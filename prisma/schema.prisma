@@ -1,0 +1,81 @@
+// This is your Prisma schema file for ContentPilot AI
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+// Required by Shopify app template - DO NOT REMOVE
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// ContentPilot AI - Brand Voice Settings
+model BrandVoice {
+  id              String   @id @default(cuid())
+  shop            String   @unique
+  storeName       String   @default("")
+  brandTone       String   @default("professional")  // e.g. "professional but approachable"
+  targetAudience  String   @default("")               // e.g. "health-conscious Australians 25-55"
+  keyDifferentiators String @default("")              // e.g. "Australian lab tested, premium quality"
+  avoidPhrases    String   @default("")               // What NOT to sound like
+  sampleContent   String   @default("")               // Merchant's best existing descriptions
+  additionalNotes String   @default("")               // Any other brand guidelines
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ContentPilot AI - Generated Content Records
+model GeneratedContent {
+  id               String   @id @default(cuid())
+  shop             String
+  productId        String                             // Shopify Product GID
+  productTitle     String   @default("")
+  contentType      String                             // "description", "metaTitle", "metaDescription", "altText", "faq"
+  originalContent  String   @default("")              // What was there before
+  generatedContent String   @default("")              // What AI produced
+  publishedContent String   @default("")              // What was actually published
+  status           String   @default("draft")         // "draft", "approved", "published", "rejected"
+  version          Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([shop, productId])
+  @@index([shop, status])
+}
+
+// ContentPilot AI - Generation Jobs (for bulk operations)
+model GenerationJob {
+  id               String   @id @default(cuid())
+  shop             String
+  status           String   @default("queued")        // "queued", "processing", "complete", "failed"
+  totalProducts    Int      @default(0)
+  completedProducts Int     @default(0)
+  failedProducts   Int      @default(0)
+  contentTypes     String   @default("description")   // comma-separated: "description,metaTitle,metaDescription"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([shop, status])
+}
