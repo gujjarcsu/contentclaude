@@ -16,6 +16,7 @@ import {
   Checkbox,
   Banner,
   Box,
+  Tabs,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -30,33 +31,34 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor") || null;
   const direction = url.searchParams.get("dir") || "next";
+  const statusFilter = url.searchParams.get("status") || "all";
 
-  const query = direction === "prev"
-    ? `query($cursor: String) {
-        products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE) {
-          pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
-          edges { node {
-            id title handle status productType vendor description
-            featuredImage { url altText }
-            variants(first: 1) { edges { node { price } } }
-            tags
-          }}
-        }
-      }`
-    : `query($cursor: String) {
-        products(first: ${PAGE_SIZE}, after: $cursor, sortKey: TITLE) {
-          pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
-          edges { node {
-            id title handle status productType vendor description
-            featuredImage { url altText }
-            variants(first: 1) { edges { node { price } } }
-            tags
-          }}
-        }
-      }`;
+  const query =
+    direction === "prev"
+      ? `query($cursor: String) {
+          products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE) {
+            pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
+            edges { node {
+              id title handle status productType vendor description
+              featuredImage { url altText }
+              variants(first: 1) { edges { node { price } } }
+              tags
+            }}
+          }
+        }`
+      : `query($cursor: String) {
+          products(first: ${PAGE_SIZE}, after: $cursor, sortKey: TITLE) {
+            pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
+            edges { node {
+              id title handle status productType vendor description
+              featuredImage { url altText }
+              variants(first: 1) { edges { node { price } } }
+              tags
+            }}
+          }
+        }`;
 
   const response = await admin.graphql(query, { variables: { cursor } });
-
   const data = await response.json();
   const { edges, pageInfo } = data.data.products;
   const products = edges.map(({ node }) => ({
@@ -74,6 +76,7 @@ export const loader = async ({ request }) => {
     tags: node.tags || [],
   }));
 
+  // Get ALL content records for this shop to build the status map and tab counts
   const generatedProducts = await prisma.generatedContent.findMany({
     where: { shop, contentType: "description" },
     select: { productId: true, status: true, updatedAt: true },
@@ -84,7 +87,14 @@ export const loader = async ({ request }) => {
     statusMap[productId] = { status, updatedAt };
   });
 
-  return Response.json({ products, statusMap, pageInfo });
+  // Tab counts from DB (global, not just this page)
+  const dbCounts = { draft: 0, published: 0 };
+  generatedProducts.forEach(({ status }) => {
+    if (status === "draft") dbCounts.draft++;
+    else if (status === "published") dbCounts.published++;
+  });
+
+  return Response.json({ products, statusMap, pageInfo, statusFilter, dbCounts });
 };
 
 export const action = async ({ request }) => {
@@ -116,15 +126,12 @@ export const action = async ({ request }) => {
     },
   });
 
-  // Enqueue via BullMQ (Redis) when REDIS_URL is set; falls back to
-  // in-process setTimeout for local dev without Redis.
   await enqueueGenerationJob(job.id);
-
   return redirect("/app/jobs");
 };
 
 export default function ProductsPage() {
-  const { products, statusMap, pageInfo } = useLoaderData();
+  const { products, statusMap, pageInfo, statusFilter, dbCounts } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
   const [, setSearchParams] = useSearchParams();
@@ -139,7 +146,15 @@ export default function ProductsPage() {
   const handleSearchChange = useCallback((v) => setSearchValue(v), []);
   const handleSearchClear = useCallback(() => setSearchValue(""), []);
 
-  const filteredProducts = products.filter((p) =>
+  // Filter products by selected tab
+  const tabFilteredProducts = products.filter((p) => {
+    if (statusFilter === "draft") return statusMap[p.id]?.status === "draft";
+    if (statusFilter === "published") return statusMap[p.id]?.status === "published";
+    if (statusFilter === "needsContent") return !statusMap[p.id];
+    return true; // "all"
+  });
+
+  const filteredProducts = tabFilteredProducts.filter((p) =>
     p.title.toLowerCase().includes(searchValue.toLowerCase())
   );
 
@@ -147,6 +162,24 @@ export default function ProductsPage() {
   const publishedCount = Object.values(statusMap).filter((s) => s.status === "published").length;
   const draftCount = Object.values(statusMap).filter((s) => s.status === "draft").length;
   const noContentCount = totalProducts - publishedCount - draftCount;
+
+  const tabs = [
+    { id: "all", content: `All (${totalProducts})`, panelID: "all" },
+    { id: "needsContent", content: `Needs Content (${noContentCount})`, panelID: "needsContent" },
+    { id: "draft", content: `Draft (${dbCounts.draft})`, panelID: "draft" },
+    { id: "published", content: `Published (${dbCounts.published})`, panelID: "published" },
+  ];
+  const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
+  const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
+
+  const handleTabChange = useCallback(
+    (index) => {
+      const tabId = tabs[index].id;
+      setSearchParams({ status: tabId });
+      setSelectedItems([]);
+    },
+    [tabs, setSearchParams]
+  );
 
   function getStatusBadge(productId) {
     const s = statusMap[productId];
@@ -158,7 +191,7 @@ export default function ProductsPage() {
 
   function getContentPreview(product) {
     if (!product.description || product.description.length < 20) {
-      return <Text as="p" variant="bodySm" tone="critical">⚠ Missing description</Text>;
+      return <Text as="p" variant="bodySm" tone="critical">Missing description</Text>;
     }
     return (
       <Text as="p" variant="bodySm" tone="subdued" truncate>
@@ -187,6 +220,13 @@ export default function ProductsPage() {
       title="Products"
       subtitle={`${totalProducts} products · ${publishedCount} optimised · ${noContentCount} need content`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      secondaryActions={[
+        {
+          content: "Review Drafts",
+          onAction: () => navigate("/app/review"),
+          disabled: dbCounts.draft === 0,
+        },
+      ]}
     >
       <BlockStack gap="500">
         {/* Stats Bar */}
@@ -217,7 +257,7 @@ export default function ProductsPage() {
           </Layout.Section>
         </Layout>
 
-        {/* Bulk generation panel — visible only when items are selected */}
+        {/* Bulk generation panel */}
         {selectedItems.length > 0 && (
           <Card>
             <BlockStack gap="400">
@@ -225,18 +265,12 @@ export default function ProductsPage() {
                 <Text as="h2" variant="headingMd">
                   Generate for {selectedItems.length} selected product{selectedItems.length > 1 ? "s" : ""}
                 </Text>
-                <Button
-                  variant="plain"
-                  tone="critical"
-                  onClick={() => setSelectedItems([])}
-                >
+                <Button variant="plain" tone="critical" onClick={() => setSelectedItems([])}>
                   Clear selection
                 </Button>
               </InlineStack>
 
-              {bulkError && (
-                <Banner tone="critical"><p>{bulkError}</p></Banner>
-              )}
+              {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
 
               <InlineStack gap="500" wrap={false}>
                 <Checkbox
@@ -260,10 +294,7 @@ export default function ProductsPage() {
               </InlineStack>
 
               <InlineStack gap="300">
-                <Button
-                  variant="primary"
-                  onClick={handleBulkGenerate}
-                >
+                <Button variant="primary" onClick={handleBulkGenerate}>
                   Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} →
                 </Button>
                 <Text as="p" variant="bodySm" tone="subdued">
@@ -274,8 +305,9 @@ export default function ProductsPage() {
           </Card>
         )}
 
-        {/* Product List */}
+        {/* Product List with status tabs */}
         <Card padding="0">
+          <Tabs tabs={tabs} selected={activeTab} onSelect={handleTabChange} fitted />
           <ResourceList
             resourceName={{ singular: "product", plural: "products" }}
             items={filteredProducts}
@@ -305,7 +337,10 @@ export default function ProductsPage() {
                   id={id}
                   media={
                     <Thumbnail
-                      source={imageUrl || "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png"}
+                      source={
+                        imageUrl ||
+                        "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png"
+                      }
                       alt={title}
                       size="medium"
                     />
@@ -341,10 +376,14 @@ export default function ProductsPage() {
             }}
             emptyState={
               <EmptyState
-                heading="No products found"
+                heading={statusFilter === "all" ? "No products found" : `No products with status: ${statusFilter}`}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Add products to your Shopify store first, then come back to generate AI content.</p>
+                <p>
+                  {statusFilter === "all"
+                    ? "Add products to your Shopify store first."
+                    : "Switch to the 'All' tab to see all products."}
+                </p>
               </EmptyState>
             }
           />
@@ -353,16 +392,20 @@ export default function ProductsPage() {
               <InlineStack align="center" gap="300">
                 <Button
                   disabled={!pageInfo.hasPreviousPage}
-                  onClick={() => setSearchParams({ cursor: pageInfo.startCursor, dir: "prev" })}
+                  onClick={() =>
+                    setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter })
+                  }
                 >
                   ← Previous
                 </Button>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Showing {products.length} products
+                  Showing {filteredProducts.length} products
                 </Text>
                 <Button
                   disabled={!pageInfo.hasNextPage}
-                  onClick={() => setSearchParams({ cursor: pageInfo.endCursor, dir: "next" })}
+                  onClick={() =>
+                    setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter })
+                  }
                 >
                   Next →
                 </Button>

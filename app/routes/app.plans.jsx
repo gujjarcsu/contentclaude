@@ -14,8 +14,9 @@ import {
   Divider,
   List,
 } from "@shopify/polaris";
-import { authenticate, BILLING_PLANS, BILLING_TEST } from "../shopify.server";
-import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, FREE_PLAN } from "../utils/plans.server";
+import { authenticate, BILLING_TEST } from "../shopify.server";
+import { BILLING_PLANS, FREE_PLAN } from "../utils/billing-plans.js";
+import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
 
 export const loader = async ({ request }) => {
   const { billing, session } = await authenticate.admin(request);

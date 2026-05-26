@@ -1,14 +1,9 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
-import { BILLING_PLANS } from "../shopify.server.js";
+import { BILLING_PLANS, FREE_PLAN } from "./billing-plans.js";
 import { getCache, setCache, invalidateCache } from "./cache.server.js";
 
-export const FREE_PLAN = {
-  key: null,
-  planName: "free",
-  amount: 0,
-  monthlyLimit: 10,
-};
+export { FREE_PLAN };
 
 // Map Shopify billing plan key → our internal plan definition
 export function getPlanByKey(shopifyKey) {

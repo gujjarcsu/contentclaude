@@ -7,40 +7,18 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
 
 // Billing test mode: true on dev/staging, false in production.
-// Flip to false before App Store submission and use real Shopify partner charges.
 const BILLING_TEST = process.env.NODE_ENV !== "production";
 
-export const BILLING_PLANS = {
-  starter: {
-    key: "Starter Plan",
-    planName: "starter",
-    amount: 9.99,
-    monthlyLimit: 50,
-    currencyCode: "USD",
-    interval: BillingInterval.Every30Days,
-    trialDays: 7,
-  },
-  growth: {
-    key: "Growth Plan",
-    planName: "growth",
-    amount: 29.99,
-    monthlyLimit: 200,
-    currencyCode: "USD",
-    interval: BillingInterval.Every30Days,
-    trialDays: 7,
-  },
-  pro: {
-    key: "Professional Plan",
-    planName: "pro",
-    amount: 79.99,
-    monthlyLimit: 1000,
-    currencyCode: "USD",
-    interval: BillingInterval.Every30Days,
-    trialDays: 7,
-  },
-};
+// Server-enriched plans: base constants + server-only billing properties
+export const BILLING_PLANS = Object.fromEntries(
+  Object.entries(BILLING_PLAN_BASE).map(([k, v]) => [
+    k,
+    { ...v, currencyCode: "USD", interval: BillingInterval.Every30Days, trialDays: 7 },
+  ])
+);
 
 export { BILLING_TEST };
 

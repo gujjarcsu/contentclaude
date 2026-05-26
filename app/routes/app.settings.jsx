@@ -1,6 +1,3 @@
-// app/routes/app.settings.jsx
-// ContentPilot AI - Brand Voice Settings
-
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page,
@@ -17,15 +14,12 @@ import {
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { invalidateCache } from "../utils/cache.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const brandVoice = await prisma.brandVoice.findUnique({
-    where: { shop },
-  });
+  const brandVoice = await prisma.brandVoice.findUnique({ where: { shop } });
 
   return Response.json({
     brandVoice: brandVoice || {
@@ -36,6 +30,8 @@ export const loader = async ({ request }) => {
       avoidPhrases: "",
       sampleContent: "",
       additionalNotes: "",
+      targetKeywords: "",
+      language: "en",
     },
     hasApiKey: !!process.env.ANTHROPIC_API_KEY,
   });
@@ -46,21 +42,30 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
 
+  // Dynamic import keeps cache.server out of the client bundle
+  const { invalidateCache } = await import("../utils/cache.server.js");
+
   const VALID_TONES = new Set([
     "professional", "friendly", "premium", "bold",
     "scientific", "warm", "minimalist", "playful", "custom",
   ]);
+  const VALID_LANGUAGES = new Set([
+    "en", "es", "fr", "de", "it", "pt", "ja", "zh", "ko", "ar", "hi", "nl",
+  ]);
+
   const rawTone = formData.get("brandTone") || "professional";
-  const rawSample = (formData.get("sampleContent") || "").slice(0, 5000);
+  const rawLang = formData.get("language") || "en";
 
   const data = {
-    storeName: (formData.get("storeName") || "").slice(0, 200),
-    brandTone: VALID_TONES.has(rawTone) ? rawTone : "professional",
-    targetAudience: (formData.get("targetAudience") || "").slice(0, 500),
+    storeName:          (formData.get("storeName") || "").slice(0, 200),
+    brandTone:          VALID_TONES.has(rawTone) ? rawTone : "professional",
+    targetAudience:     (formData.get("targetAudience") || "").slice(0, 500),
     keyDifferentiators: (formData.get("keyDifferentiators") || "").slice(0, 500),
-    avoidPhrases: (formData.get("avoidPhrases") || "").slice(0, 500),
-    sampleContent: rawSample,
-    additionalNotes: (formData.get("additionalNotes") || "").slice(0, 500),
+    avoidPhrases:       (formData.get("avoidPhrases") || "").slice(0, 500),
+    sampleContent:      (formData.get("sampleContent") || "").slice(0, 5000),
+    additionalNotes:    (formData.get("additionalNotes") || "").slice(0, 500),
+    targetKeywords:     (formData.get("targetKeywords") || "").slice(0, 500),
+    language:           VALID_LANGUAGES.has(rawLang) ? rawLang : "en",
   };
 
   await prisma.brandVoice.upsert({
@@ -69,7 +74,6 @@ export const action = async ({ request }) => {
     create: { shop, ...data },
   });
 
-  // Bust the cached brand voice so the next generation uses fresh settings
   await invalidateCache(`bv:${shop}`);
 
   return Response.json({ success: true, message: "Brand voice settings saved!" });
@@ -79,7 +83,6 @@ export default function SettingsPage() {
   const { brandVoice, hasApiKey } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
-
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
@@ -90,6 +93,8 @@ export default function SettingsPage() {
   const [avoidPhrases, setAvoidPhrases] = useState(brandVoice.avoidPhrases);
   const [sampleContent, setSampleContent] = useState(brandVoice.sampleContent);
   const [additionalNotes, setAdditionalNotes] = useState(brandVoice.additionalNotes);
+  const [targetKeywords, setTargetKeywords] = useState(brandVoice.targetKeywords || "");
+  const [language, setLanguage] = useState(brandVoice.language || "en");
 
   const toneOptions = [
     { label: "Professional & Trustworthy", value: "professional" },
@@ -101,6 +106,21 @@ export default function SettingsPage() {
     { label: "Minimalist & Clean", value: "minimalist" },
     { label: "Fun & Playful", value: "playful" },
     { label: "Custom (describe in notes)", value: "custom" },
+  ];
+
+  const languageOptions = [
+    { label: "English", value: "en" },
+    { label: "Spanish", value: "es" },
+    { label: "French", value: "fr" },
+    { label: "German", value: "de" },
+    { label: "Italian", value: "it" },
+    { label: "Portuguese", value: "pt" },
+    { label: "Japanese", value: "ja" },
+    { label: "Chinese (Simplified)", value: "zh" },
+    { label: "Korean", value: "ko" },
+    { label: "Arabic", value: "ar" },
+    { label: "Hindi", value: "hi" },
+    { label: "Dutch", value: "nl" },
   ];
 
   return (
@@ -119,155 +139,185 @@ export default function SettingsPage() {
         {!hasApiKey && (
           <Banner tone="critical" title="API Key Required">
             <p>
-              Add your Anthropic API key to the .env file in your project root:
-              ANTHROPIC_API_KEY=sk-ant-your-key-here
+              Add your Anthropic API key to the .env file: ANTHROPIC_API_KEY=sk-ant-your-key-here
             </p>
           </Banner>
         )}
 
         <Form method="post">
-        <Layout>
-          <Layout.Section>
-            <BlockStack gap="400">
-              {/* Basic Info */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingLg">Store Identity</Text>
+          <Layout>
+            <Layout.Section>
+              <BlockStack gap="400">
+                {/* Basic Info */}
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingLg">Store Identity</Text>
 
-                  <TextField
-                    name="storeName"
-                    label="Store Name"
-                    value={storeName}
-                    onChange={setStoreName}
-                    placeholder="e.g., Elite Peps Australia"
-                    helpText="Your brand name as it should appear in content"
-                    autoComplete="off"
-                  />
+                    <TextField
+                      name="storeName"
+                      label="Store Name"
+                      value={storeName}
+                      onChange={setStoreName}
+                      placeholder="e.g., Elite Peps Australia"
+                      helpText="Your brand name as it should appear in content"
+                      autoComplete="off"
+                    />
 
-                  <Select
-                    name="brandTone"
-                    label="Brand Tone"
-                    options={toneOptions}
-                    value={brandTone}
-                    onChange={setBrandTone}
-                    helpText="The overall voice and personality of your brand"
-                  />
+                    <Select
+                      name="brandTone"
+                      label="Brand Tone"
+                      options={toneOptions}
+                      value={brandTone}
+                      onChange={setBrandTone}
+                      helpText="The overall voice and personality of your brand"
+                    />
 
-                  <TextField
-                    name="targetAudience"
-                    label="Target Audience"
-                    value={targetAudience}
-                    onChange={setTargetAudience}
-                    placeholder="e.g., Health-conscious Australians aged 25-55 looking for premium research peptides"
-                    helpText="Who are your customers? Be specific — age, interests, needs, location"
-                    multiline={3}
-                    autoComplete="off"
-                  />
-                </BlockStack>
-              </Card>
+                    <Select
+                      name="language"
+                      label="Content Language"
+                      options={languageOptions}
+                      value={language}
+                      onChange={setLanguage}
+                      helpText="All generated content will be written in this language"
+                    />
 
-              {/* Differentiators */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingLg">What Makes You Unique</Text>
+                    <TextField
+                      name="targetAudience"
+                      label="Target Audience"
+                      value={targetAudience}
+                      onChange={setTargetAudience}
+                      placeholder="e.g., Health-conscious Australians aged 25-55 looking for premium research peptides"
+                      helpText="Who are your customers? Be specific — age, interests, needs, location"
+                      multiline={3}
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                </Card>
 
-                  <TextField
-                    name="keyDifferentiators"
-                    label="Key Differentiators"
-                    value={keyDifferentiators}
-                    onChange={setKeyDifferentiators}
-                    placeholder="e.g., Australian lab tested, 99%+ purity guaranteed, same-day dispatch, locally owned"
-                    helpText="What sets you apart from competitors? These will be woven into all content naturally."
-                    multiline={3}
-                    autoComplete="off"
-                  />
+                {/* SEO Keywords */}
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingLg">SEO Keyword Targeting</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Global keywords the AI will naturally incorporate into all generated content.
+                      You can also set per-product keywords on the product detail page.
+                    </Text>
 
-                  <TextField
-                    name="avoidPhrases"
-                    label="Phrases & Styles to Avoid"
-                    value={avoidPhrases}
-                    onChange={setAvoidPhrases}
-                    placeholder="e.g., Don't sound like a cheap dropshipper. Avoid hype words like 'amazing' or 'revolutionary'. Don't use emojis."
-                    helpText="What should the AI NOT sound like? Be specific."
-                    multiline={3}
-                    autoComplete="off"
-                  />
-                </BlockStack>
-              </Card>
+                    <TextField
+                      name="targetKeywords"
+                      label="Target Keywords"
+                      value={targetKeywords}
+                      onChange={setTargetKeywords}
+                      placeholder="e.g., peptides Australia, research peptides, buy BPC-157"
+                      helpText="Comma-separated. These will be woven naturally into descriptions and meta tags."
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                </Card>
 
-              {/* Sample Content */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Paste 2-3 of your best existing product descriptions below.
-                    The AI will analyze your writing style and match it in all
-                    future generations. This is the single most important setting
-                    for content quality.
-                  </Text>
+                {/* Differentiators */}
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingLg">What Makes You Unique</Text>
 
-                  <TextField
-                    name="sampleContent"
-                    label="Your Best Product Descriptions (paste 2-3)"
-                    value={sampleContent}
-                    onChange={setSampleContent}
-                    placeholder="Paste your favorite product descriptions here. The ones you wrote yourself and are proud of. The AI will learn your voice from these..."
-                    multiline={8}
-                    autoComplete="off"
-                  />
+                    <TextField
+                      name="keyDifferentiators"
+                      label="Key Differentiators"
+                      value={keyDifferentiators}
+                      onChange={setKeyDifferentiators}
+                      placeholder="e.g., Australian lab tested, 99%+ purity guaranteed, same-day dispatch, locally owned"
+                      helpText="What sets you apart? These will be woven into all content naturally."
+                      multiline={3}
+                      autoComplete="off"
+                    />
 
-                  <TextField
-                    name="additionalNotes"
-                    label="Additional Notes or Guidelines"
-                    value={additionalNotes}
-                    onChange={setAdditionalNotes}
-                    placeholder="e.g., Always mention that we ship from Sydney. Never make medical claims. Include storage instructions when relevant."
-                    helpText="Any other rules the AI should follow when writing for your store"
-                    multiline={3}
-                    autoComplete="off"
-                  />
-                </BlockStack>
-              </Card>
+                    <TextField
+                      name="avoidPhrases"
+                      label="Phrases & Styles to Avoid"
+                      value={avoidPhrases}
+                      onChange={setAvoidPhrases}
+                      placeholder="e.g., Don't sound like a cheap dropshipper. Avoid hype words like 'amazing' or 'revolutionary'. Don't use emojis."
+                      helpText="What should the AI NOT sound like? Be specific."
+                      multiline={3}
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                </Card>
 
-              <Button
-                variant="primary"
-                size="large"
-                submit
-                loading={isSaving}
-                fullWidth
-              >
-                {isSaving ? "Saving..." : "Save Settings"}
-              </Button>
-            </BlockStack>
-          </Layout.Section>
+                {/* Sample Content */}
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Paste 2-3 of your best existing product descriptions.
+                      The AI will analyze your writing style and match it in all future generations.
+                    </Text>
 
-          {/* Right sidebar - tips */}
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Tips for Better Content</Text>
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm">
-                    <strong>Be specific with your audience.</strong> "Health-conscious
-                    Australian men 30-50" is better than "everyone."
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    <strong>Include real differentiators.</strong> "Australian lab
-                    tested with COA available" is better than "high quality."
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    <strong>Paste real examples.</strong> The sample descriptions
-                    are the most powerful way to train the AI on your exact voice.
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    <strong>Tell it what to avoid.</strong> "Don't sound like a
-                    generic supplement store" gives the AI guardrails.
-                  </Text>
-                </BlockStack>
+                    <TextField
+                      name="sampleContent"
+                      label="Your Best Product Descriptions (paste 2-3)"
+                      value={sampleContent}
+                      onChange={setSampleContent}
+                      placeholder="Paste your favorite product descriptions here…"
+                      multiline={8}
+                      autoComplete="off"
+                    />
+
+                    <TextField
+                      name="additionalNotes"
+                      label="Additional Notes or Guidelines"
+                      value={additionalNotes}
+                      onChange={setAdditionalNotes}
+                      placeholder="e.g., Always mention that we ship from Sydney. Never make medical claims."
+                      helpText="Any other rules the AI should follow when writing for your store"
+                      multiline={3}
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                </Card>
+
+                <Button
+                  variant="primary"
+                  size="large"
+                  submit
+                  loading={isSaving}
+                  fullWidth
+                >
+                  {isSaving ? "Saving..." : "Save Settings"}
+                </Button>
               </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+            </Layout.Section>
+
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">Tips for Better Content</Text>
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">
+                      <strong>Be specific with your audience.</strong> "Health-conscious
+                      Australian men 30-50" beats "everyone."
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      <strong>Add real keywords.</strong> Keywords are naturally woven
+                      into descriptions and meta tags — no stuffing.
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      <strong>Include real differentiators.</strong> "Australian lab
+                      tested with COA available" beats "high quality."
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      <strong>Paste real examples.</strong> Sample descriptions are
+                      the most powerful way to match your exact voice.
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      <strong>Use the language selector</strong> to generate content
+                      in Spanish, French, German, and 8 other languages.
+                    </Text>
+                  </BlockStack>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
         </Form>
       </BlockStack>
     </Page>

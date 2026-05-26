@@ -9,6 +9,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Mock dependencies ────────────────────────────────────────────────────────
 
+vi.mock("@prisma/client", () => ({
+  Prisma: {
+    TransactionIsolationLevel: { Serializable: "Serializable" },
+  },
+}));
+
 vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: {
@@ -23,12 +29,13 @@ vi.mock("../../app/db.server.js", () => ({
   },
 }));
 
-vi.mock("../../app/shopify.server.js", () => ({
+vi.mock("../../app/utils/billing-plans.js", () => ({
   BILLING_PLANS: {
-    starter: { key: "Starter Plan", planName: "starter", monthlyLimit: 50 },
-    growth:  { key: "Growth Plan",  planName: "growth",  monthlyLimit: 200 },
-    pro:     { key: "Professional Plan", planName: "pro", monthlyLimit: 1000 },
+    starter: { key: "Starter Plan", planName: "starter", amount: 9.99, monthlyLimit: 50 },
+    growth:  { key: "Growth Plan",  planName: "growth",  amount: 29.99, monthlyLimit: 200 },
+    pro:     { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000 },
   },
+  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 10 },
 }));
 
 vi.mock("../../app/utils/cache.server.js", () => ({

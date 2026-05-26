@@ -14,14 +14,12 @@ import {
   Checkbox,
   Spinner,
   Divider,
+  TextField,
+  Select,
 } from "@shopify/polaris";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { generateProductContent, generateAltText } from "../utils/ai.server";
-import { tryConsumeGeneration } from "../utils/plans.server";
-import { checkRateLimit } from "../utils/rateLimit.server";
-import { getCache, invalidateCache } from "../utils/cache.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +45,6 @@ export async function loader({ request, params }) {
 
   const { data } = await response.json();
   if (!data.product) throw new Response("Product not found", { status: 404 });
-
   const product = data.product;
 
   const [existingContent, brandVoice] = await Promise.all([
@@ -105,32 +102,43 @@ export async function action({ request, params }) {
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
+  // Dynamic imports keep server-only modules out of the client bundle
+  const [
+    { generateProductContent, generateAltText },
+    { tryConsumeGeneration },
+    { checkRateLimit },
+    { getCache },
+  ] = await Promise.all([
+    import("../utils/ai.server.js"),
+    import("../utils/plans.server.js"),
+    import("../utils/rateLimit.server.js"),
+    import("../utils/cache.server.js"),
+  ]);
+
   // ── Generate ──────────────────────────────────────────────────────────────
   if (actionType === "generate") {
-    // Per-shop rate limit: max 10 AI generations per minute
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
-      return {
-        error: `Too many requests. Please wait ${rl.retryAfterSeconds} seconds before generating again.`,
-      };
+      return { error: `Too many requests. Please wait ${rl.retryAfterSeconds} seconds before generating again.` };
     }
 
     const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
       (t) => formData.get(`gen_${t}`) === "true"
     );
     const doAltText = formData.get("gen_altText") === "true";
+    const autoPublish = formData.get("autoPublish") === "true";
+    const targetKeywords = (formData.get("targetKeywords") || "").trim();
+    const contentLength = formData.get("contentLength") || "standard";
 
     if (contentTypes.length === 0 && !doAltText) {
       return { error: "Select at least one content type to generate." };
     }
 
-    // Atomic check + usage record write in a single serializable transaction.
-    // Prevents concurrent requests from both passing the monthly limit check.
     const primaryContentType = contentTypes[0] ?? "altText";
     const gate = await tryConsumeGeneration(shop, primaryContentType, productId);
     if (!gate.allowed) {
       return {
-        error: `Monthly limit reached (${gate.monthlyLimit} generations on the ${gate.planName} plan). Upgrade your plan to continue generating content.`,
+        error: `Monthly limit reached (${gate.monthlyLimit} generations on the ${gate.planName} plan). Upgrade your plan to continue.`,
         limitReached: true,
       };
     }
@@ -150,14 +158,13 @@ export async function action({ request, params }) {
     );
     const { data: productData } = await productResponse.json();
     const product = productData.product;
-    // Use cached brand voice — invalidated on settings save
+
     const brandVoice = await getCache(
       `bv:${shop}`,
       () => prisma.brandVoice.findUnique({ where: { shop } }),
-      300 // 5-minute cache
+      300
     );
 
-    // Standard content (description / meta / faq)
     let generated = {};
     if (contentTypes.length > 0) {
       generated = await generateProductContent(
@@ -172,10 +179,11 @@ export async function action({ request, params }) {
           tags: product.tags,
         },
         brandVoice,
-        contentTypes
+        contentTypes,
+        { keywords: targetKeywords, length: contentLength }
       );
 
-      // UsageRecord was already written atomically by tryConsumeGeneration — do NOT write again.
+      const finalStatus = autoPublish ? "published" : "draft";
       await Promise.all(
         contentTypes
           .filter((t) => generated[t])
@@ -186,23 +194,39 @@ export async function action({ request, params }) {
               type === "metaDescription" ? product.seo?.description || "" : "";
             return prisma.generatedContent.upsert({
               where: { shop_productId_contentType: { shop, productId, contentType: type } },
-              update: { generatedContent: generated[type], originalContent, status: "draft", version: { increment: 1 } },
-              create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: "draft" },
+              update: { generatedContent: generated[type], originalContent, status: finalStatus, version: { increment: 1 } },
+              create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
             });
           })
       );
+
+      // Auto-publish: immediately push to Shopify
+      if (autoPublish) {
+        const input = { id: productId };
+        if (generated.description) input.descriptionHtml = generated.description;
+        if (generated.metaTitle || generated.metaDescription) {
+          input.seo = {};
+          if (generated.metaTitle) input.seo.title = generated.metaTitle;
+          if (generated.metaDescription) input.seo.description = generated.metaDescription;
+        }
+        if (Object.keys(input).length > 1) {
+          await admin.graphql(
+            `mutation updateProduct($input: ProductInput!) {
+              productUpdate(input: $input) {
+                product { id }
+                userErrors { field message }
+              }
+            }`,
+            { variables: { input } }
+          );
+        }
+      }
     }
 
-    // Alt text (generates and immediately applies to Shopify images)
     let altTextResults = [];
     if (doAltText) {
       const images = product.images.edges.map((e) => e.node).filter((img) => img.url);
-
       if (images.length > 0) {
-        // Sequential (not parallel) to respect Anthropic rate limits.
-        // Each image generates one Haiku call — parallel calls on multi-image
-        // products would cause 429s under load.
-        altTextResults = [];
         for (const img of images) {
           try {
             const altText = await generateAltText(img.url, product.title);
@@ -230,27 +254,28 @@ export async function action({ request, params }) {
         await prisma.generatedContent.upsert({
           where: { shop_productId_contentType: { shop, productId, contentType: "altText" } },
           update: { generatedContent: JSON.stringify(altTextResults), status: "published", version: { increment: 1 } },
-          create: {
-            shop, productId, productTitle: product.title, contentType: "altText",
-            originalContent: "", generatedContent: JSON.stringify(altTextResults), status: "published",
-          },
+          create: { shop, productId, productTitle: product.title, contentType: "altText", originalContent: "", generatedContent: JSON.stringify(altTextResults), status: "published" },
         });
-
-        // UsageRecord already written atomically by tryConsumeGeneration — no duplicate write needed.
       }
     }
 
     const messageParts = [];
-    if (contentTypes.length > 0) messageParts.push("Content generated — review below and publish when ready.");
+    if (contentTypes.length > 0) {
+      messageParts.push(
+        autoPublish
+          ? "Content generated and published to your store!"
+          : "Content generated — review below and publish when ready."
+      );
+    }
     if (doAltText && altTextResults.length > 0) {
       const succeeded = altTextResults.filter((r) => !r.error).length;
       messageParts.push(`Alt text applied to ${succeeded} image${succeeded !== 1 ? "s" : ""}.`);
     }
 
-    return { success: true, generated, altTextResults, message: messageParts.join(" ") || "Done!" };
+    return { success: true, generated, altTextResults, autoPublished: autoPublish, message: messageParts.join(" ") || "Done!" };
   }
 
-  // ── Publish ───────────────────────────────────────────────────────────────
+  // ── Publish (with optional edited content) ────────────────────────────────
   if (actionType === "publish") {
     const description = formData.get("publishDescription");
     const metaTitle = formData.get("publishMetaTitle");
@@ -281,13 +306,10 @@ export async function action({ request, params }) {
       return { error: `Shopify rejected the update — ${msg}. Nothing was published.` };
     }
 
-    // Only mark the content types that were actually sent to Shopify as published.
     const publishedTypes = [];
     if (description) publishedTypes.push("description");
-    if (metaTitle || metaDescription) {
-      if (metaTitle) publishedTypes.push("metaTitle");
-      if (metaDescription) publishedTypes.push("metaDescription");
-    }
+    if (metaTitle) publishedTypes.push("metaTitle");
+    if (metaDescription) publishedTypes.push("metaDescription");
     if (publishedTypes.length > 0) {
       await prisma.generatedContent.updateMany({
         where: { shop, productId, contentType: { in: publishedTypes }, status: "draft" },
@@ -322,9 +344,8 @@ export async function action({ request, params }) {
 function OriginalContentSection({ original, contentType, revertFetcher }) {
   const [expanded, setExpanded] = useState(false);
   if (!original) return null;
-
-  const isReverting = revertFetcher.state !== "idle" &&
-    revertFetcher.formData?.get("contentType") === contentType;
+  const isReverting =
+    revertFetcher.state !== "idle" && revertFetcher.formData?.get("contentType") === contentType;
 
   return (
     <BlockStack gap="200">
@@ -344,13 +365,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
               <revertFetcher.Form method="post">
                 <input type="hidden" name="actionType" value="revert" />
                 <input type="hidden" name="contentType" value={contentType} />
-                <Button
-                  variant="plain"
-                  tone="critical"
-                  size="slim"
-                  submit
-                  loading={isReverting}
-                >
+                <Button variant="plain" tone="critical" size="slim" submit loading={isReverting}>
                   Revert to this original
                 </Button>
               </revertFetcher.Form>
@@ -376,13 +391,45 @@ export default function ProductGeneratePage() {
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
 
+  // Generate panel state
   const [genDescription, setGenDescription] = useState(true);
   const [genMetaTitle, setGenMetaTitle] = useState(true);
   const [genMetaDescription, setGenMetaDescription] = useState(true);
   const [genFaq, setGenFaq] = useState(false);
   const [genAltText, setGenAltText] = useState(false);
+  const [autoPublish, setAutoPublish] = useState(false);
+  const [targetKeywords, setTargetKeywords] = useState("");
+  const [contentLength, setContentLength] = useState("standard");
 
-  // Toast: fire on success actions via App Bridge
+  // Editable content state — initialized from generated or existing
+  const rawDescription = actionData?.generated?.description || existingContent.description?.generated || "";
+  const rawMetaTitle = actionData?.generated?.metaTitle || existingContent.metaTitle?.generated || "";
+  const rawMetaDescription = actionData?.generated?.metaDescription || existingContent.metaDescription?.generated || "";
+  const faq = actionData?.generated?.faq || existingContent.faq?.generated || "";
+
+  const [editedDescription, setEditedDescription] = useState(rawDescription);
+  const [editedMetaTitle, setEditedMetaTitle] = useState(rawMetaTitle);
+  const [editedMetaDescription, setEditedMetaDescription] = useState(rawMetaDescription);
+
+  // Sync edited state when new content arrives
+  useEffect(() => {
+    if (rawDescription) setEditedDescription(rawDescription);
+  }, [rawDescription]);
+  useEffect(() => {
+    if (rawMetaTitle) setEditedMetaTitle(rawMetaTitle);
+  }, [rawMetaTitle]);
+  useEffect(() => {
+    if (rawMetaDescription) setEditedMetaDescription(rawMetaDescription);
+  }, [rawMetaDescription]);
+
+  const hasGeneratedContent = !!(rawDescription || rawMetaTitle || rawMetaDescription || faq);
+
+  const altTextResults = actionData?.altTextResults ?? (() => {
+    const raw = existingContent.altText?.generated;
+    try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+  })();
+
+  // Toast on success
   useEffect(() => {
     if (actionData?.success && actionData !== prevFetcherData.current) {
       prevFetcherData.current = actionData;
@@ -392,7 +439,7 @@ export default function ProductGeneratePage() {
     }
   }, [actionData]);
 
-  // Revalidate loader after revert so content cards refresh
+  // Revalidate after revert
   useEffect(() => {
     if (revertFetcher.data?.reverted && revertFetcher.data !== prevRevertData.current) {
       prevRevertData.current = revertFetcher.data;
@@ -403,39 +450,50 @@ export default function ProductGeneratePage() {
     }
   }, [revertFetcher.data, revalidator]);
 
-  const description = actionData?.generated?.description || existingContent.description?.generated || "";
-  const metaTitle = actionData?.generated?.metaTitle || existingContent.metaTitle?.generated || "";
-  const metaDescription = actionData?.generated?.metaDescription || existingContent.metaDescription?.generated || "";
-  const faq = actionData?.generated?.faq || existingContent.faq?.generated || "";
-  const hasGeneratedContent = !!(description || metaTitle || metaDescription || faq);
-
-  const altTextResults = actionData?.altTextResults ?? (() => {
-    const raw = existingContent.altText?.generated;
-    try { return raw ? JSON.parse(raw) : []; } catch { return []; }
-  })();
-
-  const handleGenerate = () => {
+  const handleGenerate = useCallback((overrideTypes = null) => {
     const fd = new FormData();
     fd.append("actionType", "generate");
-    fd.append("gen_description", genDescription.toString());
-    fd.append("gen_metaTitle", genMetaTitle.toString());
-    fd.append("gen_metaDescription", genMetaDescription.toString());
-    fd.append("gen_faq", genFaq.toString());
-    fd.append("gen_altText", genAltText.toString());
+    const types = overrideTypes || {
+      description: genDescription,
+      metaTitle: genMetaTitle,
+      metaDescription: genMetaDescription,
+      faq: genFaq,
+      altText: genAltText,
+    };
+    fd.append("gen_description", (types.description ?? false).toString());
+    fd.append("gen_metaTitle", (types.metaTitle ?? false).toString());
+    fd.append("gen_metaDescription", (types.metaDescription ?? false).toString());
+    fd.append("gen_faq", (types.faq ?? false).toString());
+    fd.append("gen_altText", (types.altText ?? false).toString());
+    fd.append("autoPublish", autoPublish.toString());
+    fd.append("targetKeywords", targetKeywords);
+    fd.append("contentLength", contentLength);
     fetcher.submit(fd, { method: "POST" });
-  };
+  }, [genDescription, genMetaTitle, genMetaDescription, genFaq, genAltText, autoPublish, targetKeywords, contentLength, fetcher]);
 
-  const handlePublish = () => {
+  const handleRegenerateSection = useCallback((type) => {
+    const types = { description: false, metaTitle: false, metaDescription: false, faq: false, altText: false };
+    types[type] = true;
+    handleGenerate(types);
+  }, [handleGenerate]);
+
+  const handlePublish = useCallback(() => {
     const fd = new FormData();
     fd.append("actionType", "publish");
-    if (description) fd.append("publishDescription", description);
-    if (metaTitle) fd.append("publishMetaTitle", metaTitle);
-    if (metaDescription) fd.append("publishMetaDescription", metaDescription);
+    if (editedDescription) fd.append("publishDescription", editedDescription);
+    if (editedMetaTitle) fd.append("publishMetaTitle", editedMetaTitle);
+    if (editedMetaDescription) fd.append("publishMetaDescription", editedMetaDescription);
     fetcher.submit(fd, { method: "POST" });
-  };
+  }, [editedDescription, editedMetaTitle, editedMetaDescription, fetcher]);
 
   const noneSelected = !genDescription && !genMetaTitle && !genMetaDescription && !genFaq && !genAltText;
   const noImages = product.images.length === 0;
+
+  const lengthOptions = [
+    { label: "Short (~100-150 words) — simple products", value: "short" },
+    { label: "Standard (~200-300 words) — default", value: "standard" },
+    { label: "Detailed (~400-500 words) — complex/high-value products", value: "detailed" },
+  ];
 
   return (
     <Page
@@ -502,6 +560,23 @@ export default function ProductGeneratePage() {
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">Generate Content</Text>
+
+                  <Select
+                    label="Description Length"
+                    options={lengthOptions}
+                    value={contentLength}
+                    onChange={setContentLength}
+                  />
+
+                  <TextField
+                    label="Target Keywords (optional)"
+                    value={targetKeywords}
+                    onChange={setTargetKeywords}
+                    placeholder="e.g., peptides Australia, BPC-157"
+                    helpText="Overrides global keywords for this product"
+                    autoComplete="off"
+                  />
+
                   <Text as="p" variant="bodySm" tone="subdued">Select what to generate:</Text>
                   <Checkbox
                     label="Product Description"
@@ -535,13 +610,23 @@ export default function ProductGeneratePage() {
                     helpText={
                       noImages
                         ? "No images on this product"
-                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""} on Shopify`
+                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}`
                     }
                   />
+
+                  <Divider />
+
+                  <Checkbox
+                    label="Auto-publish after generation"
+                    checked={autoPublish}
+                    onChange={setAutoPublish}
+                    helpText="Skips the review step — publishes immediately to Shopify"
+                  />
+
                   <Button
                     variant="primary"
                     size="large"
-                    onClick={handleGenerate}
+                    onClick={() => handleGenerate()}
                     loading={isGenerating}
                     disabled={isLoading || noneSelected || !hasApiKey}
                     fullWidth
@@ -553,14 +638,22 @@ export default function ProductGeneratePage() {
             </BlockStack>
           </Layout.Section>
 
-          {/* ── Right: content preview ────────────────────────────────────── */}
+          {/* ── Right: content preview + inline editing ───────────────────── */}
           <Layout.Section>
             <BlockStack gap="400">
 
               {/* Description */}
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Product Description</Text>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Product Description</Text>
+                    {rawDescription && (
+                      <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("description")} loading={isGenerating}>
+                        Regenerate
+                      </Button>
+                    )}
+                  </InlineStack>
+
                   <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                     <BlockStack gap="100">
                       <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">CURRENT:</Text>
@@ -581,21 +674,27 @@ export default function ProductGeneratePage() {
                     </Box>
                   )}
 
-                  {description && (
-                    <Box padding="300" background="bg-surface-success" borderRadius="200">
-                      <BlockStack gap="100">
-                        <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" fontWeight="bold" tone="success">AI-GENERATED:</Text>
-                          <Badge tone="success">
-                            {existingContent.description?.status === "published" ? "Published" : "Ready to Publish"}
-                          </Badge>
-                        </InlineStack>
-                        <div dangerouslySetInnerHTML={{ __html: description }} />
-                      </BlockStack>
-                    </Box>
+                  {rawDescription && (
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between">
+                        <Text as="p" variant="bodySm" fontWeight="bold" tone="success">AI-GENERATED (editable):</Text>
+                        <Badge tone={existingContent.description?.status === "published" ? "success" : "info"}>
+                          {existingContent.description?.status === "published" ? "Published" : "Draft"}
+                        </Badge>
+                      </InlineStack>
+                      <TextField
+                        label=""
+                        labelHidden
+                        value={editedDescription}
+                        onChange={setEditedDescription}
+                        multiline={8}
+                        helpText="Edit the HTML directly — changes are saved when you click Publish"
+                        autoComplete="off"
+                      />
+                    </BlockStack>
                   )}
 
-                  {!description && !isGenerating && (
+                  {!rawDescription && !isGenerating && (
                     <Text as="p" variant="bodySm" tone="subdued">
                       Click "Generate Content" to create an AI-optimised description.
                     </Text>
@@ -615,18 +714,32 @@ export default function ProductGeneratePage() {
               </Card>
 
               {/* Meta Title */}
-              {(metaTitle || genMetaTitle) && (
+              {(rawMetaTitle || genMetaTitle) && (
                 <Card>
                   <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">Meta Title</Text>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingMd">Meta Title</Text>
+                      {rawMetaTitle && (
+                        <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaTitle")} loading={isGenerating}>
+                          Regenerate
+                        </Button>
+                      )}
+                    </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Current: {product.seoTitle || "(using product title)"}
                     </Text>
-                    {metaTitle && (
-                      <Box padding="200" background="bg-surface-success" borderRadius="200">
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">{metaTitle}</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">{metaTitle.length}/60 characters</Text>
-                      </Box>
+                    {rawMetaTitle && (
+                      <BlockStack gap="100">
+                        <TextField
+                          label=""
+                          labelHidden
+                          value={editedMetaTitle}
+                          onChange={setEditedMetaTitle}
+                          helpText={`${editedMetaTitle.length}/60 characters`}
+                          error={editedMetaTitle.length > 60 ? "Over 60 characters — shorten before publishing" : ""}
+                          autoComplete="off"
+                        />
+                      </BlockStack>
                     )}
                     {existingContent.metaTitle?.original && (
                       <>
@@ -643,18 +756,31 @@ export default function ProductGeneratePage() {
               )}
 
               {/* Meta Description */}
-              {(metaDescription || genMetaDescription) && (
+              {(rawMetaDescription || genMetaDescription) && (
                 <Card>
                   <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">Meta Description</Text>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingMd">Meta Description</Text>
+                      {rawMetaDescription && (
+                        <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaDescription")} loading={isGenerating}>
+                          Regenerate
+                        </Button>
+                      )}
+                    </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Current: {product.seoDescription || "(none set)"}
                     </Text>
-                    {metaDescription && (
-                      <Box padding="200" background="bg-surface-success" borderRadius="200">
-                        <Text as="p" variant="bodyMd">{metaDescription}</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">{metaDescription.length}/155 characters</Text>
-                      </Box>
+                    {rawMetaDescription && (
+                      <TextField
+                        label=""
+                        labelHidden
+                        value={editedMetaDescription}
+                        onChange={setEditedMetaDescription}
+                        multiline={2}
+                        helpText={`${editedMetaDescription.length}/155 characters`}
+                        error={editedMetaDescription.length > 155 ? "Over 155 characters — shorten before publishing" : ""}
+                        autoComplete="off"
+                      />
                     )}
                     {existingContent.metaDescription?.original && (
                       <>
@@ -674,7 +800,12 @@ export default function ProductGeneratePage() {
               {faq && (
                 <Card>
                   <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">FAQ Content</Text>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingMd">FAQ Content</Text>
+                      <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("faq")} loading={isGenerating}>
+                        Regenerate
+                      </Button>
+                    </InlineStack>
                     <Box padding="200" background="bg-surface-success" borderRadius="200">
                       <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>{faq}</pre>
                     </Box>
@@ -720,9 +851,7 @@ export default function ProductGeneratePage() {
                                 ) : (
                                   <>
                                     <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
-                                    <Text as="p" variant="bodySm" tone="subdued">
-                                      {result.altText.length} characters
-                                    </Text>
+                                    <Text as="p" variant="bodySm" tone="subdued">{result.altText.length} characters</Text>
                                   </>
                                 )}
                               </BlockStack>
@@ -733,7 +862,7 @@ export default function ProductGeneratePage() {
                     )}
                     {!altTextResults.length && !isGenerating && (
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Check "Image Alt Text" and click Generate to create accessibility-optimised alt text for all images.
+                        Check "Image Alt Text" and click Generate to create alt text for all images.
                       </Text>
                     )}
                   </BlockStack>
@@ -741,18 +870,23 @@ export default function ProductGeneratePage() {
               )}
 
               {/* Publish button */}
-              {hasGeneratedContent && (
+              {hasGeneratedContent && !actionData?.autoPublished && (
                 <Card>
-                  <Button
-                    variant="primary"
-                    size="large"
-                    onClick={handlePublish}
-                    loading={isPublishing}
-                    disabled={isLoading}
-                    fullWidth
-                  >
-                    {isPublishing ? "Publishing…" : "Publish to Store"}
-                  </Button>
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Your edits above will be published — not the original AI output.
+                    </Text>
+                    <Button
+                      variant="primary"
+                      size="large"
+                      onClick={handlePublish}
+                      loading={isPublishing}
+                      disabled={isLoading}
+                      fullWidth
+                    >
+                      {isPublishing ? "Publishing…" : "Publish to Store"}
+                    </Button>
+                  </BlockStack>
                 </Card>
               )}
             </BlockStack>

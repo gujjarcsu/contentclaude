@@ -54,6 +54,8 @@ model BrandVoice {
   avoidPhrases       String   @default("")
   sampleContent      String   @default("")
   additionalNotes    String   @default("")
+  targetKeywords     String   @default("") // comma-separated global SEO keywords
+  language           String   @default("en") // ISO 639-1 output language code
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

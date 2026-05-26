@@ -273,8 +273,20 @@ export default function Dashboard() {
                 <Button variant="primary" size="large" onClick={() => navigate("/app/products")}>
                   Generate Product Content
                 </Button>
-                <Button size="large" onClick={() => navigate("/app/jobs")}>
-                  View Bulk Jobs
+                <Button size="large" onClick={() => navigate("/app/review")}>
+                  Review & Publish Drafts
+                </Button>
+                <Button size="large" onClick={() => navigate("/app/seo-audit")}>
+                  SEO Audit
+                </Button>
+                <Button size="large" onClick={() => navigate("/app/collections")}>
+                  Collection Descriptions
+                </Button>
+                <Button size="large" onClick={() => navigate("/app/blog")}>
+                  Blog Generator
+                </Button>
+                <Button size="large" onClick={() => navigate("/app/analytics")}>
+                  Analytics
                 </Button>
                 <Button size="large" onClick={() => navigate("/app/settings")}>
                   Brand Voice Settings
