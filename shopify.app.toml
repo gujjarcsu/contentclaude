@@ -26,6 +26,11 @@ api_version = "2026-07"
   uri = "/webhooks/app/subscriptions_update"
   topics = ["app_subscriptions/update"]
 
+  # Autopilot — generate content when a new product is created
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/create"
+  topics = ["products/create"]
+
   # NOTE: GDPR compliance webhooks (customers/data_request, customers/redact,
   # shop/redact) are NOT registered via toml. They must be configured in the
   # Shopify Partner Dashboard → App → App setup → GDPR data requests.

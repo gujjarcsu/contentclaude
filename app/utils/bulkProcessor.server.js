@@ -33,10 +33,17 @@ export async function processBulkJob(jobId) {
     });
     if (!session) throw new Error(`No offline session for shop ${job.shop}`);
 
-    const [brandVoice, plan] = await Promise.all([
+    const [brandVoice, plan, recentContent] = await Promise.all([
       prisma.brandVoice.findUnique({ where: { shop: job.shop } }),
       prisma.plan.findUnique({ where: { shop: job.shop } }),
+      prisma.generatedContent.findMany({
+        where: { shop: job.shop, contentType: "description" },
+        select: { productTitle: true },
+        orderBy: { updatedAt: "desc" },
+        take: 15,
+      }),
     ]);
+    const recentTitlesBase = recentContent.map((r) => r.productTitle).filter(Boolean);
 
     // Cache the plan limit once; track usage locally to avoid N*2 DB queries.
     // Re-check from DB every 10 products to catch mid-job plan changes.
@@ -81,6 +88,8 @@ export async function processBulkJob(jobId) {
           continue;
         }
 
+        const recentTitles = recentTitlesBase.filter((t) => t !== product.title);
+
         const generated = await generateProductContent(
           {
             title: product.title,
@@ -89,11 +98,13 @@ export async function processBulkJob(jobId) {
             description: product.description,
             descriptionHtml: product.descriptionHtml,
             imageUrl: product.featuredImage?.url || "",
+            images: (product.images?.edges || []).map((e) => e.node),
             variants: product.variants.edges.map((e) => e.node),
             tags: product.tags,
           },
           brandVoice,
-          contentTypes
+          contentTypes,
+          { recentTitles }
         );
 
         const month = new Date().toISOString().slice(0, 7);
@@ -241,6 +252,7 @@ async function fetchShopifyProduct(session, productId) {
             id title productType vendor description descriptionHtml
             seo { title description }
             featuredImage { url }
+            images(first: 4) { edges { node { url } } }
             variants(first: 10) { edges { node { title price } } }
             tags
           }

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -17,6 +17,7 @@ import {
 import { useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { enqueueGenerationJob } from "../queues/generationQueue.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -42,6 +43,40 @@ export const loader = async ({ request }) => {
       createdAt: j.createdAt.toISOString(),
     })),
   });
+};
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const formData = await request.formData();
+  const jobId = formData.get("jobId");
+
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
+  if (!job || job.shop !== shop) {
+    return Response.json({ error: "Job not found." }, { status: 404 });
+  }
+
+  // Re-queue the failed products (those not yet completed)
+  const allIds = JSON.parse(job.productIds || "[]");
+  const failedIds = allIds.slice(job.completedProducts);
+
+  if (failedIds.length === 0) {
+    return Response.json({ error: "No failed products to retry." }, { status: 400 });
+  }
+
+  const newJob = await prisma.generationJob.create({
+    data: {
+      shop,
+      status: "queued",
+      totalProducts: failedIds.length,
+      productIds: JSON.stringify(failedIds),
+      contentTypes: job.contentTypes,
+      autoPublish: job.autoPublish,
+    },
+  });
+
+  await enqueueGenerationJob(newJob.id);
+  return Response.json({ success: true, newJobId: newJob.id });
 };
 
 function statusBadge(status) {
@@ -70,6 +105,7 @@ export default function JobsPage() {
   const { jobs } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const retryFetcher = useFetcher();
 
   const hasActiveJobs = jobs.some((j) =>
     j.status === "queued" || j.status === "processing"
@@ -257,17 +293,39 @@ export default function JobsPage() {
                     {job.status === "complete" && (
                       <>
                         <Divider />
-                        <InlineStack gap="300">
+                        <InlineStack gap="300" blockAlign="center">
                           <Button
                             variant="primary"
-                            onClick={() => navigate("/app/products")}
+                            onClick={() => navigate("/app/review")}
                           >
                             Review & Publish Content
                           </Button>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {job.completedProducts} product
-                            {job.completedProducts !== 1 ? "s" : ""} have draft
-                            content ready to review
+                            {job.completedProducts !== 1 ? "s" : ""} ready to review
+                          </Text>
+                        </InlineStack>
+                      </>
+                    )}
+
+                    {/* Retry failed */}
+                    {job.status === "failed" && job.failedProducts > 0 && (
+                      <>
+                        <Divider />
+                        <InlineStack gap="300" blockAlign="center">
+                          <retryFetcher.Form method="post">
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <Button
+                              variant="primary"
+                              tone="critical"
+                              submit
+                              loading={retryFetcher.state !== "idle" && retryFetcher.formData?.get("jobId") === job.id}
+                            >
+                              Retry Failed Products
+                            </Button>
+                          </retryFetcher.Form>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Will re-queue {job.failedProducts} failed product{job.failedProducts !== 1 ? "s" : ""}
                           </Text>
                         </InlineStack>
                       </>

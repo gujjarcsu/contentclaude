@@ -17,6 +17,7 @@ import {
   Banner,
   Box,
   Tabs,
+  Modal,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -98,10 +99,55 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+  const actionType = formData.get("actionType") || "generateSelected";
 
+  const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
+    (t) => formData.get(`bulk_${t}`) === "true"
+  );
+  if (contentTypes.length === 0) return { error: "Select at least one content type." };
+  const autoPublish = formData.get("bulk_autoPublish") === "true";
+
+  if (actionType === "generateAll") {
+    // Paginate through ALL Shopify product IDs
+    const allIds = [];
+    let cursor = null;
+    let hasNextPage = true;
+    while (hasNextPage) {
+      const resp = await admin.graphql(
+        `query($cursor: String) {
+          products(first: 250, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { id } }
+          }
+        }`,
+        { variables: { cursor } }
+      );
+      const { data } = await resp.json();
+      const { edges, pageInfo } = data.products;
+      allIds.push(...edges.map((e) => e.node.id));
+      hasNextPage = pageInfo.hasNextPage;
+      cursor = pageInfo.endCursor;
+    }
+    if (allIds.length === 0) return { error: "No products found in your store." };
+
+    const job = await prisma.generationJob.create({
+      data: {
+        shop,
+        status: "queued",
+        totalProducts: allIds.length,
+        productIds: JSON.stringify(allIds),
+        contentTypes: contentTypes.join(","),
+        autoPublish,
+      },
+    });
+    await enqueueGenerationJob(job.id);
+    return redirect("/app/jobs");
+  }
+
+  // generateSelected — existing bulk-by-selection flow
   let selectedIds;
   try {
     selectedIds = JSON.parse(formData.get("selectedIds") || "[]");
@@ -109,14 +155,7 @@ export const action = async ({ request }) => {
   } catch {
     return { error: "Invalid selection data. Please refresh and try again." };
   }
-  const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-    (t) => formData.get(`bulk_${t}`) === "true"
-  );
-
   if (selectedIds.length === 0) return { error: "No products selected." };
-  if (contentTypes.length === 0) return { error: "Select at least one content type." };
-
-  const autoPublish = formData.get("bulk_autoPublish") === "true";
 
   const job = await prisma.generationJob.create({
     data: {
@@ -128,7 +167,6 @@ export const action = async ({ request }) => {
       autoPublish,
     },
   });
-
   await enqueueGenerationJob(job.id);
   return redirect("/app/jobs");
 };
@@ -146,6 +184,7 @@ export default function ProductsPage() {
   const [bulkFaq, setBulkFaq] = useState(false);
   const [bulkAutoPublish, setBulkAutoPublish] = useState(false);
   const [bulkError, setBulkError] = useState("");
+  const [generateAllModal, setGenerateAllModal] = useState(false);
 
   const handleSearchChange = useCallback((v) => setSearchValue(v), []);
   const handleSearchClear = useCallback(() => setSearchValue(""), []);
@@ -204,21 +243,36 @@ export default function ProductsPage() {
     );
   }
 
+  const buildBulkFormData = useCallback((actionType, ids) => {
+    const fd = new FormData();
+    fd.append("actionType", actionType);
+    if (ids) fd.append("selectedIds", JSON.stringify(ids));
+    fd.append("bulk_description", bulkDesc.toString());
+    fd.append("bulk_metaTitle", bulkMeta.toString());
+    fd.append("bulk_metaDescription", bulkMeta.toString());
+    fd.append("bulk_faq", bulkFaq.toString());
+    fd.append("bulk_autoPublish", bulkAutoPublish.toString());
+    return fd;
+  }, [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish]);
+
   const handleBulkGenerate = useCallback(() => {
     if (!bulkDesc && !bulkMeta && !bulkFaq) {
       setBulkError("Select at least one content type to generate.");
       return;
     }
     setBulkError("");
-    const fd = new FormData();
-    fd.append("selectedIds", JSON.stringify(selectedItems));
-    fd.append("bulk_description", bulkDesc.toString());
-    fd.append("bulk_metaTitle", bulkMeta.toString());
-    fd.append("bulk_metaDescription", bulkMeta.toString());
-    fd.append("bulk_faq", bulkFaq.toString());
-    fd.append("bulk_autoPublish", bulkAutoPublish.toString());
-    submit(fd, { method: "POST" });
-  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish, submit]);
+    submit(buildBulkFormData("generateSelected", selectedItems), { method: "POST" });
+  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit]);
+
+  const handleGenerateAll = useCallback(() => {
+    if (!bulkDesc && !bulkMeta && !bulkFaq) {
+      setBulkError("Select at least one content type to generate.");
+      return;
+    }
+    setBulkError("");
+    setGenerateAllModal(false);
+    submit(buildBulkFormData("generateAll", null), { method: "POST" });
+  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, setGenerateAllModal, submit]);
 
   return (
     <Page
@@ -230,6 +284,10 @@ export default function ProductsPage() {
           content: "Review Drafts",
           onAction: () => navigate("/app/review"),
           disabled: dbCounts.draft === 0,
+        },
+        {
+          content: `Generate All (${totalProducts})`,
+          onAction: () => setGenerateAllModal(true),
         },
       ]}
     >
@@ -387,13 +445,14 @@ export default function ProductsPage() {
             }}
             emptyState={
               <EmptyState
-                heading={statusFilter === "all" ? "No products found" : `No products with status: ${statusFilter}`}
+                heading={statusFilter === "all" ? "Your store is all caught up!" : `No ${statusFilter} products found`}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                action={statusFilter !== "all" ? { content: "View all products", onAction: () => setSearchParams({}) } : undefined}
               >
                 <p>
                   {statusFilter === "all"
-                    ? "Add products to your Shopify store first."
-                    : "Switch to the 'All' tab to see all products."}
+                    ? "Looks like your store doesn't have any products yet. Add some products in Shopify, then come back here to generate killer content for them."
+                    : `No products match the "${statusFilter}" filter. Try switching tabs or clearing the filter.`}
                 </p>
               </EmptyState>
             }
@@ -424,6 +483,34 @@ export default function ProductsPage() {
             </Box>
           )}
         </Card>
+
+        {/* Generate All confirmation modal */}
+        <Modal
+          open={generateAllModal}
+          onClose={() => setGenerateAllModal(false)}
+          title={`Generate content for all ${totalProducts} products?`}
+          primaryAction={{ content: "Start Bulk Job", onAction: handleGenerateAll }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setGenerateAllModal(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text as="p" variant="bodyMd">
+                This creates a background job for all {totalProducts} products. Estimated time: ~{Math.ceil(totalProducts * 3.5 / 60)} minutes.
+              </Text>
+              <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
+              <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />
+              <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} />
+              <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} />
+              <Checkbox
+                label="Auto-publish (skip review)"
+                checked={bulkAutoPublish}
+                onChange={setBulkAutoPublish}
+                helpText="Pushes directly to Shopify — no review step"
+              />
+              {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
       </BlockStack>
     </Page>
   );

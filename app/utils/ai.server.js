@@ -75,6 +75,94 @@ export async function generateAltText(imageUrl, productTitle) {
   return rawText.trim();
 }
 
+export async function enhanceExistingContent(product, brandVoice, contentTypes = ["description"], options = {}) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+
+  const keywords = sanitizePromptInput(options.keywords || brandVoice?.targetKeywords || "", 300);
+  const language = brandVoice?.language || "en";
+  const langName = getLanguageName(language);
+  const bvStoreName = sanitizePromptInput(brandVoice?.storeName || "the store", 200);
+  const bvTone = sanitizePromptInput(brandVoice?.brandTone || "professional", 100);
+  const bvAudience = sanitizePromptInput(brandVoice?.targetAudience || "general consumers", 500);
+  const bvDiff = sanitizePromptInput(brandVoice?.keyDifferentiators || "", 500);
+
+  const existing = {
+    description: product.descriptionHtml || product.description || "",
+    metaTitle: product.seoTitle || "",
+    metaDescription: product.seoDescription || "",
+  };
+
+  const sections = [];
+
+  sections.push(`=== CRITICAL RULES ===
+You are ENHANCING existing content — not rewriting from scratch.
+PRESERVE the structure, key facts, and voice of the original.
+IMPROVE: clarity, readability, SEO keyword density, conversion hooks, brand tone alignment.
+Do NOT invent claims not in the original or product data.`);
+
+  if (language !== "en") {
+    sections.push(`=== LANGUAGE ===\nWrite ALL content in ${langName}.`);
+  }
+
+  sections.push(`=== BRAND CONTEXT ===
+Store Name: ${bvStoreName}
+Brand Tone: ${bvTone}
+Target Audience: ${bvAudience}
+Key Differentiators: ${bvDiff}${brandVoice?.sampleContent ? `\n\nSAMPLE WRITING STYLE:\n${sanitizePromptInput(brandVoice.sampleContent, 600)}` : ""}`);
+
+  sections.push(`=== PRODUCT ===
+Title: ${product.title}
+Product Type: ${product.productType || "N/A"}
+Tags: ${product.tags?.join(", ") || "none"}`);
+
+  if (keywords) {
+    sections.push(`=== SEO KEYWORDS ===\nNaturally weave these into the content: ${keywords}`);
+  }
+
+  const typeInstructions = [];
+  if (contentTypes.includes("description") && existing.description) {
+    typeInstructions.push(`ENHANCE THIS DESCRIPTION (return improved HTML):
+<EXISTING_DESCRIPTION>
+${existing.description.substring(0, 2000)}
+</EXISTING_DESCRIPTION>
+Output: <DESCRIPTION>enhanced HTML here</DESCRIPTION>`);
+  }
+  if (contentTypes.includes("metaTitle")) {
+    typeInstructions.push(`IMPROVE THIS META TITLE (max 60 chars, Title Case):
+Current: "${existing.metaTitle || "(none)"}"
+Output: <META_TITLE>improved title here</META_TITLE>`);
+  }
+  if (contentTypes.includes("metaDescription")) {
+    typeInstructions.push(`IMPROVE THIS META DESCRIPTION (max 155 chars):
+Current: "${existing.metaDescription || "(none)"}"
+Output: <META_DESCRIPTION>improved description here</META_DESCRIPTION>`);
+  }
+  sections.push(`=== CONTENT TO ENHANCE ===\n${typeInstructions.join("\n\n")}`);
+
+  const prompt = sections.join("\n\n");
+
+  const imageUrls = [];
+  if (Array.isArray(product.images) && product.images.length > 0) {
+    product.images.slice(0, 2).forEach((img) => {
+      const url = img?.url || img?.src;
+      if (url) imageUrls.push(url);
+    });
+  }
+
+  const messageContent = imageUrls.length > 0
+    ? [...imageUrls.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: prompt }]
+    : prompt;
+
+  const rawText = await callClaude(apiKey, {
+    model: "claude-sonnet-4-6",
+    max_tokens: 3000,
+    messages: [{ role: "user", content: messageContent }],
+  });
+
+  return parseGeneratedContent(rawText);
+}
+
 export async function generateBlogPost(topic, brandVoice, options = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
@@ -124,6 +212,47 @@ Write a compelling, SEO-friendly blog post on the given topic.
   return {
     title: extractTag(rawText, "BLOG_TITLE"),
     content: extractTag(rawText, "BLOG_CONTENT"),
+  };
+}
+
+export async function generateSocialContent(product, brandVoice) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+
+  const prompt = `Generate social media content for this product.
+
+PRODUCT: ${product.title}
+DESCRIPTION SNIPPET: ${(product.description || "").replace(/<[^>]+>/g, "").substring(0, 300)}
+BRAND VOICE: ${brandVoice?.brandTone || "professional"}
+STORE: ${brandVoice?.storeName || "the store"}
+TARGET AUDIENCE: ${brandVoice?.targetAudience || "general consumers"}
+
+Rules:
+- Write in the brand's voice — do NOT sound generic or AI-written
+- Do NOT invent claims not in the product data
+
+<INSTAGRAM>
+Instagram caption: 150-200 words, compelling hook, storytelling, 10-15 hashtags at end.
+</INSTAGRAM>
+
+<FACEBOOK>
+Facebook post: 80-120 words, conversational, clear CTA. No hashtags.
+</FACEBOOK>
+
+<TIKTOK>
+TikTok hook + script: First line = scroll-stopping hook (under 10 words). Then 3-4 short punchy sentences. Total under 60 words.
+</TIKTOK>`;
+
+  const rawText = await callClaude(apiKey, {
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1500,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return {
+    instagram: extractTag(rawText, "INSTAGRAM").trim(),
+    facebook: extractTag(rawText, "FACEBOOK").trim(),
+    tiktok: extractTag(rawText, "TIKTOK").trim(),
   };
 }
 
@@ -177,6 +306,32 @@ Generate:
   };
 }
 
+// ─── Prompt injection defence ────────────────────────────────────────────────
+
+const INJECTION_PATTERNS = [
+  /ignore\s+(all\s+)?(previous|prior|above|earlier|prior)\s+instructions?/gi,
+  /disregard\s+(all\s+)?(previous|prior|above)\s+instructions?/gi,
+  /forget\s+(all\s+)?(previous|prior|above)\s+instructions?/gi,
+  /do\s+not\s+follow\s+(the\s+)?(above|previous)\s+instructions?/gi,
+  /you\s+are\s+now\s+(a|an)\s+/gi,
+  /act\s+as\s+(a|an)\s+(different|new|unrestricted)/gi,
+  /\[system\]/gi,
+  /\[assistant\]/gi,
+  /\[user\]/gi,
+  /===\s*(critical|system|override|jailbreak)/gi,
+  /<\|im_start\|>/gi,
+  /<\|im_end\|>/gi,
+];
+
+export function sanitizePromptInput(input, maxLength = 1000) {
+  if (!input || typeof input !== "string") return "";
+  let clean = input.slice(0, maxLength);
+  for (const pattern of INJECTION_PATTERNS) {
+    clean = clean.replace(pattern, "[removed]");
+  }
+  return clean;
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function callClaude(apiKey, body, attempt = 0) {
@@ -226,7 +381,7 @@ async function callClaude(apiKey, body, attempt = 0) {
 
 function buildPrompt(product, brandVoice, contentTypes, options = {}) {
   const sections = [];
-  const keywords = options.keywords || brandVoice?.targetKeywords || "";
+  const keywords = sanitizePromptInput(options.keywords || brandVoice?.targetKeywords || "", 300);
   const language = brandVoice?.language || "en";
   const langName = getLanguageName(language);
   const length = options.length || "standard";
@@ -247,13 +402,22 @@ Write ALL content in ${langName}. The meta title and meta description must also 
   }
 
   // ── Brand context ─────────────────────────────────────────────────────────
+  const bvStoreName = sanitizePromptInput(brandVoice?.storeName || "the store", 200);
+  const bvTone = sanitizePromptInput(brandVoice?.brandTone || "professional and helpful", 100);
+  const bvAudience = sanitizePromptInput(brandVoice?.targetAudience || "general consumers", 500);
+  const bvDiff = sanitizePromptInput(brandVoice?.keyDifferentiators || "quality products, great service", 500);
+  const bvAvoid = sanitizePromptInput(brandVoice?.avoidPhrases || "generic AI-sounding language, excessive hype", 300);
+  const bvNotes = sanitizePromptInput(brandVoice?.additionalNotes || "none", 300);
+  const bvSample = brandVoice?.sampleContent
+    ? `\n\nSAMPLE CONTENT IN OUR VOICE (match this writing style exactly):\n${sanitizePromptInput(brandVoice.sampleContent, 1000)}`
+    : "";
   sections.push(`=== BRAND CONTEXT ===
-Store Name: ${brandVoice?.storeName || "the store"}
-Brand Tone: ${brandVoice?.brandTone || "professional and helpful"}
-Target Audience: ${brandVoice?.targetAudience || "general consumers"}
-Key Differentiators: ${brandVoice?.keyDifferentiators || "quality products, great service"}
-Phrases/Styles to Avoid: ${brandVoice?.avoidPhrases || "generic AI-sounding language, excessive hype"}
-Additional Guidelines: ${brandVoice?.additionalNotes || "none"}${brandVoice?.sampleContent ? `\n\nSAMPLE CONTENT IN OUR VOICE (match this writing style exactly):\n${brandVoice.sampleContent}` : ""}`);
+Store Name: ${bvStoreName}
+Brand Tone: ${bvTone}
+Target Audience: ${bvAudience}
+Key Differentiators: ${bvDiff}
+Phrases/Styles to Avoid: ${bvAvoid}
+Additional Guidelines: ${bvNotes}${bvSample}`);
 
   // ── Product type awareness ────────────────────────────────────────────────
   const typeNote = getProductTypeInstructions(product.productType, product.title);
@@ -279,7 +443,21 @@ Use these keywords in the product description (at least 2-3 natural occurrences)
       ? `Price: $${prices[0].toFixed(2)}`
       : "Price: N/A";
 
+  // ── Cross-product differentiation ────────────────────────────────────────
+  if (options.recentTitles?.length > 0) {
+    sections.push(`=== DIFFERENTIATION ===
+Other products already in this catalog: ${options.recentTitles.slice(0, 8).join(", ")}
+Ensure THIS product has a DISTINCT content angle — highlight what makes it uniquely valuable versus these related items. Do not repeat hooks or structures used for those products.`);
+  }
+
   // ── Product data ──────────────────────────────────────────────────────────
+  const imageCount = Array.isArray(product.images) ? Math.min(product.images.length, 4) : (product.imageUrl ? 1 : 0);
+  const imageNote = imageCount > 1
+    ? `\n\nPRODUCT IMAGES: ${imageCount} images provided above. Use visual details from ALL images (colors, materials, form, packaging, context) to enrich the description. Only describe what is visibly present.`
+    : imageCount === 1
+    ? "\n\nPRODUCT IMAGE: Provided above. Use visual details you observe (colors, materials, form, packaging, context) to enrich the description. Only describe what is visibly present."
+    : "";
+
   sections.push(`=== PRODUCT DATA ===
 Title: ${product.title}
 Product Type: ${product.productType || "N/A"}
@@ -287,7 +465,7 @@ Vendor: ${product.vendor || "N/A"}
 Tags: ${product.tags?.join(", ") || "none"}
 ${priceInfo}
 Variants: ${product.variants?.map((v) => v.title).filter((t) => t !== "Default Title").join(", ") || "Single option"}
-Current Description: ${product.descriptionHtml || product.description || "No existing description"}${product.imageUrl ? "\n\nPRODUCT IMAGE: Provided above. Use visual details you observe (colors, materials, form, packaging, context) to enrich the description. Only describe what is visibly present." : ""}`);
+Current Description: ${product.descriptionHtml || product.description || "No existing description"}${imageNote}`);
 
   // ── Content type instructions ─────────────────────────────────────────────
   const typeInstructions = [];

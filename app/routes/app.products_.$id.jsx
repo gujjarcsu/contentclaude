@@ -47,10 +47,32 @@ export async function loader({ request, params }) {
   if (!data.product) throw new Response("Product not found", { status: 404 });
   const product = data.product;
 
-  const [existingContent, brandVoice] = await Promise.all([
+  const [existingContent, brandVoice, versions, templates] = await Promise.all([
     prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
     prisma.brandVoice.findUnique({ where: { shop } }),
+    prisma.contentVersion.findMany({
+      where: { shop, productId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+    prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }),
   ]);
+
+  const { scoreContent } = await import("../utils/contentScorer.server.js");
+  const contentMap = existingContent.reduce((acc, c) => { acc[c.contentType] = c; return acc; }, {});
+  const qualityScore = scoreContent({
+    description: contentMap.description?.generatedContent || "",
+    metaTitle: contentMap.metaTitle?.generatedContent || "",
+    metaDescription: contentMap.metaDescription?.generatedContent || "",
+    faq: contentMap.faq?.generatedContent || "",
+  });
+
+  // Group versions by content type, keep last 5 per type
+  const versionsByType = {};
+  for (const v of versions) {
+    if (!versionsByType[v.contentType]) versionsByType[v.contentType] = [];
+    if (versionsByType[v.contentType].length < 5) versionsByType[v.contentType].push(v);
+  }
 
   return {
     product: {
@@ -90,6 +112,9 @@ export async function loader({ request, params }) {
     }, {}),
     hasBrandVoice: !!brandVoice,
     hasApiKey: !!process.env.ANTHROPIC_API_KEY,
+    qualityScore,
+    versionsByType,
+    templates,
   };
 }
 
@@ -104,7 +129,7 @@ export async function action({ request, params }) {
 
   // Dynamic imports keep server-only modules out of the client bundle
   const [
-    { generateProductContent, generateAltText },
+    { generateProductContent, generateAltText, enhanceExistingContent },
     { tryConsumeGeneration },
     { checkRateLimit },
     { getCache },
@@ -114,6 +139,77 @@ export async function action({ request, params }) {
     import("../utils/rateLimit.server.js"),
     import("../utils/cache.server.js"),
   ]);
+
+  // ── Enhance Existing ─────────────────────────────────────────────────────
+  if (actionType === "enhance") {
+    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+    if (!rl.allowed) {
+      return { error: `Too many requests. Please wait ${rl.retryAfterSeconds} seconds.` };
+    }
+    const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
+      (t) => formData.get(`gen_${t}`) === "true"
+    );
+    if (contentTypes.length === 0) return { error: "Select at least one content type to enhance." };
+
+    const gate = await tryConsumeGeneration(shop, contentTypes[0], productId);
+    if (!gate.allowed) {
+      return { error: `Monthly limit reached (${gate.monthlyLimit} on ${gate.planName}). Upgrade to continue.`, limitReached: true };
+    }
+
+    const [productResponse, brandVoice] = await Promise.all([
+      admin.graphql(
+        `query getProduct($id: ID!) {
+          product(id: $id) {
+            title productType vendor description descriptionHtml
+            seo { title description }
+            images(first: 4) { edges { node { url } } }
+            tags
+          }
+        }`,
+        { variables: { id: productId } }
+      ),
+      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+    ]);
+    const { data: pd } = await productResponse.json();
+    const p = pd.product;
+    const targetKeywords = (formData.get("targetKeywords") || "").trim();
+
+    const generated = await enhanceExistingContent(
+      {
+        title: p.title,
+        productType: p.productType,
+        description: p.description,
+        descriptionHtml: p.descriptionHtml,
+        seoTitle: p.seo?.title || "",
+        seoDescription: p.seo?.description || "",
+        images: (p.images?.edges || []).map((e) => e.node),
+        tags: p.tags,
+      },
+      brandVoice,
+      contentTypes,
+      { keywords: targetKeywords }
+    );
+
+    const typesToSave = contentTypes.filter((t) => generated[t]);
+    const existing = await prisma.generatedContent.findMany({
+      where: { shop, productId, contentType: { in: typesToSave } },
+    });
+    if (existing.length > 0) {
+      await prisma.contentVersion.createMany({
+        data: existing.map((c) => ({ shop, productId, contentType: c.contentType, content: c.generatedContent, version: c.version })),
+      });
+    }
+    await Promise.all(
+      typesToSave.map((type) =>
+        prisma.generatedContent.upsert({
+          where: { shop_productId_contentType: { shop, productId, contentType: type } },
+          update: { generatedContent: generated[type], status: "draft", version: { increment: 1 } },
+          create: { shop, productId, productTitle: p.title, contentType: type, originalContent: "", generatedContent: generated[type], status: "draft" },
+        })
+      )
+    );
+    return { success: true, generated, message: "Existing content enhanced — review and publish when ready." };
+  }
 
   // ── Generate ──────────────────────────────────────────────────────────────
   if (actionType === "generate") {
@@ -159,11 +255,16 @@ export async function action({ request, params }) {
     const { data: productData } = await productResponse.json();
     const product = productData.product;
 
-    const brandVoice = await getCache(
-      `bv:${shop}`,
-      () => prisma.brandVoice.findUnique({ where: { shop } }),
-      300
-    );
+    const [brandVoice, recentContent] = await Promise.all([
+      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+      prisma.generatedContent.findMany({
+        where: { shop, contentType: "description", NOT: { productId } },
+        select: { productTitle: true },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+      }),
+    ]);
+    const recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
 
     let generated = {};
     if (contentTypes.length > 0) {
@@ -175,29 +276,43 @@ export async function action({ request, params }) {
           description: product.description,
           descriptionHtml: product.descriptionHtml,
           imageUrl: product.featuredImage?.url || "",
+          images: (product.images?.edges || []).map((e) => e.node),
           variants: product.variants.edges.map((e) => e.node),
           tags: product.tags,
         },
         brandVoice,
         contentTypes,
-        { keywords: targetKeywords, length: contentLength }
+        { keywords: targetKeywords, length: contentLength, recentTitles }
       );
 
       const finalStatus = autoPublish ? "published" : "draft";
+      const typesToSave = contentTypes.filter((t) => generated[t]);
+
+      // Snapshot existing content into version history before overwriting
+      const existing = await prisma.generatedContent.findMany({
+        where: { shop, productId, contentType: { in: typesToSave } },
+      });
+      if (existing.length > 0) {
+        await prisma.contentVersion.createMany({
+          data: existing.map((c) => ({
+            shop, productId, contentType: c.contentType,
+            content: c.generatedContent, version: c.version,
+          })),
+        });
+      }
+
       await Promise.all(
-        contentTypes
-          .filter((t) => generated[t])
-          .map((type) => {
-            const originalContent =
-              type === "description" ? product.descriptionHtml || "" :
-              type === "metaTitle" ? product.seo?.title || "" :
-              type === "metaDescription" ? product.seo?.description || "" : "";
-            return prisma.generatedContent.upsert({
-              where: { shop_productId_contentType: { shop, productId, contentType: type } },
-              update: { generatedContent: generated[type], originalContent, status: finalStatus, version: { increment: 1 } },
-              create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
-            });
-          })
+        typesToSave.map((type) => {
+          const originalContent =
+            type === "description" ? product.descriptionHtml || "" :
+            type === "metaTitle" ? product.seo?.title || "" :
+            type === "metaDescription" ? product.seo?.description || "" : "";
+          return prisma.generatedContent.upsert({
+            where: { shop_productId_contentType: { shop, productId, contentType: type } },
+            update: { generatedContent: generated[type], originalContent, status: finalStatus, version: { increment: 1 } },
+            create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
+          });
+        })
       );
 
       // Auto-publish: immediately push to Shopify
@@ -350,6 +465,39 @@ export async function action({ request, params }) {
     return { success: true, published: true, message: "Content published to your Shopify store!" };
   }
 
+  // ── Generate Social Media Content ────────────────────────────────────────
+  if (actionType === "generateSocial") {
+    const { generateSocialContent } = await import("../utils/ai.server.js");
+    const [productResp, brandVoice, descRecord] = await Promise.all([
+      admin.graphql(`query($id:ID!){product(id:$id){title description}}`, { variables: { id: productId } }),
+      prisma.brandVoice.findUnique({ where: { shop } }),
+      prisma.generatedContent.findUnique({
+        where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+      }),
+    ]);
+    const { data: pd } = await productResp.json();
+    const social = await generateSocialContent(
+      { title: pd.product?.title || "", description: descRecord?.generatedContent || pd.product?.description || "" },
+      brandVoice
+    );
+    return { success: true, social };
+  }
+
+  // ── Restore Version ───────────────────────────────────────────────────────
+  if (actionType === "restoreVersion") {
+    const versionId = formData.get("versionId");
+    const ver = await prisma.contentVersion.findUnique({ where: { id: versionId } });
+    if (!ver || ver.shop !== shop || ver.productId !== productId) {
+      return { error: "Version not found." };
+    }
+    await prisma.generatedContent.upsert({
+      where: { shop_productId_contentType: { shop, productId, contentType: ver.contentType } },
+      update: { generatedContent: ver.content, status: "draft" },
+      create: { shop, productId, productTitle: "", contentType: ver.contentType, generatedContent: ver.content, status: "draft" },
+    });
+    return { success: true, reverted: true, contentType: ver.contentType, message: `${ver.contentType} restored to version ${ver.version}.` };
+  }
+
   // ── Revert ────────────────────────────────────────────────────────────────
   if (actionType === "revert") {
     const contentType = formData.get("contentType");
@@ -370,6 +518,46 @@ export async function action({ request, params }) {
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
+
+function VersionHistorySection({ versions, contentType, restoreFetcher }) {
+  const [open, setOpen] = useState(false);
+  if (!versions || versions.length === 0) return null;
+
+  return (
+    <BlockStack gap="100">
+      <Button variant="plain" size="slim" onClick={() => setOpen((v) => !v)}>
+        {open ? "Hide" : `History (${versions.length})`}
+      </Button>
+      {open && (
+        <BlockStack gap="200">
+          {versions.map((v) => (
+            <Box key={v.id} padding="200" background="bg-surface-secondary" borderRadius="200">
+              <InlineStack align="space-between" blockAlign="start">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                    v{v.version} · {new Date(v.createdAt).toLocaleDateString()}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {v.content.replace(/<[^>]+>/g, "").substring(0, 80)}…
+                  </Text>
+                </BlockStack>
+                <restoreFetcher.Form method="post">
+                  <input type="hidden" name="actionType" value="restoreVersion" />
+                  <input type="hidden" name="versionId" value={v.id} />
+                  <Button size="slim" variant="plain"
+                    loading={restoreFetcher.state !== "idle" && restoreFetcher.formData?.get("versionId") === v.id}
+                    submit>
+                    Restore
+                  </Button>
+                </restoreFetcher.Form>
+              </InlineStack>
+            </Box>
+          ))}
+        </BlockStack>
+      )}
+    </BlockStack>
+  );
+}
 
 function OriginalContentSection({ original, contentType, revertFetcher }) {
   const [expanded, setExpanded] = useState(false);
@@ -408,18 +596,36 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, hasApiKey } = useLoaderData();
+  const { product, existingContent, hasBrandVoice, hasApiKey, qualityScore, versionsByType, templates } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const fetcher = useFetcher();
   const revertFetcher = useFetcher();
+  const socialFetcher = useFetcher();
+  const restoreFetcher = useFetcher();
   const prevFetcherData = useRef(null);
   const prevRevertData = useRef(null);
 
   const isLoading = fetcher.state !== "idle";
   const actionData = fetcher.data;
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
+  const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
+
+  // Progressive loading messages during AI generation
+  const loadingMessages = [
+    "Analysing your product…",
+    "Crafting your brand voice…",
+    "Writing compelling copy…",
+    "Optimising for SEO…",
+    "Polishing the final draft…",
+  ];
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  useEffect(() => {
+    if (!isGenerating && !isEnhancing) { setLoadingMsgIdx(0); return; }
+    const interval = setInterval(() => setLoadingMsgIdx((i) => (i + 1) % loadingMessages.length), 3000);
+    return () => clearInterval(interval);
+  }, [isGenerating, isEnhancing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate panel state
   const [genDescription, setGenDescription] = useState(true);
@@ -430,6 +636,21 @@ export default function ProductGeneratePage() {
   const [autoPublish, setAutoPublish] = useState(false);
   const [targetKeywords, setTargetKeywords] = useState("");
   const [contentLength, setContentLength] = useState("standard");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+
+  const applyTemplate = useCallback((templateId) => {
+    setSelectedTemplate(templateId);
+    if (!templateId) return;
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    const types = tpl.contentTypes.split(",");
+    setGenDescription(types.includes("description"));
+    setGenMetaTitle(types.includes("metaTitle"));
+    setGenMetaDescription(types.includes("metaDescription"));
+    setGenFaq(types.includes("faq"));
+    setContentLength(tpl.contentLength || "standard");
+    if (tpl.keywords) setTargetKeywords(tpl.keywords);
+  }, [templates]);
 
   // Editable content state — initialized from generated or existing
   const rawDescription = actionData?.generated?.description || existingContent.description?.generated || "";
@@ -507,6 +728,16 @@ export default function ProductGeneratePage() {
     handleGenerate(types);
   }, [handleGenerate]);
 
+  const handleEnhance = useCallback(() => {
+    const fd = new FormData();
+    fd.append("actionType", "enhance");
+    fd.append("gen_description", genDescription.toString());
+    fd.append("gen_metaTitle", genMetaTitle.toString());
+    fd.append("gen_metaDescription", genMetaDescription.toString());
+    fd.append("targetKeywords", targetKeywords);
+    fetcher.submit(fd, { method: "POST" });
+  }, [genDescription, genMetaTitle, genMetaDescription, targetKeywords, fetcher]);
+
   const handlePublish = useCallback(() => {
     const fd = new FormData();
     fd.append("actionType", "publish");
@@ -518,6 +749,19 @@ export default function ProductGeneratePage() {
 
   const noneSelected = !genDescription && !genMetaTitle && !genMetaDescription && !genFaq && !genAltText;
   const noImages = product.images.length === 0;
+
+  // Keyboard shortcut: Cmd/Ctrl+Enter to generate
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isLoading && hasApiKey && !noneSelected) {
+        e.preventDefault();
+        handleGenerate();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [isLoading, hasApiKey, noneSelected, handleGenerate]);
 
   const lengthOptions = [
     { label: "Short (~100-150 words) — simple products", value: "short" },
@@ -589,7 +833,24 @@ export default function ProductGeneratePage() {
 
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Generate Content</Text>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Generate Content</Text>
+                    {qualityScore.score > 0 && (
+                      <Badge tone={qualityScore.grade === "Excellent" ? "success" : qualityScore.grade === "Good" ? "info" : qualityScore.grade === "Fair" ? "attention" : "critical"}>
+                        {qualityScore.grade} · {qualityScore.score}/100
+                      </Badge>
+                    )}
+                  </InlineStack>
+
+                  {templates.length > 0 && (
+                    <Select
+                      label="Apply Template"
+                      options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
+                      value={selectedTemplate}
+                      onChange={applyTemplate}
+                      helpText="Pre-fills the options below"
+                    />
+                  )}
 
                   <Select
                     label="Description Length"
@@ -661,8 +922,20 @@ export default function ProductGeneratePage() {
                     disabled={isLoading || noneSelected || !hasApiKey}
                     fullWidth
                   >
-                    {isGenerating ? "Generating with AI…" : "Generate Content"}
+                    {isGenerating ? loadingMessages[loadingMsgIdx] : "Generate Content ⌘↵"}
                   </Button>
+
+                  {(product.descriptionHtml || product.seoTitle) && (
+                    <Button
+                      size="large"
+                      onClick={handleEnhance}
+                      loading={isEnhancing}
+                      disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription) || !hasApiKey}
+                      fullWidth
+                    >
+                      {isEnhancing ? loadingMessages[loadingMsgIdx] : "Enhance Existing Content"}
+                    </Button>
+                  )}
                 </BlockStack>
               </Card>
             </BlockStack>
@@ -733,12 +1006,11 @@ export default function ProductGeneratePage() {
                   {existingContent.description?.original && (
                     <>
                       <Divider />
-                      <OriginalContentSection
-                        original={existingContent.description.original}
-                        contentType="description"
-                        revertFetcher={revertFetcher}
-                      />
+                      <OriginalContentSection original={existingContent.description.original} contentType="description" revertFetcher={revertFetcher} />
                     </>
+                  )}
+                  {versionsByType.description?.length > 0 && (
+                    <VersionHistorySection versions={versionsByType.description} contentType="description" restoreFetcher={restoreFetcher} />
                   )}
                 </BlockStack>
               </Card>
@@ -774,12 +1046,11 @@ export default function ProductGeneratePage() {
                     {existingContent.metaTitle?.original && (
                       <>
                         <Divider />
-                        <OriginalContentSection
-                          original={existingContent.metaTitle.original}
-                          contentType="metaTitle"
-                          revertFetcher={revertFetcher}
-                        />
+                        <OriginalContentSection original={existingContent.metaTitle.original} contentType="metaTitle" revertFetcher={revertFetcher} />
                       </>
+                    )}
+                    {versionsByType.metaTitle?.length > 0 && (
+                      <VersionHistorySection versions={versionsByType.metaTitle} contentType="metaTitle" restoreFetcher={restoreFetcher} />
                     )}
                   </BlockStack>
                 </Card>
@@ -815,12 +1086,11 @@ export default function ProductGeneratePage() {
                     {existingContent.metaDescription?.original && (
                       <>
                         <Divider />
-                        <OriginalContentSection
-                          original={existingContent.metaDescription.original}
-                          contentType="metaDescription"
-                          revertFetcher={revertFetcher}
-                        />
+                        <OriginalContentSection original={existingContent.metaDescription.original} contentType="metaDescription" revertFetcher={revertFetcher} />
                       </>
+                    )}
+                    {versionsByType.metaDescription?.length > 0 && (
+                      <VersionHistorySection versions={versionsByType.metaDescription} contentType="metaDescription" restoreFetcher={restoreFetcher} />
                     )}
                   </BlockStack>
                 </Card>
@@ -919,6 +1189,65 @@ export default function ProductGeneratePage() {
                   </BlockStack>
                 </Card>
               )}
+
+              {/* Social Media Content */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Social Media Content</Text>
+                    <Button
+                      size="slim"
+                      loading={socialFetcher.state !== "idle"}
+                      disabled={!hasApiKey}
+                      onClick={() => {
+                        const fd = new FormData();
+                        fd.append("actionType", "generateSocial");
+                        socialFetcher.submit(fd, { method: "POST" });
+                      }}
+                    >
+                      Generate
+                    </Button>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Ready-to-post captions for Instagram, Facebook, and TikTok.
+                  </Text>
+                  {socialFetcher.data?.social && (
+                    <BlockStack gap="300">
+                      {[
+                        { key: "instagram", label: "Instagram" },
+                        { key: "facebook", label: "Facebook" },
+                        { key: "tiktok", label: "TikTok" },
+                      ].map(({ key, label }) =>
+                        socialFetcher.data.social[key] ? (
+                          <Box key={key} padding="300" background="bg-surface-secondary" borderRadius="200">
+                            <BlockStack gap="200">
+                              <InlineStack align="space-between" blockAlign="center">
+                                <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(socialFetcher.data.social[key]);
+                                    if (window.shopify?.toast) {
+                                      window.shopify.toast.show(`${label} caption copied!`, { duration: 2000 });
+                                    }
+                                  }}
+                                >
+                                  Copy
+                                </Button>
+                              </InlineStack>
+                              <Text as="p" variant="bodySm">{socialFetcher.data.social[key]}</Text>
+                            </BlockStack>
+                          </Box>
+                        ) : null
+                      )}
+                    </BlockStack>
+                  )}
+                  {socialFetcher.data?.error && (
+                    <Text as="p" variant="bodySm" tone="critical">{socialFetcher.data.error}</Text>
+                  )}
+                </BlockStack>
+              </Card>
             </BlockStack>
           </Layout.Section>
         </Layout>

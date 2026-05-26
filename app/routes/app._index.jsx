@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, redirect } from "react-router";
 import {
   Page,
   Layout,
@@ -55,6 +55,11 @@ export const loader = async ({ request }) => {
   // hasApiKey is a server config check only — not sent to the client
   const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
   const isNewShop = generatedCount === 0 && draftCount === 0;
+
+  // Send brand-new merchants through the onboarding wizard
+  if (isNewShop && !brandVoice) {
+    throw redirect("/app/setup");
+  }
 
   return Response.json({
     totalProducts,

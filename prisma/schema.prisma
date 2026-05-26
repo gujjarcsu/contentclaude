@@ -17,7 +17,7 @@ generator client {
 // when using Prisma with a serverless / edge deployment.
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // Required by Shopify app template
@@ -54,10 +54,13 @@ model BrandVoice {
   avoidPhrases       String   @default("")
   sampleContent      String   @default("")
   additionalNotes    String   @default("")
-  targetKeywords     String   @default("") // comma-separated global SEO keywords
-  language           String   @default("en") // ISO 639-1 output language code
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  targetKeywords         String   @default("") // comma-separated global SEO keywords
+  language               String   @default("en") // ISO 639-1 output language code
+  autopilotEnabled       Boolean  @default(false) // auto-generate on new product
+  autopilotAutoPublish   Boolean  @default(false) // publish immediately during autopilot
+  autopilotContentTypes  String   @default("description,metaTitle,metaDescription") // csv
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 // AI-generated content per product per content type
@@ -121,6 +124,35 @@ model GDPRRequest {
   @@index([shop])
   @@index([requestType])
   @@index([processedAt])
+}
+
+// Saved content versions — written before each overwrite so merchants can roll back
+model ContentVersion {
+  id          String   @id @default(cuid())
+  shop        String
+  productId   String
+  contentType String   // "description" | "metaTitle" | "metaDescription" | "faq"
+  content     String
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@index([shop, productId, contentType])
+  @@index([shop, createdAt])
+}
+
+// Merchant-saved generation presets
+model ContentTemplate {
+  id                 String   @id @default(cuid())
+  shop               String
+  name               String
+  contentLength      String   @default("standard") // "short"|"standard"|"detailed"
+  contentTypes       String   @default("description,metaTitle,metaDescription") // csv
+  keywords           String   @default("")
+  customInstructions String   @default("")
+  isDefault          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  @@index([shop])
 }
 
 // Async bulk generation jobs

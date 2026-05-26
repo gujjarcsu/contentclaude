@@ -16,7 +16,7 @@ import {
   Box,
   Divider,
 } from "@shopify/polaris";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -257,6 +257,16 @@ export default function ReviewPage() {
     submit(fd, { method: "POST" });
   }, [products, approved, submit]);
 
+  const prevActionData = useRef(null);
+  useEffect(() => {
+    if (actionData?.success && actionData !== prevActionData.current) {
+      prevActionData.current = actionData;
+      if (typeof window !== "undefined" && window.shopify?.toast) {
+        window.shopify.toast.show(actionData.message ?? "Done!", { duration: 4000 });
+      }
+    }
+  }, [actionData]);
+
   const filtered = products.filter((p) =>
     p.productTitle.toLowerCase().includes(search.toLowerCase())
   );
@@ -289,13 +299,10 @@ export default function ReviewPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-        {actionData?.success && (
-          <Banner tone="success" title="Done!">
-            <p>{actionData.message}</p>
-            {actionData.errors?.map((e, i) => (
-              <p key={i} style={{ marginTop: 4 }}>
-                Failed: {e.productId} — {e.error}
-              </p>
+        {actionData?.success && actionData.errors?.length > 0 && (
+          <Banner tone="warning" title="Published with some errors">
+            {actionData.errors.map((e, i) => (
+              <p key={i}>Failed: {e.productId} — {e.error}</p>
             ))}
           </Banner>
         )}
