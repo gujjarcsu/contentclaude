@@ -1,81 +1,142 @@
-// This is your Prisma schema file for ContentPilot AI
-// Learn more: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
+// ── Database ────────────────────────────────────────────────────────────────
+// Current: SQLite (development / single-server deployment).
+//
+// To migrate to PostgreSQL before scaling beyond ~5 concurrent shops:
+//   1. Change provider to "postgresql"
+//   2. Change url to env("DATABASE_URL")
+//   3. Add DATABASE_URL=postgresql://user:pass@host:5432/contentpilot to .env
+//   4. Run: npx prisma migrate dev --name "sqlite_to_postgres"
+//   5. Run: npx prisma migrate deploy  (or use pgloader / pg_dump for data)
+//
+// Recommended managed Postgres: Railway, Neon, Supabase, or PlanetScale.
+// Connection pooling: add ?pgbouncer=true&connection_limit=1 to DATABASE_URL
+// when using Prisma with a serverless / edge deployment.
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
 }
 
-// Required by Shopify app template - DO NOT REMOVE
+// Required by Shopify app template
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+
+  @@index([shop])
 }
 
-// ContentPilot AI - Brand Voice Settings
+// Brand voice configuration per shop
 model BrandVoice {
-  id              String   @id @default(cuid())
-  shop            String   @unique
-  storeName       String   @default("")
-  brandTone       String   @default("professional")  // e.g. "professional but approachable"
-  targetAudience  String   @default("")               // e.g. "health-conscious Australians 25-55"
-  keyDifferentiators String @default("")              // e.g. "Australian lab tested, premium quality"
-  avoidPhrases    String   @default("")               // What NOT to sound like
-  sampleContent   String   @default("")               // Merchant's best existing descriptions
-  additionalNotes String   @default("")               // Any other brand guidelines
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  shop               String   @unique
+  storeName          String   @default("")
+  brandTone          String   @default("professional")
+  targetAudience     String   @default("")
+  keyDifferentiators String   @default("")
+  avoidPhrases       String   @default("")
+  sampleContent      String   @default("")
+  additionalNotes    String   @default("")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
-// ContentPilot AI - Generated Content Records
+// AI-generated content per product per content type
 model GeneratedContent {
   id               String   @id @default(cuid())
   shop             String
-  productId        String                             // Shopify Product GID
+  productId        String
   productTitle     String   @default("")
-  contentType      String                             // "description", "metaTitle", "metaDescription", "altText", "faq"
-  originalContent  String   @default("")              // What was there before
-  generatedContent String   @default("")              // What AI produced
-  publishedContent String   @default("")              // What was actually published
-  status           String   @default("draft")         // "draft", "approved", "published", "rejected"
+  contentType      String   // "description" | "metaTitle" | "metaDescription" | "faq" | "altText"
+  originalContent  String   @default("")
+  generatedContent String   @default("")
+  publishedContent String   @default("")
+  status           String   @default("draft") // "draft" | "approved" | "published" | "rejected"
   version          Int      @default(1)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  @@unique([shop, productId, contentType])
   @@index([shop, productId])
   @@index([shop, status])
+  @@index([shop, updatedAt])
 }
 
-// ContentPilot AI - Generation Jobs (for bulk operations)
+// Subscription plan per shop
+model Plan {
+  id               String    @id @default(cuid())
+  shop             String    @unique
+  planName         String    @default("free")   // "free" | "starter" | "growth" | "pro"
+  status           String    @default("active") // "active" | "cancelled" | "frozen"
+  monthlyLimit     Int       @default(10)       // max generations per calendar month
+  shopifyChargeId  String?                      // Shopify AppSubscription GID
+  currentPeriodEnd DateTime?                    // when the current billing period ends
+  trialEndsAt      DateTime?
+  renewsAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// Per-generation usage log — powers billing, analytics, and limit checks
+model UsageRecord {
+  id          String   @id @default(cuid())
+  shop        String
+  month       String   // "2026-05"  — YYYY-MM, makes monthly rollup trivial
+  contentType String   // "description" | "metaTitle" | etc.
+  productId   String?
+  tokensUsed  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([shop, month])
+  @@index([shop, createdAt])
+}
+
+// GDPR webhook audit log — required for Shopify App Store
+model GDPRRequest {
+  id          String   @id @default(cuid())
+  shop        String
+  requestType String   // "customer_data_request" | "customer_redact" | "shop_redact"
+  payload     String   // raw JSON of the webhook payload
+  processedAt DateTime @default(now())
+
+  @@index([shop])
+  @@index([requestType])
+  @@index([processedAt])
+}
+
+// Async bulk generation jobs
 model GenerationJob {
-  id               String   @id @default(cuid())
-  shop             String
-  status           String   @default("queued")        // "queued", "processing", "complete", "failed"
-  totalProducts    Int      @default(0)
-  completedProducts Int     @default(0)
-  failedProducts   Int      @default(0)
-  contentTypes     String   @default("description")   // comma-separated: "description,metaTitle,metaDescription"
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String    @id @default(cuid())
+  shop              String
+  status            String    @default("queued") // "queued" | "processing" | "complete" | "failed"
+  totalProducts     Int       @default(0)
+  completedProducts Int       @default(0)
+  failedProducts    Int       @default(0)
+  productIds        String    @default("[]")     // JSON array of Shopify Product GIDs
+  contentTypes      String    @default("description") // comma-separated
+  errorLog          String?   // JSON array of { productId, error }
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([shop, status])
+  @@index([shop, createdAt])
 }

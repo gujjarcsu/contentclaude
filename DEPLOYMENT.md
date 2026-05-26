@@ -1,0 +1,190 @@
+# ContentPilot AI — Production Deployment Guide
+
+## Prerequisites
+
+| Requirement | Details |
+|---|---|
+| Node.js | >=20.19 <22 or >=22.12 |
+| Shopify Partner account | app.shopify.com/partners |
+| Anthropic API key | console.anthropic.com |
+| Shopify app credentials | From Partner Dashboard |
+
+---
+
+## Environment Variables
+
+Create a `.env` file (never commit this):
+
+```env
+# Shopify app credentials (from Partner Dashboard → App → API credentials)
+SHOPIFY_API_KEY=your_api_key
+SHOPIFY_API_SECRET=your_api_secret
+SHOPIFY_APP_URL=https://your-production-domain.com
+SCOPES=write_products,write_metaobjects,write_metaobject_definitions
+
+# AI content generation
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+
+# Database (SQLite for single-server; switch to PostgreSQL for scale)
+# DATABASE_URL=postgresql://user:password@host:5432/contentpilot  ← uncomment for Postgres
+
+# Logging (debug | info | warn | error)
+LOG_LEVEL=info
+
+# Error monitoring (optional — see app/utils/errorMonitoring.server.js)
+# SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+```
+
+---
+
+## Deployment Options
+
+### Option 1 — Railway (Recommended for getting started)
+
+1. Create a new project at railway.app
+2. Connect your GitHub repo
+3. Add a PostgreSQL plugin (Railway → New → Database → PostgreSQL)
+4. Set all env vars in Railway → Variables
+5. Set `DATABASE_URL` from the PostgreSQL plugin's connection string
+6. Railway builds and deploys automatically on push to `main`
+
+**Start command:** `npm run setup && npm start`
+
+### Option 2 — Fly.io
+
+```bash
+fly launch --name contentpilot-ai
+fly postgres create --name contentpilot-db
+fly postgres attach contentpilot-db
+fly secrets set SHOPIFY_API_KEY=... SHOPIFY_API_SECRET=... ANTHROPIC_API_KEY=...
+fly deploy
+```
+
+### Option 3 — Render
+
+1. New Web Service → connect GitHub repo
+2. Build command: `npm install && npm run build`
+3. Start command: `npm run setup && npm start`
+4. Add a Render PostgreSQL database and set `DATABASE_URL`
+
+---
+
+## Database Migration (SQLite → PostgreSQL)
+
+When you're ready to scale beyond a single server:
+
+1. Update `prisma/schema.prisma`:
+   ```diff
+   datasource db {
+   -  provider = "sqlite"
+   -  url      = "file:dev.sqlite"
+   +  provider = "postgresql"
+   +  url      = env("DATABASE_URL")
+   }
+   ```
+
+2. Set `DATABASE_URL` in your environment
+
+3. Run migrations:
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+4. Migrate existing data with `pgloader` or a manual export/import script if needed.
+
+---
+
+## Shopify App Store Submission Checklist
+
+### Before submitting:
+
+- [ ] **Billing test mode off** — Set `BILLING_TEST = false` in `app/shopify.server.js` (currently reads from `NODE_ENV`)
+- [ ] **GDPR webhooks registered** — Go to Partner Dashboard → App → App setup → GDPR data requests. Register three URLs:
+  - `https://your-domain.com/webhooks/customers/data_request`
+  - `https://your-domain.com/webhooks/customers/redact`
+  - `https://your-domain.com/webhooks/shop/redact`
+- [ ] **App URL updated** — `shopify.app.toml` `application_url` points to production
+- [ ] **Redirect URLs updated** — `shopify.app.toml` `auth.redirect_urls` includes production URL
+- [ ] **Privacy policy URL** — Add to Partner Dashboard
+- [ ] **Support email** — Add to Partner Dashboard
+- [ ] **App icon** — 1200×1200 PNG, no alpha channel
+- [ ] **App listing screenshots** — At least 3, 1600×900
+
+### Deploy app configuration:
+```bash
+npm run deploy
+```
+
+---
+
+## Webhook Configuration
+
+Webhooks registered via `shopify.app.toml` (auto-managed by Shopify CLI):
+
+| Topic | Handler |
+|---|---|
+| `app/uninstalled` | `webhooks.app.uninstalled.jsx` |
+| `app/scopes_update` | `webhooks.app.scopes_update.jsx` |
+| `app_subscriptions/update` | `webhooks.app.subscriptions_update.jsx` |
+
+GDPR webhooks (registered manually in Partner Dashboard):
+
+| Topic | Handler |
+|---|---|
+| `customers/data_request` | `webhooks.customers.data_request.jsx` |
+| `customers/redact` | `webhooks.customers.redact.jsx` |
+| `shop/redact` | `webhooks.shop.redact.jsx` |
+
+---
+
+## Scaling Notes
+
+ContentPilot is designed for growth. Here's what to address at each scale milestone:
+
+### < 50 shops
+Current architecture is fine. SQLite + fire-and-forget background jobs.
+
+### 50–500 shops
+- Switch to **PostgreSQL** (see migration above)
+- Replace `setTimeout` fire-and-forget in bulk processor with **BullMQ + Redis**
+  - Install: `npm install bullmq ioredis`
+  - Create `app/queues/generationQueue.server.js`
+  - Railway/Fly.io both offer managed Redis
+
+### 500+ shops
+- Add a dedicated **worker process** for the generation queue (separate Fly Machine or Railway service)
+- Add **connection pooling** (PgBouncer or Supabase's built-in pooler)
+- Consider **rate limit management** at the queue level (Anthropic: 4000 RPM on Sonnet)
+- Add **Sentry** for error monitoring (see `app/utils/errorMonitoring.server.js`)
+
+---
+
+## Monitoring & Logs
+
+Logs are structured JSON (via pino) output to stdout. Configure your platform's log drain:
+
+- **Railway:** Auto-collected, searchable in dashboard
+- **Fly.io:** `fly logs` or configure Logtail drain
+- **Render:** Auto-collected in dashboard
+
+Key log events to watch:
+
+| Event | Level | Fields |
+|---|---|---|
+| Bulk job started | `info` | `jobId`, `shop`, `productCount` |
+| Product generated | `debug` | `jobId`, `shop`, `productId` |
+| Product failed | `error` | `jobId`, `shop`, `productId`, `err` |
+| Bulk job complete | `info` | `jobId`, `completedProducts`, `failedProducts` |
+| Claude API retry | `warn` | `model`, `status`, `attempt` |
+| Claude API error | `error` | `model`, `status`, `body` |
+| Plan limit hit | `warn` | `shop`, `planName`, `monthlyLimit` |
+
+---
+
+## Health Check
+
+The app has no dedicated `/health` endpoint (Shopify CLI doesn't require one). To verify the deployment is healthy:
+
+1. Visit `https://your-domain.com/app` — should redirect to Shopify auth
+2. Check logs for any startup errors
+3. Run `npx prisma migrate status` to verify DB is in sync

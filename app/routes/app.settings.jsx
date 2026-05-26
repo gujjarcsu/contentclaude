@@ -14,9 +14,10 @@ import {
   Banner,
   Box,
 } from "@shopify/polaris";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { invalidateCache } from "../utils/cache.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -45,14 +46,21 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
 
+  const VALID_TONES = new Set([
+    "professional", "friendly", "premium", "bold",
+    "scientific", "warm", "minimalist", "playful", "custom",
+  ]);
+  const rawTone = formData.get("brandTone") || "professional";
+  const rawSample = (formData.get("sampleContent") || "").slice(0, 5000);
+
   const data = {
-    storeName: formData.get("storeName") || "",
-    brandTone: formData.get("brandTone") || "professional",
-    targetAudience: formData.get("targetAudience") || "",
-    keyDifferentiators: formData.get("keyDifferentiators") || "",
-    avoidPhrases: formData.get("avoidPhrases") || "",
-    sampleContent: formData.get("sampleContent") || "",
-    additionalNotes: formData.get("additionalNotes") || "",
+    storeName: (formData.get("storeName") || "").slice(0, 200),
+    brandTone: VALID_TONES.has(rawTone) ? rawTone : "professional",
+    targetAudience: (formData.get("targetAudience") || "").slice(0, 500),
+    keyDifferentiators: (formData.get("keyDifferentiators") || "").slice(0, 500),
+    avoidPhrases: (formData.get("avoidPhrases") || "").slice(0, 500),
+    sampleContent: rawSample,
+    additionalNotes: (formData.get("additionalNotes") || "").slice(0, 500),
   };
 
   await prisma.brandVoice.upsert({
@@ -61,6 +69,9 @@ export const action = async ({ request }) => {
     create: { shop, ...data },
   });
 
+  // Bust the cached brand voice so the next generation uses fresh settings
+  await invalidateCache(`bv:${shop}`);
+
   return Response.json({ success: true, message: "Brand voice settings saved!" });
 };
 
@@ -68,6 +79,7 @@ export default function SettingsPage() {
   const { brandVoice, hasApiKey } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
@@ -123,6 +135,7 @@ export default function SettingsPage() {
                   <Text as="h2" variant="headingLg">Store Identity</Text>
 
                   <TextField
+                    name="storeName"
                     label="Store Name"
                     value={storeName}
                     onChange={setStoreName}
@@ -132,6 +145,7 @@ export default function SettingsPage() {
                   />
 
                   <Select
+                    name="brandTone"
                     label="Brand Tone"
                     options={toneOptions}
                     value={brandTone}
@@ -140,6 +154,7 @@ export default function SettingsPage() {
                   />
 
                   <TextField
+                    name="targetAudience"
                     label="Target Audience"
                     value={targetAudience}
                     onChange={setTargetAudience}
@@ -157,6 +172,7 @@ export default function SettingsPage() {
                   <Text as="h2" variant="headingLg">What Makes You Unique</Text>
 
                   <TextField
+                    name="keyDifferentiators"
                     label="Key Differentiators"
                     value={keyDifferentiators}
                     onChange={setKeyDifferentiators}
@@ -167,6 +183,7 @@ export default function SettingsPage() {
                   />
 
                   <TextField
+                    name="avoidPhrases"
                     label="Phrases & Styles to Avoid"
                     value={avoidPhrases}
                     onChange={setAvoidPhrases}
@@ -190,6 +207,7 @@ export default function SettingsPage() {
                   </Text>
 
                   <TextField
+                    name="sampleContent"
                     label="Your Best Product Descriptions (paste 2-3)"
                     value={sampleContent}
                     onChange={setSampleContent}
@@ -199,6 +217,7 @@ export default function SettingsPage() {
                   />
 
                   <TextField
+                    name="additionalNotes"
                     label="Additional Notes or Guidelines"
                     value={additionalNotes}
                     onChange={setAdditionalNotes}
@@ -209,6 +228,16 @@ export default function SettingsPage() {
                   />
                 </BlockStack>
               </Card>
+
+              <Button
+                variant="primary"
+                size="large"
+                submit
+                loading={isSaving}
+                fullWidth
+              >
+                {isSaving ? "Saving..." : "Save Settings"}
+              </Button>
             </BlockStack>
           </Layout.Section>
 
@@ -239,6 +268,7 @@ export default function SettingsPage() {
             </Card>
           </Layout.Section>
         </Layout>
+        </Form>
       </BlockStack>
     </Page>
   );

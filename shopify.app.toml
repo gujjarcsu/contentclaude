@@ -1,53 +1,39 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# ContentPilot AI — Shopify App Configuration
+# Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1279a14cca41d4a6f8e6e3c485870b77"
-name = """
-\r
-contentpilot-ai"""
+name = "ContentPilot AI"
 application_url = "https://example.com"
 embedded = true
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products,write_metaobjects,write_metaobject_definitions"
-
-[product.metafields.app.demo_info]
-type = "single_line_text_field"
-name = "Demo Source Info"
-description = "Tracks products created by the Shopify app template for development"
-
-  [product.metafields.app.demo_info.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example]
-name = "Example"
-description = "An example metaobject definition created by this template"
-
-  [metaobjects.app.example.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example.fields.title]
-name = "Title"
-type = "single_line_text_field"
-required = true
-
-[metaobjects.app.example.fields.description]
-name = "Description"
-type = "multi_line_text_field"
 
 [webhooks]
 api_version = "2026-07"
 
+  # App lifecycle
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
-  topics = [ "app/uninstalled" ]
+  topics = ["app/uninstalled"]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
+  topics = ["app/scopes_update"]
+
+  # Billing — subscription created, upgraded, cancelled, frozen
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/subscriptions_update"
+  topics = ["app_subscriptions/update"]
+
+  # NOTE: GDPR compliance webhooks (customers/data_request, customers/redact,
+  # shop/redact) are NOT registered via toml. They must be configured in the
+  # Shopify Partner Dashboard → App → App setup → GDPR data requests.
+  # Handler files: webhooks.customers.data_request.jsx / .customers.redact.jsx
+  # / .shop.redact.jsx — those files ARE in place and ready.
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = ["https://example.com/api/auth"]
 
 [build]
 include_config_on_deploy = true

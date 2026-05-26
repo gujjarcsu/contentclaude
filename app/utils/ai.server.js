@@ -1,142 +1,179 @@
-// app/utils/ai.server.js
-// ContentPilot AI - Claude API Integration
-// This file handles all AI content generation
+import logger from "./logger.server.js";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const REQUEST_TIMEOUT_MS = 45_000;
+const MAX_RETRIES = 2;
 
-/**
- * Generate product content using Claude AI
- */
-export async function generateProductContent(product, brandVoice, contentTypes = ["description", "metaTitle", "metaDescription"]) {
+export async function generateProductContent(
+  product,
+  brandVoice,
+  contentTypes = ["description", "metaTitle", "metaDescription"]
+) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set. Add it to your .env file.");
-  }
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
 
-  console.log("[AI] generateProductContent called");
   const prompt = buildPrompt(product, brandVoice, contentTypes);
-  console.log("[AI] PROMPT LENGTH:", prompt.length);
 
-  console.log("[ContentPilot] Generating content for:", product.title);
-  console.log("[ContentPilot] Content types:", contentTypes);
-  console.log("[ContentPilot] Brand voice:", brandVoice?.storeName || "(none)", "/ Tone:", brandVoice?.brandTone || "(none)");
-  console.log("[ContentPilot] Full prompt:\n---\n" + prompt + "\n---");
+  // Use vision (image + text) when a product image is available
+  const messageContent = product.imageUrl
+    ? [
+        { type: "image", source: { type: "url", url: product.imageUrl } },
+        { type: "text", text: prompt },
+      ]
+    : prompt;
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    }),
+  const rawText = await callClaude(apiKey, {
+    model: "claude-sonnet-4-6",
+    max_tokens: 4000,
+    messages: [{ role: "user", content: messageContent }],
   });
 
-  console.log("[AI] API RESPONSE STATUS:", response.status);
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("[ContentPilot] Claude API error:", response.status, errorBody);
-    throw new Error(`Claude API error ${response.status}: ${errorBody}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.content[0]?.text || "";
-
-  console.log("[ContentPilot] Raw Claude response:\n---\n" + rawText + "\n---");
-
-  const parsed = parseGeneratedContent(rawText);
-  console.log("[ContentPilot] Parsed fields:", {
-    description: parsed.description ? `${parsed.description.length} chars` : "EMPTY",
-    metaTitle: parsed.metaTitle || "EMPTY",
-    metaDescription: parsed.metaDescription ? `${parsed.metaDescription.length} chars` : "EMPTY",
-    faq: parsed.faq ? `${parsed.faq.length} chars` : "EMPTY",
-  });
-
-  return parsed;
+  return parseGeneratedContent(rawText);
 }
 
-/**
- * Build the AI prompt with full context
- */
+export async function generateAltText(imageUrl, productTitle) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+
+  const rawText = await callClaude(apiKey, {
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "url", url: imageUrl } },
+          {
+            type: "text",
+            text: `Write concise alt text for this product image. Product: "${productTitle}". Rules: under 125 chars, describe what is visually shown, include the product name naturally, helpful for accessibility and SEO, do NOT start with "Image of" or "Photo of". Return ONLY the alt text.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  return rawText.trim();
+}
+
+// ─── Internal helpers ────────────────────────────────────────────────────────
+
+async function callClaude(apiKey, body, attempt = 0) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const t0 = Date.now();
+
+  let response;
+  try {
+    response = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === "AbortError") {
+      logger.error({ model: body.model, attempt }, "Claude API request timed out");
+      throw new Error("Claude API timed out after 45 seconds.");
+    }
+    logger.error({ err, model: body.model, attempt }, "Claude API fetch error");
+    throw err;
+  }
+  clearTimeout(timer);
+
+  if (response.ok) {
+    const data = await response.json();
+    logger.debug({ model: body.model, attempt, ms: Date.now() - t0 }, "Claude API call succeeded");
+    return data.content[0]?.text ?? "";
+  }
+
+  if (response.status >= 500 && attempt < MAX_RETRIES) {
+    logger.warn({ model: body.model, status: response.status, attempt }, "Claude API 5xx — retrying");
+    await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
+    return callClaude(apiKey, body, attempt + 1);
+  }
+
+  const errorBody = await response.text();
+  logger.error({ model: body.model, status: response.status, attempt, body: errorBody }, "Claude API error");
+  throw new Error(`Claude API error ${response.status}: ${errorBody}`);
+}
+
 function buildPrompt(product, brandVoice, contentTypes) {
   const sections = [];
 
-  // Brand context
+  // ── Anti-hallucination anchor ─────────────────────────────────────────────
+  sections.push(`=== CRITICAL RULES — READ FIRST ===
+FACTUAL ACCURACY: Only state factual claims that appear verbatim in the PRODUCT DATA or BRAND CONTEXT sections below. Never invent certifications, manufacturing origins, testing claims, awards, country of origin, or specific statistics. If a claim is not explicitly provided in the data, do not include it. Generic benefits ("great gift", "long-lasting") are acceptable; specific claims ("made in Australia", "lab tested", "certified organic") are NOT unless explicitly provided.
+VOICE: Write as the brand, not about it. First or second person where natural.
+AUTHENTICITY: Do not mention AI, automation, or content generation.`);
+
+  // ── Brand context ─────────────────────────────────────────────────────────
   sections.push(`=== BRAND CONTEXT ===
-Store Name: ${brandVoice?.storeName || "Shopify Store"}
+Store Name: ${brandVoice?.storeName || "the store"}
 Brand Tone: ${brandVoice?.brandTone || "professional and helpful"}
 Target Audience: ${brandVoice?.targetAudience || "general consumers"}
 Key Differentiators: ${brandVoice?.keyDifferentiators || "quality products, great service"}
 Phrases/Styles to Avoid: ${brandVoice?.avoidPhrases || "generic AI-sounding language, excessive hype"}
-Additional Guidelines: ${brandVoice?.additionalNotes || "none"}`);
+Additional Guidelines: ${brandVoice?.additionalNotes || "none"}${brandVoice?.sampleContent ? `\n\nSAMPLE CONTENT IN OUR VOICE (match this writing style exactly):\n${brandVoice.sampleContent}` : ""}`);
 
-  // Product data
+  // ── Product data ──────────────────────────────────────────────────────────
   sections.push(`=== PRODUCT DATA ===
 Title: ${product.title}
 Product Type: ${product.productType || "N/A"}
 Vendor: ${product.vendor || "N/A"}
 Tags: ${product.tags?.join(", ") || "none"}
-Price: ${product.variants?.[0]?.price || "N/A"} ${product.variants?.[0]?.currencyCode || ""}
-Variants: ${product.variants?.map(v => v.title).join(", ") || "Default"}
-Current Description: ${product.descriptionHtml || product.description || "No existing description"}`);
+Price: ${product.variants?.[0]?.price || "N/A"}
+Variants: ${product.variants?.map((v) => v.title).filter((t) => t !== "Default Title").join(", ") || "Single option"}
+Current Description: ${product.descriptionHtml || product.description || "No existing description"}${product.imageUrl ? "\n\nPRODUCT IMAGE: Provided above. Use visual details you observe (colors, materials, form, packaging, context) to enrich the description with specific visual language. Only describe what is visibly present." : ""}`);
 
-  // Generation instructions
+  // ── Content type instructions ─────────────────────────────────────────────
   const typeInstructions = [];
 
   if (contentTypes.includes("description")) {
     typeInstructions.push(`
 PRODUCT DESCRIPTION:
-- Write a DETAILED, compelling product description of at least 200 words (aim for 200-300 words)
-- Structure it in three parts: (1) a compelling hook, (2) detailed body with specific benefits AND features, (3) a call to action
-- The hook must address a real customer pain point or desire — make it specific and emotionally resonant, not generic
-- The body must include specific use cases, tangible benefits, and what makes this product worth buying over alternatives
+- Write a compelling, detailed product description of at least 200 words
+- Structure: (1) hook that addresses a real customer pain point or desire, (2) body with specific features and tangible benefits, (3) clear call to action
 - Include emotional appeal — help the customer visualise owning and using this product
-- Use the brand tone consistently throughout every sentence
-- Include natural keyword usage for SEO without stuffing
-- End with a motivating, brand-appropriate call to action
-- Use HTML formatting: <p> tags for paragraphs, <strong> for key benefit highlights, <ul><li> for feature lists where appropriate
-- DO NOT write a single short paragraph — this must be substantial, multi-paragraph marketing copy
-- MINIMUM 200 words. If your draft is under 200 words, expand it before outputting.
-- Format your output as: <DESCRIPTION>your HTML description here</DESCRIPTION>`);
+- Consistent brand tone throughout; natural keyword usage for SEO
+- HTML formatting: <p> tags for paragraphs, <strong> for key highlights, <ul><li> for feature lists
+- MINIMUM 200 words — expand if under that before outputting
+- Format: <DESCRIPTION>your HTML content here</DESCRIPTION>`);
   }
 
   if (contentTypes.includes("metaTitle")) {
     typeInstructions.push(`
 META TITLE:
-- Write an SEO-optimized meta title
-- Maximum 60 characters
-- Include the product name and one key benefit or keyword
-- Make it compelling for search results
-- Format your output as: <META_TITLE>your meta title here</META_TITLE>`);
+- SEO-optimised, maximum 60 characters (strictly enforce)
+- Format: Brand Name Product Name | Key Benefit or Category
+- CAPITALISATION: Use Title Case — capitalise the first letter of each significant word (brand name, product name, key descriptors). Articles (a, an, the), prepositions (in, of, for), and conjunctions (and, or, but) are lowercase unless they start the title.
+- Example good format: "Gujjar Skateboard Gift Card | Choose Your Gear"
+- Make it compelling and relevant to search intent
+- Format: <META_TITLE>Your Title Here</META_TITLE>`);
   }
 
   if (contentTypes.includes("metaDescription")) {
     typeInstructions.push(`
 META DESCRIPTION:
-- Write an SEO-optimized meta description
-- Maximum 155 characters
-- Include a clear value proposition and subtle call-to-action
-- Make it compelling enough to improve click-through rate from search results
-- Format your output as: <META_DESCRIPTION>your meta description here</META_DESCRIPTION>`);
+- SEO-optimised, maximum 155 characters (strictly enforce)
+- Clear value proposition with a subtle call to action
+- CAPITALISATION: Use sentence case — capitalise only the first word and proper nouns (brand name, product names, place names). Do not capitalise common nouns mid-sentence.
+- Example: "Give the perfect gift with a Gujjar Skateboard gift card. Available in $10, $25 & $50 — perfect for skaters and beach lovers."
+- Format: <META_DESCRIPTION>Your meta description here.</META_DESCRIPTION>`);
   }
 
   if (contentTypes.includes("faq")) {
     typeInstructions.push(`
 FAQ CONTENT:
-- Generate 4-5 relevant frequently asked questions and answers about this product
-- Questions should be ones real customers would actually ask
-- Answers should be helpful, accurate, and 2-3 sentences each
-- Include questions about usage, benefits, ingredients/materials, shipping, and suitability
-- Format your output as: <FAQ>
+- 4–5 questions real customers would ask about usage, benefits, materials, shipping, compatibility, or suitability
+- Each answer 2–3 sentences — helpful, specific, and grounded in the product data
+- Do NOT invent claims not supported by the product data
+- Format:
+<FAQ>
 Q: Question here?
 A: Answer here.
 
@@ -147,93 +184,41 @@ A: Answer here.
 
   sections.push(`=== CONTENT TO GENERATE ===${typeInstructions.join("\n")}`);
 
-  sections.push(`=== IMPORTANT RULES ===
-- Write as if you ARE the brand, not describing it from outside
-- Never mention AI, automation, or that this content was generated
-- Never invent specific claims, certifications, or statistics unless provided in the product data
-- Sound natural and human — avoid generic AI patterns like "Whether you're looking for..." or "Say goodbye to..."
-- Every sentence must earn its place — no filler
-- Match the brand tone exactly`);
+  sections.push(`=== OUTPUT RULES ===
+- Match the brand tone exactly in every sentence — read the SAMPLE CONTENT above and mirror that rhythm and register
+- No filler openers: never start with "Whether you're looking for...", "Say goodbye to...", "Introducing...", "Are you tired of..."
+- Every sentence must earn its place — no padding
+- Re-read the CRITICAL RULES at the top before finalising your output`);
 
   return sections.join("\n\n");
 }
 
-/**
- * Parse Claude's structured response into content fields
- */
 function parseGeneratedContent(rawText) {
-  const result = {
-    description: extractBetweenTags(rawText, "DESCRIPTION"),
-    metaTitle: extractBetweenTags(rawText, "META_TITLE"),
-    metaDescription: extractBetweenTags(rawText, "META_DESCRIPTION"),
-    faq: extractBetweenTags(rawText, "FAQ"),
-    raw: rawText,
+  return {
+    description: extractTag(rawText, "DESCRIPTION"),
+    metaTitle: extractTag(rawText, "META_TITLE"),
+    metaDescription: extractTag(rawText, "META_DESCRIPTION"),
+    faq: extractTag(rawText, "FAQ"),
   };
-
-  return result;
 }
 
-/**
- * Extract content between XML-style tags
- */
-function extractBetweenTags(text, tagName) {
-  const regex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, "s");
-  const match = text.match(regex);
-  return match ? match[1].trim() : "";
+function extractTag(text, tagName) {
+  const match = text.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`));
+  return match ? sanitizeHtml(match[1].trim()) : "";
 }
 
-/**
- * Generate alt text for a product image using Claude's vision
- */
-export async function generateAltText(imageUrl, productTitle, brandVoice) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set.");
-  }
-
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 200,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "url",
-                url: imageUrl,
-              },
-            },
-            {
-              type: "text",
-              text: `Write a concise, descriptive alt text for this product image. The product is "${productTitle}". The alt text should be:
-- Under 125 characters
-- Descriptive of what's visually shown
-- Include the product name naturally
-- Helpful for accessibility and SEO
-- NOT start with "Image of" or "Photo of"
-
-Return ONLY the alt text, nothing else.`,
-            },
-          ],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errorBody}`);
-  }
-
-  const data = await response.json();
-  return data.content[0]?.text?.trim() || "";
+// Strip elements and attributes that can execute JS.
+// This is a defence-in-depth layer; Claude output should never contain these,
+// but a prompt-injection attack on product data could attempt it.
+function sanitizeHtml(html) {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
+    .replace(/<embed\b[^>]*>/gi, "")
+    .replace(/<link\b[^>]*>/gi, "")
+    .replace(/<meta\b[^>]*>/gi, "")
+    .replace(/\s(on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "")
+    .replace(/javascript\s*:/gi, "blocked:")
+    .replace(/data\s*:\s*text\/html/gi, "blocked:");
 }

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint · Test · Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+        continue-on-error: true  # JS project — TS errors are warnings for now
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY || 'ci-placeholder' }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET || 'ci-placeholder' }}
+          SHOPIFY_APP_URL: "https://ci.example.com"
+          ANTHROPIC_API_KEY: "sk-ant-ci-placeholder"
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - name: Audit for high/critical vulnerabilities
+        run: npm audit --audit-level=high
+        continue-on-error: true  # Inform but don't block merges for now
