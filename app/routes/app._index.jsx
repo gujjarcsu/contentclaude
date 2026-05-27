@@ -6,11 +6,11 @@ import {
   Text,
   BlockStack,
   InlineStack,
-  Banner,
   Button,
   Box,
   Badge,
   ProgressBar,
+  Banner,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -52,8 +52,6 @@ export const loader = async ({ request }) => {
       brandVoice.targetAudience?.trim() ||
       brandVoice.sampleContent?.trim())
   );
-  // hasApiKey is a server config check only — not sent to the client
-  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
   // Send brand-new merchants through the onboarding wizard
@@ -67,7 +65,6 @@ export const loader = async ({ request }) => {
     draftCount,
     activeJobCount,
     hasBrandVoice,
-    hasApiKey,
     isNewShop,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
@@ -111,7 +108,6 @@ export default function Dashboard() {
     draftCount,
     activeJobCount,
     hasBrandVoice,
-    hasApiKey,
     isNewShop,
     plan,
     usageCount,
@@ -125,16 +121,6 @@ export default function Dashboard() {
     <Page title="ContentPilot AI">
       <BlockStack gap="500">
 
-        {/* ── Setup warnings ──────────────────────────────────────────────── */}
-        {!hasApiKey && (
-          <Banner tone="warning" title="API Key Missing">
-            <p>
-              Add your Anthropic API key to the .env file to enable AI content
-              generation. Without it, the app cannot generate content.
-            </p>
-          </Banner>
-        )}
-
         {activeJobCount > 0 && (
           <Banner tone="info" title={`${activeJobCount} bulk job${activeJobCount > 1 ? "s" : ""} running`}>
             <p>Content is being generated in the background.</p>
@@ -147,7 +133,7 @@ export default function Dashboard() {
         )}
 
         {/* ── Onboarding checklist (shown only for new shops) ─────────────── */}
-        {isNewShop && hasApiKey && (
+        {isNewShop && (
           <Card>
             <BlockStack gap="400">
               <BlockStack gap="100">
@@ -269,36 +255,34 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* ── Optimise Store hero CTA ──────────────────────────────────────── */}
+        {!isNewShop && (
+          <Card background="bg-fill-info-active">
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg">Optimise Your Entire Store</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Generate AI content for every product missing a description — in one click.
+                  </Text>
+                </BlockStack>
+                <Button variant="primary" size="large" onClick={() => navigate("/app/optimize")}>
+                  Optimise Store →
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        )}
+
         {/* ── Quick actions ────────────────────────────────────────────────── */}
         {!isNewShop && (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingLg">Quick Actions</Text>
-              <InlineStack gap="300" wrap={true}>
-                <Button variant="primary" size="large" onClick={() => navigate("/app/products")}>
-                  Generate Product Content
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/review")}>
-                  Review & Publish Drafts
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/seo-audit")}>
-                  SEO Audit
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/collections")}>
-                  Collection Descriptions
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/blog")}>
-                  Blog Generator
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/analytics")}>
-                  Analytics
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/settings")}>
-                  Brand Voice Settings
-                </Button>
-                <Button size="large" onClick={() => navigate("/app/plans")}>
-                  Plans & Billing
-                </Button>
+              <Text as="h2" variant="headingMd">More Tools</Text>
+              <InlineStack gap="300" wrap>
+                <Button onClick={() => navigate("/app/jobs")}>Bulk Jobs</Button>
+                <Button onClick={() => navigate("/app/analytics")}>Analytics</Button>
+                <Button onClick={() => navigate("/app/blog")}>Blog Generator</Button>
               </InlineStack>
             </BlockStack>
           </Card>

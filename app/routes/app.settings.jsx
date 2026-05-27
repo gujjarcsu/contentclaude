@@ -27,7 +27,6 @@ export const loader = async ({ request }) => {
       autopilotContentTypes: "description,metaTitle,metaDescription",
     },
     templates,
-    hasApiKey: !!process.env.ANTHROPIC_API_KEY,
   });
 };
 
@@ -110,7 +109,7 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { brandVoice, templates, hasApiKey } = useLoaderData();
+  const { brandVoice, templates } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -182,12 +181,6 @@ export default function SettingsPage() {
         {actionData?.error && (
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
         )}
-        {!hasApiKey && (
-          <Banner tone="critical" title="API Key Required">
-            <p>Add ANTHROPIC_API_KEY to your .env file to enable content generation.</p>
-          </Banner>
-        )}
-
         <Form method="post">
           <input type="hidden" name="actionType" value="saveBrandVoice" />
           {/* autopilot hidden fields */}

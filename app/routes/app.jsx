@@ -20,16 +20,11 @@ export default function App() {
         <s-app-nav>
           <s-link href="/app">Dashboard</s-link>
           <s-link href="/app/products">Products</s-link>
-          <s-link href="/app/optimize">Optimise Store</s-link>
           <s-link href="/app/review">Review & Publish</s-link>
           <s-link href="/app/collections">Collections</s-link>
-          <s-link href="/app/blog">Blog</s-link>
           <s-link href="/app/seo-audit">SEO Audit</s-link>
-          <s-link href="/app/jobs">Bulk Jobs</s-link>
-          <s-link href="/app/analytics">Analytics</s-link>
           <s-link href="/app/settings">Settings</s-link>
           <s-link href="/app/plans">Plans & Billing</s-link>
-          <s-link href="/app/setup">Onboarding</s-link>
         </s-app-nav>
         <Outlet />
       </PolarisProvider>

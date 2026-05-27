@@ -111,7 +111,6 @@ export async function loader({ request, params }) {
       return acc;
     }, {}),
     hasBrandVoice: !!brandVoice,
-    hasApiKey: !!process.env.ANTHROPIC_API_KEY,
     qualityScore,
     versionsByType,
     templates,
@@ -596,7 +595,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, hasApiKey, qualityScore, versionsByType, templates } = useLoaderData();
+  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const fetcher = useFetcher();
@@ -754,14 +753,14 @@ export default function ProductGeneratePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isLoading && hasApiKey && !noneSelected) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isLoading && !noneSelected) {
         e.preventDefault();
         handleGenerate();
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [isLoading, hasApiKey, noneSelected, handleGenerate]);
+  }, [isLoading, noneSelected, handleGenerate]);
 
   const lengthOptions = [
     { label: "Short (~100-150 words) — simple products", value: "short" },
@@ -789,11 +788,6 @@ export default function ProductGeneratePage() {
         )}
         {revertFetcher.data?.error && (
           <Banner tone="critical"><p>{revertFetcher.data.error}</p></Banner>
-        )}
-        {!hasApiKey && (
-          <Banner tone="critical" title="API Key Missing">
-            <p>Add ANTHROPIC_API_KEY to your .env file to enable content generation.</p>
-          </Banner>
         )}
         {!hasBrandVoice && (
           <Banner tone="warning">
@@ -919,7 +913,7 @@ export default function ProductGeneratePage() {
                     size="large"
                     onClick={() => handleGenerate()}
                     loading={isGenerating}
-                    disabled={isLoading || noneSelected || !hasApiKey}
+                    disabled={isLoading || noneSelected}
                     fullWidth
                   >
                     {isGenerating ? loadingMessages[loadingMsgIdx] : "Generate Content ⌘↵"}
@@ -930,7 +924,7 @@ export default function ProductGeneratePage() {
                       size="large"
                       onClick={handleEnhance}
                       loading={isEnhancing}
-                      disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription) || !hasApiKey}
+                      disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription)}
                       fullWidth
                     >
                       {isEnhancing ? loadingMessages[loadingMsgIdx] : "Enhance Existing Content"}
@@ -1198,7 +1192,6 @@ export default function ProductGeneratePage() {
                     <Button
                       size="slim"
                       loading={socialFetcher.state !== "idle"}
-                      disabled={!hasApiKey}
                       onClick={() => {
                         const fd = new FormData();
                         fd.append("actionType", "generateSocial");
