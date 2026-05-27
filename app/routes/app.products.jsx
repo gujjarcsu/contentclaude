@@ -289,6 +289,10 @@ export default function ProductsPage() {
           content: `Generate All (${totalProducts})`,
           onAction: () => setGenerateAllModal(true),
         },
+        {
+          content: "Bulk Jobs →",
+          onAction: () => navigate("/app/jobs"),
+        },
       ]}
     >
       <BlockStack gap="500">

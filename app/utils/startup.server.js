@@ -46,6 +46,11 @@ export const startupPromise = (async () => {
   if (_initialized) return;
   _initialized = true;
 
+  // Warn if SQLite is being used in production — not suitable for multi-tenant scale
+  if (process.env.NODE_ENV === "production" && (process.env.DATABASE_URL || "").includes("sqlite")) {
+    logger.warn("⚠️ SQLite detected in production. Migrate to PostgreSQL for multi-tenant reliability. See DEPLOYMENT.md.");
+  }
+
   try {
     await recoverStuckJobs();
   } catch (err) {

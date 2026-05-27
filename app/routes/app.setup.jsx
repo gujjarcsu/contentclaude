@@ -7,7 +7,7 @@ import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ export const loader = async ({ request }) => {
   const step = parseInt(url.searchParams.get("step") || "1", 10);
 
   const brandVoice = await prisma.brandVoice.findUnique({ where: { shop } });
-  return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS) });
+  return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS), shopName: "" });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -68,6 +68,11 @@ export const action = async ({ request }) => {
   }
 
   if (step === 4) {
+    // Preview step — no DB save, just advance to final step
+    return redirect("/app/setup?step=5");
+  }
+
+  if (step === 5) {
     // Final step — mark setup complete and redirect to products
     return redirect("/app/products");
   }
@@ -126,6 +131,7 @@ export default function SetupPage() {
     "Brand Identity",
     "Your Audience",
     "SEO & Language",
+    "Content Preview",
     "You're all set!",
   ];
 
@@ -249,8 +255,56 @@ export default function SetupPage() {
             </Card>
           )}
 
-          {/* Step 4: Done */}
+          {/* Step 4: Content Preview */}
           {step === 4 && (
+            <Card>
+              <BlockStack gap="500">
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingLg">Here's what ContentPilot generates for you</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Based on your brand voice settings, ContentPilot produces content like this example — customised to your products, audience, and tone.
+                  </Text>
+                </BlockStack>
+
+                <Box padding="400" background="bg-surface-secondary" borderRadius="300">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">EXAMPLE PRODUCT DESCRIPTION</Text>
+                    </InlineStack>
+                    <Text as="h3" variant="headingMd">Premium Whey Protein Isolate 1kg</Text>
+                    <Text as="p" variant="bodyMd">
+                      Built for athletes who train hard and recover harder. Our Premium Whey Protein Isolate delivers <strong>27g of ultra-filtered protein</strong> per serve — with less than 1g of fat and virtually no lactose, so your body gets exactly what it needs, nothing it doesn't.
+                    </Text>
+                    <Text as="p" variant="bodyMd">
+                      Cold-processed at low temperatures to preserve the full amino acid spectrum, this isolate mixes instantly with no clumping, no chalky aftertaste — just clean, fast-absorbing protein that works as hard as you do.
+                    </Text>
+                    <Box padding="200" background="bg-surface" borderRadius="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Meta Title:</Text>
+                      <Text as="p" variant="bodySm">Premium Whey Protein Isolate | Fast Absorption</Text>
+                    </Box>
+                    <Box padding="200" background="bg-surface" borderRadius="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">Meta Description:</Text>
+                      <Text as="p" variant="bodySm">Cold-processed whey isolate with 27g protein, &lt;1g fat. No fillers. Pure performance nutrition for serious athletes.</Text>
+                    </Box>
+                  </BlockStack>
+                </Box>
+
+                <Banner tone="info">
+                  Your actual content will be tailored to YOUR products, brand tone, and target audience — not a generic template.
+                </Banner>
+
+                <InlineStack gap="300">
+                  <Button onClick={() => navigate("/app/setup?step=3")}>← Back</Button>
+                  <Button variant="primary" submit loading={isSaving}>
+                    Looks great — let's go! →
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          )}
+
+          {/* Step 5: Done */}
+          {step === 5 && (
             <Card>
               <BlockStack gap="400" inlineAlign="center">
                 <Box paddingBlockStart="400">

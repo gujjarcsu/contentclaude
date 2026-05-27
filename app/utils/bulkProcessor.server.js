@@ -33,7 +33,7 @@ export async function processBulkJob(jobId) {
     });
     if (!session) throw new Error(`No offline session for shop ${job.shop}`);
 
-    const [brandVoice, plan, recentContent] = await Promise.all([
+    const [brandVoice, plan, recentContent, collectionVoices] = await Promise.all([
       prisma.brandVoice.findUnique({ where: { shop: job.shop } }),
       prisma.plan.findUnique({ where: { shop: job.shop } }),
       prisma.generatedContent.findMany({
@@ -42,7 +42,13 @@ export async function processBulkJob(jobId) {
         orderBy: { updatedAt: "desc" },
         take: 15,
       }),
+      prisma.collectionVoice.findMany({ where: { shop: job.shop } }),
     ]);
+    // Build a map of collectionId -> voice override for O(1) lookup
+    const collectionVoiceMap = {};
+    for (const cv of collectionVoices) {
+      collectionVoiceMap[cv.collectionId] = cv;
+    }
     const recentTitlesBase = recentContent.map((r) => r.productTitle).filter(Boolean);
 
     // Cache the plan limit once; track usage locally to avoid N*2 DB queries.
@@ -90,6 +96,12 @@ export async function processBulkJob(jobId) {
 
         const recentTitles = recentTitlesBase.filter((t) => t !== product.title);
 
+        // Find first matching collection voice override for this product
+        const productCollectionIds = (product.collections?.edges || []).map((e) => e.node?.id).filter(Boolean);
+        const collectionVoice = productCollectionIds
+          .map((id) => collectionVoiceMap[id])
+          .find((cv) => cv && (cv.brandTone || cv.targetAudience || cv.keywords));
+
         const generated = await generateProductContent(
           {
             title: product.title,
@@ -104,7 +116,7 @@ export async function processBulkJob(jobId) {
           },
           brandVoice,
           contentTypes,
-          { recentTitles }
+          { recentTitles, collectionVoice }
         );
 
         const month = new Date().toISOString().slice(0, 7);
@@ -255,6 +267,7 @@ async function fetchShopifyProduct(session, productId) {
             images(first: 4) { edges { node { url } } }
             variants(first: 10) { edges { node { title price } } }
             tags
+            collections(first: 5) { edges { node { id } } }
           }
         }`,
         variables: { id: productId },

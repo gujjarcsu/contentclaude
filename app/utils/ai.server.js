@@ -22,7 +22,18 @@ export async function generateProductContent(
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
 
-  const prompt = buildPrompt(product, brandVoice, contentTypes, options);
+  // Collection-level voice overrides take precedence over shop-level brand voice
+  const { collectionVoice, ...promptOptions } = options;
+  const effectiveBrandVoice = collectionVoice
+    ? {
+        ...brandVoice,
+        ...(collectionVoice.brandTone ? { brandTone: collectionVoice.brandTone } : {}),
+        ...(collectionVoice.targetAudience ? { targetAudience: collectionVoice.targetAudience } : {}),
+        ...(collectionVoice.keywords ? { targetKeywords: collectionVoice.keywords } : {}),
+      }
+    : brandVoice;
+
+  const prompt = buildPrompt(product, effectiveBrandVoice, contentTypes, promptOptions);
 
   // Collect up to 4 images for vision context
   const imageUrls = [];

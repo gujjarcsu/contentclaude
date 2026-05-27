@@ -50,26 +50,37 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const jobId = formData.get("jobId");
+  const actionType = formData.get("actionType") || "resume";
 
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
   if (!job || job.shop !== shop) {
     return Response.json({ error: "Job not found." }, { status: 404 });
   }
 
-  // Re-queue the failed products (those not yet completed)
-  const allIds = JSON.parse(job.productIds || "[]");
-  const failedIds = allIds.slice(job.completedProducts);
+  let retryIds = [];
 
-  if (failedIds.length === 0) {
-    return Response.json({ error: "No failed products to retry." }, { status: 400 });
+  if (actionType === "retryFailed") {
+    // Parse error log to get the specific product IDs that failed
+    const errorLog = job.errorLog ? JSON.parse(job.errorLog) : [];
+    retryIds = errorLog
+      .map((e) => e.productId)
+      .filter((id) => id && id !== "N/A");
+  } else {
+    // Resume: re-queue products that weren't completed (assumes sequential processing)
+    const allIds = JSON.parse(job.productIds || "[]");
+    retryIds = allIds.slice(job.completedProducts);
+  }
+
+  if (retryIds.length === 0) {
+    return Response.json({ error: "No products to retry." }, { status: 400 });
   }
 
   const newJob = await prisma.generationJob.create({
     data: {
       shop,
       status: "queued",
-      totalProducts: failedIds.length,
-      productIds: JSON.stringify(failedIds),
+      totalProducts: retryIds.length,
+      productIds: JSON.stringify(retryIds),
       contentTypes: job.contentTypes,
       autoPublish: job.autoPublish,
     },
@@ -166,14 +177,11 @@ export default function JobsPage() {
               heading="No bulk jobs yet"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               action={{
-                content: "Select products to generate",
+                content: "Go to Products",
                 onAction: () => navigate("/app/products"),
               }}
             >
-              <p>
-                Go to the Products page, select multiple products using the
-                checkboxes, and click "Generate Selected" to run a bulk job.
-              </p>
+              <p>Select products and hit 'Generate All' to start your first bulk generation.</p>
             </EmptyState>
           </Card>
         ) : (
@@ -304,28 +312,42 @@ export default function JobsPage() {
                             {job.completedProducts} product
                             {job.completedProducts !== 1 ? "s" : ""} ready to review
                           </Text>
+                          {job.failedProducts > 0 && (
+                            <retryFetcher.Form method="post">
+                              <input type="hidden" name="jobId" value={job.id} />
+                              <input type="hidden" name="actionType" value="retryFailed" />
+                              <Button
+                                tone="critical"
+                                submit
+                                loading={retryFetcher.state !== "idle" && retryFetcher.formData?.get("jobId") === job.id}
+                              >
+                                Retry Failed ({job.failedProducts})
+                              </Button>
+                            </retryFetcher.Form>
+                          )}
                         </InlineStack>
                       </>
                     )}
 
-                    {/* Retry failed */}
-                    {job.status === "failed" && job.failedProducts > 0 && (
+                    {/* Resume crashed job */}
+                    {job.status === "failed" && (
                       <>
                         <Divider />
                         <InlineStack gap="300" blockAlign="center">
                           <retryFetcher.Form method="post">
                             <input type="hidden" name="jobId" value={job.id} />
+                            <input type="hidden" name="actionType" value="resume" />
                             <Button
                               variant="primary"
                               tone="critical"
                               submit
                               loading={retryFetcher.state !== "idle" && retryFetcher.formData?.get("jobId") === job.id}
                             >
-                              Retry Failed Products
+                              Resume Job
                             </Button>
                           </retryFetcher.Form>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Will re-queue {job.failedProducts} failed product{job.failedProducts !== 1 ? "s" : ""}
+                            Re-queues unprocessed products from where the job crashed
                           </Text>
                         </InlineStack>
                       </>

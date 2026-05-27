@@ -274,18 +274,43 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* ── Quick actions ────────────────────────────────────────────────── */}
+        {/* ── More tools cards ─────────────────────────────────────────────── */}
         {!isNewShop && (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">More Tools</Text>
-              <InlineStack gap="300" wrap>
-                <Button onClick={() => navigate("/app/jobs")}>Bulk Jobs</Button>
-                <Button onClick={() => navigate("/app/analytics")}>Analytics</Button>
-                <Button onClick={() => navigate("/app/blog")}>Blog Generator</Button>
-              </InlineStack>
-            </BlockStack>
-          </Card>
+          <Layout>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">SEO Audit</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Scan your entire catalog for missing descriptions, meta tags, and alt text.
+                  </Text>
+                  <Button onClick={() => navigate("/app/seo-audit")}>View Full Audit →</Button>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">Analytics</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Track your content generation activity and usage by month.
+                  </Text>
+                  <Button onClick={() => navigate("/app/analytics")}>View Analytics →</Button>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">Blog Generator</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Write SEO-friendly blog posts in your brand voice in under 60 seconds.
+                  </Text>
+                  <Button onClick={() => navigate("/app/blog")}>Write a Blog Post →</Button>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
         )}
 
       </BlockStack>

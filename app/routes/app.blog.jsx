@@ -24,7 +24,7 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
 
   const brandVoice = await prisma.brandVoice.findUnique({ where: { shop } });
-  return Response.json({ brandVoice, hasApiKey: !!process.env.ANTHROPIC_API_KEY });
+  return Response.json({ brandVoice });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function BlogPage() {
-  const { brandVoice, hasApiKey } = useLoaderData();
+  const { brandVoice } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -153,11 +153,6 @@ export default function BlogPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-        {!hasApiKey && (
-          <Banner tone="critical" title="API Key Missing">
-            <p>Add ANTHROPIC_API_KEY to your .env file to enable content generation.</p>
-          </Banner>
-        )}
         {actionData?.error && (
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
         )}
@@ -208,7 +203,7 @@ export default function BlogPage() {
                       variant="primary"
                       submit
                       loading={isGenerating}
-                      disabled={!topic.trim() || !hasApiKey}
+                      disabled={!topic.trim()}
                       fullWidth
                     >
                       {isGenerating ? "Generating…" : "Generate Blog Post"}
@@ -286,12 +281,13 @@ export default function BlogPage() {
             {!generated && !isGenerating && (
               <Card>
                 <Box padding="600">
-                  <BlockStack gap="200" inlineAlign="center">
+                  <BlockStack gap="300" inlineAlign="center">
+                    <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic ✍️</Text>
                     <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                      Fill in the form and click Generate to create your first blog post.
+                      Write your first AI-powered blog post in under 60 seconds.
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                      Blog posts are written in your brand voice using the settings from the Settings page.
+                      Blog posts are written in your brand voice and optimised for the keywords in your Settings.
                     </Text>
                   </BlockStack>
                 </Box>

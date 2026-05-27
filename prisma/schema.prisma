@@ -175,3 +175,17 @@ model GenerationJob {
   @@index([shop, status])
   @@index([shop, createdAt])
 }
+
+// Per-collection brand voice overrides — allows mixed-catalog merchants to use
+// different tones for luxury vs technical vs budget product lines.
+model CollectionVoice {
+  id             String @id @default(cuid())
+  shop           String
+  collectionId   String
+  brandTone      String @default("")
+  targetAudience String @default("")
+  keywords       String @default("")
+
+  @@unique([shop, collectionId])
+  @@index([shop])
+}

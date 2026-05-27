@@ -14,6 +14,9 @@ import {
   Box,
   Spinner,
   TextField,
+  Select,
+  Checkbox,
+  Divider,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -58,7 +61,11 @@ export const loader = async ({ request }) => {
   const statusMap = {};
   generated.forEach(({ productId, status }) => { statusMap[productId] = status; });
 
-  return Response.json({ collections, statusMap });
+  const voiceOverrides = await prisma.collectionVoice.findMany({ where: { shop } });
+  const voiceMap = {};
+  voiceOverrides.forEach((v) => { voiceMap[v.collectionId] = v; });
+
+  return Response.json({ collections, statusMap, voiceMap });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -150,17 +157,62 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, published: true, collectionId });
   }
 
+  if (actionType === "saveVoice") {
+    const collectionId = formData.get("collectionId");
+    const useDefaults = formData.get("useDefaults") === "true";
+    if (useDefaults) {
+      await prisma.collectionVoice.deleteMany({ where: { shop, collectionId } });
+    } else {
+      const brandTone = (formData.get("brandTone") || "").slice(0, 100);
+      const targetAudience = (formData.get("targetAudience") || "").slice(0, 500);
+      const keywords = (formData.get("keywords") || "").slice(0, 500);
+      await prisma.collectionVoice.upsert({
+        where: { shop_collectionId: { shop, collectionId } },
+        update: { brandTone, targetAudience, keywords },
+        create: { shop, collectionId, brandTone, targetAudience, keywords },
+      });
+    }
+    return Response.json({ success: true, savedVoice: true, collectionId });
+  }
+
   return Response.json({ error: "Unknown action." }, { status: 400 });
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const TONE_OPTIONS = [
+  { label: "Store Default", value: "" },
+  { label: "Professional & Trustworthy", value: "professional" },
+  { label: "Friendly & Conversational", value: "friendly" },
+  { label: "Premium & Luxurious", value: "premium" },
+  { label: "Bold & Energetic", value: "bold" },
+  { label: "Scientific & Technical", value: "scientific" },
+  { label: "Warm & Nurturing", value: "warm" },
+  { label: "Minimalist & Clean", value: "minimalist" },
+  { label: "Fun & Playful", value: "playful" },
+];
+
 export default function CollectionsPage() {
-  const { collections, statusMap } = useLoaderData();
+  const { collections, statusMap, voiceMap } = useLoaderData();
   const navigate = useNavigate();
   const fetcher = useFetcher();
+  const voiceFetcher = useFetcher();
   const [expandedId, setExpandedId] = useState(null);
   const [editedContent, setEditedContent] = useState({});
+  const [voiceOpen, setVoiceOpen] = useState({});
+  const [voiceForms, setVoiceForms] = useState(() => {
+    const init = {};
+    for (const col of collections) {
+      const v = voiceMap[col.id];
+      init[col.id] = {
+        useDefaults: !v,
+        brandTone: v?.brandTone || "",
+        targetAudience: v?.targetAudience || "",
+        keywords: v?.keywords || "",
+      };
+    }
+    return init;
+  });
 
   const isGenerating = fetcher.state !== "idle" && fetcher.formData?.get("actionType") === "generate";
   const isPublishing = fetcher.state !== "idle" && fetcher.formData?.get("actionType") === "publish";
@@ -200,6 +252,30 @@ export default function CollectionsPage() {
       [collectionId]: { ...(prev[collectionId] || {}), [field]: value },
     }));
   };
+
+  const updateVoiceForm = (collectionId, field, value) => {
+    setVoiceForms((prev) => ({
+      ...prev,
+      [collectionId]: { ...(prev[collectionId] || {}), [field]: value },
+    }));
+  };
+
+  const handleSaveVoice = useCallback(
+    (collectionId) => {
+      const form = voiceForms[collectionId] || {};
+      const fd = new FormData();
+      fd.append("actionType", "saveVoice");
+      fd.append("collectionId", collectionId);
+      fd.append("useDefaults", String(!!form.useDefaults));
+      if (!form.useDefaults) {
+        fd.append("brandTone", form.brandTone || "");
+        fd.append("targetAudience", form.targetAudience || "");
+        fd.append("keywords", form.keywords || "");
+      }
+      voiceFetcher.submit(fd, { method: "POST" });
+    },
+    [voiceFetcher, voiceForms]
+  );
 
   if (collections.length === 0) {
     return (
@@ -325,6 +401,71 @@ export default function CollectionsPage() {
                     <Spinner size="small" />
                     <Text as="p" variant="bodySm" tone="subdued">Generating collection content…</Text>
                   </InlineStack>
+                )}
+
+                <Divider />
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" fontWeight="semibold">Voice Override</Text>
+                  <Button
+                    variant="plain"
+                    size="slim"
+                    onClick={() => setVoiceOpen((prev) => ({ ...prev, [collection.id]: !prev[collection.id] }))}
+                  >
+                    {voiceOpen[collection.id] ? "Hide" : voiceMap[collection.id] ? "Edit Override" : "Set Override"}
+                  </Button>
+                </InlineStack>
+
+                {voiceOpen[collection.id] && (
+                  <BlockStack gap="300">
+                    <Checkbox
+                      label="Use store defaults (no override)"
+                      checked={!!(voiceForms[collection.id]?.useDefaults)}
+                      onChange={(v) => updateVoiceForm(collection.id, "useDefaults", v)}
+                    />
+                    {!voiceForms[collection.id]?.useDefaults && (
+                      <BlockStack gap="200">
+                        <Select
+                          label="Brand Tone"
+                          options={TONE_OPTIONS}
+                          value={voiceForms[collection.id]?.brandTone || ""}
+                          onChange={(v) => updateVoiceForm(collection.id, "brandTone", v)}
+                          helpText="Overrides the store-level tone for this collection only"
+                        />
+                        <TextField
+                          label="Target Audience"
+                          value={voiceForms[collection.id]?.targetAudience || ""}
+                          onChange={(v) => updateVoiceForm(collection.id, "targetAudience", v)}
+                          multiline={2}
+                          placeholder="e.g., Interior designers aged 30-50 seeking luxury finishes"
+                          autoComplete="off"
+                        />
+                        <TextField
+                          label="Keywords"
+                          value={voiceForms[collection.id]?.keywords || ""}
+                          onChange={(v) => updateVoiceForm(collection.id, "keywords", v)}
+                          placeholder="e.g., luxury bathroom vanities, designer fittings"
+                          helpText="Comma-separated. Overrides store keywords for this collection."
+                          autoComplete="off"
+                        />
+                      </BlockStack>
+                    )}
+                    <InlineStack align="end">
+                      <Button
+                        size="slim"
+                        variant="primary"
+                        onClick={() => handleSaveVoice(collection.id)}
+                        loading={
+                          voiceFetcher.state !== "idle" &&
+                          voiceFetcher.formData?.get("collectionId") === collection.id
+                        }
+                      >
+                        Save Voice Override
+                      </Button>
+                    </InlineStack>
+                    {voiceFetcher.data?.savedVoice && voiceFetcher.data?.collectionId === collection.id && (
+                      <Banner tone="success" title="Voice override saved" />
+                    )}
+                  </BlockStack>
                 )}
               </BlockStack>
             </Card>

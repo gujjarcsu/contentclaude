@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import {
   Page,
   Layout,
@@ -11,6 +11,10 @@ import {
   DataTable,
   ProgressBar,
   Banner,
+  SkeletonPage,
+  SkeletonBodyText,
+  SkeletonDisplayText,
+  Spinner,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -124,6 +128,9 @@ function CheckIcon({ pass }) {
 export default function SeoAuditPage() {
   const { products, totalScore, missingDesc, missingMeta, missingAlt, staleCount } = useLoaderData();
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const revalidator = useRevalidator();
+  const isLoading = navigation.state === "loading" || revalidator.state === "loading";
 
   const rows = products.map((p) => [
     <InlineStack gap="200" blockAlign="center" key={p.id}>
@@ -146,8 +153,25 @@ export default function SeoAuditPage() {
         content: "Fix All Missing Content",
         onAction: () => navigate("/app/optimize"),
       }}
+      secondaryActions={[
+        {
+          content: isLoading ? "Scanning…" : "Refresh Audit",
+          onAction: () => revalidator.revalidate(),
+          loading: isLoading,
+          disabled: isLoading,
+        },
+      ]}
     >
       <BlockStack gap="500">
+        {isLoading && (
+          <Banner tone="info">
+            <InlineStack gap="200" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="p" variant="bodyMd">Scanning your catalog... This may take a moment for large stores.</Text>
+            </InlineStack>
+          </Banner>
+        )}
+
         {staleCount > 0 && (
           <Banner
             tone="warning"
