@@ -1,12 +1,13 @@
 import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Badge, ProgressBar, Banner, Checkbox, Box,
+  Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import { FREE_PLAN } from "../utils/billing-plans.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ export const loader = async ({ request }) => {
   ]);
 
   const needsContent = Math.max(0, totalProducts - publishedCount - draftCount);
-  const remaining = Math.max(0, (plan?.monthlyLimit ?? 10) - usageCount);
+  const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
   return Response.json({
@@ -37,7 +38,7 @@ export const loader = async ({ request }) => {
     remaining,
     canOptimize,
     planName: plan?.planName ?? "free",
-    monthlyLimit: plan?.monthlyLimit ?? 10,
+    monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
   });
 };
 
@@ -121,8 +122,9 @@ export default function OptimizePage() {
   const [genMeta, setGenMeta] = useState(true);
   const [genFaq, setGenFaq] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const handleOptimize = useCallback(() => {
+  const doSubmit = useCallback(() => {
     const fd = new FormData();
     fd.append("description", genDesc.toString());
     fd.append("metaTitle", genMeta.toString());
@@ -131,6 +133,14 @@ export default function OptimizePage() {
     fd.append("autoPublish", autoPublish.toString());
     submit(fd, { method: "POST" });
   }, [genDesc, genMeta, genFaq, autoPublish, submit]);
+
+  const handleOptimize = useCallback(() => {
+    if (autoPublish) {
+      setConfirmOpen(true);
+    } else {
+      doSubmit();
+    }
+  }, [autoPublish, doSubmit]);
 
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
@@ -246,6 +256,31 @@ export default function OptimizePage() {
           </Banner>
         )}
       </BlockStack>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Publish directly to your live storefront?"
+        primaryAction={{
+          content: "Yes, auto-publish",
+          destructive: true,
+          onAction: () => { setConfirmOpen(false); doSubmit(); },
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setConfirmOpen(false) }]}
+      >
+        <Modal.Section>
+          <TextContainer>
+            <Text as="p">
+              Auto-publish will overwrite the live product descriptions on your Shopify storefront
+              for all <strong>{canOptimize}</strong> products — without a review step.
+            </Text>
+            <Text as="p" tone="subdued">
+              This cannot be undone from ContentPilot. You can revert individual products via
+              the product editor after the job completes.
+            </Text>
+          </TextContainer>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

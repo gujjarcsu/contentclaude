@@ -342,6 +342,7 @@ export default function CollectionsPage() {
                       size="slim"
                       onClick={() => handleGenerate(collection)}
                       loading={isGenerating && fetcher.formData?.get("collectionId") === collection.id}
+                      disabled={isGenerating}
                     >
                       {status ? "Regenerate" : "Generate"}
                     </Button>

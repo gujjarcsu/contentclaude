@@ -46,6 +46,14 @@ export const action = async ({ request }) => {
     const tplContentTypes = ["description", "metaTitle", "metaDescription", "faq"]
       .filter((t) => formData.get(`tpl_${t}`) === "true")
       .join(",") || "description,metaTitle,metaDescription";
+    const isDefault = formData.get("tplDefault") === "true";
+    // Clear existing defaults BEFORE creating so the new record is the only default.
+    if (isDefault) {
+      await prisma.contentTemplate.updateMany({
+        where: { shop },
+        data: { isDefault: false },
+      });
+    }
     await prisma.contentTemplate.create({
       data: {
         shop,
@@ -54,15 +62,9 @@ export const action = async ({ request }) => {
         contentTypes: tplContentTypes,
         keywords: (formData.get("tplKeywords") || "").slice(0, 500),
         customInstructions: (formData.get("tplInstructions") || "").slice(0, 1000),
-        isDefault: formData.get("tplDefault") === "true",
+        isDefault,
       },
     });
-    if (formData.get("tplDefault") === "true") {
-      await prisma.contentTemplate.updateMany({
-        where: { shop, NOT: { id: { startsWith: "__placeholder" } } },
-        data: { isDefault: false },
-      });
-    }
     return Response.json({ success: true, message: "Template saved!" });
   }
 

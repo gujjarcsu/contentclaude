@@ -19,6 +19,7 @@ vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: {
       findUnique: vi.fn(),
+      create: vi.fn(),
       upsert: vi.fn(),
     },
     usageRecord: {
@@ -70,7 +71,8 @@ describe("canGenerate", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns allowed:true when under limit", async () => {
-    prisma.plan.upsert.mockResolvedValue({
+    // getOrCreatePlan now calls findUnique first; return existing plan so create is skipped
+    prisma.plan.findUnique.mockResolvedValue({
       planName: "free",
       status: "active",
       monthlyLimit: 10,
@@ -85,7 +87,7 @@ describe("canGenerate", () => {
   });
 
   it("returns allowed:false when at limit", async () => {
-    prisma.plan.upsert.mockResolvedValue({
+    prisma.plan.findUnique.mockResolvedValue({
       planName: "free",
       status: "active",
       monthlyLimit: 10,
@@ -99,7 +101,7 @@ describe("canGenerate", () => {
   });
 
   it("returns allowed:false when plan is frozen", async () => {
-    prisma.plan.upsert.mockResolvedValue({
+    prisma.plan.findUnique.mockResolvedValue({
       planName: "starter",
       status: "frozen",
       monthlyLimit: 50,

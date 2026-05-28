@@ -11,10 +11,10 @@ export function getPlanByKey(shopifyKey) {
 }
 
 export async function getOrCreatePlan(shop) {
-  return prisma.plan.upsert({
-    where: { shop },
-    update: {},
-    create: {
+  const existing = await prisma.plan.findUnique({ where: { shop } });
+  if (existing) return existing;
+  return prisma.plan.create({
+    data: {
       shop,
       planName: FREE_PLAN.planName,
       status: "active",

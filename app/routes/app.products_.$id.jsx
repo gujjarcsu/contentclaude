@@ -175,7 +175,7 @@ export async function action({ request, params }) {
     ]);
     const { data: pd } = await productResponse.json();
     const p = pd.product;
-    const targetKeywords = (formData.get("targetKeywords") || "").trim();
+    const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
 
     const generated = await enhanceExistingContent(
       {
@@ -226,8 +226,10 @@ export async function action({ request, params }) {
     );
     const doAltText = formData.get("gen_altText") === "true";
     const autoPublish = formData.get("autoPublish") === "true";
-    const targetKeywords = (formData.get("targetKeywords") || "").trim();
-    const contentLength = formData.get("contentLength") || "standard";
+    const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
+    const contentLength = ["short", "standard", "detailed"].includes(formData.get("contentLength"))
+      ? formData.get("contentLength")
+      : "standard";
 
     if (contentTypes.length === 0 && !doAltText) {
       return { error: "Select at least one content type to generate." };
@@ -776,6 +778,22 @@ export default function ProductGeneratePage() {
   }, [rawMetaDescription]);
 
   const hasGeneratedContent = !!(rawDescription || rawMetaTitle || rawMetaDescription || faq);
+
+  // Track whether the merchant has hand-edited content since it was last generated/saved
+  const hasUnsavedEdits =
+    (editedDescription !== rawDescription && editedDescription !== "") ||
+    (editedMetaTitle !== rawMetaTitle && editedMetaTitle !== "") ||
+    (editedMetaDescription !== rawMetaDescription && editedMetaDescription !== "");
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!hasUnsavedEdits) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedEdits]);
 
   const altTextResults = actionData?.altTextResults ?? (() => {
     const raw = existingContent.altText?.generated;

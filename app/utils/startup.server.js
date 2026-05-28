@@ -57,6 +57,18 @@ export function runStartupChecks() {
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
     warnings.push("Shopify API credentials not configured");
   }
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
+  if (!appUrl || appUrl.includes("example.com")) {
+    const msg = "SHOPIFY_APP_URL is not set or is a placeholder — set it to your production URL before running shopify app deploy";
+    if (process.env.NODE_ENV === "production") {
+      warnings.push(msg);
+    } else {
+      logger.debug("SHOPIFY_APP_URL placeholder is OK in dev (CLI auto-updates via tunnel)");
+    }
+  }
+  if (process.env.NODE_ENV === "production" && !process.env.CONTENTPILOT_API_TOKEN) {
+    warnings.push("CONTENTPILOT_API_TOKEN not set — /api/generate external endpoint will reject all requests");
+  }
 
   warnings.forEach((w) => logger.warn(`⚠️ STARTUP: ${w}`));
   if (warnings.length === 0) {

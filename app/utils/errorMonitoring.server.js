@@ -1,31 +1,59 @@
 /**
- * Error monitoring — production-ready placeholder.
+ * Error monitoring — Sentry integration with structured-log fallback.
  *
- * To integrate Sentry:
- *   npm install @sentry/node
- *   Add SENTRY_DSN to your environment variables.
- *   Uncomment the Sentry lines below.
+ * Configuration:
+ *   1. npm install @sentry/node
+ *   2. Set SENTRY_DSN in your environment (.env.example has the key).
+ *   3. Set SENTRY_ENVIRONMENT (defaults to NODE_ENV).
  *
- * To integrate Honeybadger:
- *   npm install @honeybadger-io/js
- *   Add HONEYBADGER_API_KEY to your environment variables.
+ * Without SENTRY_DSN, all events are only written to the structured logger.
+ * This is acceptable in development; in production you MUST set SENTRY_DSN
+ * or errors will be invisible to your team.
  */
 
-// import * as Sentry from "@sentry/node";
-// Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
-
 import logger from "./logger.server.js";
+
+let _sentry = null;
+
+async function getSentry() {
+  if (_sentry !== null) return _sentry;
+  if (!process.env.SENTRY_DSN) {
+    _sentry = false;
+    return false;
+  }
+  try {
+    const Sentry = await import("@sentry/node");
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "production",
+      tracesSampleRate: 0.1,
+      integrations: [],
+    });
+    _sentry = Sentry;
+    logger.info("Sentry error monitoring initialized");
+    return Sentry;
+  } catch (err) {
+    logger.warn({ err: err.message }, "Sentry @sentry/node not installed — run: npm install @sentry/node");
+    _sentry = false;
+    return false;
+  }
+}
 
 /**
  * Capture an unexpected exception.
  * @param {Error} error
  * @param {Record<string, unknown>} [context]  Extra data attached to the report.
  */
-export function captureException(error, context = {}) {
+export async function captureException(error, context = {}) {
   logger.error({ err: error, ...context }, error?.message ?? "Unhandled exception");
 
-  // TODO: uncomment when Sentry is configured
-  // Sentry.captureException(error, { extra: context });
+  const Sentry = await getSentry();
+  if (Sentry) {
+    Sentry.withScope((scope) => {
+      scope.setExtras(context);
+      Sentry.captureException(error);
+    });
+  }
 }
 
 /**
@@ -34,10 +62,15 @@ export function captureException(error, context = {}) {
  * @param {"info"|"warning"|"error"} [level]
  * @param {Record<string, unknown>} [context]
  */
-export function captureMessage(message, level = "warning", context = {}) {
+export async function captureMessage(message, level = "warning", context = {}) {
   const pinoLevel = level === "error" ? "error" : level === "warning" ? "warn" : "info";
   logger[pinoLevel]({ ...context }, message);
 
-  // TODO: uncomment when Sentry is configured
-  // Sentry.captureMessage(message, { level, extra: context });
+  const Sentry = await getSentry();
+  if (Sentry) {
+    Sentry.withScope((scope) => {
+      scope.setExtras(context);
+      Sentry.captureMessage(message, level);
+    });
+  }
 }

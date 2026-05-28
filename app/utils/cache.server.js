@@ -110,19 +110,30 @@ export async function invalidateCache(key) {
 
 /**
  * Invalidate all cache keys matching a pattern (e.g. all keys for a shop).
- * Only works when Redis is configured. Mem-cache invalidation is by prefix scan.
+ * Uses SCAN cursor iteration (non-blocking) instead of KEYS (O(N) blocking).
  */
 export async function invalidateCachePattern(pattern) {
   const fullPattern = CACHE_PREFIX + pattern;
   // Invalidate in-process cache
+  const prefix = fullPattern.replace(/\*/g, "");
   for (const key of memCache.keys()) {
-    if (key.startsWith(fullPattern.replace("*", ""))) memCache.delete(key);
+    if (key.startsWith(prefix)) memCache.delete(key);
   }
   try {
     const redis = await getRedis();
     if (!redis) return;
-    const keys = await redis.keys(fullPattern);
-    if (keys.length) await redis.del(...keys);
+    // SCAN iterates in batches of 100 — non-blocking unlike KEYS which scans the
+    // entire keyspace in a single command and blocks the Redis event loop.
+    let cursor = "0";
+    const toDelete = [];
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", fullPattern, "COUNT", 100);
+      cursor = nextCursor;
+      toDelete.push(...keys);
+    } while (cursor !== "0");
+    if (toDelete.length > 0) {
+      await redis.del(...toDelete);
+    }
   } catch (err) {
     logger.warn({ pattern, err: err.message }, "Redis pattern invalidation failed");
   }

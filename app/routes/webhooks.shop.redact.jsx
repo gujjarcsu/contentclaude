@@ -19,6 +19,9 @@ export const action = async ({ request }) => {
 
     // Delete every table that holds shop data
     await tx.generatedContent.deleteMany({ where: { shop } });
+    await tx.contentVersion.deleteMany({ where: { shop } });
+    await tx.contentTemplate.deleteMany({ where: { shop } });
+    await tx.collectionVoice.deleteMany({ where: { shop } });
     await tx.brandVoice.deleteMany({ where: { shop } });
     await tx.generationJob.deleteMany({ where: { shop } });
     await tx.usageRecord.deleteMany({ where: { shop } });

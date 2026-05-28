@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams, useSubmit } from "react-router";
 import {
   Page,
   Layout,
@@ -10,10 +10,12 @@ import {
   ProgressBar,
   DataTable,
   Box,
+  Select,
 } from "@shopify/polaris";
+import { useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
+import { getOrCreatePlan } from "../utils/plans.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -21,9 +23,15 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  const url = new URL(request.url);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const selectedMonth = url.searchParams.get("month") || currentMonth;
+  // Clamp to a real YYYY-MM format to prevent injection
+  const safeMonth = /^\d{4}-\d{2}$/.test(selectedMonth) ? selectedMonth : currentMonth;
+
   const [plan, usageCount, contentStats, recentUsage, jobStats] = await Promise.all([
     getOrCreatePlan(shop),
-    getMonthlyUsageCount(shop),
+    prisma.usageRecord.count({ where: { shop, month: safeMonth } }),
     prisma.generatedContent.groupBy({
       by: ["status"],
       where: { shop },
@@ -61,7 +69,6 @@ export const loader = async ({ request }) => {
   const completedJobs = jobStats.find((s) => s.status === "complete")?._count.status ?? 0;
   const failedJobs = jobStats.find((s) => s.status === "failed")?._count.status ?? 0;
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
   const daysInMonth = new Date(
     new Date().getFullYear(),
     new Date().getMonth() + 1,
@@ -69,6 +76,10 @@ export const loader = async ({ request }) => {
   ).getDate();
   const dayOfMonth = new Date().getDate();
   const daysRemaining = daysInMonth - dayOfMonth;
+
+  // Build list of last 6 months for the selector
+  const availableMonths = recentUsage.map((r) => r.month).sort().reverse();
+  if (!availableMonths.includes(currentMonth)) availableMonths.unshift(currentMonth);
 
   return Response.json({
     totalProducts,
@@ -82,7 +93,9 @@ export const loader = async ({ request }) => {
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
     daysRemaining,
+    selectedMonth: safeMonth,
     currentMonth,
+    availableMonths,
   });
 };
 
@@ -92,9 +105,15 @@ export default function AnalyticsPage() {
   const {
     totalProducts, published, draft, rejected, coveragePct,
     monthlyRows, completedJobs, failedJobs,
-    plan, usageCount, daysRemaining, currentMonth,
+    plan, usageCount, daysRemaining, selectedMonth, currentMonth, availableMonths,
   } = useLoaderData();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const submit = useSubmit();
+
+  const handleMonthChange = useCallback((month) => {
+    setSearchParams({ month });
+  }, [setSearchParams]);
 
   const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
@@ -173,15 +192,31 @@ export default function AnalyticsPage() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <Text as="h2" variant="headingMd">Monthly Usage — {currentMonth}</Text>
+                <Text as="h2" variant="headingMd">Monthly Usage</Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {planLabels[plan.planName] ?? plan.planName} Plan
                 </Badge>
               </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {usageCount} / {plan.monthlyLimit} generations · {daysRemaining} days remaining
-              </Text>
+              <InlineStack gap="300" blockAlign="center">
+                {selectedMonth === currentMonth && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {daysRemaining} days remaining
+                  </Text>
+                )}
+                <Box minWidth="140px">
+                  <Select
+                    label="Month"
+                    labelHidden
+                    options={availableMonths.map((m) => ({ label: m, value: m }))}
+                    value={selectedMonth}
+                    onChange={handleMonthChange}
+                  />
+                </Box>
+              </InlineStack>
             </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {usageCount} / {plan.monthlyLimit} generations used
+            </Text>
             <ProgressBar
               progress={usagePct}
               tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? "highlight" : "success"}

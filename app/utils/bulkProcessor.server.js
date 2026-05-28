@@ -2,8 +2,8 @@ import prisma from "../db.server.js";
 import { generateProductContent } from "./ai.server.js";
 import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
-
-const SHOPIFY_API_VERSION = "2025-10";
+import { FREE_PLAN } from "./billing-plans.js";
+import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // For production scale, replace setTimeout-based queue with BullMQ + Redis.
 const THROTTLE_MS = 3500;
@@ -57,7 +57,7 @@ export async function processBulkJob(jobId) {
     let localUsageCount = await prisma.usageRecord.count({
       where: { shop: job.shop, month: new Date().toISOString().slice(0, 7) },
     });
-    const planLimit = plan?.monthlyLimit ?? 10;
+    const planLimit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
     const planName = plan?.planName ?? "free";
 
     for (let i = 0; i < productIds.length; i++) {

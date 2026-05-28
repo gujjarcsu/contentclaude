@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher, useSubmit } from "react-router";
 import {
   Page,
   Layout,
@@ -59,6 +59,17 @@ export const action = async ({ request }) => {
 
   let retryIds = [];
 
+  if (actionType === "cancel") {
+    if (!["queued", "processing"].includes(job.status)) {
+      return Response.json({ error: "Only queued or processing jobs can be cancelled." }, { status: 400 });
+    }
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { status: "failed", completedAt: new Date(), errorLog: JSON.stringify([{ productId: "N/A", error: "Cancelled by merchant." }]) },
+    });
+    return Response.json({ success: true });
+  }
+
   if (actionType === "retryFailed") {
     // Parse error log to get the specific product IDs that failed
     const errorLog = job.errorLog ? JSON.parse(job.errorLog) : [];
@@ -117,6 +128,7 @@ export default function JobsPage() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
+  const cancelFetcher = useFetcher();
 
   const hasActiveJobs = jobs.some((j) =>
     j.status === "queued" || j.status === "processing"
@@ -240,6 +252,21 @@ export default function JobsPage() {
                         <Text as="p" variant="bodySm" tone="subdued">
                           products done
                         </Text>
+                        {(job.status === "queued" || job.status === "processing") && (
+                          <cancelFetcher.Form method="post">
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <input type="hidden" name="actionType" value="cancel" />
+                            <Button
+                              tone="critical"
+                              variant="plain"
+                              size="slim"
+                              submit
+                              loading={cancelFetcher.state !== "idle" && cancelFetcher.formData?.get("jobId") === job.id}
+                            >
+                              Cancel job
+                            </Button>
+                          </cancelFetcher.Form>
+                        )}
                       </BlockStack>
                     </InlineStack>
 

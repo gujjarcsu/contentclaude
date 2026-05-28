@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import { FREE_PLAN } from "../utils/billing-plans.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
@@ -20,7 +21,7 @@ export const action = async ({ request }) => {
   const plan = await prisma.plan.findUnique({ where: { shop } });
   const month = new Date().toISOString().slice(0, 7);
   const usageCount = await prisma.usageRecord.count({ where: { shop, month } });
-  const limit = plan?.monthlyLimit ?? 10;
+  const limit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
 
   if ((plan?.status ?? "active") !== "active" || usageCount >= limit) {
     return new Response("Plan limit reached", { status: 200 });

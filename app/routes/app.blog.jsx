@@ -203,7 +203,7 @@ export default function BlogPage() {
                       variant="primary"
                       submit
                       loading={isGenerating}
-                      disabled={!topic.trim()}
+                      disabled={!topic.trim() || isGenerating}
                       fullWidth
                     >
                       {isGenerating ? "Generating…" : "Generate Blog Post"}
@@ -284,6 +284,7 @@ export default function BlogPage() {
                       size="large"
                       submit
                       loading={isPublishing}
+                      disabled={isPublishing}
                       fullWidth
                     >
                       {isPublishing ? "Publishing…" : "Publish to Shopify Blog"}

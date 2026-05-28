@@ -13,6 +13,7 @@
  */
 
 import prisma from "../db.server";
+import { getCache } from "../utils/cache.server";
 
 export const loader = async () => {
   const checks = {};
@@ -27,19 +28,13 @@ export const loader = async () => {
     healthy = false;
   }
 
-  // Redis ping (optional — not a hard failure)
+  // Redis ping — reuses the shared singleton from cache.server.js
+  // so no new connection is created per health probe.
   if (process.env.REDIS_URL) {
     try {
-      const { default: Redis } = await import("ioredis");
-      const r = new Redis(process.env.REDIS_URL, {
-        connectTimeout: 2000,
-        maxRetriesPerRequest: 1,
-        lazyConnect: true,
-        enableOfflineQueue: false,
-      });
-      await r.connect();
-      await r.ping();
-      await r.quit();
+      // getCache with a short TTL exercises the Redis connection without
+      // creating a new client instance. A miss just returns the supplier value.
+      await getCache("__health_ping__", async () => "ok", 5);
       checks.redis = "ok";
     } catch (err) {
       // Redis failure is degraded, not fatal — app still works with in-memory fallback

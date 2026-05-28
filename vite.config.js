@@ -51,6 +51,11 @@ export default defineConfig({
   plugins: [reactRouter(), tsconfigPaths()],
   build: {
     assetsInlineLimit: 0,
+    rollupOptions: {
+      // @sentry/node is an optional peer dep — only installed when SENTRY_DSN is set.
+      // Mark it external so Rollup does not try to bundle it at build time.
+      external: ["@sentry/node"],
+    },
   },
   optimizeDeps: {
     include: ["@shopify/app-bridge-react"],
