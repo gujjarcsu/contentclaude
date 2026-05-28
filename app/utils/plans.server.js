@@ -62,6 +62,21 @@ export async function canGenerate(shop) {
 export async function tryConsumeGeneration(shop, contentType, productId = null) {
   const month = new Date().toISOString().slice(0, 7);
 
+  // Free re-generation: if this product was already generated in the last 24h,
+  // don't count it against the monthly limit — encourage iteration on quality.
+  if (productId) {
+    const recentGeneration = await prisma.usageRecord.findFirst({
+      where: {
+        shop,
+        productId,
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+    });
+    if (recentGeneration) {
+      return { allowed: true, isFreeRegeneration: true, planName: "free", monthlyLimit: 0, remaining: 0 };
+    }
+  }
+
   try {
     const result = await prisma.$transaction(
       async (tx) => {

@@ -24,6 +24,7 @@ vi.mock("../../app/db.server.js", () => ({
     usageRecord: {
       count: vi.fn(),
       create: vi.fn(),
+      findFirst: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -35,7 +36,7 @@ vi.mock("../../app/utils/billing-plans.js", () => ({
     growth:  { key: "Growth Plan",  planName: "growth",  amount: 29.99, monthlyLimit: 200 },
     pro:     { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000 },
   },
-  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 10 },
+  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 25 },
 }));
 
 vi.mock("../../app/utils/cache.server.js", () => ({
@@ -115,6 +116,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("allows generation and writes usage record when under limit", async () => {
+    prisma.usageRecord.findFirst.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
@@ -182,12 +184,27 @@ describe("tryConsumeGeneration (atomic gate)", () => {
 
     expect(result.allowed).toBe(false);
   });
+
+  it("allows free re-generation when product was generated in the last 24h", async () => {
+    // findFirst returns a recent record → bypass the transaction entirely
+    prisma.usageRecord.findFirst.mockResolvedValue({ id: "existing", createdAt: new Date() });
+
+    const result = await tryConsumeGeneration(
+      "shop.myshopify.com",
+      "description",
+      "gid://shopify/Product/999"
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.isFreeRegeneration).toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
 });
 
 describe("FREE_PLAN constant", () => {
   it("has correct default values", () => {
     expect(FREE_PLAN.planName).toBe("free");
-    expect(FREE_PLAN.monthlyLimit).toBe(10);
+    expect(FREE_PLAN.monthlyLimit).toBe(25);
     expect(FREE_PLAN.amount).toBe(0);
     expect(FREE_PLAN.key).toBeNull();
   });

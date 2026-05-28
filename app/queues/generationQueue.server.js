@@ -15,7 +15,7 @@
  * lifetime of the process. Railway/Fly.io keep the process alive.
  */
 
-import { Queue, Worker, QueueEvents } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import logger from "../utils/logger.server.js";
 
 const QUEUE_NAME = "content-generation";
@@ -31,18 +31,33 @@ let _workerStarted = false;
 function getQueue() {
   if (!redisConnection) return null;
   if (!_queue) {
-    _queue = new Queue(QUEUE_NAME, {
-      connection: redisConnection,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: "exponential", delay: 10_000 },
-        removeOnComplete: { count: 200 }, // Keep last 200 completed jobs for debugging
-        removeOnFail: { count: 500 },
-      },
-    });
-    logger.info({ queueName: QUEUE_NAME }, "BullMQ queue initialised");
+    try {
+      _queue = new Queue(QUEUE_NAME, {
+        connection: redisConnection,
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 10_000 },
+          removeOnComplete: { age: 86_400, count: 1_000 }, // Keep last 1000 completed for 24h
+          removeOnFail: { age: 604_800, count: 5_000 },    // Keep failed for 7 days
+        },
+      });
+      _queue.on("failed", (job, err) => {
+        logger.error(
+          { jobId: job?.id, err: err?.message, attemptsMade: job?.attemptsMade },
+          "Job permanently failed — moved to DLQ"
+        );
+      });
+      logger.info({ queueName: QUEUE_NAME }, "BullMQ queue initialised");
+    } catch (err) {
+      logger.warn({ err: err.message }, "Redis not available — queue disabled, using inline processing");
+      _queue = null;
+    }
   }
   return _queue;
+}
+
+export function isQueueAvailable() {
+  return !!getQueue();
 }
 
 /**
@@ -93,22 +108,26 @@ export async function enqueueGenerationJob(jobId) {
   const queue = getQueue();
 
   if (queue) {
-    // Start worker lazily on first enqueue (idempotent)
-    await startWorker();
-    await queue.add("process-bulk", { jobId }, { jobId }); // jobId as deduplication key
-    logger.info({ jobId }, "Enqueued generation job in BullMQ");
+    try {
+      await startWorker();
+      await queue.add("process-bulk", { jobId }, { jobId });
+      logger.info({ jobId }, "Enqueued generation job in BullMQ");
+      return;
+    } catch (redisError) {
+      logger.warn({ jobId, err: redisError.message }, "Redis unavailable — processing job inline");
+    }
   } else {
-    // Dev fallback: no Redis configured
     logger.warn(
       { jobId },
-      "REDIS_URL not set — running generation job in-process via setTimeout (dev mode). " +
-        "Job will be lost on server restart. Set REDIS_URL for production reliability."
+      "REDIS_URL not set — running generation job in-process (dev mode). Set REDIS_URL for production reliability."
     );
-    const { processBulkJob } = await import("../utils/bulkProcessor.server.js");
-    setTimeout(() => processBulkJob(jobId).catch((err) => {
-      logger.error({ jobId, err }, "In-process job failed");
-    }), 0);
   }
+
+  // Inline fallback: Redis unavailable or not configured
+  const { processBulkJob } = await import("../utils/bulkProcessor.server.js");
+  setTimeout(() => processBulkJob(jobId).catch((err) => {
+    logger.error({ jobId, err }, "In-process job failed");
+  }), 0);
 }
 
 /**

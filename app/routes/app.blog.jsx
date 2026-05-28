@@ -226,6 +226,21 @@ export default function BlogPage() {
               </Card>
             )}
 
+            {!generated && !isGenerating && (
+              <Card>
+                <Box padding="800">
+                  <BlockStack gap="300" inlineAlign="center">
+                    <Text as="p" variant="headingMd" alignment="center" tone="subdued">
+                      No blog post yet
+                    </Text>
+                    <Text as="p" variant="bodySm" alignment="center" tone="subdued">
+                      Enter a topic on the left and click Generate Blog Post to create SEO-friendly content in your brand voice.
+                    </Text>
+                  </BlockStack>
+                </Box>
+              </Card>
+            )}
+
             {generated && !isGenerating && (
               <BlockStack gap="400">
                 <Card>

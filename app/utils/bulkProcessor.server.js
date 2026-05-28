@@ -23,6 +23,7 @@ export async function processBulkJob(jobId) {
     const productIds = JSON.parse(job.productIds);
     const contentTypes = job.contentTypes.split(",").filter(Boolean);
     const errorLog = [];
+    const MAX_ERROR_LOG_ENTRIES = 200;
     let completedCount = 0;
     let failedCount = 0;
 
@@ -73,7 +74,7 @@ export async function processBulkJob(jobId) {
         if (!allowed) {
           const limitMsg = `Monthly generation limit reached (${planLimit} on ${planName} plan). Upgrade at /app/plans.`;
           jobLogger.warn({ shop: job.shop, productId, planName, planLimit }, limitMsg);
-          errorLog.push({ productId, error: limitMsg });
+          if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: limitMsg });
           failedCount++;
           await prisma.generationJob.update({
             where: { id: jobId },
@@ -85,7 +86,7 @@ export async function processBulkJob(jobId) {
         const product = await fetchShopifyProduct(session, productId);
         if (!product) {
           jobLogger.warn({ shop: job.shop, productId }, "Product not found in Shopify during bulk job");
-          errorLog.push({ productId, error: "Product not found in Shopify" });
+          if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: "Product not found in Shopify" });
           failedCount++;
           await prisma.generationJob.update({
             where: { id: jobId },
@@ -186,7 +187,7 @@ export async function processBulkJob(jobId) {
       } catch (err) {
         jobLogger.error({ shop: job.shop, productId, err }, "Failed to generate content for product");
         captureException(err, { jobId, shop: job.shop, productId });
-        errorLog.push({ productId, error: err.message });
+        if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: err.message });
         failedCount++;
         await prisma.generationJob.update({
           where: { id: jobId },

@@ -5,7 +5,7 @@ export const FREE_PLAN = {
   key: null,
   planName: "free",
   amount: 0,
-  monthlyLimit: 10,
+  monthlyLimit: 25,
 };
 
 export const BILLING_PLANS = {

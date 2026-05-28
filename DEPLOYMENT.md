@@ -94,6 +94,29 @@ When you're ready to scale beyond a single server:
 
 ---
 
+## PostgreSQL Connection Pooling
+
+When deploying to serverless or edge platforms (Vercel, Cloudflare Workers, Railway):
+
+1. Use a connection pooler like PgBouncer (built into Neon, Supabase, Railway)
+2. Append `?pgbouncer=true&connection_limit=1` to your `DATABASE_URL`
+3. Example:
+   ```
+   DATABASE_URL=postgresql://user:pass@host:5432/contentpilot?pgbouncer=true&connection_limit=1
+   ```
+
+For traditional server deployments (VPS, Docker):
+- Standard PostgreSQL connection without pooler suffix is fine
+- Prisma manages its own connection pool (default: 5 connections)
+
+**Managed PostgreSQL providers with built-in pooling:**
+- [Neon](https://neon.tech) — serverless Postgres, auto-scaling, free tier
+- [Supabase](https://supabase.com) — Postgres + PgBouncer included
+- [Railway](https://railway.app) — one-click Postgres plugin
+- [PlanetScale](https://planetscale.com) — MySQL-compatible (requires schema change)
+
+---
+
 ## Shopify App Store Submission Checklist
 
 ### Before submitting:

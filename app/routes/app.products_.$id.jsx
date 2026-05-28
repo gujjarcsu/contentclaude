@@ -21,6 +21,7 @@ import {
 import { useState, useEffect, useRef, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import logger from "../utils/logger.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,8 @@ export async function action({ request, params }) {
   const productId = `gid://shopify/Product/${params.id}`;
   const formData = await request.formData();
   const actionType = formData.get("actionType");
+
+  try {
 
   // Dynamic imports keep server-only modules out of the client bundle
   const [
@@ -498,6 +501,96 @@ export async function action({ request, params }) {
     return { success: true, reverted: true, contentType: ver.contentType, message: `${ver.contentType} restored to version ${ver.version}.` };
   }
 
+  // ── Generate A/B Variants ─────────────────────────────────────────────────
+  if (actionType === "generateVariants") {
+    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+    if (!rl.allowed) {
+      return { error: `Too many requests. Please wait ${rl.retryAfterSeconds} seconds.` };
+    }
+    const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
+      (t) => formData.get(`gen_${t}`) === "true"
+    );
+    if (contentTypes.length === 0) {
+      return { error: "Select at least one content type to generate variants for." };
+    }
+    const gate = await tryConsumeGeneration(shop, contentTypes[0], productId);
+    if (!gate.allowed) {
+      return { error: `Monthly limit reached (${gate.monthlyLimit} on ${gate.planName}). Upgrade to continue.`, limitReached: true };
+    }
+
+    const [productResp, brandVoice] = await Promise.all([
+      admin.graphql(
+        `query getProduct($id: ID!) {
+          product(id: $id) {
+            title productType vendor description descriptionHtml
+            seo { title description }
+            featuredImage { url }
+            images(first: 4) { edges { node { url } } }
+            variants(first: 10) { edges { node { title price } } }
+            tags
+          }
+        }`,
+        { variables: { id: productId } }
+      ),
+      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+    ]);
+    const { data: pd } = await productResp.json();
+    const p = pd.product;
+    const targetKeywords = (formData.get("targetKeywords") || "").trim();
+    const productData = {
+      title: p.title, productType: p.productType, vendor: p.vendor,
+      description: p.description, descriptionHtml: p.descriptionHtml,
+      imageUrl: p.featuredImage?.url || "",
+      images: (p.images?.edges || []).map((e) => e.node),
+      variants: p.variants.edges.map((e) => e.node),
+      tags: p.tags,
+    };
+    const baseOptions = { keywords: targetKeywords, length: "standard" };
+
+    // Run both variants in parallel — 2 API credits but merchant gets a real choice
+    const [variantA, variantB] = await Promise.all([
+      generateProductContent(productData, brandVoice, contentTypes, baseOptions),
+      generateProductContent(productData, brandVoice, contentTypes, {
+        ...baseOptions,
+        variantHint: "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
+      }),
+    ]);
+    return { success: true, variants: [variantA, variantB] };
+  }
+
+  // ── Save chosen A/B variant ───────────────────────────────────────────────
+  if (actionType === "saveVariant") {
+    let variantContent;
+    try {
+      variantContent = JSON.parse(formData.get("variantContent") || "{}");
+    } catch {
+      return { error: "Invalid variant data." };
+    }
+    const typesToSave = Object.keys(variantContent).filter((t) =>
+      ["description", "metaTitle", "metaDescription"].includes(t) && variantContent[t]
+    );
+    if (typesToSave.length === 0) return { error: "No content to save." };
+
+    const existing = await prisma.generatedContent.findMany({
+      where: { shop, productId, contentType: { in: typesToSave } },
+    });
+    if (existing.length > 0) {
+      await prisma.contentVersion.createMany({
+        data: existing.map((c) => ({ shop, productId, contentType: c.contentType, content: c.generatedContent, version: c.version })),
+      });
+    }
+    await Promise.all(
+      typesToSave.map((type) =>
+        prisma.generatedContent.upsert({
+          where: { shop_productId_contentType: { shop, productId, contentType: type } },
+          update: { generatedContent: variantContent[type], status: "draft", version: { increment: 1 } },
+          create: { shop, productId, productTitle: "", contentType: type, originalContent: "", generatedContent: variantContent[type], status: "draft" },
+        })
+      )
+    );
+    return { success: true, generated: variantContent, message: "Variant saved as draft — review and publish when ready." };
+  }
+
   // ── Revert ────────────────────────────────────────────────────────────────
   if (actionType === "revert") {
     const contentType = formData.get("contentType");
@@ -515,6 +608,12 @@ export async function action({ request, params }) {
   }
 
   return { error: "Unknown action." };
+
+  } catch (err) {
+    if (err instanceof Response) throw err;
+    logger.error({ err, shop, actionType }, "Unhandled action error in products.$id");
+    return { error: "An unexpected error occurred. Please try again or contact support." };
+  }
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -602,6 +701,7 @@ export default function ProductGeneratePage() {
   const fetcher = useFetcher();
   const revertFetcher = useFetcher();
   const socialFetcher = useFetcher();
+  const variantFetcher = useFetcher();
   const restoreFetcher = useFetcher();
   const prevFetcherData = useRef(null);
   const prevRevertData = useRef(null);
@@ -611,6 +711,8 @@ export default function ProductGeneratePage() {
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
   const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
+  const isGeneratingVariants = variantFetcher.state !== "idle";
+  const variants = variantFetcher.data?.variants ?? null;
 
   // Progressive loading messages during AI generation
   const loadingMessages = [
@@ -737,6 +839,23 @@ export default function ProductGeneratePage() {
     fd.append("targetKeywords", targetKeywords);
     fetcher.submit(fd, { method: "POST" });
   }, [genDescription, genMetaTitle, genMetaDescription, targetKeywords, fetcher]);
+
+  const handleGenerateVariants = useCallback(() => {
+    const fd = new FormData();
+    fd.append("actionType", "generateVariants");
+    fd.append("gen_description", genDescription.toString());
+    fd.append("gen_metaTitle", genMetaTitle.toString());
+    fd.append("gen_metaDescription", genMetaDescription.toString());
+    fd.append("targetKeywords", targetKeywords);
+    variantFetcher.submit(fd, { method: "POST" });
+  }, [genDescription, genMetaTitle, genMetaDescription, targetKeywords, variantFetcher]);
+
+  const handleSaveVariant = useCallback((variantContent) => {
+    const fd = new FormData();
+    fd.append("actionType", "saveVariant");
+    fd.append("variantContent", JSON.stringify(variantContent));
+    fetcher.submit(fd, { method: "POST" });
+  }, [fetcher]);
 
   const handlePublish = useCallback(() => {
     const fd = new FormData();
@@ -985,24 +1104,81 @@ export default function ProductGeneratePage() {
                       size="large"
                       onClick={handleEnhance}
                       loading={isEnhancing}
-                      disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription)}
+                      disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
                       fullWidth
                     >
                       {isEnhancing ? loadingMessages[loadingMsgIdx] : "Enhance Existing Content"}
                     </Button>
                   )}
+                  <Button
+                    size="large"
+                    onClick={handleGenerateVariants}
+                    loading={isGeneratingVariants}
+                    disabled={isLoading || isGeneratingVariants || noneSelected}
+                    fullWidth
+                  >
+                    {isGeneratingVariants ? "Generating 2 options…" : "Generate 2 Options (A/B)"}
+                  </Button>
                   {isGenerating && (
                     <BlockStack gap="200" inlineAlign="center">
                       <Spinner size="large" />
                       <Text variant="headingSm">{loadingMessages[loadingMsgIdx]}</Text>
                     </BlockStack>
                   )}
+                  {isGeneratingVariants && (
+                    <BlockStack gap="200" inlineAlign="center">
+                      <Spinner size="large" />
+                      <Text variant="headingSm">Writing 2 different versions… 20–40s</Text>
+                    </BlockStack>
+                  )}
                 </BlockStack>
               </Card>
             )}
 
+            {/* ── A/B Variant comparison ── */}
+            {selectedTab === 0 && variants && (
+              <BlockStack gap="400">
+                <Banner tone="info" title="2 Options Generated">
+                  Compare both versions and click "Use This One" to save your favourite as a draft.
+                </Banner>
+                {variants.map((v, idx) => (
+                  <Card key={idx}>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h3" variant="headingMd">Option {idx === 0 ? "A" : "B"}</Text>
+                        <Button
+                          variant="primary"
+                          size="slim"
+                          onClick={() => handleSaveVariant(v)}
+                          loading={isLoading}
+                          disabled={isLoading}
+                        >
+                          Use This One
+                        </Button>
+                      </InlineStack>
+                      {v.description && (
+                        <Box padding="200" background="bg-surface-secondary" borderRadius="100">
+                          <span dangerouslySetInnerHTML={{ __html: v.description.substring(0, 600) + (v.description.length > 600 ? "…" : "") }} />
+                        </Box>
+                      )}
+                      {v.metaTitle && (
+                        <Text as="p" variant="bodySm"><strong>Meta Title:</strong> {v.metaTitle}</Text>
+                      )}
+                      {v.metaDescription && (
+                        <Text as="p" variant="bodySm"><strong>Meta Desc:</strong> {v.metaDescription}</Text>
+                      )}
+                    </BlockStack>
+                  </Card>
+                ))}
+              </BlockStack>
+            )}
+
             {/* ── Tab 1: Generated content + publish ── */}
             {selectedTab === 1 && (<>
+
+              <Banner tone="info">
+                All content below was generated by AI — review and edit before publishing to your store.
+              </Banner>
 
               {/* Description */}
               <Card>

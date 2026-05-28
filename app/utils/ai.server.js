@@ -343,9 +343,44 @@ export function sanitizePromptInput(input, maxLength = 1000) {
   return clean;
 }
 
+// ─── Circuit breaker ─────────────────────────────────────────────────────────
+
+const circuitState = { failures: 0, lastFailure: 0, isOpen: false };
+const CIRCUIT_THRESHOLD = 5;
+const CIRCUIT_COOLDOWN_MS = 60_000;
+
+function checkCircuit() {
+  if (!circuitState.isOpen) return true;
+  if (Date.now() - circuitState.lastFailure > CIRCUIT_COOLDOWN_MS) {
+    circuitState.isOpen = false;
+    circuitState.failures = 0;
+    logger.info("Circuit breaker CLOSED — resuming API calls");
+    return true;
+  }
+  return false;
+}
+
+function recordSuccess() {
+  circuitState.failures = 0;
+  circuitState.isOpen = false;
+}
+
+function recordFailure() {
+  circuitState.failures++;
+  circuitState.lastFailure = Date.now();
+  if (circuitState.failures >= CIRCUIT_THRESHOLD) {
+    circuitState.isOpen = true;
+    logger.warn({ failures: circuitState.failures }, "Circuit breaker OPEN — pausing API calls for 60s");
+  }
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function callClaude(apiKey, body, attempt = 0) {
+  if (!checkCircuit()) {
+    throw new Error("AI service temporarily unavailable. The system will retry automatically in about a minute.");
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const t0 = Date.now();
@@ -365,21 +400,25 @@ async function callClaude(apiKey, body, attempt = 0) {
   } catch (err) {
     clearTimeout(timer);
     if (err.name === "AbortError") {
+      recordFailure();
       logger.error({ model: body.model, attempt }, "Claude API request timed out");
       throw new Error("Claude API timed out after 45 seconds.");
     }
+    recordFailure();
     logger.error({ err, model: body.model, attempt }, "Claude API fetch error");
     throw err;
   }
   clearTimeout(timer);
 
   if (response.ok) {
+    recordSuccess();
     const data = await response.json();
     logger.debug({ model: body.model, attempt, ms: Date.now() - t0 }, "Claude API call succeeded");
     return data.content[0]?.text ?? "";
   }
 
   if (response.status >= 500 && attempt < MAX_RETRIES) {
+    recordFailure();
     logger.warn({ model: body.model, status: response.status, attempt }, "Claude API 5xx — retrying");
     await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
     return callClaude(apiKey, body, attempt + 1);
@@ -419,8 +458,9 @@ Write ALL content in ${langName}. The meta title and meta description must also 
   const bvDiff = sanitizePromptInput(brandVoice?.keyDifferentiators || "quality products, great service", 500);
   const bvAvoid = sanitizePromptInput(brandVoice?.avoidPhrases || "generic AI-sounding language, excessive hype", 300);
   const bvNotes = sanitizePromptInput(brandVoice?.additionalNotes || "none", 300);
-  const bvSample = brandVoice?.sampleContent
-    ? `\n\nSAMPLE CONTENT IN OUR VOICE (match this writing style exactly):\n${sanitizePromptInput(brandVoice.sampleContent, 1000)}`
+  const rawSample = brandVoice?.sampleContent || "";
+  const bvSample = rawSample
+    ? `\n\nSAMPLE CONTENT IN OUR VOICE (match this writing style exactly):\n${sanitizePromptInput(rawSample.slice(0, 500) + (rawSample.length > 500 ? "..." : ""), 520)}`
     : "";
   sections.push(`=== BRAND CONTEXT ===
 Store Name: ${bvStoreName}
@@ -535,6 +575,10 @@ A: Answer here.
 - No filler openers: never start with "Whether you're looking for...", "Say goodbye to...", "Introducing...", "Are you tired of..."
 - Every sentence must earn its place — no padding
 - Re-read the CRITICAL RULES at the top before finalising your output`);
+
+  if (options.variantHint) {
+    sections.push(`=== VARIANT INSTRUCTION ===\n${options.variantHint}`);
+  }
 
   return sections.join("\n\n");
 }

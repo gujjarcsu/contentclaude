@@ -11,9 +11,6 @@ import {
   DataTable,
   ProgressBar,
   Banner,
-  SkeletonPage,
-  SkeletonBodyText,
-  SkeletonDisplayText,
   Spinner,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";

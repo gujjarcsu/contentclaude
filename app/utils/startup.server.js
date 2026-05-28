@@ -42,14 +42,35 @@ async function recoverStuckJobs() {
   }
 }
 
+export function runStartupChecks() {
+  const warnings = [];
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    warnings.push("ANTHROPIC_API_KEY not set — AI generation will fail");
+  }
+  if (process.env.NODE_ENV === "production" && (process.env.DATABASE_URL || "").includes("sqlite")) {
+    warnings.push("SQLite detected in production — migrate to PostgreSQL for multi-tenant reliability");
+  }
+  if (!process.env.REDIS_URL && process.env.NODE_ENV === "production") {
+    warnings.push("REDIS_URL not set in production — bulk jobs will run inline (slower, not crash-safe)");
+  }
+  if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
+    warnings.push("Shopify API credentials not configured");
+  }
+
+  warnings.forEach((w) => logger.warn(`⚠️ STARTUP: ${w}`));
+  if (warnings.length === 0) {
+    logger.info("✅ All startup checks passed");
+  }
+
+  return warnings;
+}
+
 export const startupPromise = (async () => {
   if (_initialized) return;
   _initialized = true;
 
-  // Warn if SQLite is being used in production — not suitable for multi-tenant scale
-  if (process.env.NODE_ENV === "production" && (process.env.DATABASE_URL || "").includes("sqlite")) {
-    logger.warn("⚠️ SQLite detected in production. Migrate to PostgreSQL for multi-tenant reliability. See DEPLOYMENT.md.");
-  }
+  runStartupChecks();
 
   try {
     await recoverStuckJobs();
