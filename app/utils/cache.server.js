@@ -12,7 +12,7 @@
 import logger from "./logger.server.js";
 
 const REDIS_URL = process.env.REDIS_URL;
-const CACHE_PREFIX = "cp:"; // contentpilot
+const CACHE_PREFIX = "cc:"; // contentclaude
 
 // In-process fallback cache for dev
 const memCache = new Map(); // key → { value, expiresAt }

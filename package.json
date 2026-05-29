@@ -1,5 +1,5 @@
 {
-  "name": "contentpilot-ai",
+  "name": "contentclaude",
   "private": true,
   "scripts": {
     "build": "react-router build",

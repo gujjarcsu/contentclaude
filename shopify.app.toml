@@ -1,8 +1,8 @@
-# ContentPilot AI — Shopify App Configuration
+# ContentClaude — Shopify App Configuration
 # Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1279a14cca41d4a6f8e6e3c485870b77"
-name = "ContentPilot AI"
+name = "ContentClaude"
 # IMPORTANT: Replace https://example.com with your production domain before running
 # `shopify app deploy`. During local development the CLI auto-updates this via tunnel
 # (automatically_update_urls_on_dev = true below). Set SHOPIFY_APP_URL in .env as well.

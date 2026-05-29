@@ -15,7 +15,7 @@ const transport =
 
 const logger = pino({
   level: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === "production" ? "info" : "debug"),
-  base: { service: "contentpilot-ai", env: process.env.NODE_ENV ?? "development" },
+  base: { service: "contentclaude", env: process.env.NODE_ENV ?? "development" },
   timestamp: pino.stdTimeFunctions.isoTime,
   ...(transport ? { transport } : {}),
 });

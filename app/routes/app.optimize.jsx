@@ -275,7 +275,7 @@ export default function OptimizePage() {
               for all <strong>{canOptimize}</strong> products — without a review step.
             </Text>
             <Text as="p" tone="subdued">
-              This cannot be undone from ContentPilot. You can revert individual products via
+              This cannot be undone from ContentClaude. You can revert individual products via
               the product editor after the job completes.
             </Text>
           </TextContainer>

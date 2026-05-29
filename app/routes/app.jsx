@@ -4,6 +4,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
+import { ContentClaudeBrand } from "../components/ContentClaudeBrand";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -18,10 +19,14 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <PolarisProvider i18n={enTranslations}>
         <s-app-nav>
+          <div slot="logo" style={{ padding: "8px 16px" }}>
+            <ContentClaudeBrand />
+          </div>
           <s-link href="/app">Dashboard</s-link>
           <s-link href="/app/products">Products</s-link>
           <s-link href="/app/optimize">Optimise Store</s-link>
           <s-link href="/app/review">Review & Publish</s-link>
+          <s-link href="/app/blog">Blog Generator</s-link>
           <s-link href="/app/collections">Collections</s-link>
           <s-link href="/app/settings">Settings</s-link>
           <s-link href="/app/plans">Plans & Billing</s-link>

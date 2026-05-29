@@ -3,7 +3,7 @@ import db from "../db.server";
 
 // GDPR: Triggered 48 hours after a merchant deletes a customer, requesting
 // that all data for that customer be erased.
-// ContentPilot stores NO customer PII — nothing to redact. Log for audit.
+// ContentClaude stores NO customer PII — nothing to redact. Log for audit.
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
 
@@ -15,6 +15,6 @@ export const action = async ({ request }) => {
     },
   });
 
-  // No customer data to redact — ContentPilot only holds shop-level data.
+  // No customer data to redact — ContentClaude only holds shop-level data.
   return new Response(null, { status: 200 });
 };

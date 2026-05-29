@@ -222,7 +222,7 @@ export default function PlansPage() {
   return (
     <Page
       title="Plans & Billing"
-      subtitle="Manage your ContentPilot subscription"
+      subtitle="Manage your ContentClaude subscription"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">

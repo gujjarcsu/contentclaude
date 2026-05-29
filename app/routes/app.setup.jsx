@@ -136,7 +136,7 @@ export default function SetupPage() {
   ];
 
   return (
-    <Page title="Welcome to ContentPilot AI" subtitle="Let's set up your brand voice in 4 quick steps">
+    <Page title="Welcome to ContentClaude" subtitle="Let's set up your brand voice in 4 quick steps">
       <BlockStack gap="500">
         {/* Progress bar */}
         <Card>
@@ -160,7 +160,7 @@ export default function SetupPage() {
               <BlockStack gap="400">
                 <Text as="h2" variant="headingLg">What's your brand?</Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  This tells ContentPilot who it's writing for. You can always update these later in Settings.
+                  This tells ContentClaude who it's writing for. You can always update these later in Settings.
                 </Text>
                 <TextField
                   name="storeName"
@@ -260,9 +260,9 @@ export default function SetupPage() {
             <Card>
               <BlockStack gap="500">
                 <BlockStack gap="200">
-                  <Text as="h2" variant="headingLg">Here's what ContentPilot generates for you</Text>
+                  <Text as="h2" variant="headingLg">Here's what ContentClaude generates for you</Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Based on your brand voice settings, ContentPilot produces content like this example — customised to your products, audience, and tone.
+                    Based on your brand voice settings, ContentClaude produces content like this example — customised to your products, audience, and tone.
                   </Text>
                 </BlockStack>
 
@@ -311,7 +311,7 @@ export default function SetupPage() {
                   <Text as="h2" variant="headingXl" alignment="center">You're ready to go!</Text>
                 </Box>
                 <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                  Your brand voice is set up. ContentPilot will now write all content in your exact voice.
+                  Your brand voice is set up. ContentClaude will now write all content in your exact voice.
                 </Text>
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" alignment="center">What's next:</Text>

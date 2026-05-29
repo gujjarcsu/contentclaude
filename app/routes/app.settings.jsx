@@ -453,7 +453,7 @@ export default function SettingsPage() {
                     </Text>
                     <Box padding="200" background="bg-surface-secondary" borderRadius="200">
                       <Text as="p" variant="bodySm">POST /api/generate</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">Header: X-ContentPilot-Token</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Header: X-ContentClaude-Token</Text>
                     </Box>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Contact support to enable the API endpoint.

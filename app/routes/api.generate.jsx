@@ -1,19 +1,19 @@
 // External trigger endpoint — POST /api/generate
-// Supports two auth modes (controlled by CONTENTPILOT_AUTH_MODE env var):
+// Supports two auth modes (controlled by CONTENTCLAUDE_AUTH_MODE env var):
 //
 //   "hmac" (default in production):
-//     Caller sends X-Shop-Domain and X-ContentPilot-Signature headers.
+//     Caller sends X-Shop-Domain and X-ContentClaude-Signature headers.
 //     Signature = HMAC-SHA256(raw request body, shop's Shopify access token).
 //     This scopes every request to one shop and rotates automatically when
 //     Shopify rotates the shop's offline access token.
 //
 //   "token" (simple, for Shopify Flow / low-risk integrations):
-//     Caller sends X-ContentPilot-Token matching CONTENTPILOT_API_TOKEN.
+//     Caller sends X-ContentClaude-Token matching CONTENTCLAUDE_API_TOKEN.
 //     Single global secret — only use when HMAC is not feasible.
 //
 // Usage from Shopify Flow:
 //   HTTP action → POST https://<your-app>/api/generate
-//   Headers: X-Shop-Domain: {{shop.domain}}, X-ContentPilot-Signature: <hmac>
+//   Headers: X-Shop-Domain: {{shop.domain}}, X-ContentClaude-Signature: <hmac>
 //   Body: { "productId": "gid://shopify/Product/123", "contentTypes": ["description"] }
 
 import crypto from "node:crypto";
@@ -22,12 +22,12 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import logger from "../utils/logger.server";
 
-const AUTH_MODE = process.env.CONTENTPILOT_AUTH_MODE || "hmac";
+const AUTH_MODE = process.env.CONTENTCLAUDE_AUTH_MODE || "hmac";
 
 async function verifyRequest(request, rawBody) {
   if (AUTH_MODE === "token") {
-    const token = request.headers.get("X-ContentPilot-Token");
-    const expected = process.env.CONTENTPILOT_API_TOKEN;
+    const token = request.headers.get("X-ContentClaude-Token");
+    const expected = process.env.CONTENTCLAUDE_API_TOKEN;
     if (!expected || token !== expected) return { ok: false };
     // Token mode has no shop-scope — the caller must provide it in the body
     return { ok: true };
@@ -35,8 +35,8 @@ async function verifyRequest(request, rawBody) {
 
   // HMAC mode: per-shop signature verification with replay prevention
   const shopDomain = request.headers.get("X-Shop-Domain");
-  const signature = request.headers.get("X-ContentPilot-Signature");
-  const tsHeader = request.headers.get("X-ContentPilot-Timestamp");
+  const signature = request.headers.get("X-ContentClaude-Signature");
+  const tsHeader = request.headers.get("X-ContentClaude-Timestamp");
   if (!shopDomain || !signature || !tsHeader) return { ok: false };
 
   // Reject requests older than 5 minutes (replay prevention)
