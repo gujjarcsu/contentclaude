@@ -19,7 +19,7 @@ export const loader = async ({ request }) => {
   const productCountData = await productCountResponse.json();
   const totalProducts = productCountData.data.productsCount.count;
 
-  const [contentStats, brandVoice, activeJobCount, plan, usageCount, recentActivity] = await Promise.all([
+  const [contentStats, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats] = await Promise.all([
     prisma.generatedContent.groupBy({
       by: ["status"],
       where: { shop },
@@ -37,10 +37,18 @@ export const loader = async ({ request }) => {
       take: 3,
       select: { productId: true, productTitle: true, status: true, updatedAt: true },
     }),
+    prisma.blogPost.groupBy({
+      by: ["status"],
+      where: { shop },
+      _count: { status: true },
+    }),
   ]);
 
   const generatedCount = contentStats.find((s) => s.status === "published")?._count.status ?? 0;
   const draftCount = contentStats.find((s) => s.status === "draft")?._count.status ?? 0;
+  const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
+  const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
+  const blogsTotal = blogsPublished + blogsDraft;
 
   const hasBrandVoice = !!(
     brandVoice &&
@@ -70,6 +78,9 @@ export const loader = async ({ request }) => {
       updatedAt: r.updatedAt.toISOString(),
     })),
     storeName,
+    blogsTotal,
+    blogsPublished,
+    blogsDraft,
   });
 };
 
@@ -140,6 +151,7 @@ export default function Dashboard() {
   const {
     totalProducts, generatedCount, draftCount, activeJobCount,
     hasBrandVoice, isNewShop, plan, usageCount, recentActivity, storeName,
+    blogsTotal, blogsPublished, blogsDraft,
   } = useLoaderData();
   const navigate = useNavigate();
 
@@ -413,7 +425,20 @@ export default function Dashboard() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Write SEO-optimised blog posts in your brand voice in under 60 seconds.
                   </Text>
-                  <Button onClick={() => navigate("/app/blog")}>Write a Post →</Button>
+                  {blogsTotal > 0 && (
+                    <InlineStack gap="200">
+                      <Badge tone="success">{blogsPublished} published</Badge>
+                      {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
+                    </InlineStack>
+                  )}
+                  <InlineStack gap="200">
+                    <Button onClick={() => navigate("/app/blog")}>Write a Post →</Button>
+                    {blogsTotal > 0 && (
+                      <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
+                        View all ({blogsTotal})
+                      </Button>
+                    )}
+                  </InlineStack>
                 </BlockStack>
               </Card>
             </Layout.Section>

@@ -12,8 +12,8 @@ generator client {
 // Connection pooling: add ?pgbouncer=true&connection_limit=1 to DATABASE_URL
 // when using Prisma with a serverless / edge deployment.
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Required by Shopify app template
@@ -186,4 +186,22 @@ model CollectionVoice {
 
   @@unique([shop, collectionId])
   @@index([shop])
+}
+
+// AI-generated blog posts — saved before/after publishing to Shopify
+model BlogPost {
+  id               String    @id @default(cuid())
+  shop             String
+  title            String    @default("")
+  content          String    @default("")
+  wordCount        Int       @default(0)
+  topic            String    @default("")
+  keywords         String    @default("")
+  status           String    @default("draft")  // "draft" | "published"
+  shopifyArticleId String?                       // Shopify article GID after publish
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([shop, status])
+  @@index([shop, createdAt])
 }
