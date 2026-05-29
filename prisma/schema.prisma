@@ -12,8 +12,8 @@ generator client {
 // Connection pooling: add ?pgbouncer=true&connection_limit=1 to DATABASE_URL
 // when using Prisma with a serverless / edge deployment.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.sqlite"
 }
 
 // Required by Shopify app template

@@ -7,8 +7,6 @@ import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-// ─── Loader ──────────────────────────────────────────────────────────────────
-
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -30,8 +28,6 @@ export const loader = async ({ request }) => {
   });
 };
 
-// ─── Action ──────────────────────────────────────────────────────────────────
-
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -47,12 +43,8 @@ export const action = async ({ request }) => {
       .filter((t) => formData.get(`tpl_${t}`) === "true")
       .join(",") || "description,metaTitle,metaDescription";
     const isDefault = formData.get("tplDefault") === "true";
-    // Clear existing defaults BEFORE creating so the new record is the only default.
     if (isDefault) {
-      await prisma.contentTemplate.updateMany({
-        where: { shop },
-        data: { isDefault: false },
-      });
+      await prisma.contentTemplate.updateMany({ where: { shop }, data: { isDefault: false } });
     }
     await prisma.contentTemplate.create({
       data: {
@@ -74,7 +66,6 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, message: "Template deleted." });
   }
 
-  // Default: save brand voice
   const VALID_TONES = new Set(["professional","friendly","premium","bold","scientific","warm","minimalist","playful","custom"]);
   const VALID_LANGUAGES = new Set(["en","es","fr","de","it","pt","ja","zh","ko","ar","hi","nl"]);
 
@@ -108,7 +99,32 @@ export const action = async ({ request }) => {
   return Response.json({ success: true, message: "Settings saved!" });
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+const TONE_CARDS = [
+  { value: "professional", emoji: "💼", label: "Professional", desc: "Authoritative & trustworthy" },
+  { value: "friendly",     emoji: "😊", label: "Friendly",     desc: "Warm & conversational" },
+  { value: "premium",      emoji: "✨", label: "Premium",      desc: "Luxury & aspirational" },
+  { value: "bold",         emoji: "⚡", label: "Bold",         desc: "High energy & direct" },
+  { value: "scientific",   emoji: "🔬", label: "Scientific",   desc: "Technical & evidence-based" },
+  { value: "warm",         emoji: "🌿", label: "Warm",         desc: "Nurturing & empathetic" },
+  { value: "minimalist",   emoji: "◻",  label: "Minimalist",  desc: "Clean & understated" },
+  { value: "playful",      emoji: "🎉", label: "Playful",      desc: "Fun & engaging" },
+  { value: "custom",       emoji: "✍️", label: "Custom",       desc: "Define your own tone" },
+];
+
+const languageOptions = [
+  { label: "English", value: "en" }, { label: "Spanish", value: "es" },
+  { label: "French", value: "fr" }, { label: "German", value: "de" },
+  { label: "Italian", value: "it" }, { label: "Portuguese", value: "pt" },
+  { label: "Japanese", value: "ja" }, { label: "Chinese (Simplified)", value: "zh" },
+  { label: "Korean", value: "ko" }, { label: "Arabic", value: "ar" },
+  { label: "Hindi", value: "hi" }, { label: "Dutch", value: "nl" },
+];
+
+const lengthOptions = [
+  { label: "Short (~100-150 words)", value: "short" },
+  { label: "Standard (~200-300 words)", value: "standard" },
+  { label: "Detailed (~400-500 words)", value: "detailed" },
+];
 
 export default function SettingsPage() {
   const { brandVoice, templates } = useLoaderData();
@@ -127,7 +143,6 @@ export default function SettingsPage() {
   const [targetKeywords, setTargetKeywords] = useState(brandVoice.targetKeywords || "");
   const [language, setLanguage] = useState(brandVoice.language || "en");
 
-  // Autopilot
   const [autopilotEnabled, setAutopilotEnabled] = useState(brandVoice.autopilotEnabled || false);
   const [autopilotAutoPublish, setAutopilotAutoPublish] = useState(brandVoice.autopilotAutoPublish || false);
   const apTypes = (brandVoice.autopilotContentTypes || "description,metaTitle,metaDescription").split(",");
@@ -135,7 +150,6 @@ export default function SettingsPage() {
   const [apMeta, setApMeta] = useState(apTypes.includes("metaTitle"));
   const [apFaq, setApFaq] = useState(apTypes.includes("faq"));
 
-  // New template form
   const [tplName, setTplName] = useState("");
   const [tplLength, setTplLength] = useState("standard");
   const [tplDesc, setTplDesc] = useState(true);
@@ -159,31 +173,6 @@ export default function SettingsPage() {
     }
   }, [actionData]);
 
-  const toneOptions = [
-    { label: "Professional & Trustworthy", value: "professional" },
-    { label: "Friendly & Conversational", value: "friendly" },
-    { label: "Premium & Luxurious", value: "premium" },
-    { label: "Bold & Energetic", value: "bold" },
-    { label: "Scientific & Technical", value: "scientific" },
-    { label: "Warm & Nurturing", value: "warm" },
-    { label: "Minimalist & Clean", value: "minimalist" },
-    { label: "Fun & Playful", value: "playful" },
-    { label: "Custom (describe in notes)", value: "custom" },
-  ];
-  const languageOptions = [
-    { label: "English", value: "en" }, { label: "Spanish", value: "es" },
-    { label: "French", value: "fr" }, { label: "German", value: "de" },
-    { label: "Italian", value: "it" }, { label: "Portuguese", value: "pt" },
-    { label: "Japanese", value: "ja" }, { label: "Chinese (Simplified)", value: "zh" },
-    { label: "Korean", value: "ko" }, { label: "Arabic", value: "ar" },
-    { label: "Hindi", value: "hi" }, { label: "Dutch", value: "nl" },
-  ];
-  const lengthOptions = [
-    { label: "Short (~100-150 words)", value: "short" },
-    { label: "Standard (~200-300 words)", value: "standard" },
-    { label: "Detailed (~400-500 words)", value: "detailed" },
-  ];
-
   return (
     <Page
       title="Settings"
@@ -191,15 +180,12 @@ export default function SettingsPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-        {actionData?.success && (
-          <Banner tone="success"><p>{actionData.message}</p></Banner>
-        )}
-        {actionData?.error && (
+        {actionData?.error && !actionData?.success && (
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
         )}
+
         <Form method="post">
           <input type="hidden" name="actionType" value="saveBrandVoice" />
-          {/* autopilot hidden fields */}
           <input type="hidden" name="autopilotEnabled" value={autopilotEnabled.toString()} />
           <input type="hidden" name="autopilotAutoPublish" value={autopilotAutoPublish.toString()} />
           <input type="hidden" name="ap_description" value={apDesc.toString()} />
@@ -209,62 +195,175 @@ export default function SettingsPage() {
           <Layout>
             <Layout.Section>
               <BlockStack gap="400">
+
                 {/* Store Identity */}
                 <Card>
                   <BlockStack gap="400">
-                    <Text as="h2" variant="headingLg">Store Identity</Text>
-                    <TextField name="storeName" label="Store Name" value={storeName} onChange={setStoreName}
-                      placeholder="e.g., Elite Peps Australia" autoComplete="off" />
-                    <Select name="brandTone" label="Brand Tone" options={toneOptions}
-                      value={brandTone} onChange={setBrandTone} />
-                    <Select name="language" label="Content Language" options={languageOptions}
-                      value={language} onChange={setLanguage} />
-                    <TextField name="targetAudience" label="Target Audience" value={targetAudience}
-                      onChange={setTargetAudience} multiline={3} autoComplete="off"
-                      placeholder="e.g., Health-conscious Australians 25-55 into peptides" />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingLg">Store Identity</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Tell the AI who you are — the more specific, the better the output.
+                      </Text>
+                    </BlockStack>
+                    <TextField
+                      name="storeName"
+                      label="Store Name"
+                      value={storeName}
+                      onChange={setStoreName}
+                      placeholder="e.g., Elite Peps Australia"
+                      autoComplete="off"
+                    />
+                    <Select
+                      name="language"
+                      label="Content Language"
+                      options={languageOptions}
+                      value={language}
+                      onChange={setLanguage}
+                    />
+                    <TextField
+                      name="targetAudience"
+                      label="Target Audience"
+                      value={targetAudience}
+                      onChange={setTargetAudience}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder="e.g., Health-conscious Australians 25-55 interested in peptides"
+                    />
+                  </BlockStack>
+                </Card>
+
+                {/* Brand Tone — visual selector */}
+                <Card>
+                  <BlockStack gap="400">
+                    <input type="hidden" name="brandTone" value={brandTone} />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingLg">Brand Tone</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        How should your content sound? Click to select.
+                      </Text>
+                    </BlockStack>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                        gap: "10px",
+                      }}
+                    >
+                      {TONE_CARDS.map((card) => {
+                        const isSelected = brandTone === card.value;
+                        return (
+                          <button
+                            key={card.value}
+                            type="button"
+                            onClick={() => setBrandTone(card.value)}
+                            style={{
+                              border: isSelected ? "2px solid #005BD3" : "1px solid #e1e3e5",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              background: isSelected ? "#f3f7ff" : "#fff",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              transition: "all 0.15s",
+                            }}
+                          >
+                            <BlockStack gap="100">
+                              <Text as="p" variant="bodyLg">{card.emoji}</Text>
+                              <Text as="p" variant="bodySm" fontWeight="semibold">
+                                {card.label}
+                              </Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {card.desc}
+                              </Text>
+                            </BlockStack>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </BlockStack>
                 </Card>
 
                 {/* SEO Keywords */}
                 <Card>
                   <BlockStack gap="400">
-                    <Text as="h2" variant="headingLg">SEO Keyword Targeting</Text>
-                    <TextField name="targetKeywords" label="Target Keywords" value={targetKeywords}
-                      onChange={setTargetKeywords} autoComplete="off"
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingLg">SEO Keyword Targeting</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        These keywords are woven naturally into all generated content.
+                      </Text>
+                    </BlockStack>
+                    <TextField
+                      name="targetKeywords"
+                      label="Target Keywords"
+                      value={targetKeywords}
+                      onChange={setTargetKeywords}
+                      autoComplete="off"
                       placeholder="e.g., peptides Australia, buy BPC-157"
-                      helpText="Comma-separated. Woven into all content naturally." />
+                      helpText="Comma-separated. Override per-product on the Generate page."
+                    />
                   </BlockStack>
                 </Card>
 
                 {/* Differentiators */}
                 <Card>
                   <BlockStack gap="400">
-                    <Text as="h2" variant="headingLg">What Makes You Unique</Text>
-                    <TextField name="keyDifferentiators" label="Key Differentiators"
-                      value={keyDifferentiators} onChange={setKeyDifferentiators}
-                      multiline={3} autoComplete="off"
-                      placeholder="e.g., Australian lab tested, 99%+ purity, same-day dispatch" />
-                    <TextField name="avoidPhrases" label="Phrases & Styles to Avoid"
-                      value={avoidPhrases} onChange={setAvoidPhrases}
-                      multiline={3} autoComplete="off"
-                      placeholder="e.g., No hype words. No emojis. Never say 'revolutionary'." />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingLg">What Makes You Unique</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        These details are injected into every piece of content to reinforce your brand.
+                      </Text>
+                    </BlockStack>
+                    <TextField
+                      name="keyDifferentiators"
+                      label="Key Differentiators"
+                      value={keyDifferentiators}
+                      onChange={setKeyDifferentiators}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder="e.g., Australian lab tested, 99%+ purity, same-day dispatch from Sydney"
+                    />
+                    <TextField
+                      name="avoidPhrases"
+                      label="Phrases & Styles to Avoid"
+                      value={avoidPhrases}
+                      onChange={setAvoidPhrases}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder="e.g., No hype words. No emojis. Never say 'revolutionary'."
+                    />
                   </BlockStack>
                 </Card>
 
                 {/* Sample Content */}
                 <Card>
                   <BlockStack gap="400">
-                    <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
-                    <TextField name="sampleContent" label="Your Best Product Descriptions (2-3 examples)"
-                      value={sampleContent} onChange={setSampleContent} multiline={8} autoComplete="off"
-                      placeholder="Paste your favourite product descriptions here…" />
-                    <TextField name="additionalNotes" label="Additional Guidelines"
-                      value={additionalNotes} onChange={setAdditionalNotes} multiline={3} autoComplete="off"
-                      placeholder="e.g., Always mention we ship from Sydney. Never make medical claims." />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Paste 2–3 of your best product descriptions. This is the most powerful way to match your exact voice.
+                      </Text>
+                    </BlockStack>
+                    <TextField
+                      name="sampleContent"
+                      label="Your Best Product Descriptions"
+                      value={sampleContent}
+                      onChange={setSampleContent}
+                      multiline={8}
+                      autoComplete="off"
+                      placeholder="Paste your favourite product descriptions here…"
+                    />
+                    <TextField
+                      name="additionalNotes"
+                      label="Additional Guidelines"
+                      value={additionalNotes}
+                      onChange={setAdditionalNotes}
+                      multiline={3}
+                      autoComplete="off"
+                      placeholder="e.g., Always mention we ship from Sydney. Never make medical claims."
+                    />
                   </BlockStack>
                 </Card>
 
-                {/* ── Autopilot ── */}
+                {/* Autopilot */}
                 <Card>
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
@@ -310,22 +409,47 @@ export default function SettingsPage() {
               </BlockStack>
             </Layout.Section>
 
+            {/* Sidebar */}
             <Layout.Section variant="oneThird">
               <BlockStack gap="400">
                 <Card>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">Tips for Better Content</Text>
-                    <Text as="p" variant="bodySm"><strong>Be specific with your audience.</strong> "Health-conscious Australian men 30-50" beats "everyone."</Text>
-                    <Text as="p" variant="bodySm"><strong>Add real keywords.</strong> Woven naturally — no stuffing.</Text>
-                    <Text as="p" variant="bodySm"><strong>Include real differentiators.</strong> "Lab tested with COA" beats "high quality."</Text>
-                    <Text as="p" variant="bodySm"><strong>Paste real examples.</strong> The most powerful way to match your exact voice.</Text>
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm">
+                        <strong>Be specific with your audience.</strong> "Health-conscious Australian men 30-50" beats "everyone."
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        <strong>Add real keywords.</strong> Woven naturally — no keyword stuffing.
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        <strong>Real differentiators win.</strong> "Lab tested with COA" beats "high quality."
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        <strong>Paste real examples.</strong> The single most powerful way to clone your voice.
+                      </Text>
+                    </BlockStack>
                   </BlockStack>
                 </Card>
+
+                <Card>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">Tone Guide</Text>
+                    <BlockStack gap="200">
+                      {TONE_CARDS.slice(0, 4).map((card) => (
+                        <Text key={card.value} as="p" variant="bodySm">
+                          <strong>{card.emoji} {card.label}</strong> — {card.desc}
+                        </Text>
+                      ))}
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
+
                 <Card>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">Flow Integration</Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Trigger content generation from Shopify Flow using the API endpoint:
+                      Trigger content generation from Shopify Flow:
                     </Text>
                     <Box padding="200" background="bg-surface-secondary" borderRadius="200">
                       <Text as="p" variant="bodySm">POST /api/generate</Text>
@@ -341,7 +465,7 @@ export default function SettingsPage() {
           </Layout>
         </Form>
 
-        {/* ── Re-run wizard ── */}
+        {/* Re-run wizard */}
         <Card>
           <InlineStack align="space-between" blockAlign="center">
             <BlockStack gap="100">
@@ -352,17 +476,15 @@ export default function SettingsPage() {
           </InlineStack>
         </Card>
 
-        {/* ── Content Templates ── */}
+        {/* Content Templates */}
         <Card>
           <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <BlockStack gap="100">
-                <Text as="h2" variant="headingLg">Content Templates</Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Save generation presets — apply them from the product page with one click.
-                </Text>
-              </BlockStack>
-            </InlineStack>
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingLg">Content Templates</Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Save generation presets — apply from the product page with one click.
+              </Text>
+            </BlockStack>
 
             {templates.length > 0 && (
               <BlockStack gap="200">
@@ -400,27 +522,53 @@ export default function SettingsPage() {
               <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
               <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
               <BlockStack gap="300">
-                <TextField name="tplName" label="Template Name" value={tplName} onChange={setTplName}
-                  placeholder="e.g., Full SEO Package" autoComplete="off" />
-                <Select name="tplLength" label="Description Length" options={lengthOptions}
-                  value={tplLength} onChange={setTplLength} />
+                <TextField
+                  name="tplName"
+                  label="Template Name"
+                  value={tplName}
+                  onChange={setTplName}
+                  placeholder="e.g., Full SEO Package"
+                  autoComplete="off"
+                />
+                <Select
+                  name="tplLength"
+                  label="Description Length"
+                  options={lengthOptions}
+                  value={tplLength}
+                  onChange={setTplLength}
+                />
                 <Text as="p" variant="bodySm" fontWeight="semibold">Content types:</Text>
                 <InlineStack gap="400" wrap>
                   <Checkbox label="Description" checked={tplDesc} onChange={setTplDesc} />
                   <Checkbox label="Meta Title & Description" checked={tplMeta} onChange={setTplMeta} />
                   <Checkbox label="FAQ" checked={tplFaq} onChange={setTplFaq} />
                 </InlineStack>
-                <TextField name="tplKeywords" label="Keywords (optional)" value={tplKeywords}
-                  onChange={setTplKeywords} autoComplete="off" placeholder="Override global keywords" />
-                <TextField name="tplInstructions" label="Custom Instructions (optional)"
-                  value={tplInstructions} onChange={setTplInstructions} multiline={2} autoComplete="off"
-                  placeholder="e.g., Focus on clinical applications, always mention purity" />
+                <TextField
+                  name="tplKeywords"
+                  label="Keywords (optional)"
+                  value={tplKeywords}
+                  onChange={setTplKeywords}
+                  autoComplete="off"
+                  placeholder="Override global keywords for this template"
+                />
+                <TextField
+                  name="tplInstructions"
+                  label="Custom Instructions (optional)"
+                  value={tplInstructions}
+                  onChange={setTplInstructions}
+                  multiline={2}
+                  autoComplete="off"
+                  placeholder="e.g., Focus on clinical applications, always mention purity"
+                />
                 <Checkbox label="Set as default template" checked={tplDefault} onChange={setTplDefault} />
-                <Button submit loading={isSaving} disabled={!tplName.trim()}>Save Template</Button>
+                <Button submit loading={isSaving} disabled={!tplName.trim()}>
+                  Save Template
+                </Button>
               </BlockStack>
             </Form>
           </BlockStack>
         </Card>
+
       </BlockStack>
     </Page>
   );

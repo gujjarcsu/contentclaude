@@ -22,11 +22,15 @@ import {
   SkeletonBodyText,
   SkeletonDisplayText,
   SkeletonThumbnail,
+  ProgressBar,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
+import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import { UpgradePrompt } from "../components/UpgradePrompt";
 
 const PAGE_SIZE = 50;
 
@@ -38,7 +42,7 @@ export const loader = async ({ request }) => {
   const direction = url.searchParams.get("dir") || "next";
   const statusFilter = url.searchParams.get("status") || "all";
 
-  const query =
+  const gqlQuery =
     direction === "prev"
       ? `query($cursor: String) {
           products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE) {
@@ -63,9 +67,18 @@ export const loader = async ({ request }) => {
           }
         }`;
 
-  const response = await admin.graphql(query, { variables: { cursor } });
-  const data = await response.json();
-  const { edges, pageInfo } = data.data.products;
+  const [gqlResponse, generatedContent, plan, usageCount] = await Promise.all([
+    admin.graphql(gqlQuery, { variables: { cursor } }),
+    prisma.generatedContent.findMany({
+      where: { shop },
+      select: { productId: true, contentType: true, status: true, updatedAt: true },
+    }),
+    getOrCreatePlan(shop),
+    getMonthlyUsageCount(shop),
+  ]);
+
+  const gqlData = await gqlResponse.json();
+  const { edges, pageInfo } = gqlData.data.products;
   const products = edges.map(({ node }) => ({
     id: node.id,
     numericId: node.id.replace("gid://shopify/Product/", ""),
@@ -81,25 +94,31 @@ export const loader = async ({ request }) => {
     tags: node.tags || [],
   }));
 
-  // Get ALL content records for this shop to build the status map and tab counts
-  const generatedProducts = await prisma.generatedContent.findMany({
-    where: { shop, contentType: "description" },
-    select: { productId: true, status: true, updatedAt: true },
-  });
-
-  const statusMap = {};
-  generatedProducts.forEach(({ productId, status, updatedAt }) => {
-    statusMap[productId] = { status, updatedAt };
-  });
-
-  // Tab counts from DB (global, not just this page)
+  // Per-product map: { [productId]: { description: {status, updatedAt}, metaTitle: ..., ... } }
+  const contentMap = {};
   const dbCounts = { draft: 0, published: 0 };
-  generatedProducts.forEach(({ status }) => {
-    if (status === "draft") dbCounts.draft++;
-    else if (status === "published") dbCounts.published++;
+  generatedContent.forEach(({ productId, contentType, status, updatedAt }) => {
+    if (!contentMap[productId]) contentMap[productId] = {};
+    contentMap[productId][contentType] = { status, updatedAt };
+    if (contentType === "description") {
+      if (status === "draft") dbCounts.draft++;
+      else if (status === "published") dbCounts.published++;
+    }
   });
 
-  return Response.json({ products, statusMap, pageInfo, statusFilter, dbCounts });
+  const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
+
+  return Response.json({
+    products,
+    contentMap,
+    pageInfo,
+    statusFilter,
+    dbCounts,
+    usageCount,
+    usageRemaining,
+    monthlyLimit: plan.monthlyLimit,
+    planName: plan.planName,
+  });
 };
 
 export const action = async ({ request }) => {
@@ -115,7 +134,6 @@ export const action = async ({ request }) => {
   const autoPublish = formData.get("bulk_autoPublish") === "true";
 
   if (actionType === "generateAll") {
-    // Paginate through ALL Shopify product IDs
     const allIds = [];
     let cursor = null;
     let hasNextPage = true;
@@ -151,7 +169,6 @@ export const action = async ({ request }) => {
     return redirect("/app/jobs");
   }
 
-  // generateSelected — existing bulk-by-selection flow
   let selectedIds;
   try {
     selectedIds = JSON.parse(formData.get("selectedIds") || "[]");
@@ -208,7 +225,10 @@ function ProductListSkeleton() {
 }
 
 export default function ProductsPage() {
-  const { products, statusMap, pageInfo, statusFilter, dbCounts } = useLoaderData();
+  const {
+    products, contentMap, pageInfo, statusFilter, dbCounts,
+    usageCount, usageRemaining, monthlyLimit, planName,
+  } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -226,22 +246,25 @@ export default function ProductsPage() {
   const handleSearchChange = useCallback((v) => setSearchValue(v), []);
   const handleSearchClear = useCallback(() => setSearchValue(""), []);
 
-  // Derived values (no hooks below this line — safe for early return)
+  // Derived values (no hooks below)
+  const totalProducts = products.length;
+  const publishedCount = Object.values(contentMap).filter((m) => m.description?.status === "published").length;
+  const draftCount = Object.values(contentMap).filter((m) => m.description?.status === "draft").length;
+  const noContentCount = totalProducts - publishedCount - draftCount;
+  const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
+  const isLowUsage = usageRemaining > 0 && usageRemaining <= 5;
+  const isOutOfUsage = usageRemaining === 0;
+
   const tabFilteredProducts = products.filter((p) => {
-    if (statusFilter === "draft") return statusMap[p.id]?.status === "draft";
-    if (statusFilter === "published") return statusMap[p.id]?.status === "published";
-    if (statusFilter === "needsContent") return !statusMap[p.id];
-    return true; // "all"
+    if (statusFilter === "draft") return contentMap[p.id]?.description?.status === "draft";
+    if (statusFilter === "published") return contentMap[p.id]?.description?.status === "published";
+    if (statusFilter === "needsContent") return !contentMap[p.id]?.description;
+    return true;
   });
 
   const filteredProducts = tabFilteredProducts.filter((p) =>
     p.title.toLowerCase().includes(searchValue.toLowerCase())
   );
-
-  const totalProducts = products.length;
-  const publishedCount = Object.values(statusMap).filter((s) => s.status === "published").length;
-  const draftCount = Object.values(statusMap).filter((s) => s.status === "draft").length;
-  const noContentCount = totalProducts - publishedCount - draftCount;
 
   const tabs = [
     { id: "all", content: `All (${totalProducts})`, panelID: "all" },
@@ -262,35 +285,62 @@ export default function ProductsPage() {
   );
 
   function getStatusBadge(productId) {
-    const s = statusMap[productId];
-    if (!s) return <Badge tone="attention">No AI Content</Badge>;
-    if (s.status === "published") return <Badge tone="success">Published</Badge>;
-    if (s.status === "draft") return <Badge tone="info">Draft Ready</Badge>;
+    const m = contentMap[productId];
+    if (!m?.description) return <Badge tone="attention">No AI Content</Badge>;
+    if (m.description.status === "published") return <Badge tone="success">Published</Badge>;
+    if (m.description.status === "draft") return <Badge tone="info">Draft Ready</Badge>;
     return <Badge>Unknown</Badge>;
   }
 
-  function getContentPreview(product) {
-    if (!product.description || product.description.length < 20) {
-      return <Text as="p" variant="bodySm" tone="critical">Missing description</Text>;
-    }
+  function getContentTypePills(productId) {
+    const m = contentMap[productId] || {};
+    const types = [
+      { key: "description", label: "Desc" },
+      { key: "metaTitle", label: "Meta" },
+      { key: "faq", label: "FAQ" },
+    ];
     return (
-      <Text as="p" variant="bodySm" tone="subdued" truncate>
-        {product.description.substring(0, 100)}…
-      </Text>
+      <InlineStack gap="100">
+        {types.map(({ key, label }) => {
+          const s = m[key]?.status;
+          if (!s) {
+            return (
+              <Box key={key} padding="100" background="bg-surface-secondary" borderRadius="100">
+                <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
+              </Box>
+            );
+          }
+          return (
+            <Box
+              key={key}
+              padding="100"
+              background={s === "published" ? "bg-surface-success" : "bg-surface-info"}
+              borderRadius="100"
+            >
+              <Text as="span" variant="bodySm" tone={s === "published" ? "success" : "info"}>
+                {label} ✓
+              </Text>
+            </Box>
+          );
+        })}
+      </InlineStack>
     );
   }
 
-  const buildBulkFormData = useCallback((actionType, ids) => {
-    const fd = new FormData();
-    fd.append("actionType", actionType);
-    if (ids) fd.append("selectedIds", JSON.stringify(ids));
-    fd.append("bulk_description", bulkDesc.toString());
-    fd.append("bulk_metaTitle", bulkMeta.toString());
-    fd.append("bulk_metaDescription", bulkMeta.toString());
-    fd.append("bulk_faq", bulkFaq.toString());
-    fd.append("bulk_autoPublish", bulkAutoPublish.toString());
-    return fd;
-  }, [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish]);
+  const buildBulkFormData = useCallback(
+    (actionType, ids) => {
+      const fd = new FormData();
+      fd.append("actionType", actionType);
+      if (ids) fd.append("selectedIds", JSON.stringify(ids));
+      fd.append("bulk_description", bulkDesc.toString());
+      fd.append("bulk_metaTitle", bulkMeta.toString());
+      fd.append("bulk_metaDescription", bulkMeta.toString());
+      fd.append("bulk_faq", bulkFaq.toString());
+      fd.append("bulk_autoPublish", bulkAutoPublish.toString());
+      return fd;
+    },
+    [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish]
+  );
 
   const handleBulkGenerate = useCallback(() => {
     if (!bulkDesc && !bulkMeta && !bulkFaq) {
@@ -309,7 +359,7 @@ export default function ProductsPage() {
     setBulkError("");
     setGenerateAllModal(false);
     submit(buildBulkFormData("generateAll", null), { method: "POST" });
-  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, setGenerateAllModal, submit]);
+  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit]);
 
   if (navigation.state === "loading") return <ProductListSkeleton />;
 
@@ -335,33 +385,90 @@ export default function ProductsPage() {
       ]}
     >
       <BlockStack gap="500">
-        {/* Stats Bar */}
+
+        {/* Usage alert — only when critical */}
+        {isOutOfUsage && (
+          <Banner tone="critical" title="Monthly generation limit reached">
+            <p>You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your store.</p>
+            <Box paddingBlockStart="200">
+              <Button variant="plain" onClick={() => navigate("/app/plans")}>View Plans & Upgrade →</Button>
+            </Box>
+          </Banner>
+        )}
+        {isLowUsage && (
+          <UpgradePrompt
+            compact
+            tone="warning"
+            title={`Only ${usageRemaining} generation${usageRemaining !== 1 ? "s" : ""} left this month`}
+            message={`${usageCount}/${monthlyLimit} used · upgrade to continue without interruption`}
+            onUpgrade={() => navigate("/app/plans")}
+          />
+        )}
+
+        {/* Stat bar */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">{publishedCount}</Text>
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <CheckCircle2 size={20} color="#00A047" />
+                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">{publishedCount}</Text>
+                </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">AI Content Published</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="headingXl" fontWeight="bold">{draftCount}</Text>
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <Clock size={20} color="#1656AC" />
+                  <Text as="p" variant="headingXl" fontWeight="bold">{draftCount}</Text>
+                </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">Drafts to Review</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="critical">{noContentCount}</Text>
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <AlertCircle size={20} color={noContentCount > 0 ? "#E51C00" : "#8C9196"} />
+                  <Text as="p" variant="headingXl" fontWeight="bold" tone={noContentCount > 0 ? "critical" : undefined}>
+                    {noContentCount}
+                  </Text>
+                </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">Need Content</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
+
+        {/* Usage mini-bar — show for free plan or when usage is above half */}
+        {(planName === "free" || usagePct >= 50) && (
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodySm" fontWeight="semibold">Monthly Generations</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {usageCount} / {monthlyLimit} used
+                  </Text>
+                  {planName === "free" && (
+                    <Button size="slim" variant="plain" onClick={() => navigate("/app/plans")}>
+                      Upgrade
+                    </Button>
+                  )}
+                </InlineStack>
+              </InlineStack>
+              <ProgressBar
+                progress={usagePct}
+                tone={usagePct >= 90 ? "critical" : usagePct >= 60 ? "highlight" : "success"}
+                size="small"
+              />
+            </BlockStack>
+          </Card>
+        )}
 
         {/* Bulk generation panel */}
         {selectedItems.length > 0 && (
@@ -376,48 +483,44 @@ export default function ProductsPage() {
                 </Button>
               </InlineStack>
 
-              {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
+              {isOutOfUsage ? (
+                <UpgradePrompt
+                  tone="warning"
+                  title="No generations remaining"
+                  message="Upgrade your plan to generate content for these products"
+                  onUpgrade={() => navigate("/app/plans")}
+                />
+              ) : (
+                <>
+                  {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
 
-              <InlineStack gap="500" wrap>
-                <Checkbox
-                  label="Description"
-                  checked={bulkDesc}
-                  onChange={setBulkDesc}
-                  helpText="Full product description"
-                />
-                <Checkbox
-                  label="Meta Title & Description"
-                  checked={bulkMeta}
-                  onChange={setBulkMeta}
-                  helpText="SEO meta tags"
-                />
-                <Checkbox
-                  label="FAQ Content"
-                  checked={bulkFaq}
-                  onChange={setBulkFaq}
-                  helpText="Q&A pairs"
-                />
-                <Checkbox
-                  label="Auto-publish"
-                  checked={bulkAutoPublish}
-                  onChange={setBulkAutoPublish}
-                  helpText="Push to Shopify immediately — skips review"
-                />
-              </InlineStack>
+                  <InlineStack gap="500" wrap>
+                    <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} helpText="Full product description" />
+                    <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} helpText="SEO meta tags" />
+                    <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} helpText="Q&A pairs" />
+                    <Checkbox label="Auto-publish" checked={bulkAutoPublish} onChange={setBulkAutoPublish} helpText="Push to Shopify immediately — skips review" />
+                  </InlineStack>
 
-              <InlineStack gap="300">
-                <Button variant="primary" onClick={handleBulkGenerate}>
-                  Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} →
-                </Button>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  ~{Math.ceil(selectedItems.length * 3.5 / 60)} min estimated · runs in background
-                </Text>
-              </InlineStack>
+                  <InlineStack gap="300" blockAlign="center">
+                    <Button variant="primary" onClick={handleBulkGenerate}>
+                      Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} →
+                    </Button>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated · runs in background
+                    </Text>
+                    {isLowUsage && (
+                      <Text as="p" variant="bodySm" tone="critical">
+                        Only {usageRemaining} generation{usageRemaining !== 1 ? "s" : ""} left!
+                      </Text>
+                    )}
+                  </InlineStack>
+                </>
+              )}
             </BlockStack>
           </Card>
         )}
 
-        {/* Product List with status tabs */}
+        {/* Product list with status tabs */}
         <Card padding="0">
           <Tabs tabs={tabs} selected={activeTab} onSelect={handleTabChange} fitted />
           <ResourceList
@@ -474,7 +577,7 @@ export default function ProductsPage() {
                           <Text as="span" variant="bodySm" tone="subdued">· {productType}</Text>
                         )}
                       </InlineStack>
-                      {getContentPreview(product)}
+                      {getContentTypePills(id)}
                     </BlockStack>
                     <BlockStack gap="200" inlineAlign="end">
                       {getStatusBadge(id)}
@@ -488,13 +591,21 @@ export default function ProductsPage() {
             }}
             emptyState={
               <EmptyState
-                heading={statusFilter === "all" ? "Your store is all caught up!" : `No ${statusFilter} products found`}
+                heading={
+                  statusFilter === "all"
+                    ? "Your store is all set!"
+                    : `No ${statusFilter} products found`
+                }
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                action={statusFilter !== "all" ? { content: "View all products", onAction: () => setSearchParams({}) } : undefined}
+                action={
+                  statusFilter !== "all"
+                    ? { content: "View all products", onAction: () => setSearchParams({}) }
+                    : { content: "Go to Dashboard", onAction: () => navigate("/app") }
+                }
               >
                 <p>
                   {statusFilter === "all"
-                    ? "Looks like your store doesn't have any products yet. Add some products in Shopify, then come back here to generate killer content for them."
+                    ? "Add products in Shopify, then come back here to generate AI content for them."
                     : `No products match the "${statusFilter}" filter. Try switching tabs or clearing the filter.`}
                 </p>
               </EmptyState>
@@ -538,7 +649,7 @@ export default function ProductsPage() {
           <Modal.Section>
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
-                This creates a background job for all {totalProducts} products. Estimated time: ~{Math.ceil(totalProducts * 3.5 / 60)} minutes.
+                This creates a background job for all {totalProducts} products. Estimated time: ~{Math.ceil((totalProducts * 3.5) / 60)} minutes.
               </Text>
               <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
               <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />
@@ -554,6 +665,7 @@ export default function ProductsPage() {
             </BlockStack>
           </Modal.Section>
         </Modal>
+
       </BlockStack>
     </Page>
   );

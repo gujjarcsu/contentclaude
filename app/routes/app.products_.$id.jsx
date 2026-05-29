@@ -17,8 +17,12 @@ import {
   TextField,
   Select,
   Tabs,
+  ProgressBar,
+  Collapsible,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { UpgradePrompt } from "../components/UpgradePrompt";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
@@ -732,6 +736,7 @@ export default function ProductGeneratePage() {
   }, [isGenerating, isEnhancing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate panel state
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [genDescription, setGenDescription] = useState(true);
   const [genMetaTitle, setGenMetaTitle] = useState(true);
   const [genMetaDescription, setGenMetaDescription] = useState(true);
@@ -992,32 +997,6 @@ export default function ProductGeneratePage() {
                     )}
                   </InlineStack>
 
-                  {templates.length > 0 && (
-                    <Select
-                      label="Apply Template"
-                      options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
-                      value={selectedTemplate}
-                      onChange={applyTemplate}
-                      helpText="Pre-fills the options below"
-                    />
-                  )}
-
-                  <Select
-                    label="Description Length"
-                    options={lengthOptions}
-                    value={contentLength}
-                    onChange={setContentLength}
-                  />
-
-                  <TextField
-                    label="Target Keywords (optional)"
-                    value={targetKeywords}
-                    onChange={setTargetKeywords}
-                    placeholder="e.g., peptides Australia, BPC-157"
-                    helpText="Overrides global keywords for this product"
-                    autoComplete="off"
-                  />
-
                   <Text as="p" variant="bodySm" tone="subdued">Select what to generate:</Text>
                   <Checkbox
                     label="Product Description"
@@ -1057,12 +1036,69 @@ export default function ProductGeneratePage() {
 
                   <Divider />
 
+                  {/* Advanced options — collapsible */}
+                  <Button
+                    variant="plain"
+                    size="slim"
+                    icon={advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    onClick={() => setAdvancedOpen((v) => !v)}
+                  >
+                    Advanced Options
+                  </Button>
+                  <Collapsible open={advancedOpen} id="advanced-options">
+                    <BlockStack gap="300">
+                      {templates.length > 0 && (
+                        <Select
+                          label="Apply Template"
+                          options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
+                          value={selectedTemplate}
+                          onChange={applyTemplate}
+                          helpText="Pre-fills the options below"
+                        />
+                      )}
+                      <Select
+                        label="Description Length"
+                        options={lengthOptions}
+                        value={contentLength}
+                        onChange={setContentLength}
+                      />
+                      <TextField
+                        label="Target Keywords (optional)"
+                        value={targetKeywords}
+                        onChange={setTargetKeywords}
+                        placeholder="e.g., peptides Australia, BPC-157"
+                        helpText="Overrides global keywords for this product"
+                        autoComplete="off"
+                      />
+                    </BlockStack>
+                  </Collapsible>
+
+                  <Divider />
+
                   <Checkbox
                     label="Auto-publish after generation"
                     checked={autoPublish}
                     onChange={setAutoPublish}
                     helpText="Skips the review step — publishes immediately to Shopify"
                   />
+
+                  {/* Animated progress bar during generation */}
+                  {(isGenerating || isEnhancing) && (
+                    <Box padding="300" background="bg-surface-info" borderRadius="200">
+                      <BlockStack gap="200">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Spinner size="small" />
+                          <Text as="p" variant="bodySm" fontWeight="semibold">
+                            {loadingMessages[loadingMsgIdx]}
+                          </Text>
+                        </InlineStack>
+                        <ProgressBar progress={((loadingMsgIdx + 1) / 5) * 85} tone="highlight" size="small" animated />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Takes 10–30 seconds — you can stay on this page
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                  )}
 
                   <Button
                     variant="primary"
@@ -1072,7 +1108,7 @@ export default function ProductGeneratePage() {
                     disabled={isLoading || noneSelected}
                     fullWidth
                   >
-                    {isGenerating ? loadingMessages[loadingMsgIdx] : "Generate Content ⌘↵"}
+                    {isGenerating ? "Generating…" : "Generate Content ⌘↵"}
                   </Button>
 
                   {(product.descriptionHtml || product.seoTitle) && (
@@ -1083,8 +1119,17 @@ export default function ProductGeneratePage() {
                       disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription)}
                       fullWidth
                     >
-                      {isEnhancing ? loadingMessages[loadingMsgIdx] : "Enhance Existing Content"}
+                      {isEnhancing ? "Enhancing…" : "Enhance Existing Content"}
                     </Button>
+                  )}
+
+                  {actionData?.limitReached && (
+                    <UpgradePrompt
+                      tone="warning"
+                      title="Monthly limit reached"
+                      message="Upgrade your plan to keep generating content"
+                      onUpgrade={() => navigate("/app/plans")}
+                    />
                   )}
                 </BlockStack>
               </Card>
@@ -1099,58 +1144,106 @@ export default function ProductGeneratePage() {
             <Box paddingBlockStart="400">
             <BlockStack gap="400">
 
-            {/* ── Tab 0: Generate controls (mirrors left column on mobile) ── */}
+            {/* ── Tab 0: Generate controls ── */}
             {selectedTab === 0 && (
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Ready to generate</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Configure your options in the panel on the left, then click Generate Content.
-                  </Text>
-                  <Button
-                    variant="primary"
-                    size="large"
-                    onClick={() => handleGenerate()}
-                    loading={isGenerating}
-                    disabled={isLoading || noneSelected}
-                    fullWidth
-                  >
-                    {isGenerating ? loadingMessages[loadingMsgIdx] : "Generate Content ⌘↵"}
-                  </Button>
-                  {(product.descriptionHtml || product.seoTitle) && (
+              <>
+                {/* Success state after generation */}
+                {actionData?.success && !isGenerating && !isEnhancing && (
+                  <Box padding="400" background="bg-surface-success" borderRadius="200">
+                    <BlockStack gap="200">
+                      <InlineStack gap="200" blockAlign="center">
+                        <CheckCircle2 size={20} color="#00A047" />
+                        <Text as="p" variant="headingSm" fontWeight="semibold">
+                          {actionData.autoPublished ? "Content published to your store!" : "Content generated — review & publish"}
+                        </Text>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">{actionData.message}</Text>
+                      {!actionData.autoPublished && (
+                        <Button size="slim" onClick={() => setSelectedTab(1)}>
+                          Review Generated Content →
+                        </Button>
+                      )}
+                    </BlockStack>
+                  </Box>
+                )}
+
+                <Card>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">
+                      {hasGeneratedContent ? "Regenerate Content" : "Ready to Generate"}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {hasGeneratedContent
+                        ? "Your product already has AI content. Generate again to create a fresh version."
+                        : "Select your content types in the left panel, then click Generate Content."}
+                    </Text>
+
+                    {(isGenerating || isGeneratingVariants || isEnhancing) && (
+                      <Box padding="300" background="bg-surface-info" borderRadius="200">
+                        <BlockStack gap="200">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Spinner size="small" />
+                            <Text as="p" variant="bodySm" fontWeight="semibold">
+                              {isGeneratingVariants
+                                ? "Writing 2 different versions…"
+                                : loadingMessages[loadingMsgIdx]}
+                            </Text>
+                          </InlineStack>
+                          <ProgressBar
+                            progress={isGeneratingVariants ? 60 : ((loadingMsgIdx + 1) / 5) * 85}
+                            tone="highlight"
+                            size="small"
+                            animated
+                          />
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {isGeneratingVariants ? "20–40 seconds" : "10–30 seconds"} — you can stay on this page
+                          </Text>
+                        </BlockStack>
+                      </Box>
+                    )}
+
                     <Button
+                      variant="primary"
                       size="large"
-                      onClick={handleEnhance}
-                      loading={isEnhancing}
-                      disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
+                      onClick={() => handleGenerate()}
+                      loading={isGenerating}
+                      disabled={isLoading || noneSelected}
                       fullWidth
                     >
-                      {isEnhancing ? loadingMessages[loadingMsgIdx] : "Enhance Existing Content"}
+                      {isGenerating ? "Generating…" : "Generate Content ⌘↵"}
                     </Button>
-                  )}
-                  <Button
-                    size="large"
-                    onClick={handleGenerateVariants}
-                    loading={isGeneratingVariants}
-                    disabled={isLoading || isGeneratingVariants || noneSelected}
-                    fullWidth
-                  >
-                    {isGeneratingVariants ? "Generating 2 options…" : "Generate 2 Options (A/B)"}
-                  </Button>
-                  {isGenerating && (
-                    <BlockStack gap="200" inlineAlign="center">
-                      <Spinner size="large" />
-                      <Text variant="headingSm">{loadingMessages[loadingMsgIdx]}</Text>
-                    </BlockStack>
-                  )}
-                  {isGeneratingVariants && (
-                    <BlockStack gap="200" inlineAlign="center">
-                      <Spinner size="large" />
-                      <Text variant="headingSm">Writing 2 different versions… 20–40s</Text>
-                    </BlockStack>
-                  )}
-                </BlockStack>
-              </Card>
+                    {(product.descriptionHtml || product.seoTitle) && (
+                      <Button
+                        size="large"
+                        onClick={handleEnhance}
+                        loading={isEnhancing}
+                        disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
+                        fullWidth
+                      >
+                        {isEnhancing ? "Enhancing…" : "Enhance Existing Content"}
+                      </Button>
+                    )}
+                    <Button
+                      size="large"
+                      onClick={handleGenerateVariants}
+                      loading={isGeneratingVariants}
+                      disabled={isLoading || isGeneratingVariants || noneSelected}
+                      fullWidth
+                    >
+                      {isGeneratingVariants ? "Generating 2 options…" : "Generate 2 Options (A/B)"}
+                    </Button>
+
+                    {actionData?.limitReached && (
+                      <UpgradePrompt
+                        tone="warning"
+                        title="Monthly limit reached"
+                        message="Upgrade your plan to keep generating content"
+                        onUpgrade={() => navigate("/app/plans")}
+                      />
+                    )}
+                  </BlockStack>
+                </Card>
+              </>
             )}
 
             {/* ── A/B Variant comparison ── */}

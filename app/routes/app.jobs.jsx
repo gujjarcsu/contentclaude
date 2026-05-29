@@ -15,6 +15,7 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { useEffect, useRef } from "react";
+import { Clock, CheckCircle2, XCircle, Loader, Zap } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
@@ -65,19 +66,19 @@ export const action = async ({ request }) => {
     }
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { status: "failed", completedAt: new Date(), errorLog: JSON.stringify([{ productId: "N/A", error: "Cancelled by merchant." }]) },
+      data: {
+        status: "failed",
+        completedAt: new Date(),
+        errorLog: JSON.stringify([{ productId: "N/A", error: "Cancelled by merchant." }]),
+      },
     });
     return Response.json({ success: true });
   }
 
   if (actionType === "retryFailed") {
-    // Parse error log to get the specific product IDs that failed
     const errorLog = job.errorLog ? JSON.parse(job.errorLog) : [];
-    retryIds = errorLog
-      .map((e) => e.productId)
-      .filter((id) => id && id !== "N/A");
+    retryIds = errorLog.map((e) => e.productId).filter((id) => id && id !== "N/A");
   } else {
-    // Resume: re-queue products that weren't completed (assumes sequential processing)
     const allIds = JSON.parse(job.productIds || "[]");
     retryIds = allIds.slice(job.completedProducts);
   }
@@ -111,12 +112,38 @@ function statusBadge(status) {
   }
 }
 
+function statusIcon(status) {
+  switch (status) {
+    case "queued":     return <Clock size={16} color="#916A00" />;
+    case "processing": return <Loader size={16} color="#1656AC" />;
+    case "complete":   return <CheckCircle2 size={16} color="#00A047" />;
+    case "failed":     return <XCircle size={16} color="#E51C00" />;
+    default:           return null;
+  }
+}
+
 function elapsed(startedAt, completedAt) {
   if (!startedAt) return null;
   const end = completedAt ? new Date(completedAt) : new Date();
   const secs = Math.round((end - new Date(startedAt)) / 1000);
   if (secs < 60) return `${secs}s`;
   return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
+function getEta(job) {
+  if (job.status !== "processing" || !job.startedAt) return null;
+  const done = job.completedProducts + job.failedProducts;
+  const remaining = job.totalProducts - done;
+  if (done === 0 || remaining <= 0) return null;
+
+  const elapsedMs = Date.now() - new Date(job.startedAt).getTime();
+  const msPerProduct = elapsedMs / done;
+  const etaMs = msPerProduct * remaining;
+  const etaSecs = Math.round(etaMs / 1000);
+
+  if (etaSecs < 60) return `~${etaSecs}s remaining`;
+  const mins = Math.floor(etaSecs / 60);
+  return `~${mins}m remaining`;
 }
 
 function formatDate(iso) {
@@ -130,13 +157,8 @@ export default function JobsPage() {
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
 
-  const hasActiveJobs = jobs.some((j) =>
-    j.status === "queued" || j.status === "processing"
-  );
+  const hasActiveJobs = jobs.some((j) => j.status === "queued" || j.status === "processing");
 
-  // Exponential back-off polling while jobs are active.
-  // Starts at 5 s, doubles each empty poll (no progress), caps at 30 s.
-  // Resets to 5 s as soon as a job makes progress.
   const pollIntervalRef = useRef(5000);
   const prevProgressRef = useRef(null);
   const prevRetryData = useRef(null);
@@ -174,16 +196,12 @@ export default function JobsPage() {
       return;
     }
 
-    const currentProgress = jobs
-      .map((j) => j.completedProducts + j.failedProducts)
-      .join(",");
+    const currentProgress = jobs.map((j) => j.completedProducts + j.failedProducts).join(",");
 
     if (currentProgress !== prevProgressRef.current) {
-      // Progress detected — reset to fast polling
       pollIntervalRef.current = 5000;
       prevProgressRef.current = currentProgress;
     } else {
-      // No progress — back off, cap at 30 s
       pollIntervalRef.current = Math.min(pollIntervalRef.current * 2, 30_000);
     }
 
@@ -193,6 +211,9 @@ export default function JobsPage() {
     }, interval);
     return () => clearTimeout(timer);
   }, [hasActiveJobs, jobs, revalidator]);
+
+  const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "processing");
+  const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "failed");
 
   return (
     <Page
@@ -205,9 +226,10 @@ export default function JobsPage() {
       }}
     >
       <BlockStack gap="500">
+
         {hasActiveJobs && (
           <Banner tone="info" title="Jobs are running">
-            <p>This page refreshes automatically every 5 seconds. You can navigate away — jobs continue in the background.</p>
+            <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>
           </Banner>
         )}
 
@@ -221,101 +243,150 @@ export default function JobsPage() {
                 onAction: () => navigate("/app/products"),
               }}
             >
-              <p>Select products and hit 'Generate All' to start your first bulk generation.</p>
+              <p>Select products and hit "Generate All" to start your first bulk generation job.</p>
             </EmptyState>
           </Card>
         ) : (
           <BlockStack gap="400">
-            {jobs.map((job) => {
-              const progress =
-                job.totalProducts > 0
-                  ? Math.round(
-                      ((job.completedProducts + job.failedProducts) /
-                        job.totalProducts) *
-                        100
-                    )
-                  : 0;
+
+            {/* Active jobs */}
+            {activeJobs.map((job) => {
+              const done = job.completedProducts + job.failedProducts;
+              const progress = job.totalProducts > 0 ? Math.round((done / job.totalProducts) * 100) : 0;
               const elapsedTime = elapsed(job.startedAt, job.completedAt);
+              const eta = getEta(job);
               const contentTypesList = job.contentTypes
                 .split(",")
                 .map((t) =>
-                  t === "description"
-                    ? "Description"
-                    : t === "metaTitle"
-                    ? "Meta Title"
-                    : t === "metaDescription"
-                    ? "Meta Description"
-                    : t === "faq"
-                    ? "FAQ"
-                    : t
+                  t === "description" ? "Description" :
+                  t === "metaTitle" ? "Meta Title" :
+                  t === "metaDescription" ? "Meta Description" :
+                  t === "faq" ? "FAQ" : t
                 )
                 .join(", ");
 
               return (
                 <Card key={job.id}>
                   <BlockStack gap="400">
-                    {/* Header row */}
                     <InlineStack align="space-between" blockAlign="start">
-                      <BlockStack gap="100">
-                        <InlineStack gap="300" blockAlign="center">
+                      <BlockStack gap="200">
+                        <InlineStack gap="200" blockAlign="center">
+                          {statusIcon(job.status)}
                           {statusBadge(job.status)}
                           <Text as="p" variant="bodySm" tone="subdued">
                             Started {formatDate(job.createdAt)}
                           </Text>
-                          {elapsedTime && (
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              · {elapsedTime} elapsed
-                            </Text>
-                          )}
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
                           Generating: {contentTypesList}
+                        </Text>
+                        <InlineStack gap="300">
+                          {elapsedTime && (
+                            <Text as="p" variant="bodySm" tone="subdued">{elapsedTime} elapsed</Text>
+                          )}
+                          {eta && (
+                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="info">{eta}</Text>
+                          )}
+                        </InlineStack>
+                      </BlockStack>
+
+                      <BlockStack gap="100" inlineAlign="end">
+                        <Text as="p" variant="headingMd" fontWeight="bold">
+                          {done}/{job.totalProducts}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">products done</Text>
+                        <cancelFetcher.Form method="post">
+                          <input type="hidden" name="jobId" value={job.id} />
+                          <input type="hidden" name="actionType" value="cancel" />
+                          <Button
+                            tone="critical"
+                            variant="plain"
+                            size="slim"
+                            submit
+                            loading={
+                              cancelFetcher.state !== "idle" &&
+                              cancelFetcher.formData?.get("jobId") === job.id
+                            }
+                          >
+                            Cancel job
+                          </Button>
+                        </cancelFetcher.Form>
+                      </BlockStack>
+                    </InlineStack>
+
+                    {job.totalProducts > 0 && (
+                      <BlockStack gap="100">
+                        <ProgressBar
+                          progress={progress}
+                          tone="highlight"
+                          size="medium"
+                          animated
+                        />
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">{progress}% complete</Text>
+                          {job.failedProducts > 0 && (
+                            <Text as="p" variant="bodySm" tone="critical">
+                              {job.failedProducts} failed
+                            </Text>
+                          )}
+                        </InlineStack>
+                      </BlockStack>
+                    )}
+                  </BlockStack>
+                </Card>
+              );
+            })}
+
+            {/* Completed / failed jobs */}
+            {completedJobs.map((job) => {
+              const done = job.completedProducts + job.failedProducts;
+              const progress = job.totalProducts > 0 ? Math.round((done / job.totalProducts) * 100) : 0;
+              const elapsedTime = elapsed(job.startedAt, job.completedAt);
+              const contentTypesList = job.contentTypes
+                .split(",")
+                .map((t) =>
+                  t === "description" ? "Description" :
+                  t === "metaTitle" ? "Meta Title" :
+                  t === "metaDescription" ? "Meta Description" :
+                  t === "faq" ? "FAQ" : t
+                )
+                .join(", ");
+
+              return (
+                <Card key={job.id}>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="start">
+                      <BlockStack gap="200">
+                        <InlineStack gap="200" blockAlign="center">
+                          {statusIcon(job.status)}
+                          {statusBadge(job.status)}
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {formatDate(job.createdAt)}
+                          </Text>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {contentTypesList}
+                          {elapsedTime ? ` · ${elapsedTime}` : ""}
                         </Text>
                       </BlockStack>
 
                       <BlockStack gap="100" inlineAlign="end">
                         <Text as="p" variant="headingMd" fontWeight="bold">
-                          {job.completedProducts}/{job.totalProducts}
+                          {done}/{job.totalProducts}
                         </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          products done
-                        </Text>
-                        {(job.status === "queued" || job.status === "processing") && (
-                          <cancelFetcher.Form method="post">
-                            <input type="hidden" name="jobId" value={job.id} />
-                            <input type="hidden" name="actionType" value="cancel" />
-                            <Button
-                              tone="critical"
-                              variant="plain"
-                              size="slim"
-                              submit
-                              loading={cancelFetcher.state !== "idle" && cancelFetcher.formData?.get("jobId") === job.id}
-                            >
-                              Cancel job
-                            </Button>
-                          </cancelFetcher.Form>
-                        )}
+                        <Text as="p" variant="bodySm" tone="subdued">products done</Text>
                       </BlockStack>
                     </InlineStack>
 
-                    {/* Progress bar */}
                     {job.totalProducts > 0 && (
                       <BlockStack gap="100">
                         <ProgressBar
                           progress={progress}
-                          tone={
-                            job.status === "failed"
-                              ? "critical"
-                              : job.status === "complete"
-                              ? "success"
-                              : "highlight"
-                          }
-                          size="medium"
+                          tone={job.status === "failed" ? "critical" : "success"}
+                          size="small"
                         />
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {progress}% complete
-                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">{progress}% complete</Text>
                           {job.failedProducts > 0 && (
                             <Text as="p" variant="bodySm" tone="critical">
                               {job.failedProducts} failed
@@ -325,7 +396,6 @@ export default function JobsPage() {
                       </BlockStack>
                     )}
 
-                    {/* Error log */}
                     {job.errorLog.length > 0 && (
                       <>
                         <Divider />
@@ -333,13 +403,8 @@ export default function JobsPage() {
                           <Text as="p" variant="bodySm" fontWeight="bold" tone="critical">
                             Errors ({job.errorLog.length})
                           </Text>
-                          {job.errorLog.map((err, i) => (
-                            <Box
-                              key={i}
-                              padding="200"
-                              background="bg-surface-critical-subdued"
-                              borderRadius="100"
-                            >
+                          {job.errorLog.slice(0, 5).map((err, i) => (
+                            <Box key={i} padding="200" background="bg-surface-critical-subdued" borderRadius="100">
                               <Text as="p" variant="bodySm">
                                 <strong>
                                   {err.productId.replace("gid://shopify/Product/", "Product #")}
@@ -348,24 +413,24 @@ export default function JobsPage() {
                               </Text>
                             </Box>
                           ))}
+                          {job.errorLog.length > 5 && (
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              …and {job.errorLog.length - 5} more errors
+                            </Text>
+                          )}
                         </BlockStack>
                       </>
                     )}
 
-                    {/* Completion CTA */}
                     {job.status === "complete" && (
                       <>
                         <Divider />
                         <InlineStack gap="300" blockAlign="center">
-                          <Button
-                            variant="primary"
-                            onClick={() => navigate("/app/review")}
-                          >
+                          <Button variant="primary" onClick={() => navigate("/app/review")}>
                             Review & Publish Content
                           </Button>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {job.completedProducts} product
-                            {job.completedProducts !== 1 ? "s" : ""} ready to review
+                            {job.completedProducts} product{job.completedProducts !== 1 ? "s" : ""} ready
                           </Text>
                           {job.failedProducts > 0 && (
                             <retryFetcher.Form method="post">
@@ -374,7 +439,10 @@ export default function JobsPage() {
                               <Button
                                 tone="critical"
                                 submit
-                                loading={retryFetcher.state !== "idle" && retryFetcher.formData?.get("jobId") === job.id}
+                                loading={
+                                  retryFetcher.state !== "idle" &&
+                                  retryFetcher.formData?.get("jobId") === job.id
+                                }
                               >
                                 Retry Failed ({job.failedProducts})
                               </Button>
@@ -384,7 +452,6 @@ export default function JobsPage() {
                       </>
                     )}
 
-                    {/* Resume crashed job */}
                     {job.status === "failed" && (
                       <>
                         <Divider />
@@ -396,7 +463,10 @@ export default function JobsPage() {
                               variant="primary"
                               tone="critical"
                               submit
-                              loading={retryFetcher.state !== "idle" && retryFetcher.formData?.get("jobId") === job.id}
+                              loading={
+                                retryFetcher.state !== "idle" &&
+                                retryFetcher.formData?.get("jobId") === job.id
+                              }
                             >
                               Resume Job
                             </Button>
@@ -411,8 +481,10 @@ export default function JobsPage() {
                 </Card>
               );
             })}
+
           </BlockStack>
         )}
+
       </BlockStack>
     </Page>
   );
