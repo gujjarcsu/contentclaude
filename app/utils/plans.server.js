@@ -67,19 +67,22 @@ export async function canGenerate(shop) {
 export async function tryConsumeGeneration(shop, contentType, productId = null) {
   const month = new Date().toISOString().slice(0, 7);
 
-  // Free re-generation: if this product was already generated in the last 24h,
-  // don't count it against the monthly limit — encourage iteration on quality.
+  // Free re-generation: first 3 re-gens of the same product within 24h are free.
+  // 4th+ re-gen within 24h costs a credit (cap prevents unlimited free abuse).
   if (productId) {
-    const recentGeneration = await prisma.usageRecord.findFirst({
+    const MAX_FREE_REGENS = 3;
+    const recentCount = await prisma.usageRecord.count({
       where: {
         shop,
         productId,
         createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
     });
-    if (recentGeneration) {
+    if (recentCount > 0 && recentCount <= MAX_FREE_REGENS) {
       return { allowed: true, isFreeRegeneration: true, planName: "free", monthlyLimit: 0, remaining: 0 };
     }
+    // recentCount === 0 → first generation, charge a credit
+    // recentCount > MAX_FREE_REGENS → cap reached, charge a credit
   }
 
   try {

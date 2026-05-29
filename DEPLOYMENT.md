@@ -25,8 +25,8 @@ SCOPES=write_products,write_metaobjects,write_metaobject_definitions
 # AI content generation
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 
-# Database (SQLite for single-server; switch to PostgreSQL for scale)
-# DATABASE_URL=postgresql://user:password@host:5432/contentpilot  ← uncomment for Postgres
+# Database (PostgreSQL required for production)
+DATABASE_URL=postgresql://user:password@host:5432/contentpilot
 
 # Logging (debug | info | warn | error)
 LOG_LEVEL=info
@@ -69,28 +69,26 @@ fly deploy
 
 ---
 
-## Database Migration (SQLite → PostgreSQL)
+## Database Setup (PostgreSQL — Required)
 
-When you're ready to scale beyond a single server:
+PostgreSQL is the default and only supported production database. Set `DATABASE_URL` in your environment and run migrations:
 
-1. Update `prisma/schema.prisma`:
-   ```diff
-   datasource db {
-   -  provider = "sqlite"
-   -  url      = "file:dev.sqlite"
-   +  provider = "postgresql"
-   +  url      = env("DATABASE_URL")
-   }
-   ```
+```bash
+npx prisma migrate deploy
+```
 
-2. Set `DATABASE_URL` in your environment
+Migrate existing data with `pgloader` or a manual export/import script if needed.
 
-3. Run migrations:
-   ```bash
-   npx prisma migrate deploy
-   ```
+---
 
-4. Migrate existing data with `pgloader` or a manual export/import script if needed.
+## Local Development with SQLite (optional)
+
+If you don't have PostgreSQL locally, you can temporarily switch back to SQLite for development:
+1. Change `provider = "postgresql"` to `provider = "sqlite"` in `prisma/schema.prisma`
+2. Set `DATABASE_URL="file:dev.sqlite"` in `.env`
+3. Run `npx prisma migrate dev`
+
+**Do NOT deploy to production with SQLite.** Switch back to PostgreSQL before deploying.
 
 ---
 
@@ -165,10 +163,11 @@ GDPR webhooks (registered manually in Partner Dashboard):
 ContentPilot is designed for growth. Here's what to address at each scale milestone:
 
 ### < 50 shops
-Current architecture is fine. SQLite + fire-and-forget background jobs.
+Current architecture is fine. PostgreSQL + BullMQ background jobs (Redis optional, falls back to inline).
 
 ### 50–500 shops
-- Switch to **PostgreSQL** (see migration above)
+- Ensure **PostgreSQL** is in use (it is by default)
+- Ensure **Redis** is configured for BullMQ (set `REDIS_URL`)
 - Replace `setTimeout` fire-and-forget in bulk processor with **BullMQ + Redis**
   - Install: `npm install bullmq ioredis`
   - Create `app/queues/generationQueue.server.js`

@@ -118,7 +118,8 @@ describe("tryConsumeGeneration (atomic gate)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("allows generation and writes usage record when under limit", async () => {
-    prisma.usageRecord.findFirst.mockResolvedValue(null);
+    // recentCount = 0 → first generation, no free re-gen, proceed to transaction
+    prisma.usageRecord.count.mockResolvedValue(0);
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
@@ -188,8 +189,8 @@ describe("tryConsumeGeneration (atomic gate)", () => {
   });
 
   it("allows free re-generation when product was generated in the last 24h", async () => {
-    // findFirst returns a recent record → bypass the transaction entirely
-    prisma.usageRecord.findFirst.mockResolvedValue({ id: "existing", createdAt: new Date() });
+    // recentCount = 1 → within free re-gen window (1–3), bypass transaction
+    prisma.usageRecord.count.mockResolvedValue(1);
 
     const result = await tryConsumeGeneration(
       "shop.myshopify.com",
@@ -200,6 +201,51 @@ describe("tryConsumeGeneration (atomic gate)", () => {
     expect(result.allowed).toBe(true);
     expect(result.isFreeRegeneration).toBe(true);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows free re-generation up to 3 times within 24h", async () => {
+    // recentCount = 3 → still within the free cap (1–3)
+    prisma.usageRecord.count.mockResolvedValue(3);
+
+    const result = await tryConsumeGeneration(
+      "shop.myshopify.com",
+      "description",
+      "gid://shopify/Product/123"
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.isFreeRegeneration).toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("charges a credit after 3 free re-generations", async () => {
+    // recentCount = 4 → past the cap, falls through to normal transaction
+    prisma.usageRecord.count.mockResolvedValue(4);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      fn({
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({
+            planName: "free",
+            status: "active",
+            monthlyLimit: 25,
+          }),
+        },
+        usageRecord: {
+          count: vi.fn().mockResolvedValue(5),
+          create: vi.fn().mockResolvedValue({}),
+        },
+      })
+    );
+
+    const result = await tryConsumeGeneration(
+      "shop.myshopify.com",
+      "description",
+      "gid://shopify/Product/123"
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.isFreeRegeneration).toBeUndefined();
+    expect(result.remaining).toBe(19);
   });
 });
 

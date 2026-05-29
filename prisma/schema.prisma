@@ -3,20 +3,16 @@ generator client {
 }
 
 // ── Database ────────────────────────────────────────────────────────────────
-// Current: SQLite (development / single-server deployment).
+// PostgreSQL is the required production database.
 //
-// To migrate to PostgreSQL before scaling beyond ~5 concurrent shops:
-//   1. Change provider to "postgresql"
-//   2. Change url to env("DATABASE_URL")
-//   3. Add DATABASE_URL=postgresql://user:pass@host:5432/contentpilot to .env
-//   4. Run: npx prisma migrate dev --name "sqlite_to_postgres"
-//   5. Run: npx prisma migrate deploy  (or use pgloader / pg_dump for data)
+// Local dev without PostgreSQL: see DEPLOYMENT.md "Local Development with SQLite"
+// for a temporary fallback.
 //
 // Recommended managed Postgres: Railway, Neon, Supabase, or PlanetScale.
 // Connection pooling: add ?pgbouncer=true&connection_limit=1 to DATABASE_URL
 // when using Prisma with a serverless / edge deployment.
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
