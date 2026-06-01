@@ -17,6 +17,7 @@ export const action = async ({ request }) => {
       await tx.contentTemplate.deleteMany({ where: { shop } });
       await tx.collectionVoice.deleteMany({ where: { shop } });
       await tx.brandVoice.deleteMany({ where: { shop } });
+      await tx.blogPost.deleteMany({ where: { shop } });
       await tx.generationJob.deleteMany({ where: { shop } });
       await tx.usageRecord.deleteMany({ where: { shop } });
       await tx.plan.deleteMany({ where: { shop } });
