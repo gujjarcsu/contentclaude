@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
+import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import {
   Page,
   Layout,
@@ -16,7 +16,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -32,7 +32,7 @@ export const loader = async ({ request }) => {
   let hasNextPage = true;
   const MAX_AUDIT_PRODUCTS = 500;
   const AUDIT_START = Date.now();
-  const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit â€” leave headroom for DB + response
+  const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit — leave headroom for DB + response
 
   while (hasNextPage && allEdges.length < MAX_AUDIT_PRODUCTS) {
     if (Date.now() - AUDIT_START > AUDIT_TIMEOUT_MS) {
@@ -106,7 +106,7 @@ export const loader = async ({ request }) => {
   return Response.json({ products, totalScore, missingDesc, missingMeta, missingAlt, staleCount });
 };
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ───────────────────────────────────────────────────────────────
 
 function ScoreRing({ score }) {
   const tone = score >= 80 ? "success" : score >= 50 ? "highlight" : "critical";
@@ -123,8 +123,8 @@ function ScoreRing({ score }) {
 
 function CheckIcon({ pass }) {
   return pass
-    ? <Badge tone="success">âœ“</Badge>
-    : <Badge tone="critical">âœ—</Badge>;
+    ? <Badge tone="success">✓</Badge>
+    : <Badge tone="critical">✗</Badge>;
 }
 
 export default function SeoAuditPage() {
@@ -149,7 +149,7 @@ export default function SeoAuditPage() {
   return (
     <Page
       title="SEO Audit"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed â€” sorted by score (worst first)${products.length >= 500 ? " Â· showing first 500" : ""}`}
+      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${products.length >= 500 ? " · showing first 500" : ""}`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: "Fix All Missing Content",
@@ -157,7 +157,7 @@ export default function SeoAuditPage() {
       }}
       secondaryActions={[
         {
-          content: isLoading ? "Scanningâ€¦" : "Refresh Audit",
+          content: isLoading ? "Scanning..." : "Refresh Audit",
           onAction: () => revalidator.revalidate(),
           loading: isLoading,
           disabled: isLoading,
@@ -181,7 +181,7 @@ export default function SeoAuditPage() {
           >
             <p>Refreshing old descriptions keeps your SEO rankings strong and content relevant.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/optimize")}>Refresh Stale Content â†’</Button>
+              <Button onClick={() => navigate("/app/optimize")}>Refresh Stale Content →</Button>
             </Box>
           </Banner>
         )}
@@ -217,7 +217,7 @@ export default function SeoAuditPage() {
                   )}
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  SEO score breakdown: Description (30pts) Â· Meta Title (25pts) Â· Meta Description (25pts) Â· Has Images (10pts) Â· Alt Text (10pts)
+                  SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) · Has Images (10pts) · Alt Text (10pts)
                 </Text>
               </BlockStack>
             </Card>

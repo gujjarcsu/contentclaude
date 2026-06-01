@@ -10,16 +10,24 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
+import { getCache } from "../utils/cache.server";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const productCountResponse = await admin.graphql(`query { productsCount { count } }`);
-  const productCountData = await productCountResponse.json();
-  const totalProducts = productCountData.data.productsCount.count;
+  // Cache product count 5 min — it's read on every dashboard load and rarely changes
+  const totalProducts = await getCache(
+    `productCount:${shop}`,
+    async () => {
+      const r = await admin.graphql(`query { productsCount { count } }`);
+      const d = await r.json();
+      return d.data.productsCount.count;
+    },
+    300
+  );
 
-  const [contentStats, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats] = await Promise.all([
+  const [contentStats, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
     prisma.generatedContent.groupBy({
       by: ["status"],
       where: { shop },
@@ -41,6 +49,16 @@ export const loader = async ({ request }) => {
       by: ["status"],
       where: { shop },
       _count: { status: true },
+    }),
+    // Detect a job that finished in the last 15 min so we can surface a success banner
+    prisma.generationJob.findFirst({
+      where: {
+        shop,
+        status: "complete",
+        completedAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      orderBy: { completedAt: "desc" },
+      select: { completedProducts: true, completedAt: true },
     }),
   ]);
 
@@ -81,6 +99,12 @@ export const loader = async ({ request }) => {
     blogsTotal,
     blogsPublished,
     blogsDraft,
+    recentlyCompletedJob: recentlyCompletedJob
+      ? {
+          completedProducts: recentlyCompletedJob.completedProducts,
+          completedAt: recentlyCompletedJob.completedAt.toISOString(),
+        }
+      : null,
   });
 };
 
@@ -151,7 +175,7 @@ export default function Dashboard() {
   const {
     totalProducts, generatedCount, draftCount, activeJobCount,
     hasBrandVoice, isNewShop, plan, usageCount, recentActivity, storeName,
-    blogsTotal, blogsPublished, blogsDraft,
+    blogsTotal, blogsPublished, blogsDraft, recentlyCompletedJob,
   } = useLoaderData();
   const navigate = useNavigate();
 
@@ -177,6 +201,18 @@ export default function Dashboard() {
     <Page>
       <BlockStack gap="600">
 
+        {/* ── Job completion banner ──────────────────────────────────────── */}
+        {recentlyCompletedJob && activeJobCount === 0 && (
+          <Banner
+            tone="success"
+            title={`Bulk job complete — ${recentlyCompletedJob.completedProducts} product${recentlyCompletedJob.completedProducts !== 1 ? "s" : ""} generated`}
+            action={{ content: "Review & Publish →", onAction: () => navigate("/app/review") }}
+            onDismiss={() => {}}
+          >
+            <p>Your AI content is ready to review. Check drafts, make edits, and publish with one click.</p>
+          </Banner>
+        )}
+
         {/* ── Active jobs banner ─────────────────────────────────────────── */}
         {activeJobCount > 0 && (
           <Banner
@@ -190,7 +226,8 @@ export default function Dashboard() {
 
         {/* ── Hero Section ──────────────────────────────────────────────── */}
         <Box padding="600" background="bg-fill-brand" borderRadius="300">
-          <InlineStack align="space-between" blockAlign="center" wrap={false}>
+          {/* wrap allowed on mobile so button drops below the heading on narrow screens */}
+          <InlineStack align="space-between" blockAlign="center" gap="400">
             <BlockStack gap="200">
               <InlineStack gap="200" blockAlign="center">
                 <Sparkles size={22} color="#ffffff" />

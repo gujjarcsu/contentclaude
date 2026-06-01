@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams } from "react-router";
 import {
   Page,
   Layout,
@@ -17,7 +17,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan } from "../utils/plans.server";
 
-// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -99,7 +99,7 @@ export const loader = async ({ request }) => {
   });
 };
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const {

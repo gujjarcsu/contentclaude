@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useActionData, useNavigation, useNavigate, redirect, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, redirect, Form } from "react-router";
 import {
   Page, Card, Text, BlockStack, InlineStack,
   Button, TextField, Select, ProgressBar, Badge, Box, Banner,
@@ -9,7 +9,7 @@ import prisma from "../db.server";
 
 const TOTAL_STEPS = 5;
 
-// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -21,7 +21,7 @@ export const loader = async ({ request }) => {
   return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS), shopName: "" });
 };
 
-// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -68,19 +68,19 @@ export const action = async ({ request }) => {
   }
 
   if (step === 4) {
-    // Preview step â€” no DB save, just advance to final step
+    // Preview step — no DB save, just advance to final step
     return redirect("/app/setup?step=5");
   }
 
   if (step === 5) {
-    // Final step â€” mark setup complete and redirect to products
+    // Final step — mark setup complete and redirect to products
     return redirect("/app/products");
   }
 
   return redirect("/app/setup?step=1");
 };
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
   const { brandVoice, step } = useLoaderData();
@@ -180,7 +180,7 @@ export default function SetupPage() {
                   helpText="The voice and personality your content should have"
                 />
                 <Button variant="primary" size="large" submit loading={isSaving} fullWidth>
-                  Continue â†’
+                  Continue →
                 </Button>
               </BlockStack>
             </Card>
@@ -210,13 +210,13 @@ export default function SetupPage() {
                   value={keyDifferentiators}
                   onChange={setKeyDifferentiators}
                   placeholder="e.g., Australian lab-tested, 99%+ purity, same-day dispatch, locally owned"
-                  helpText="Unique selling points â€” these get woven into every description"
+                  helpText="Unique selling points — these get woven into every description"
                   multiline={3}
                   autoComplete="off"
                 />
                 <InlineStack gap="300">
                   <Button onClick={() => navigate("/app/setup?step=1")}>â† Back</Button>
-                  <Button variant="primary" submit loading={isSaving}>Continue â†’</Button>
+                  <Button variant="primary" submit loading={isSaving}>Continue →</Button>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -249,7 +249,7 @@ export default function SetupPage() {
                 />
                 <InlineStack gap="300">
                   <Button onClick={() => navigate("/app/setup?step=2")}>â† Back</Button>
-                  <Button variant="primary" submit loading={isSaving}>Continue â†’</Button>
+                  <Button variant="primary" submit loading={isSaving}>Continue →</Button>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -262,7 +262,7 @@ export default function SetupPage() {
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingLg">Here's what ContentClaude generates for you</Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Based on your brand voice settings, ContentClaude produces content like this example â€” customised to your products, audience, and tone.
+                    Based on your brand voice settings, ContentClaude produces content like this example — customised to your products, audience, and tone.
                   </Text>
                 </BlockStack>
 
@@ -273,10 +273,10 @@ export default function SetupPage() {
                     </InlineStack>
                     <Text as="h3" variant="headingMd">Premium Whey Protein Isolate 1kg</Text>
                     <Text as="p" variant="bodyMd">
-                      Built for athletes who train hard and recover harder. Our Premium Whey Protein Isolate delivers <strong>27g of ultra-filtered protein</strong> per serve â€” with less than 1g of fat and virtually no lactose, so your body gets exactly what it needs, nothing it doesn't.
+                      Built for athletes who train hard and recover harder. Our Premium Whey Protein Isolate delivers <strong>27g of ultra-filtered protein</strong> per serve — with less than 1g of fat and virtually no lactose, so your body gets exactly what it needs, nothing it doesn't.
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      Cold-processed at low temperatures to preserve the full amino acid spectrum, this isolate mixes instantly with no clumping, no chalky aftertaste â€” just clean, fast-absorbing protein that works as hard as you do.
+                      Cold-processed at low temperatures to preserve the full amino acid spectrum, this isolate mixes instantly with no clumping, no chalky aftertaste — just clean, fast-absorbing protein that works as hard as you do.
                     </Text>
                     <Box padding="200" background="bg-surface" borderRadius="200">
                       <Text as="p" variant="bodySm" fontWeight="semibold">Meta Title:</Text>
@@ -290,13 +290,13 @@ export default function SetupPage() {
                 </Box>
 
                 <Banner tone="info">
-                  Your actual content will be tailored to YOUR products, brand tone, and target audience â€” not a generic template.
+                  Your actual content will be tailored to YOUR products, brand tone, and target audience — not a generic template.
                 </Banner>
 
                 <InlineStack gap="300">
                   <Button onClick={() => navigate("/app/setup?step=3")}>â† Back</Button>
                   <Button variant="primary" submit loading={isSaving}>
-                    Looks great â€” let's go! â†’
+                    Looks great — let's go! →
                   </Button>
                 </InlineStack>
               </BlockStack>
@@ -316,15 +316,15 @@ export default function SetupPage() {
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" alignment="center">What's next:</Text>
                   <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                    â†’ Pick a product and generate your first description
+                    → Pick a product and generate your first description
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                    â†’ Or use One-Click Optimise to generate content for your whole store
+                    → Or use One-Click Optimise to generate content for your whole store
                   </Text>
                 </BlockStack>
                 <InlineStack gap="300" align="center">
                   <Button variant="primary" size="large" submit loading={isSaving}>
-                    Go to Products â†’
+                    Go to Products →
                   </Button>
                   <Button onClick={() => navigate("/app/optimize")}>
                     Optimise Entire Store

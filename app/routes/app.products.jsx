@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -137,17 +137,31 @@ export const action = async ({ request }) => {
     const allIds = [];
     let cursor = null;
     let hasNextPage = true;
-    while (hasNextPage) {
-      const resp = await admin.graphql(
-        `query($cursor: String) {
-          products(first: 250, after: $cursor) {
-            pageInfo { hasNextPage endCursor }
-            edges { node { id } }
-          }
-        }`,
-        { variables: { cursor } }
-      );
+    let pageCount = 0;
+    const MAX_PAGES = 80;
+
+    while (hasNextPage && pageCount < MAX_PAGES) {
+      pageCount++;
+      let resp;
+      try {
+        resp = await admin.graphql(
+          `query($cursor: String) {
+            products(first: 250, after: $cursor) {
+              pageInfo { hasNextPage endCursor }
+              edges { node { id } }
+            }
+          }`,
+          { variables: { cursor } }
+        );
+      } catch {
+        if (allIds.length > 0) break;
+        return { error: "Could not fetch your product list from Shopify. Please try again." };
+      }
       const { data } = await resp.json();
+      if (!data?.products) {
+        if (allIds.length > 0) break;
+        return { error: "Shopify returned an unexpected response. Please try again." };
+      }
       const { edges, pageInfo } = data.products;
       allIds.push(...edges.map((e) => e.node.id));
       hasNextPage = pageInfo.hasNextPage;
@@ -318,7 +332,7 @@ export default function ProductsPage() {
               borderRadius="100"
             >
               <Text as="span" variant="bodySm" tone={s === "published" ? "success" : "info"}>
-                {label} âœ“
+                {label} ✓
               </Text>
             </Box>
           );
@@ -366,7 +380,7 @@ export default function ProductsPage() {
   return (
     <Page
       title="Products"
-      subtitle={`${totalProducts} products Â· ${publishedCount} optimised Â· ${noContentCount} need content`}
+      subtitle={`${totalProducts} products · ${publishedCount} optimised · ${noContentCount} need content`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       secondaryActions={[
         {
@@ -379,19 +393,19 @@ export default function ProductsPage() {
           onAction: () => setGenerateAllModal(true),
         },
         {
-          content: "Bulk Jobs â†’",
+          content: "Bulk Jobs →",
           onAction: () => navigate("/app/jobs"),
         },
       ]}
     >
       <BlockStack gap="500">
 
-        {/* Usage alert â€” only when critical */}
+        {/* Usage alert "" only when critical */}
         {isOutOfUsage && (
           <Banner tone="critical" title="Monthly generation limit reached">
             <p>You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your store.</p>
             <Box paddingBlockStart="200">
-              <Button variant="plain" onClick={() => navigate("/app/plans")}>View Plans & Upgrade â†’</Button>
+              <Button variant="plain" onClick={() => navigate("/app/plans")}>View Plans & Upgrade →</Button>
             </Box>
           </Banner>
         )}
@@ -400,7 +414,7 @@ export default function ProductsPage() {
             compact
             tone="warning"
             title={`Only ${usageRemaining} generation${usageRemaining !== 1 ? "s" : ""} left this month`}
-            message={`${usageCount}/${monthlyLimit} used Â· upgrade to continue without interruption`}
+            message={`${usageCount}/${monthlyLimit} used · upgrade to continue without interruption`}
             onUpgrade={() => navigate("/app/plans")}
           />
         )}
@@ -444,7 +458,7 @@ export default function ProductsPage() {
           </Layout.Section>
         </Layout>
 
-        {/* Usage mini-bar â€” show for free plan or when usage is above half */}
+        {/* Usage mini-bar "" show for free plan or when usage is above half */}
         {(planName === "free" || usagePct >= 50) && (
           <Card>
             <BlockStack gap="200">
@@ -494,19 +508,28 @@ export default function ProductsPage() {
                 <>
                   {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
 
-                  <InlineStack gap="500" wrap>
-                    <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} helpText="Full product description" />
-                    <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} helpText="SEO meta tags" />
-                    <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} helpText="Q&A pairs" />
-                    <Checkbox label="Auto-publish" checked={bulkAutoPublish} onChange={setBulkAutoPublish} helpText="Push to Shopify immediately â€” skips review" />
-                  </InlineStack>
+                  {/* BlockStack + minHeight 44px = Apple/Google touch-target minimum */}
+                  <BlockStack gap="200">
+                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
+                      <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} helpText="Full product description" />
+                    </Box>
+                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
+                      <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} helpText="SEO meta tags" />
+                    </Box>
+                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
+                      <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} helpText="Q&A pairs" />
+                    </Box>
+                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
+                      <Checkbox label="Auto-publish" checked={bulkAutoPublish} onChange={setBulkAutoPublish} helpText="Push directly to Shopify - skips review queue" />
+                    </Box>
+                  </BlockStack>
 
                   <InlineStack gap="300" blockAlign="center">
                     <Button variant="primary" onClick={handleBulkGenerate}>
-                      Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} â†’
+                      Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} →
                     </Button>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated Â· runs in background
+                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated · runs in background
                     </Text>
                     {isLowUsage && (
                       <Text as="p" variant="bodySm" tone="critical">
@@ -532,7 +555,7 @@ export default function ProductsPage() {
             filterControl={
               <Filters
                 queryValue={searchValue}
-                queryPlaceholder="Search productsâ€¦"
+                queryPlaceholder="Search products..."
                 onQueryChange={handleSearchChange}
                 onQueryClear={handleSearchClear}
                 filters={[]}
@@ -574,7 +597,7 @@ export default function ProductsPage() {
                       <InlineStack gap="200">
                         <Text as="span" variant="bodySm" tone="subdued">${price}</Text>
                         {productType && (
-                          <Text as="span" variant="bodySm" tone="subdued">Â· {productType}</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">· {productType}</Text>
                         )}
                       </InlineStack>
                       {getContentTypePills(id)}
@@ -620,7 +643,7 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter })
                   }
                 >
-                  â† Previous
+                   Previous
                 </Button>
                 <Text as="p" variant="bodySm" tone="subdued">
                   Showing {filteredProducts.length} products
@@ -631,7 +654,7 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter })
                   }
                 >
-                  Next â†’
+                  Next →
                 </Button>
               </InlineStack>
             </Box>
@@ -659,7 +682,7 @@ export default function ProductsPage() {
                 label="Auto-publish (skip review)"
                 checked={bulkAutoPublish}
                 onChange={setBulkAutoPublish}
-                helpText="Pushes directly to Shopify â€” no review step"
+                helpText="Pushes directly to Shopify - no review step"
               />
               {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
             </BlockStack>

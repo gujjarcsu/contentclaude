@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useActionData, useNavigation, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -22,7 +22,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -68,7 +68,7 @@ export const loader = async ({ request }) => {
   return Response.json({ collections, statusMap, voiceMap });
 };
 
-// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -178,7 +178,7 @@ export const action = async ({ request }) => {
   return Response.json({ error: "Unknown action." }, { status: 400 });
 };
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const TONE_OPTIONS = [
   { label: "Store Default", value: "" },
@@ -312,7 +312,7 @@ export default function CollectionsPage() {
   return (
     <Page
       title="Collections"
-      subtitle={`${collections.length} collection${collections.length !== 1 ? "s" : ""} Â· generate SEO descriptions for each`}
+      subtitle={`${collections.length} collection${collections.length !== 1 ? "s" : ""} · generate SEO descriptions for each`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
@@ -416,7 +416,7 @@ export default function CollectionsPage() {
                 {isActive && isGenerating && fetcher.formData?.get("collectionId") === collection.id && (
                   <InlineStack gap="200" blockAlign="center">
                     <Spinner size="small" />
-                    <Text as="p" variant="bodySm" tone="subdued">Generating collection contentâ€¦</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Generating collection content...</Text>
                   </InlineStack>
                 )}
 

@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page,
   Layout,
@@ -12,6 +12,7 @@ import {
   ProgressBar,
   Badge,
   Divider,
+  DataTable,
 } from "@shopify/polaris";
 import { Check, Zap, Star, Rocket, Building2 } from "lucide-react";
 import { authenticate, BILLING_TEST } from "../shopify.server";
@@ -200,8 +201,8 @@ const FAQ_ITEMS = [
 ];
 
 function FeatureCell({ value }) {
-  if (value === true) return <Text as="span" tone="success">âœ“</Text>;
-  if (value === false) return <Text as="span" tone="subdued">â€”</Text>;
+  if (value === true) return <Text as="span" tone="success">✓</Text>;
+  if (value === false) return <Text as="span" tone="subdued">—</Text>;
   return <Text as="span" variant="bodySm" fontWeight="semibold">{value}</Text>;
 }
 
@@ -241,7 +242,7 @@ export default function PlansPage() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
-                <Text as="h2" variant="headingLg">Current Usage â€” {currentMonth}</Text>
+                <Text as="h2" variant="headingLg">Current Usage — {currentMonth}</Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                     {PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} Plan
@@ -393,54 +394,23 @@ export default function PlansPage() {
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingLg">Feature Comparison</Text>
-            <Box overflowX="scroll">
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: "8px 12px", borderBottom: "1px solid #e1e3e5" }}>
-                      <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">Feature</Text>
-                    </th>
-                    {["Free", "Starter", "Growth", "Pro"].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          textAlign: "center",
-                          padding: "8px 12px",
-                          borderBottom: "1px solid #e1e3e5",
-                          background: h === "Growth" ? "#f3f0ff" : undefined,
-                        }}
-                      >
-                        <Text as="span" variant="bodySm" fontWeight="semibold">
-                          {h}
-                        </Text>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {FEATURE_TABLE.map((row, i) => (
-                    <tr key={row.feature} style={{ background: i % 2 === 0 ? undefined : "#fafafa" }}>
-                      <td style={{ padding: "8px 12px", borderBottom: "1px solid #f1f2f3" }}>
-                        <Text as="span" variant="bodySm">{row.feature}</Text>
-                      </td>
-                      {["free", "starter", "growth", "pro"].map((p) => (
-                        <td
-                          key={p}
-                          style={{
-                            textAlign: "center",
-                            padding: "8px 12px",
-                            borderBottom: "1px solid #f1f2f3",
-                            background: p === "growth" ? "#f9f8ff" : undefined,
-                          }}
-                        >
-                          <FeatureCell value={row[p]} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Box>
+            <DataTable
+              columnContentTypes={["text", "text", "text", "text", "text"]}
+              headings={[
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued" key="feature">Feature</Text>,
+                "Free",
+                "Starter",
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="success" key="growth">Growth ★</Text>,
+                "Pro",
+              ]}
+              rows={FEATURE_TABLE.map((row) => [
+                row.feature,
+                <FeatureCell key="free" value={row.free} />,
+                <FeatureCell key="starter" value={row.starter} />,
+                <FeatureCell key="growth" value={row.growth} />,
+                <FeatureCell key="pro" value={row.pro} />,
+              ])}
+            />
           </BlockStack>
         </Card>
 

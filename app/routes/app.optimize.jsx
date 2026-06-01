@@ -1,4 +1,4 @@
-﻿import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
@@ -9,7 +9,7 @@ import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 
-// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -42,7 +42,7 @@ export const loader = async ({ request }) => {
   });
 };
 
-// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -62,21 +62,38 @@ export const action = async ({ request }) => {
   });
   const existingIds = new Set(generatedProductIds.map((r) => r.productId));
 
-  // Paginate all Shopify product IDs and filter to only those missing content
+  // Paginate all Shopify product IDs and filter to those missing content.
+  // Hard-limit to 80 pages (80 × 250 = 20,000 products max) to prevent runaway loops.
   const missingIds = [];
   let cursor = null;
   let hasNextPage = true;
-  while (hasNextPage) {
-    const resp = await admin.graphql(
-      `query($cursor: String) {
-        products(first: 250, after: $cursor) {
-          pageInfo { hasNextPage endCursor }
-          edges { node { id } }
-        }
-      }`,
-      { variables: { cursor } }
-    );
+  let pageCount = 0;
+  const MAX_PAGES = 80;
+
+  while (hasNextPage && pageCount < MAX_PAGES) {
+    pageCount++;
+    let resp;
+    try {
+      resp = await admin.graphql(
+        `query($cursor: String) {
+          products(first: 250, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { id } }
+          }
+        }`,
+        { variables: { cursor } }
+      );
+    } catch {
+      if (missingIds.length > 0) break; // partial list — proceed with what we have
+      return Response.json({ error: "Could not fetch your product list from Shopify. Please try again." }, { status: 503 });
+    }
+
     const { data } = await resp.json();
+    if (!data?.products) {
+      if (missingIds.length > 0) break;
+      return Response.json({ error: "Shopify returned an unexpected response. Please try again." }, { status: 503 });
+    }
+
     const { edges, pageInfo } = data.products;
     for (const { node } of edges) {
       if (!existingIds.has(node.id)) missingIds.push(node.id);
@@ -86,7 +103,7 @@ export const action = async ({ request }) => {
   }
 
   if (missingIds.length === 0) {
-    return Response.json({ error: "All products already have AI content â€” nothing to optimise." });
+    return Response.json({ error: "All products already have AI content — nothing to optimise." });
   }
 
   const job = await prisma.generationJob.create({
@@ -104,7 +121,7 @@ export const action = async ({ request }) => {
   return redirect("/app/jobs");
 };
 
-// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OptimizePage() {
   const {
@@ -188,7 +205,7 @@ export default function OptimizePage() {
                   Generations left this month
                   <br />
                   <Badge tone={planName === "free" ? "attention" : "success"}>
-                    {planLabels[planName] ?? planName} â€” {monthlyLimit}/mo
+                    {planLabels[planName] ?? planName} — {monthlyLimit}/mo
                   </Badge>
                 </Text>
               </BlockStack>
@@ -205,7 +222,7 @@ export default function OptimizePage() {
           <Banner tone="warning" title="Monthly quota reached">
             <p>Upgrade your plan to generate more content this month.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/plans")}>View Plans â†’</Button>
+              <Button onClick={() => navigate("/app/plans")}>View Plans →</Button>
             </Box>
           </Banner>
         ) : (
@@ -242,7 +259,7 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
               >
-                {isSubmitting ? "Starting jobâ€¦" : `Optimise ${canOptimize} Products â†’`}
+                {isSubmitting ? "Starting job..." : `Optimise ${canOptimize} Products →`}
               </Button>
             </BlockStack>
           </Card>
@@ -251,7 +268,7 @@ export default function OptimizePage() {
         {draftCount > 0 && (
           <Banner tone="info" title={`${draftCount} draft${draftCount !== 1 ? "s" : ""} waiting for review`}>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/review")}>Review & Publish â†’</Button>
+              <Button onClick={() => navigate("/app/review")}>Review & Publish →</Button>
             </Box>
           </Banner>
         )}
@@ -272,7 +289,7 @@ export default function OptimizePage() {
           <TextContainer>
             <Text as="p">
               Auto-publish will overwrite the live product descriptions on your Shopify storefront
-              for all <strong>{canOptimize}</strong> products â€” without a review step.
+              for all <strong>{canOptimize}</strong> products — without a review step.
             </Text>
             <Text as="p" tone="subdued">
               This cannot be undone from ContentClaude. You can revert individual products via
