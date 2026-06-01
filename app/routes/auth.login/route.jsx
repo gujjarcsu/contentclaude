@@ -27,7 +27,10 @@ export default function Auth() {
   return (
     <AppProvider embedded={false}>
       <s-page>
-        <Form method="post" target="_top">
+        {/* Use native form with target="_top" so the OAuth redirect breaks
+            out of the Shopify embedded iframe and opens at the top window level.
+            React Router's <Form> uses fetch() internally and ignores target. */}
+        <form method="post" action="/auth/login" target="_top">
           <s-section heading="Log in">
             <s-text-field
               name="shop"
@@ -40,7 +43,7 @@ export default function Auth() {
             ></s-text-field>
             <s-button type="submit">Log in</s-button>
           </s-section>
-        </Form>
+        </form>
       </s-page>
     </AppProvider>
   );
