@@ -50,6 +50,10 @@ module.exports = {
       },
       rules: {
         "react/no-unknown-property": ["error", { ignore: ["variant"] }],
+        // JS project — prop-types is noisy; type safety via Polaris contracts + server validation
+        "react/prop-types": "off",
+        // Apostrophes/quotes in JSX text nodes are fine as-is
+        "react/no-unescaped-entities": "off",
       },
     },
 
@@ -91,6 +95,15 @@ module.exports = {
     },
   ],
   globals: {
-    shopify: "readonly"
+    shopify: "readonly",
+    // Node.js globals available in all server-side files
+    process: "readonly",
+    Buffer: "readonly",
+    globalThis: "readonly",
+  },
+  rules: {
+    // JS project — prop-types is noisy without TypeScript.
+    // Type safety is enforced by Polaris component contracts + server validation.
+    "react/prop-types": "off",
   },
 };

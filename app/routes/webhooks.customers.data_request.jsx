@@ -6,7 +6,7 @@ import db from "../db.server";
 // brand voice, generation history). We acknowledge the request and log it for
 // audit purposes.
 export const action = async ({ request }) => {
-  const { payload, topic, shop } = await authenticate.webhook(request);
+  const { payload, shop } = await authenticate.webhook(request);
 
   await db.gDPRRequest.create({
     data: {

@@ -1,7 +1,6 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, useSubmit } from "react-router";
 import {
   Page,
-  Layout,
   Card,
   Text,
   BlockStack,
@@ -13,7 +12,6 @@ import {
   Checkbox,
   EmptyState,
   TextField,
-  Box,
   Divider,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -66,7 +64,6 @@ export const loader = async ({ request }) => {
 
 async function fetchProductsBatch(admin, productIds) {
   if (productIds.length === 0) return {};
-  const idsJson = JSON.stringify(productIds);
   const response = await admin.graphql(
     `query getNodes($ids: [ID!]!) {
       nodes(ids: $ids) {

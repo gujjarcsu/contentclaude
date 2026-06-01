@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
 import { BILLING_PLANS, FREE_PLAN } from "./billing-plans.js";
-import { getCache, setCache, invalidateCache } from "./cache.server.js";
+import { getCache, invalidateCache } from "./cache.server.js";
 
 export { FREE_PLAN };
 

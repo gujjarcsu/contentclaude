@@ -1,7 +1,6 @@
 import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
 import {
   Page,
-  Layout,
   Card,
   Text,
   BlockStack,
@@ -15,7 +14,7 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { useEffect, useRef } from "react";
-import { Clock, CheckCircle2, XCircle, Loader, Zap } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";

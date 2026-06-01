@@ -626,7 +626,7 @@ export async function action({ request, params }) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function VersionHistorySection({ versions, contentType, restoreFetcher }) {
+function VersionHistorySection({ versions, restoreFetcher }) {
   const [open, setOpen] = useState(false);
   if (!versions || versions.length === 0) return null;
 

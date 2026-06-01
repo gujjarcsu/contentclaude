@@ -8,6 +8,7 @@ import {
   InlineStack,
   Button,
   Badge,
+  Box,
   DataTable,
   ProgressBar,
   Banner,
@@ -139,11 +140,11 @@ export default function SeoAuditPage() {
       <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>{p.title}</Button>
       {p.isStale && <Badge tone="attention">Stale</Badge>}
     </InlineStack>,
-    <Text as="span" fontWeight="bold" tone={p.score >= 80 ? "success" : p.score >= 50 ? undefined : "critical"}>{p.score}</Text>,
-    <CheckIcon pass={p.checks.hasDescription} />,
-    <CheckIcon pass={p.checks.hasMetaTitle} />,
-    <CheckIcon pass={p.checks.hasMetaDesc} />,
-    <CheckIcon pass={p.checks.hasAltText} />,
+    <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={p.score >= 80 ? "success" : p.score >= 50 ? undefined : "critical"}>{p.score}</Text>,
+    <CheckIcon key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
+    <CheckIcon key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
+    <CheckIcon key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
+    <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />,
   ]);
 
   return (

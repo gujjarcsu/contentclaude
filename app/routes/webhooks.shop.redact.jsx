@@ -5,7 +5,7 @@ import db from "../db.server";
 // full data deletion. All shop data must be permanently removed.
 // Uses a single transaction so it either fully completes or fully rolls back.
 export const action = async ({ request }) => {
-  const { payload, topic, shop } = await authenticate.webhook(request);
+  const { payload, shop } = await authenticate.webhook(request);
 
   await db.$transaction(async (tx) => {
     // Log the request first (inside the transaction so it's part of the atomic op)

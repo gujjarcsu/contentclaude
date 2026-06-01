@@ -108,7 +108,7 @@ export default function AnalyticsPage() {
     plan, usageCount, daysRemaining, selectedMonth, currentMonth, availableMonths,
   } = useLoaderData();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
 
   const handleMonthChange = useCallback((month) => {
     setSearchParams({ month });
@@ -120,7 +120,7 @@ export default function AnalyticsPage() {
   const tableRows = monthlyRows.map((r) => [
     r.month,
     r.count,
-    <ProgressBar progress={Math.min(100, Math.round((r.count / plan.monthlyLimit) * 100))} size="small" />,
+    <ProgressBar key={r.month} progress={Math.min(100, Math.round((r.count / plan.monthlyLimit) * 100))} size="small" />,
   ]);
 
   return (

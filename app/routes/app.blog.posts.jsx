@@ -1,7 +1,7 @@
 import { useLoaderData, useNavigate } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Box, Badge, EmptyState, Divider, Spinner,
+  Button, Box, Badge, EmptyState, Divider,
 } from "@shopify/polaris";
 import { BookOpen, PenLine, Globe, Clock, FileText } from "lucide-react";
 import { authenticate } from "../shopify.server";

@@ -5,7 +5,7 @@ import db from "../db.server";
 // that all data for that customer be erased.
 // ContentClaude stores NO customer PII — nothing to redact. Log for audit.
 export const action = async ({ request }) => {
-  const { payload, topic, shop } = await authenticate.webhook(request);
+  const { payload, shop } = await authenticate.webhook(request);
 
   await db.gDPRRequest.create({
     data: {
