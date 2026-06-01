@@ -404,7 +404,14 @@ export default function BlogPage() {
                       </Button>
                     </InlineStack>
                     {recentPosts.map((post) => (
-                      <Box key={post.id} padding="200" background="bg-surface-secondary" borderRadius="100">
+                      <Box
+                        key={post.id}
+                        padding="200"
+                        background="bg-surface-secondary"
+                        borderRadius="100"
+                        onClick={() => navigate(`/app/blog?postId=${post.id}`)}
+                        style={{ cursor: "pointer" }}
+                      >
                         <InlineStack align="space-between" blockAlign="center">
                           <BlockStack gap="050">
                             <Text as="p" variant="bodySm" fontWeight="semibold" truncate>
