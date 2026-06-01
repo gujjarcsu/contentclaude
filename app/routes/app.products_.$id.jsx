@@ -432,7 +432,6 @@ export async function action({ request, params }) {
       return { error: `Shopify rejected the update — ${msg}. Nothing was published.` };
     }
 
-    const publishedTypes = [];
     // Persist edited content + mark as published. The form fields carry
     // whatever the merchant had in the editor (possibly hand-edited).
     const typeContentMap = {

@@ -1,9 +1,9 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, EmptyState, Divider,
 } from "@shopify/polaris";
-import { BookOpen, PenLine, Globe, Clock, FileText } from "lucide-react";
+import { BookOpen, PenLine, Globe, Clock, FileText, Trash2 } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -36,6 +36,22 @@ export const loader = async ({ request }) => {
   });
 };
 
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const formData = await request.formData();
+  const actionType = formData.get("actionType");
+
+  if (actionType === "deletePost") {
+    const id = formData.get("postId");
+    if (!id) return Response.json({ error: "Missing postId." }, { status: 400 });
+    await prisma.blogPost.deleteMany({ where: { id, shop } });
+    return Response.json({ success: true });
+  }
+
+  return Response.json({ error: "Unknown action." }, { status: 400 });
+};
+
 function timeAgo(isoString) {
   const secs = Math.floor((Date.now() - new Date(isoString)) / 1000);
   if (secs < 60) return "just now";
@@ -45,7 +61,10 @@ function timeAgo(isoString) {
 }
 
 function PostCard({ post, onView }) {
+  const fetcher = useFetcher();
   const isDraft = post.status === "draft";
+  const isDeleting = fetcher.state !== "idle";
+
   return (
     <Box
       padding="400"
@@ -113,6 +132,19 @@ function PostCard({ post, onView }) {
           <Button size="slim" onClick={() => onView(post)}>
             {isDraft ? "Edit / Publish" : "View"}
           </Button>
+          <fetcher.Form method="post">
+            <input type="hidden" name="actionType" value="deletePost" />
+            <input type="hidden" name="postId" value={post.id} />
+            <Button
+              size="slim"
+              tone="critical"
+              variant="plain"
+              icon={<Trash2 size={14} />}
+              loading={isDeleting}
+              submit
+              accessibilityLabel="Delete post"
+            />
+          </fetcher.Form>
         </InlineStack>
       </InlineStack>
     </Box>
