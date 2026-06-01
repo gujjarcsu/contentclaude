@@ -15,6 +15,8 @@ import { getCache } from "../utils/cache.server";
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+  const url = new URL(request.url);
+  const host = url.searchParams.get("host") ?? "";
 
   // Cache product count 5 min — it's read on every dashboard load and rarely changes
   const totalProducts = await getCache(
@@ -75,7 +77,7 @@ export const loader = async ({ request }) => {
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
   if (isNewShop && !brandVoice) {
-    throw redirect("/app/setup");
+    throw redirect(`/app/setup?shop=${shop}&host=${host}`);
   }
 
   const storeName = brandVoice?.storeName || shop.split(".")[0];
