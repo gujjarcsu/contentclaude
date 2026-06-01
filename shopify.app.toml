@@ -6,7 +6,7 @@ name = "ContentClaude"
 # IMPORTANT: Replace https://example.com with your production domain before running
 # `shopify app deploy`. During local development the CLI auto-updates this via tunnel
 # (automatically_update_urls_on_dev = true below). Set SHOPIFY_APP_URL in .env as well.
-application_url = "https://example.com"
+application_url = "https://contentclaude.fly.dev"
 embedded = true
 
 [access_scopes]
@@ -42,7 +42,7 @@ api_version = "2026-07"
 
 [auth]
 # IMPORTANT: Update this to match your production application_url before deploying.
-redirect_urls = ["https://example.com/api/auth"]
+redirect_urls = ["https://contentclaude.fly.dev/api/auth"]
 
 [build]
 include_config_on_deploy = true
