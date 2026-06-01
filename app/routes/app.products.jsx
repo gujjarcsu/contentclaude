@@ -24,7 +24,7 @@ import {
   SkeletonThumbnail,
   ProgressBar,
 } from "@shopify/polaris";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -280,12 +280,12 @@ export default function ProductsPage() {
     p.title.toLowerCase().includes(searchValue.toLowerCase())
   );
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: "all", content: `All (${totalProducts})`, panelID: "all" },
     { id: "needsContent", content: `Needs Content (${noContentCount})`, panelID: "needsContent" },
     { id: "draft", content: `Draft (${dbCounts.draft})`, panelID: "draft" },
     { id: "published", content: `Published (${dbCounts.published})`, panelID: "published" },
-  ];
+  ], [totalProducts, noContentCount, dbCounts.draft, dbCounts.published]);
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
 
