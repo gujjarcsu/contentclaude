@@ -433,15 +433,22 @@ export async function action({ request, params }) {
     }
 
     const publishedTypes = [];
-    if (description) publishedTypes.push("description");
-    if (metaTitle) publishedTypes.push("metaTitle");
-    if (metaDescription) publishedTypes.push("metaDescription");
-    if (publishedTypes.length > 0) {
-      await prisma.generatedContent.updateMany({
-        where: { shop, productId, contentType: { in: publishedTypes }, status: "draft" },
-        data: { status: "published" },
-      });
-    }
+    // Persist edited content + mark as published. The form fields carry
+    // whatever the merchant had in the editor (possibly hand-edited).
+    const typeContentMap = {
+      ...(description ? { description } : {}),
+      ...(metaTitle ? { metaTitle } : {}),
+      ...(metaDescription ? { metaDescription } : {}),
+    };
+    const publishedTypes = Object.keys(typeContentMap);
+    await Promise.all(
+      publishedTypes.map((type) =>
+        prisma.generatedContent.updateMany({
+          where: { shop, productId, contentType: type, status: "draft" },
+          data: { status: "published", generatedContent: typeContentMap[type] },
+        })
+      )
+    );
 
     // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
     const faqRecord = await prisma.generatedContent.findUnique({
