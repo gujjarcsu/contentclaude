@@ -152,16 +152,23 @@ export const action = async ({ request }) => {
           failed++;
           errors.push({ productId, error: userErrors.map((e) => e.message).join("; ") });
         } else {
-          // Mark published content types
+          // Mark published content types — persist any inline edits too so
+          // the DB reflects what was actually published to Shopify.
           const publishedTypes = Object.keys(content).filter((t) =>
             ["description", "metaTitle", "metaDescription", "faq"].includes(t)
           );
-          if (publishedTypes.length > 0) {
-            await prisma.generatedContent.updateMany({
-              where: { shop, productId, contentType: { in: publishedTypes }, status: "draft" },
-              data: { status: "published" },
-            });
-          }
+          const productEdits = edits[productId] || {};
+          await Promise.all(
+            publishedTypes.map((type) =>
+              prisma.generatedContent.updateMany({
+                where: { shop, productId, contentType: type, status: "draft" },
+                data: {
+                  status: "published",
+                  ...(productEdits[type] !== undefined ? { generatedContent: productEdits[type] } : {}),
+                },
+              })
+            )
+          );
           published++;
         }
       } catch (err) {
