@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
+﻿import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
 import {
   Page,
   Layout,
@@ -27,7 +27,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
 
-// ─── Loader ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function loader({ request, params }) {
   const { admin, session } = await authenticate.admin(request);
@@ -123,7 +123,7 @@ export async function loader({ request, params }) {
   };
 }
 
-// ─── Action ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function action({ request, params }) {
   const { admin, session } = await authenticate.admin(request);
@@ -147,7 +147,7 @@ export async function action({ request, params }) {
     import("../utils/cache.server.js"),
   ]);
 
-  // ── Enhance Existing ─────────────────────────────────────────────────────
+  // â”€â”€ Enhance Existing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "enhance") {
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
@@ -215,10 +215,10 @@ export async function action({ request, params }) {
         })
       )
     );
-    return { success: true, generated, message: "Existing content enhanced — review and publish when ready." };
+    return { success: true, generated, message: "Existing content enhanced â€” review and publish when ready." };
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────────
+  // â”€â”€ Generate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "generate") {
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
@@ -318,7 +318,9 @@ export async function action({ request, params }) {
             type === "metaDescription" ? product.seo?.description || "" : "";
           return prisma.generatedContent.upsert({
             where: { shop_productId_contentType: { shop, productId, contentType: type } },
-            update: { generatedContent: generated[type], originalContent, status: finalStatus, version: { increment: 1 } },
+            // Never overwrite originalContent on update â€” it preserves the true
+            // Shopify original so merchants can always roll back.
+            update: { generatedContent: generated[type], status: finalStatus, version: { increment: 1 } },
             create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
           });
         })
@@ -388,7 +390,7 @@ export async function action({ request, params }) {
       messageParts.push(
         autoPublish
           ? "Content generated and published to your store!"
-          : "Content generated — review below and publish when ready."
+          : "Content generated â€” review below and publish when ready."
       );
     }
     if (doAltText && altTextResults.length > 0) {
@@ -399,7 +401,7 @@ export async function action({ request, params }) {
     return { success: true, generated, altTextResults, autoPublished: autoPublish, message: messageParts.join(" ") || "Done!" };
   }
 
-  // ── Publish (with optional edited content) ────────────────────────────────
+  // â”€â”€ Publish (with optional edited content) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "publish") {
     const description = formData.get("publishDescription");
     const metaTitle = formData.get("publishMetaTitle");
@@ -427,7 +429,7 @@ export async function action({ request, params }) {
     const userErrors = mutationData?.productUpdate?.userErrors ?? [];
     if (userErrors.length > 0) {
       const msg = userErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ");
-      return { error: `Shopify rejected the update — ${msg}. Nothing was published.` };
+      return { error: `Shopify rejected the update â€” ${msg}. Nothing was published.` };
     }
 
     const publishedTypes = [];
@@ -460,7 +462,7 @@ export async function action({ request, params }) {
             variables: {
               metafields: [{
                 ownerId: productId,
-                namespace: "contentpilot",
+                namespace: "contentclaude",
                 key: "faq_schema",
                 type: "json",
                 value: JSON.stringify(jsonLd),
@@ -474,7 +476,7 @@ export async function action({ request, params }) {
     return { success: true, published: true, message: "Content published to your Shopify store!" };
   }
 
-  // ── Generate Social Media Content ────────────────────────────────────────
+  // â”€â”€ Generate Social Media Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "generateSocial") {
     const { generateSocialContent } = await import("../utils/ai.server.js");
     const [productResp, brandVoice, descRecord] = await Promise.all([
@@ -492,7 +494,7 @@ export async function action({ request, params }) {
     return { success: true, social };
   }
 
-  // ── Restore Version ───────────────────────────────────────────────────────
+  // â”€â”€ Restore Version â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "restoreVersion") {
     const versionId = formData.get("versionId");
     const ver = await prisma.contentVersion.findUnique({ where: { id: versionId } });
@@ -507,7 +509,7 @@ export async function action({ request, params }) {
     return { success: true, reverted: true, contentType: ver.contentType, message: `${ver.contentType} restored to version ${ver.version}.` };
   }
 
-  // ── Generate A/B Variants ─────────────────────────────────────────────────
+  // â”€â”€ Generate A/B Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "generateVariants") {
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
@@ -553,7 +555,7 @@ export async function action({ request, params }) {
     };
     const baseOptions = { keywords: targetKeywords, length: "standard" };
 
-    // Run both variants in parallel — 2 API credits but merchant gets a real choice
+    // Run both variants in parallel â€” 2 API credits but merchant gets a real choice
     const [variantA, variantB] = await Promise.all([
       generateProductContent(productData, brandVoice, contentTypes, baseOptions),
       generateProductContent(productData, brandVoice, contentTypes, {
@@ -564,7 +566,7 @@ export async function action({ request, params }) {
     return { success: true, variants: [variantA, variantB] };
   }
 
-  // ── Save chosen A/B variant ───────────────────────────────────────────────
+  // â”€â”€ Save chosen A/B variant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "saveVariant") {
     let variantContent;
     try {
@@ -594,10 +596,10 @@ export async function action({ request, params }) {
         })
       )
     );
-    return { success: true, generated: variantContent, message: "Variant saved as draft — review and publish when ready." };
+    return { success: true, generated: variantContent, message: "Variant saved as draft â€” review and publish when ready." };
   }
 
-  // ── Revert ────────────────────────────────────────────────────────────────
+  // â”€â”€ Revert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (actionType === "revert") {
     const contentType = formData.get("contentType");
     const existing = await prisma.generatedContent.findUnique({
@@ -622,7 +624,7 @@ export async function action({ request, params }) {
   }
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function VersionHistorySection({ versions, contentType, restoreFetcher }) {
   const [open, setOpen] = useState(false);
@@ -640,10 +642,10 @@ function VersionHistorySection({ versions, contentType, restoreFetcher }) {
               <InlineStack align="space-between" blockAlign="start">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                    v{v.version} · {new Date(v.createdAt).toLocaleDateString()}
+                    v{v.version} Â· {new Date(v.createdAt).toLocaleDateString()}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {v.content.replace(/<[^>]+>/g, "").substring(0, 80)}…
+                    {v.content.replace(/<[^>]+>/g, "").substring(0, 80)}â€¦
                   </Text>
                 </BlockStack>
                 <restoreFetcher.Form method="post">
@@ -722,11 +724,11 @@ export default function ProductGeneratePage() {
 
   // Progressive loading messages during AI generation
   const loadingMessages = [
-    "Analysing your product…",
-    "Crafting your brand voice…",
-    "Writing compelling copy…",
-    "Optimising for SEO…",
-    "Polishing the final draft…",
+    "Analysing your productâ€¦",
+    "Crafting your brand voiceâ€¦",
+    "Writing compelling copyâ€¦",
+    "Optimising for SEOâ€¦",
+    "Polishing the final draftâ€¦",
   ];
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   useEffect(() => {
@@ -761,7 +763,7 @@ export default function ProductGeneratePage() {
     if (tpl.keywords) setTargetKeywords(tpl.keywords);
   }, [templates]);
 
-  // Editable content state — initialized from generated or existing
+  // Editable content state â€” initialized from generated or existing
   const rawDescription = actionData?.generated?.description || existingContent.description?.generated || "";
   const rawMetaTitle = actionData?.generated?.metaTitle || existingContent.metaTitle?.generated || "";
   const rawMetaDescription = actionData?.generated?.metaDescription || existingContent.metaDescription?.generated || "";
@@ -924,9 +926,9 @@ export default function ProductGeneratePage() {
   }, [isLoading, noneSelected, handleGenerate]);
 
   const lengthOptions = [
-    { label: "Short (~100-150 words) — simple products", value: "short" },
-    { label: "Standard (~200-300 words) — default", value: "standard" },
-    { label: "Detailed (~400-500 words) — complex/high-value products", value: "detailed" },
+    { label: "Short (~100-150 words) â€” simple products", value: "short" },
+    { label: "Standard (~200-300 words) â€” default", value: "standard" },
+    { label: "Detailed (~400-500 words) â€” complex/high-value products", value: "detailed" },
   ];
 
   return (
@@ -941,7 +943,7 @@ export default function ProductGeneratePage() {
             {actionData.limitReached && (
               <Box paddingBlockStart="200">
                 <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                  View Plans & Billing →
+                  View Plans & Billing â†’
                 </Button>
               </Box>
             )}
@@ -953,16 +955,16 @@ export default function ProductGeneratePage() {
         {!hasBrandVoice && (
           <Banner tone="warning">
             <p>
-              No brand voice configured — content will use a default tone.{" "}
+              No brand voice configured â€” content will use a default tone.{" "}
               <Button variant="plain" onClick={() => navigate("/app/settings")}>
-                Set up brand voice →
+                Set up brand voice â†’
               </Button>
             </p>
           </Banner>
         )}
 
         <Layout>
-          {/* ── Left: product info + controls ─────────────────────────────── */}
+          {/* â”€â”€ Left: product info + controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <Layout.Section variant="oneThird">
             <BlockStack gap="400">
               <Card>
@@ -976,7 +978,7 @@ export default function ProductGeneratePage() {
                     {product.productType && <Badge tone="info">{product.productType}</Badge>}
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    ${product.variants[0]?.price || "0.00"} · {product.vendor || "No vendor"}
+                    ${product.variants[0]?.price || "0.00"} Â· {product.vendor || "No vendor"}
                   </Text>
                   {product.tags.length > 0 && (
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -992,7 +994,7 @@ export default function ProductGeneratePage() {
                     <Text as="h2" variant="headingMd">Generate Content</Text>
                     {qualityScore.score > 0 && (
                       <Badge tone={qualityScore.grade === "Excellent" ? "success" : qualityScore.grade === "Good" ? "info" : qualityScore.grade === "Fair" ? "attention" : "critical"}>
-                        {qualityScore.grade} · {qualityScore.score}/100
+                        {qualityScore.grade} Â· {qualityScore.score}/100
                       </Badge>
                     )}
                   </InlineStack>
@@ -1020,7 +1022,7 @@ export default function ProductGeneratePage() {
                     label="FAQ Content"
                     checked={genFaq}
                     onChange={setGenFaq}
-                    helpText="4–5 questions and answers"
+                    helpText="4â€“5 questions and answers"
                   />
                   <Checkbox
                     label="Image Alt Text"
@@ -1036,7 +1038,7 @@ export default function ProductGeneratePage() {
 
                   <Divider />
 
-                  {/* Advanced options — collapsible */}
+                  {/* Advanced options â€” collapsible */}
                   <Button
                     variant="plain"
                     size="slim"
@@ -1050,7 +1052,7 @@ export default function ProductGeneratePage() {
                       {templates.length > 0 && (
                         <Select
                           label="Apply Template"
-                          options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
+                          options={[{ label: "â€” No template â€”", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
                           value={selectedTemplate}
                           onChange={applyTemplate}
                           helpText="Pre-fills the options below"
@@ -1079,7 +1081,7 @@ export default function ProductGeneratePage() {
                     label="Auto-publish after generation"
                     checked={autoPublish}
                     onChange={setAutoPublish}
-                    helpText="Skips the review step — publishes immediately to Shopify"
+                    helpText="Skips the review step â€” publishes immediately to Shopify"
                   />
 
                   {/* Animated progress bar during generation */}
@@ -1094,7 +1096,7 @@ export default function ProductGeneratePage() {
                         </InlineStack>
                         <ProgressBar progress={((loadingMsgIdx + 1) / 5) * 85} tone="highlight" size="small" animated />
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Takes 10–30 seconds — you can stay on this page
+                          Takes 10â€“30 seconds â€” you can stay on this page
                         </Text>
                       </BlockStack>
                     </Box>
@@ -1108,7 +1110,7 @@ export default function ProductGeneratePage() {
                     disabled={isLoading || noneSelected}
                     fullWidth
                   >
-                    {isGenerating ? "Generating…" : "Generate Content ⌘↵"}
+                    {isGenerating ? "Generatingâ€¦" : "Generate Content âŒ˜â†µ"}
                   </Button>
 
                   {(product.descriptionHtml || product.seoTitle) && (
@@ -1119,7 +1121,7 @@ export default function ProductGeneratePage() {
                       disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription)}
                       fullWidth
                     >
-                      {isEnhancing ? "Enhancing…" : "Enhance Existing Content"}
+                      {isEnhancing ? "Enhancingâ€¦" : "Enhance Existing Content"}
                     </Button>
                   )}
 
@@ -1136,7 +1138,7 @@ export default function ProductGeneratePage() {
             </BlockStack>
           </Layout.Section>
 
-          {/* ── Right: tabbed content sections ───────────────────────────── */}
+          {/* â”€â”€ Right: tabbed content sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <Layout.Section>
             <Card padding="0">
               <Tabs tabs={productDetailTabs} selected={selectedTab} onSelect={setSelectedTab} fitted />
@@ -1144,7 +1146,7 @@ export default function ProductGeneratePage() {
             <Box paddingBlockStart="400">
             <BlockStack gap="400">
 
-            {/* ── Tab 0: Generate controls ── */}
+            {/* â”€â”€ Tab 0: Generate controls â”€â”€ */}
             {selectedTab === 0 && (
               <>
                 {/* Success state after generation */}
@@ -1154,13 +1156,13 @@ export default function ProductGeneratePage() {
                       <InlineStack gap="200" blockAlign="center">
                         <CheckCircle2 size={20} color="#00A047" />
                         <Text as="p" variant="headingSm" fontWeight="semibold">
-                          {actionData.autoPublished ? "Content published to your store!" : "Content generated — review & publish"}
+                          {actionData.autoPublished ? "Content published to your store!" : "Content generated â€” review & publish"}
                         </Text>
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">{actionData.message}</Text>
                       {!actionData.autoPublished && (
                         <Button size="slim" onClick={() => setSelectedTab(1)}>
-                          Review Generated Content →
+                          Review Generated Content â†’
                         </Button>
                       )}
                     </BlockStack>
@@ -1185,7 +1187,7 @@ export default function ProductGeneratePage() {
                             <Spinner size="small" />
                             <Text as="p" variant="bodySm" fontWeight="semibold">
                               {isGeneratingVariants
-                                ? "Writing 2 different versions…"
+                                ? "Writing 2 different versionsâ€¦"
                                 : loadingMessages[loadingMsgIdx]}
                             </Text>
                           </InlineStack>
@@ -1196,7 +1198,7 @@ export default function ProductGeneratePage() {
                             animated
                           />
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {isGeneratingVariants ? "20–40 seconds" : "10–30 seconds"} — you can stay on this page
+                            {isGeneratingVariants ? "20â€“40 seconds" : "10â€“30 seconds"} â€” you can stay on this page
                           </Text>
                         </BlockStack>
                       </Box>
@@ -1210,7 +1212,7 @@ export default function ProductGeneratePage() {
                       disabled={isLoading || noneSelected}
                       fullWidth
                     >
-                      {isGenerating ? "Generating…" : "Generate Content ⌘↵"}
+                      {isGenerating ? "Generatingâ€¦" : "Generate Content âŒ˜â†µ"}
                     </Button>
                     {(product.descriptionHtml || product.seoTitle) && (
                       <Button
@@ -1220,7 +1222,7 @@ export default function ProductGeneratePage() {
                         disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
                         fullWidth
                       >
-                        {isEnhancing ? "Enhancing…" : "Enhance Existing Content"}
+                        {isEnhancing ? "Enhancingâ€¦" : "Enhance Existing Content"}
                       </Button>
                     )}
                     <Button
@@ -1230,7 +1232,7 @@ export default function ProductGeneratePage() {
                       disabled={isLoading || isGeneratingVariants || noneSelected}
                       fullWidth
                     >
-                      {isGeneratingVariants ? "Generating 2 options…" : "Generate 2 Options (A/B)"}
+                      {isGeneratingVariants ? "Generating 2 optionsâ€¦" : "Generate 2 Options (A/B)"}
                     </Button>
 
                     {actionData?.limitReached && (
@@ -1246,7 +1248,7 @@ export default function ProductGeneratePage() {
               </>
             )}
 
-            {/* ── A/B Variant comparison ── */}
+            {/* â”€â”€ A/B Variant comparison â”€â”€ */}
             {selectedTab === 0 && variants && (
               <BlockStack gap="400">
                 <Banner tone="info" title="2 Options Generated">
@@ -1269,7 +1271,7 @@ export default function ProductGeneratePage() {
                       </InlineStack>
                       {v.description && (
                         <Box padding="200" background="bg-surface-secondary" borderRadius="100">
-                          <span dangerouslySetInnerHTML={{ __html: v.description.substring(0, 600) + (v.description.length > 600 ? "…" : "") }} />
+                          <span dangerouslySetInnerHTML={{ __html: v.description.substring(0, 600) + (v.description.length > 600 ? "â€¦" : "") }} />
                         </Box>
                       )}
                       {v.metaTitle && (
@@ -1284,11 +1286,11 @@ export default function ProductGeneratePage() {
               </BlockStack>
             )}
 
-            {/* ── Tab 1: Generated content + publish ── */}
+            {/* â”€â”€ Tab 1: Generated content + publish â”€â”€ */}
             {selectedTab === 1 && (<>
 
               <Banner tone="info">
-                All content below was generated by AI — review and edit before publishing to your store.
+                All content below was generated by AI â€” review and edit before publishing to your store.
               </Banner>
 
               {/* Description */}
@@ -1309,7 +1311,7 @@ export default function ProductGeneratePage() {
                       {product.descriptionHtml ? (
                         <span dangerouslySetInnerHTML={{ __html: product.descriptionHtml.substring(0, 500) }} />
                       ) : (
-                        <Text as="p" tone="critical">No description — this product needs content.</Text>
+                        <Text as="p" tone="critical">No description â€” this product needs content.</Text>
                       )}
                     </BlockStack>
                   </Box>
@@ -1318,7 +1320,7 @@ export default function ProductGeneratePage() {
                     <Box padding="400">
                       <InlineStack align="center" gap="200">
                         <Spinner size="small" />
-                        <Text as="p" variant="bodyMd">Generating… this takes 10–20 seconds</Text>
+                        <Text as="p" variant="bodyMd">Generatingâ€¦ this takes 10â€“20 seconds</Text>
                       </InlineStack>
                     </Box>
                   )}
@@ -1337,7 +1339,7 @@ export default function ProductGeneratePage() {
                         value={editedDescription}
                         onChange={setEditedDescription}
                         multiline={8}
-                        helpText="Edit the HTML directly — changes are saved when you click Publish"
+                        helpText="Edit the HTML directly â€” changes are saved when you click Publish"
                         autoComplete="off"
                       />
                     </BlockStack>
@@ -1384,7 +1386,7 @@ export default function ProductGeneratePage() {
                           value={editedMetaTitle}
                           onChange={setEditedMetaTitle}
                           helpText={`${editedMetaTitle.length}/60 characters`}
-                          error={editedMetaTitle.length > 60 ? "Over 60 characters — shorten before publishing" : ""}
+                          error={editedMetaTitle.length > 60 ? "Over 60 characters â€” shorten before publishing" : ""}
                           autoComplete="off"
                         />
                       </BlockStack>
@@ -1425,7 +1427,7 @@ export default function ProductGeneratePage() {
                         onChange={setEditedMetaDescription}
                         multiline={2}
                         helpText={`${editedMetaDescription.length}/155 characters`}
-                        error={editedMetaDescription.length > 155 ? "Over 155 characters — shorten before publishing" : ""}
+                        error={editedMetaDescription.length > 155 ? "Over 155 characters â€” shorten before publishing" : ""}
                         autoComplete="off"
                       />
                     )}
@@ -1481,7 +1483,7 @@ export default function ProductGeneratePage() {
                       <InlineStack gap="200">
                         <Spinner size="small" />
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Generating alt text for {product.images.length} image{product.images.length !== 1 ? "s" : ""}…
+                          Generating alt text for {product.images.length} image{product.images.length !== 1 ? "s" : ""}â€¦
                         </Text>
                       </InlineStack>
                     )}
@@ -1520,10 +1522,10 @@ export default function ProductGeneratePage() {
                 <Card>
                   <BlockStack gap="200">
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Content generated by AI • Review before publishing
+                      Content generated by AI â€¢ Review before publishing
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Your edits above will be published — not the original AI output.
+                      Your edits above will be published â€” not the original AI output.
                     </Text>
                     <Button
                       variant="primary"
@@ -1533,7 +1535,7 @@ export default function ProductGeneratePage() {
                       disabled={isLoading}
                       fullWidth
                     >
-                      {isPublishing ? "Publishing…" : "Publish to Store"}
+                      {isPublishing ? "Publishingâ€¦" : "Publish to Store"}
                     </Button>
                   </BlockStack>
                 </Card>
@@ -1599,7 +1601,7 @@ export default function ProductGeneratePage() {
 
             </>)}
 
-            {/* ── Tab 2: Version history ── */}
+            {/* â”€â”€ Tab 2: Version history â”€â”€ */}
             {selectedTab === 2 && (
               <Card>
                 <BlockStack gap="400">
@@ -1624,7 +1626,7 @@ export default function ProductGeneratePage() {
               </Card>
             )}
 
-            {/* ── Tab 3: Alt text ── */}
+            {/* â”€â”€ Tab 3: Alt text â”€â”€ */}
             {selectedTab === 3 && (
               <Card>
                 <BlockStack gap="300">
@@ -1685,3 +1687,5 @@ export default function ProductGeneratePage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

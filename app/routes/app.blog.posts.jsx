@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+﻿import { useLoaderData, useNavigate } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, EmptyState, Divider, Spinner,
@@ -239,12 +239,12 @@ export default function BlogPosts() {
                 <BlockStack gap="200">
                   {[
                     "Publish drafts to your Shopify blog to drive organic traffic.",
-                    "Add 3–5 keywords per post for better SEO targeting.",
-                    "Aim for 800–1500 words for ideal search visibility.",
+                    "Add 3â€“5 keywords per post for better SEO targeting.",
+                    "Aim for 800â€“1500 words for ideal search visibility.",
                     "Repurpose posts into social media captions with the Blog Generator.",
                   ].map((tip) => (
                     <InlineStack key={tip} gap="200" blockAlign="start">
-                      <Text as="span" variant="bodySm" tone="success">✓</Text>
+                      <Text as="span" variant="bodySm" tone="success">âœ“</Text>
                       <Text as="p" variant="bodySm" tone="subdued">{tip}</Text>
                     </InlineStack>
                   ))}
@@ -257,3 +257,5 @@ export default function BlogPosts() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

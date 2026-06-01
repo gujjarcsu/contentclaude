@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
+﻿import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
@@ -9,7 +9,7 @@ import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 
-// ─── Loader ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -42,7 +42,7 @@ export const loader = async ({ request }) => {
   });
 };
 
-// ─── Action ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -86,7 +86,7 @@ export const action = async ({ request }) => {
   }
 
   if (missingIds.length === 0) {
-    return Response.json({ error: "All products already have AI content — nothing to optimise." });
+    return Response.json({ error: "All products already have AI content â€” nothing to optimise." });
   }
 
   const job = await prisma.generationJob.create({
@@ -104,7 +104,7 @@ export const action = async ({ request }) => {
   return redirect("/app/jobs");
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function OptimizePage() {
   const {
@@ -188,7 +188,7 @@ export default function OptimizePage() {
                   Generations left this month
                   <br />
                   <Badge tone={planName === "free" ? "attention" : "success"}>
-                    {planLabels[planName] ?? planName} — {monthlyLimit}/mo
+                    {planLabels[planName] ?? planName} â€” {monthlyLimit}/mo
                   </Badge>
                 </Text>
               </BlockStack>
@@ -205,7 +205,7 @@ export default function OptimizePage() {
           <Banner tone="warning" title="Monthly quota reached">
             <p>Upgrade your plan to generate more content this month.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/plans")}>View Plans →</Button>
+              <Button onClick={() => navigate("/app/plans")}>View Plans â†’</Button>
             </Box>
           </Banner>
         ) : (
@@ -242,7 +242,7 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
               >
-                {isSubmitting ? "Starting job…" : `Optimise ${canOptimize} Products →`}
+                {isSubmitting ? "Starting jobâ€¦" : `Optimise ${canOptimize} Products â†’`}
               </Button>
             </BlockStack>
           </Card>
@@ -251,7 +251,7 @@ export default function OptimizePage() {
         {draftCount > 0 && (
           <Banner tone="info" title={`${draftCount} draft${draftCount !== 1 ? "s" : ""} waiting for review`}>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/review")}>Review & Publish →</Button>
+              <Button onClick={() => navigate("/app/review")}>Review & Publish â†’</Button>
             </Box>
           </Banner>
         )}
@@ -272,7 +272,7 @@ export default function OptimizePage() {
           <TextContainer>
             <Text as="p">
               Auto-publish will overwrite the live product descriptions on your Shopify storefront
-              for all <strong>{canOptimize}</strong> products — without a review step.
+              for all <strong>{canOptimize}</strong> products â€” without a review step.
             </Text>
             <Text as="p" tone="subdued">
               This cannot be undone from ContentClaude. You can revert individual products via
@@ -284,3 +284,5 @@ export default function OptimizePage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, useSubmit } from "react-router";
+﻿import { useLoaderData, useActionData, useNavigation, useNavigate, useSubmit } from "react-router";
 import {
   Page,
   Layout,
@@ -20,7 +20,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-// ─── Loader ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -92,7 +92,7 @@ async function fetchProductsBatch(admin, productIds) {
   return result;
 }
 
-// ─── Action ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -201,7 +201,7 @@ export const action = async ({ request }) => {
   return Response.json({ error: "Unknown action." }, { status: 400 });
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function ReviewPage() {
   const { products } = useLoaderData();
@@ -282,7 +282,7 @@ export default function ReviewPage() {
         backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       >
         <EmptyState
-          heading="Nothing to review — you're all caught up! 🎉"
+          heading="Nothing to review â€” you're all caught up! ðŸŽ‰"
           image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
           action={{ content: "Go to Products", onAction: () => navigate("/app/products") }}
         >
@@ -306,7 +306,7 @@ export default function ReviewPage() {
         {actionData?.success && actionData.errors?.length > 0 && (
           <Banner tone="warning" title="Published with some errors">
             {actionData.errors.map((e, i) => (
-              <p key={i}>Failed: {e.productId} — {e.error}</p>
+              <p key={i}>Failed: {e.productId} â€” {e.error}</p>
             ))}
           </Banner>
         )}
@@ -342,7 +342,7 @@ export default function ReviewPage() {
                   loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                   disabled={isSubmitting || approvedCount === 0}
                 >
-                  Publish {approvedCount} Approved →
+                  Publish {approvedCount} Approved â†’
                 </Button>
               </InlineStack>
             </InlineStack>
@@ -350,7 +350,7 @@ export default function ReviewPage() {
             <TextField
               label=""
               labelHidden
-              placeholder="Search products…"
+              placeholder="Search productsâ€¦"
               value={search}
               onChange={setSearch}
               clearButton
@@ -384,7 +384,7 @@ export default function ReviewPage() {
                 loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                 disabled={isSubmitting || approvedCount === 0}
               >
-                Publish {approvedCount} Approved →
+                Publish {approvedCount} Approved â†’
               </Button>
             </InlineStack>
           </Card>
@@ -466,8 +466,8 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
 
   const preview =
     type === "description"
-      ? content.replace(/<[^>]+>/g, "").substring(0, 120) + "…"
-      : content.substring(0, 120) + (content.length > 120 ? "…" : "");
+      ? content.replace(/<[^>]+>/g, "").substring(0, 120) + "â€¦"
+      : content.substring(0, 120) + (content.length > 120 ? "â€¦" : "");
 
   const charLimit = type === "metaTitle" ? 60 : type === "metaDescription" ? 155 : null;
   const charCount = editedValue.length;
@@ -489,7 +489,7 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
             value={editedValue}
             onChange={handleChange}
             multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-            helpText={charLimit ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}` : "Edit before publishing"}
+            helpText={charLimit ? `${charCount}/${charLimit} characters${overLimit ? " â€” too long" : ""}` : "Edit before publishing"}
             error={overLimit ? `Shorten to under ${charLimit} characters` : ""}
             autoComplete="off"
           />
@@ -500,3 +500,5 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     </BlockStack>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

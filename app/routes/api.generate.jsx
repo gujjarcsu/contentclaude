@@ -58,7 +58,10 @@ async function verifyRequest(request, rawBody) {
     .update(signedPayload)
     .digest("hex");
 
-  // Use timingSafeEqual to prevent timing attacks
+  // Validate hex format before converting — odd-length hex silently truncates in Node
+  if (!/^[0-9a-fA-F]+$/.test(signature) || signature.length % 2 !== 0) {
+    return { ok: false, reason: "invalid_hex" };
+  }
   const sigBuf = Buffer.from(signature, "hex");
   const expBuf = Buffer.from(expected, "hex");
   if (sigBuf.length !== expBuf.length) return { ok: false };
@@ -92,13 +95,26 @@ export const action = async ({ request }) => {
   if (!productId || !shop) {
     return Response.json({ error: "productId and shop are required" }, { status: 400 });
   }
-  if (productId.length > 200 || shop.length > 200) {
-    return Response.json({ error: "Invalid input length" }, { status: 400 });
+  // Validate productId is a numeric ID or a Shopify GID
+  const numericOrGid = /^\d+$/.test(productId) || /^gid:\/\/shopify\/Product\/\d+$/.test(productId);
+  if (!numericOrGid || productId.length > 200 || shop.length > 200) {
+    return Response.json({ error: "Invalid productId or shop format" }, { status: 400 });
   }
 
-  const contentTypes = Array.isArray(rawTypes)
-    ? rawTypes.filter((t) => ["description", "metaTitle", "metaDescription", "faq"].includes(t))
-    : ["description", "metaTitle", "metaDescription"];
+  const VALID_TYPES = new Set(["description", "metaTitle", "metaDescription", "faq"]);
+  let contentTypes;
+  if (rawTypes !== undefined) {
+    if (!Array.isArray(rawTypes)) {
+      return Response.json({ error: "contentTypes must be an array" }, { status: 400 });
+    }
+    const unknown = rawTypes.filter((t) => !VALID_TYPES.has(t));
+    if (unknown.length > 0) {
+      return Response.json({ error: `Unknown content types: ${unknown.join(", ")}` }, { status: 400 });
+    }
+    contentTypes = rawTypes.length > 0 ? rawTypes : ["description", "metaTitle", "metaDescription"];
+  } else {
+    contentTypes = ["description", "metaTitle", "metaDescription"];
+  }
 
   const plan = await prisma.plan.findUnique({ where: { shop } });
   const month = new Date().toISOString().slice(0, 7);

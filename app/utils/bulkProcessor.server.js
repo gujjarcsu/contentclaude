@@ -2,7 +2,7 @@ import prisma from "../db.server.js";
 import { generateProductContent } from "./ai.server.js";
 import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
-import { FREE_PLAN } from "./billing-plans.js";
+import { tryConsumeGeneration } from "./plans.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // For production scale, replace setTimeout-based queue with BullMQ + Redis.
@@ -34,9 +34,8 @@ export async function processBulkJob(jobId) {
     });
     if (!session) throw new Error(`No offline session for shop ${job.shop}`);
 
-    const [brandVoice, plan, recentContent, collectionVoices] = await Promise.all([
+    const [brandVoice, recentContent, collectionVoices] = await Promise.all([
       prisma.brandVoice.findUnique({ where: { shop: job.shop } }),
-      prisma.plan.findUnique({ where: { shop: job.shop } }),
       prisma.generatedContent.findMany({
         where: { shop: job.shop, contentType: "description" },
         select: { productTitle: true },
@@ -45,6 +44,20 @@ export async function processBulkJob(jobId) {
       }),
       prisma.collectionVoice.findMany({ where: { shop: job.shop } }),
     ]);
+
+    if (!brandVoice) {
+      jobLogger.warn({ shop: job.shop }, "No brand voice configured — cannot run bulk generation");
+      await prisma.generationJob.update({
+        where: { id: jobId },
+        data: {
+          status: "failed",
+          completedAt: new Date(),
+          errorLog: JSON.stringify([{ productId: "all", error: "Brand voice not configured. Go to Settings to set up your brand voice before running a bulk job." }]),
+        },
+      });
+      return;
+    }
+
     // Build a map of collectionId -> voice override for O(1) lookup
     const collectionVoiceMap = {};
     for (const cv of collectionVoices) {
@@ -52,28 +65,15 @@ export async function processBulkJob(jobId) {
     }
     const recentTitlesBase = recentContent.map((r) => r.productTitle).filter(Boolean);
 
-    // Cache the plan limit once; track usage locally to avoid N*2 DB queries.
-    // Re-check from DB every 10 products to catch mid-job plan changes.
-    let localUsageCount = await prisma.usageRecord.count({
-      where: { shop: job.shop, month: new Date().toISOString().slice(0, 7) },
-    });
-    const planLimit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
-    const planName = plan?.planName ?? "free";
-
     for (let i = 0; i < productIds.length; i++) {
       const productId = productIds[i];
       try {
-        // Re-sync usage count every 10 products to stay accurate under concurrent jobs
-        if (i > 0 && i % 10 === 0) {
-          localUsageCount = await prisma.usageRecord.count({
-            where: { shop: job.shop, month: new Date().toISOString().slice(0, 7) },
-          });
-        }
-
-        const allowed = plan?.status === "active" && localUsageCount < planLimit;
-        if (!allowed) {
-          const limitMsg = `Monthly generation limit reached (${planLimit} on ${planName} plan). Upgrade at /app/plans.`;
-          jobLogger.warn({ shop: job.shop, productId, planName, planLimit }, limitMsg);
+        // Atomically check + consume one generation credit per product.
+        // Uses a serializable DB transaction — prevents quota overrun under concurrent jobs.
+        const gate = await tryConsumeGeneration(job.shop, job.contentTypes, productId);
+        if (!gate.allowed) {
+          const limitMsg = `Monthly generation limit reached. Upgrade at /app/plans.`;
+          jobLogger.warn({ shop: job.shop, productId }, limitMsg);
           if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: limitMsg });
           failedCount++;
           await prisma.generationJob.update({
@@ -120,7 +120,6 @@ export async function processBulkJob(jobId) {
           { recentTitles, collectionVoice }
         );
 
-        const month = new Date().toISOString().slice(0, 7);
         const finalStatus = job.autoPublish ? "published" : "draft";
         const generatedTypes = contentTypes.filter((t) => generated[t]);
 
@@ -134,7 +133,8 @@ export async function processBulkJob(jobId) {
             where: { shop_productId_contentType: { shop: job.shop, productId, contentType: type } },
             update: {
               generatedContent: generated[type],
-              originalContent,
+              // Never overwrite originalContent on re-generation — preserve the true
+              // Shopify original so merchants can always roll back to it.
               status: finalStatus,
               version: { increment: 1 },
             },
@@ -150,18 +150,9 @@ export async function processBulkJob(jobId) {
           });
         });
 
-        await Promise.all([
-          ...saveOps,
-          prisma.usageRecord.create({
-            data: {
-              shop: job.shop,
-              month,
-              contentType: job.contentTypes,
-              productId,
-              tokensUsed: 0,
-            },
-          }),
-        ]);
+        // tryConsumeGeneration already wrote the UsageRecord atomically.
+        // Only save content; no duplicate usage record needed.
+        await Promise.all(saveOps);
 
         // Auto-publish: push content directly to Shopify
         if (job.autoPublish && generatedTypes.length > 0) {
@@ -178,7 +169,6 @@ export async function processBulkJob(jobId) {
         }
 
         completedCount++;
-        localUsageCount++;
         await prisma.generationJob.update({
           where: { id: jobId },
           data: { completedProducts: { increment: 1 } },

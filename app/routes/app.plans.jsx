@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+﻿import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page,
   Layout,
@@ -200,8 +200,8 @@ const FAQ_ITEMS = [
 ];
 
 function FeatureCell({ value }) {
-  if (value === true) return <Text as="span" tone="success">✓</Text>;
-  if (value === false) return <Text as="span" tone="subdued">—</Text>;
+  if (value === true) return <Text as="span" tone="success">âœ“</Text>;
+  if (value === false) return <Text as="span" tone="subdued">â€”</Text>;
   return <Text as="span" variant="bodySm" fontWeight="semibold">{value}</Text>;
 }
 
@@ -241,7 +241,7 @@ export default function PlansPage() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
-                <Text as="h2" variant="headingLg">Current Usage — {currentMonth}</Text>
+                <Text as="h2" variant="headingLg">Current Usage â€” {currentMonth}</Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                     {PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} Plan
@@ -487,3 +487,5 @@ export default function PlansPage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
+﻿import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -105,7 +105,7 @@ export const action = async ({ request }) => {
 function statusBadge(status) {
   switch (status) {
     case "queued":     return <Badge tone="attention">Queued</Badge>;
-    case "processing": return <Badge tone="info" progress="incomplete">Processing…</Badge>;
+    case "processing": return <Badge tone="info" progress="incomplete">Processingâ€¦</Badge>;
     case "complete":   return <Badge tone="success">Complete</Badge>;
     case "failed":     return <Badge tone="critical">Failed</Badge>;
     default:           return <Badge>{status}</Badge>;
@@ -229,7 +229,7 @@ export default function JobsPage() {
 
         {hasActiveJobs && (
           <Banner tone="info" title="Jobs are running">
-            <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>
+            <p>This page refreshes automatically. You can navigate away â€” jobs continue in the background.</p>
           </Banner>
         )}
 
@@ -366,7 +366,7 @@ export default function JobsPage() {
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
                           {contentTypesList}
-                          {elapsedTime ? ` · ${elapsedTime}` : ""}
+                          {elapsedTime ? ` Â· ${elapsedTime}` : ""}
                         </Text>
                       </BlockStack>
 
@@ -409,13 +409,13 @@ export default function JobsPage() {
                                 <strong>
                                   {err.productId.replace("gid://shopify/Product/", "Product #")}
                                 </strong>{" "}
-                                — {err.error}
+                                â€” {err.error}
                               </Text>
                             </Box>
                           ))}
                           {job.errorLog.length > 5 && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              …and {job.errorLog.length - 5} more errors
+                              â€¦and {job.errorLog.length - 5} more errors
                             </Text>
                           )}
                         </BlockStack>
@@ -489,3 +489,5 @@ export default function JobsPage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

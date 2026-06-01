@@ -19,35 +19,32 @@ export const loader = async () => {
   const checks = {};
   let healthy = true;
 
+  const isProd = process.env.NODE_ENV === "production";
+
   // Database ping
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = "ok";
   } catch (err) {
-    checks.database = `error: ${err.message}`;
+    checks.database = isProd ? "error" : `error: ${err.message}`;
     healthy = false;
   }
 
   // Redis ping — reuses the shared singleton from cache.server.js
-  // so no new connection is created per health probe.
   if (process.env.REDIS_URL) {
     try {
-      // getCache with a short TTL exercises the Redis connection without
-      // creating a new client instance. A miss just returns the supplier value.
       await getCache("__health_ping__", async () => "ok", 5);
       checks.redis = "ok";
     } catch (err) {
-      // Redis failure is degraded, not fatal — app still works with in-memory fallback
-      checks.redis = `degraded: ${err.message}`;
+      // Redis failure is degraded, not fatal — app falls back to in-memory cache
+      checks.redis = isProd ? "degraded" : `degraded: ${err.message}`;
     }
   }
 
-  const body = {
-    status: healthy ? "ok" : "error",
-    timestamp: new Date().toISOString(),
-    checks,
-    version: process.env.npm_package_version ?? "unknown",
-  };
+  // In production return minimal info; detailed checks only in dev/staging
+  const body = isProd
+    ? { status: healthy ? "ok" : "error", timestamp: new Date().toISOString() }
+    : { status: healthy ? "ok" : "error", timestamp: new Date().toISOString(), checks };
 
   return Response.json(body, { status: healthy ? 200 : 503 });
 };

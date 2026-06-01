@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+﻿import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page,
   Layout,
@@ -178,11 +178,11 @@ export const action = async ({ request }) => {
 };
 
 const LOADING_MESSAGES = [
-  "Researching the topic…",
-  "Structuring the outline…",
-  "Writing your blog post…",
-  "Optimising for SEO…",
-  "Adding your brand voice…",
+  "Researching the topicâ€¦",
+  "Structuring the outlineâ€¦",
+  "Writing your blog postâ€¦",
+  "Optimising for SEOâ€¦",
+  "Adding your brand voiceâ€¦",
 ];
 
 export default function BlogPage() {
@@ -264,13 +264,13 @@ export default function BlogPage() {
           <Banner tone="success" title="Blog post generated!">
             <p>
               Saved as a draft. Review and edit below, then publish when ready.
-              {actionData.remaining !== undefined && ` · ${actionData.remaining} generations remaining this month.`}
+              {actionData.remaining !== undefined && ` Â· ${actionData.remaining} generations remaining this month.`}
             </p>
           </Banner>
         )}
 
         <Layout>
-          {/* Left panel — controls */}
+          {/* Left panel â€” controls */}
           <Layout.Section variant="oneThird">
             <BlockStack gap="400">
               <Card>
@@ -297,7 +297,7 @@ export default function BlogPage() {
                           value={topic}
                           onChange={setTopic}
                           placeholder="e.g., The benefits of BPC-157 for recovery"
-                          helpText="Be specific — a focused topic generates better content"
+                          helpText="Be specific â€” a focused topic generates better content"
                           autoComplete="off"
                         />
                         <TextField
@@ -334,7 +334,7 @@ export default function BlogPage() {
                                 animated
                               />
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Takes 20–40 seconds
+                                Takes 20â€“40 seconds
                               </Text>
                             </BlockStack>
                           </Box>
@@ -347,7 +347,7 @@ export default function BlogPage() {
                           disabled={!topic.trim() || isGenerating}
                           fullWidth
                         >
-                          {isGenerating ? "Generating…" : "Generate Blog Post"}
+                          {isGenerating ? "Generatingâ€¦" : "Generate Blog Post"}
                         </Button>
 
                         {actionData?.limitReached && (
@@ -388,7 +388,7 @@ export default function BlogPage() {
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">Recent Posts</Text>
                       <Button size="slim" variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                        View all →
+                        View all â†’
                       </Button>
                     </InlineStack>
                     {recentPosts.map((post) => (
@@ -414,7 +414,7 @@ export default function BlogPage() {
             </BlockStack>
           </Layout.Section>
 
-          {/* Right panel — output */}
+          {/* Right panel â€” output */}
           <Layout.Section>
             {isGenerating && (
               <Card>
@@ -446,7 +446,7 @@ export default function BlogPage() {
                   <Card>
                     <Box padding="600">
                       <BlockStack gap="300" inlineAlign="center">
-                        <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic ✍️</Text>
+                        <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic âœï¸</Text>
                         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
                           Write your first AI-powered blog post in under 60 seconds.
                         </Text>
@@ -467,7 +467,7 @@ export default function BlogPage() {
                   <InlineStack gap="200" blockAlign="center">
                     <CheckCircle2 size={18} color="#00A047" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
-                      Blog post generated and saved as draft — review and edit below
+                      Blog post generated and saved as draft â€” review and edit below
                     </Text>
                   </InlineStack>
                 </Box>
@@ -521,7 +521,7 @@ export default function BlogPage() {
                         disabled={isPublishing || !editedTitle || !editedContent}
                         fullWidth
                       >
-                        {isPublishing ? "Publishing…" : "Publish to Shopify Blog"}
+                        {isPublishing ? "Publishingâ€¦" : "Publish to Shopify Blog"}
                       </Button>
                     </BlockStack>
                   </Form>
@@ -534,3 +534,5 @@ export default function BlogPage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

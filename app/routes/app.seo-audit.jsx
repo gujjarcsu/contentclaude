@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
+﻿import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import {
   Page,
   Layout,
@@ -16,7 +16,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
-// ─── Loader ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -26,13 +26,19 @@ export const loader = async ({ request }) => {
   const SIX_MONTHS_AGO = new Date();
   SIX_MONTHS_AGO.setMonth(SIX_MONTHS_AGO.getMonth() - 6);
 
-  // Paginate through the full catalog (cap at 1000 products)
+  // Paginate through the full catalog (cap at 500 products to avoid timeout)
   const allEdges = [];
   let cursor = null;
   let hasNextPage = true;
-  const MAX_AUDIT_PRODUCTS = 1000;
+  const MAX_AUDIT_PRODUCTS = 500;
+  const AUDIT_START = Date.now();
+  const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit â€” leave headroom for DB + response
 
   while (hasNextPage && allEdges.length < MAX_AUDIT_PRODUCTS) {
+    if (Date.now() - AUDIT_START > AUDIT_TIMEOUT_MS) {
+      hasNextPage = false;
+      break;
+    }
     const response = await admin.graphql(
       `query getProducts($cursor: String) {
         products(first: 50, after: $cursor, sortKey: TITLE) {
@@ -43,7 +49,6 @@ export const loader = async ({ request }) => {
               description
               seo { title description }
               images(first: 5) { edges { node { id url altText } } }
-              variants(first: 1) { edges { node { price } } }
             }
           }
         }
@@ -101,7 +106,7 @@ export const loader = async ({ request }) => {
   return Response.json({ products, totalScore, missingDesc, missingMeta, missingAlt, staleCount });
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ScoreRing({ score }) {
   const tone = score >= 80 ? "success" : score >= 50 ? "highlight" : "critical";
@@ -118,8 +123,8 @@ function ScoreRing({ score }) {
 
 function CheckIcon({ pass }) {
   return pass
-    ? <Badge tone="success">✓</Badge>
-    : <Badge tone="critical">✗</Badge>;
+    ? <Badge tone="success">âœ“</Badge>
+    : <Badge tone="critical">âœ—</Badge>;
 }
 
 export default function SeoAuditPage() {
@@ -144,7 +149,7 @@ export default function SeoAuditPage() {
   return (
     <Page
       title="SEO Audit"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${products.length >= 1000 ? " · showing first 1,000" : ""}`}
+      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed â€” sorted by score (worst first)${products.length >= 500 ? " Â· showing first 500" : ""}`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: "Fix All Missing Content",
@@ -152,7 +157,7 @@ export default function SeoAuditPage() {
       }}
       secondaryActions={[
         {
-          content: isLoading ? "Scanning…" : "Refresh Audit",
+          content: isLoading ? "Scanningâ€¦" : "Refresh Audit",
           onAction: () => revalidator.revalidate(),
           loading: isLoading,
           disabled: isLoading,
@@ -176,7 +181,7 @@ export default function SeoAuditPage() {
           >
             <p>Refreshing old descriptions keeps your SEO rankings strong and content relevant.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/optimize")}>Refresh Stale Content →</Button>
+              <Button onClick={() => navigate("/app/optimize")}>Refresh Stale Content â†’</Button>
             </Box>
           </Banner>
         )}
@@ -212,7 +217,7 @@ export default function SeoAuditPage() {
                   )}
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) · Has Images (10pts) · Alt Text (10pts)
+                  SEO score breakdown: Description (30pts) Â· Meta Title (25pts) Â· Meta Description (25pts) Â· Has Images (10pts) Â· Alt Text (10pts)
                 </Text>
               </BlockStack>
             </Card>
@@ -234,3 +239,5 @@ export default function SeoAuditPage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

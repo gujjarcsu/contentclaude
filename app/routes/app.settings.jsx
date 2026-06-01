@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+﻿import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   TextField, Select, Button, Banner, Box, Checkbox, Divider, Badge,
@@ -100,15 +100,15 @@ export const action = async ({ request }) => {
 };
 
 const TONE_CARDS = [
-  { value: "professional", emoji: "💼", label: "Professional", desc: "Authoritative & trustworthy" },
-  { value: "friendly",     emoji: "😊", label: "Friendly",     desc: "Warm & conversational" },
-  { value: "premium",      emoji: "✨", label: "Premium",      desc: "Luxury & aspirational" },
-  { value: "bold",         emoji: "⚡", label: "Bold",         desc: "High energy & direct" },
-  { value: "scientific",   emoji: "🔬", label: "Scientific",   desc: "Technical & evidence-based" },
-  { value: "warm",         emoji: "🌿", label: "Warm",         desc: "Nurturing & empathetic" },
-  { value: "minimalist",   emoji: "◻",  label: "Minimalist",  desc: "Clean & understated" },
-  { value: "playful",      emoji: "🎉", label: "Playful",      desc: "Fun & engaging" },
-  { value: "custom",       emoji: "✍️", label: "Custom",       desc: "Define your own tone" },
+  { value: "professional", emoji: "ðŸ’¼", label: "Professional", desc: "Authoritative & trustworthy" },
+  { value: "friendly",     emoji: "ðŸ˜Š", label: "Friendly",     desc: "Warm & conversational" },
+  { value: "premium",      emoji: "âœ¨", label: "Premium",      desc: "Luxury & aspirational" },
+  { value: "bold",         emoji: "âš¡", label: "Bold",         desc: "High energy & direct" },
+  { value: "scientific",   emoji: "ðŸ”¬", label: "Scientific",   desc: "Technical & evidence-based" },
+  { value: "warm",         emoji: "ðŸŒ¿", label: "Warm",         desc: "Nurturing & empathetic" },
+  { value: "minimalist",   emoji: "â—»",  label: "Minimalist",  desc: "Clean & understated" },
+  { value: "playful",      emoji: "ðŸŽ‰", label: "Playful",      desc: "Fun & engaging" },
+  { value: "custom",       emoji: "âœï¸", label: "Custom",       desc: "Define your own tone" },
 ];
 
 const languageOptions = [
@@ -202,7 +202,7 @@ export default function SettingsPage() {
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingLg">Store Identity</Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Tell the AI who you are — the more specific, the better the output.
+                        Tell the AI who you are â€” the more specific, the better the output.
                       </Text>
                     </BlockStack>
                     <TextField
@@ -232,7 +232,7 @@ export default function SettingsPage() {
                   </BlockStack>
                 </Card>
 
-                {/* Brand Tone — visual selector */}
+                {/* Brand Tone â€” visual selector */}
                 <Card>
                   <BlockStack gap="400">
                     <input type="hidden" name="brandTone" value={brandTone} />
@@ -339,7 +339,7 @@ export default function SettingsPage() {
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Paste 2–3 of your best product descriptions. This is the most powerful way to match your exact voice.
+                        Paste 2â€“3 of your best product descriptions. This is the most powerful way to match your exact voice.
                       </Text>
                     </BlockStack>
                     <TextField
@@ -349,7 +349,7 @@ export default function SettingsPage() {
                       onChange={setSampleContent}
                       multiline={8}
                       autoComplete="off"
-                      placeholder="Paste your favourite product descriptions here…"
+                      placeholder="Paste your favourite product descriptions hereâ€¦"
                     />
                     <TextField
                       name="additionalNotes"
@@ -404,7 +404,7 @@ export default function SettingsPage() {
                 </Card>
 
                 <Button variant="primary" size="large" submit loading={isSaving} fullWidth>
-                  {isSaving ? "Saving…" : "Save Settings"}
+                  {isSaving ? "Savingâ€¦" : "Save Settings"}
                 </Button>
               </BlockStack>
             </Layout.Section>
@@ -420,7 +420,7 @@ export default function SettingsPage() {
                         <strong>Be specific with your audience.</strong> "Health-conscious Australian men 30-50" beats "everyone."
                       </Text>
                       <Text as="p" variant="bodySm">
-                        <strong>Add real keywords.</strong> Woven naturally — no keyword stuffing.
+                        <strong>Add real keywords.</strong> Woven naturally â€” no keyword stuffing.
                       </Text>
                       <Text as="p" variant="bodySm">
                         <strong>Real differentiators win.</strong> "Lab tested with COA" beats "high quality."
@@ -438,7 +438,7 @@ export default function SettingsPage() {
                     <BlockStack gap="200">
                       {TONE_CARDS.slice(0, 4).map((card) => (
                         <Text key={card.value} as="p" variant="bodySm">
-                          <strong>{card.emoji} {card.label}</strong> — {card.desc}
+                          <strong>{card.emoji} {card.label}</strong> â€” {card.desc}
                         </Text>
                       ))}
                     </BlockStack>
@@ -472,7 +472,7 @@ export default function SettingsPage() {
               <Text as="h2" variant="headingMd">Brand Voice Setup Wizard</Text>
               <Text as="p" variant="bodySm" tone="subdued">Re-run the guided setup to update your brand voice settings.</Text>
             </BlockStack>
-            <Button onClick={() => navigate("/app/setup")}>Re-run onboarding wizard →</Button>
+            <Button onClick={() => navigate("/app/setup")}>Re-run onboarding wizard â†’</Button>
           </InlineStack>
         </Card>
 
@@ -482,7 +482,7 @@ export default function SettingsPage() {
             <BlockStack gap="100">
               <Text as="h2" variant="headingLg">Content Templates</Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Save generation presets — apply from the product page with one click.
+                Save generation presets â€” apply from the product page with one click.
               </Text>
             </BlockStack>
 
@@ -497,8 +497,8 @@ export default function SettingsPage() {
                           {tpl.isDefault && <Badge tone="success">Default</Badge>}
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          {tpl.contentLength} · {tpl.contentTypes.replace(/,/g, ", ")}
-                          {tpl.keywords && ` · keywords: ${tpl.keywords}`}
+                          {tpl.contentLength} Â· {tpl.contentTypes.replace(/,/g, ", ")}
+                          {tpl.keywords && ` Â· keywords: ${tpl.keywords}`}
                         </Text>
                       </BlockStack>
                       <Form method="post">
@@ -573,3 +573,5 @@ export default function SettingsPage() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";

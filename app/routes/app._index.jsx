@@ -449,3 +449,5 @@ export default function Dashboard() {
     </Page>
   );
 }
+
+export { RouteError as ErrorBoundary } from "../components/RouteError";
