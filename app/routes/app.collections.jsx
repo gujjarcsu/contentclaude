@@ -30,7 +30,7 @@ export const loader = async ({ request }) => {
 
   const response = await admin.graphql(`
     query {
-      collections(first: 50, sortKey: TITLE) {
+      collections(first: 250, sortKey: TITLE) {
         edges {
           node {
             id title description

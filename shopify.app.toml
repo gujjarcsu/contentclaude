@@ -10,10 +10,10 @@ application_url = "https://contentclaude.fly.dev"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "write_products,write_content,write_metaobjects,write_metaobject_definitions"
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2026-04"
 
   # App lifecycle
   [[webhooks.subscriptions]]
