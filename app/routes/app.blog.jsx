@@ -439,7 +439,7 @@ export default function BlogPage() {
               </Card>
             )}
 
-            {!generated && !isGenerating && (
+            {!generated && !resumePost && !isGenerating && (
               <>
                 <Card>
                   <Box padding="800">
@@ -472,21 +472,23 @@ export default function BlogPage() {
               </>
             )}
 
-            {generated && !isGenerating && (
+            {(generated || resumePost) && !isGenerating && (
               <BlockStack gap="400">
-                {/* Success indicator */}
+                {/* Success / resume indicator */}
                 <Box padding="300" background="bg-surface-success" borderRadius="200">
                   <InlineStack gap="200" blockAlign="center">
                     <CheckCircle2 size={18} color="#00A047" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
-                      Blog post generated and saved as draft — review and edit below
+                      {generated
+                        ? "Blog post generated and saved as draft — review and edit below"
+                        : `Editing draft: ${resumePost?.title || resumePost?.topic || "Untitled"}`}
                     </Text>
                   </InlineStack>
                 </Box>
 
                 <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Generated Blog Post</Text>
+                    <Text as="h2" variant="headingMd">{generated ? "Generated Blog Post" : "Edit Draft"}</Text>
                     <TextField
                       label="Title"
                       value={editedTitle}
