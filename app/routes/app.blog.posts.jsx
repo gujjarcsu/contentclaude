@@ -159,9 +159,7 @@ export default function BlogPosts() {
   const drafts = posts.filter((p) => p.status === "draft");
 
   const handleView = (post) => {
-    navigate("/app/blog", {
-      state: { resumePostId: post.id, topic: post.topic, keywords: post.keywords },
-    });
+    navigate(`/app/blog?postId=${post.id}`);
   };
 
   return (

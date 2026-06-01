@@ -25,6 +25,8 @@ import { UpgradePrompt } from "../components/UpgradePrompt";
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+  const url = new URL(request.url);
+  const resumePostId = url.searchParams.get("postId");
 
   const [brandVoice, plan, usageCount, recentPosts] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
@@ -38,6 +40,15 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
+  // If ?postId= is provided, load that draft so the component can pre-fill the editor
+  let resumePost = null;
+  if (resumePostId) {
+    resumePost = await prisma.blogPost.findFirst({
+      where: { id: resumePostId, shop },
+      select: { id: true, title: true, topic: true, keywords: true, content: true, status: true },
+    });
+  }
+
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
   return Response.json({
@@ -50,6 +61,7 @@ export const loader = async ({ request }) => {
       ...p,
       createdAt: p.createdAt.toISOString(),
     })),
+    resumePost,
   });
 };
 
@@ -186,7 +198,7 @@ const LOADING_MESSAGES = [
 ];
 
 export default function BlogPage() {
-  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts } = useLoaderData();
+  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -194,8 +206,8 @@ export default function BlogPage() {
   const isGenerating = navigation.state === "submitting" && navigation.formData?.get("actionType") === "generate";
   const isPublishing = navigation.state === "submitting" && navigation.formData?.get("actionType") === "publish";
 
-  const [topic, setTopic] = useState("");
-  const [keywords, setKeywords] = useState(brandVoice?.targetKeywords || "");
+  const [topic, setTopic] = useState(resumePost?.topic || "");
+  const [keywords, setKeywords] = useState(resumePost?.keywords || brandVoice?.targetKeywords || "");
   const [length, setLength] = useState("medium");
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
 
@@ -220,8 +232,8 @@ export default function BlogPage() {
   }, [actionData]);
 
   const generated = actionData?.generated;
-  const [editedTitle, setEditedTitle] = useState(generated?.title || "");
-  const [editedContent, setEditedContent] = useState(generated?.content || "");
+  const [editedTitle, setEditedTitle] = useState(generated?.title || resumePost?.title || "");
+  const [editedContent, setEditedContent] = useState(generated?.content || resumePost?.content || "");
 
   if (generated?.title && editedTitle !== generated.title && !isGenerating) {
     setEditedTitle(generated.title);
@@ -508,7 +520,7 @@ export default function BlogPage() {
                     <input type="hidden" name="actionType" value="publish" />
                     <input type="hidden" name="title" value={editedTitle} />
                     <input type="hidden" name="content" value={editedContent} />
-                    <input type="hidden" name="savedPostId" value={actionData?.savedPostId || ""} />
+                    <input type="hidden" name="savedPostId" value={actionData?.savedPostId || resumePost?.id || ""} />
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">
                         This will publish the post directly to your Shopify blog.
