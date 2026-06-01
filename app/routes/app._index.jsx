@@ -15,8 +15,15 @@ import { getCache } from "../utils/cache.server";
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+  // Preserve all Shopify auth params so server-side redirects can re-authenticate.
+  // Third-party cookies are blocked in embedded iframes, so we must carry id_token
+  // and session through every redirect for the token exchange to succeed.
   const url = new URL(request.url);
-  const host = url.searchParams.get("host") ?? "";
+  const authParams = new URLSearchParams();
+  for (const key of ["host", "shop", "id_token", "session", "embedded", "locale", "timestamp", "hmac"]) {
+    const val = url.searchParams.get(key);
+    if (val) authParams.set(key, val);
+  }
 
   // Cache product count 5 min — it's read on every dashboard load and rarely changes
   const totalProducts = await getCache(
@@ -77,7 +84,7 @@ export const loader = async ({ request }) => {
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
   if (isNewShop && !brandVoice) {
-    throw redirect(`/app/setup?shop=${shop}&host=${host}`);
+    throw redirect(`/app/setup?${authParams.toString()}`);
   }
 
   const storeName = brandVoice?.storeName || shop.split(".")[0];
