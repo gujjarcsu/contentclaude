@@ -143,16 +143,19 @@ export const action = async ({ request }) => {
       return Response.json({ error: errors.map((e) => e.message).join("; ") }, { status: 422 });
     }
 
-    const publishedTypes = [];
-    if (description) publishedTypes.push("description");
-    if (metaTitle) publishedTypes.push("metaTitle");
-    if (metaDescription) publishedTypes.push("metaDescription");
-    if (publishedTypes.length > 0) {
-      await prisma.generatedContent.updateMany({
-        where: { shop, productId: collectionId, contentType: { in: publishedTypes }, status: "draft" },
-        data: { status: "published" },
-      });
-    }
+    const typeContentMap = {
+      ...(description ? { description } : {}),
+      ...(metaTitle ? { metaTitle } : {}),
+      ...(metaDescription ? { metaDescription } : {}),
+    };
+    await Promise.all(
+      Object.entries(typeContentMap).map(([type, val]) =>
+        prisma.generatedContent.updateMany({
+          where: { shop, productId: collectionId, contentType: type, status: "draft" },
+          data: { status: "published", generatedContent: val },
+        })
+      )
+    );
 
     return Response.json({ success: true, published: true, collectionId });
   }
