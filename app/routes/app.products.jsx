@@ -29,6 +29,7 @@ import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
+import { getEntitlements } from "../utils/billing-plans.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 
@@ -118,6 +119,7 @@ export const loader = async ({ request }) => {
     usageRemaining,
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
+    entitlements: getEntitlements(plan.planName),
   });
 };
 
@@ -250,7 +252,7 @@ function ProductListSkeleton() {
 export default function ProductsPage() {
   const {
     products, contentMap, pageInfo, statusFilter, dbCounts,
-    usageCount, usageRemaining, monthlyLimit, planName,
+    usageCount, usageRemaining, monthlyLimit, planName, entitlements,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -398,8 +400,13 @@ export default function ProductsPage() {
           disabled: dbCounts.draft === 0,
         },
         {
-          content: `Generate All (${totalProducts})`,
-          onAction: () => setGenerateAllModal(true),
+          content: entitlements?.bulkJobs
+            ? `Generate All (${totalProducts})`
+            : `🔒 Generate All — Growth Plan`,
+          onAction: entitlements?.bulkJobs
+            ? () => setGenerateAllModal(true)
+            : () => navigate("/app/plans"),
+          disabled: !entitlements?.bulkJobs && false, // never disabled — redirects to plans instead
         },
         {
           content: "Bulk Jobs →",

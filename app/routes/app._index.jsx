@@ -306,8 +306,8 @@ export default function Dashboard() {
           <Layout.Section variant="oneThird">
             <StatCard
               icon={CheckCircle} iconColor="#1a7345"
-              label="AI Content Published" value={generatedCount}
-              subtext="Live on your storefront" tone="success"
+              label="Products Optimised" value={generatedCount}
+              subtext="Products with published AI content" tone="success"
             />
           </Layout.Section>
           <Layout.Section variant="oneThird">

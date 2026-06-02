@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
@@ -142,6 +142,7 @@ export default function OptimizePage() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const actionData = useActionData();
   const isSubmitting = navigation.state === "submitting";
 
   // All hooks before any conditional return
@@ -193,6 +194,16 @@ export default function OptimizePage() {
     >
       <BlockStack gap="500">
 
+        {actionData?.error && (
+          <Banner
+            tone={actionData?.limitReached ? "warning" : "critical"}
+            title={actionData?.limitReached ? "Plan upgrade required" : "Error"}
+            action={actionData?.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+          >
+            <p>{actionData.error}</p>
+          </Banner>
+        )}
+
         {/* Coverage overview */}
         <Layout>
           <Layout.Section variant="oneThird">
@@ -202,7 +213,7 @@ export default function OptimizePage() {
                 <Text as="p" variant="heading2xl" fontWeight="bold"
                   tone={coveragePct >= 50 ? "success" : "critical"}>{coveragePct}%</Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {publishedCount} of {totalProducts} products have AI content
+                  {publishedCount} of {totalProducts} products have a published description
                 </Text>
                 <ProgressBar progress={coveragePct}
                   tone={coveragePct >= 50 ? "success" : "critical"} size="small" />

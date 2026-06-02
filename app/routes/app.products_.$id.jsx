@@ -26,6 +26,8 @@ import { UpgradePrompt } from "../components/UpgradePrompt";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
+import { getOrCreatePlan } from "../utils/plans.server.js";
+import { getEntitlements } from "../utils/billing-plans.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +55,7 @@ export async function loader({ request, params }) {
   if (!data.product) throw new Response("Product not found", { status: 404 });
   const product = data.product;
 
-  const [existingContent, brandVoice, versions, templates] = await Promise.all([
+  const [existingContent, brandVoice, versions, templates, plan] = await Promise.all([
     prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.contentVersion.findMany({
@@ -62,6 +64,7 @@ export async function loader({ request, params }) {
       take: 30,
     }),
     prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }),
+    getOrCreatePlan(shop),
   ]);
 
   const { scoreContent } = await import("../utils/contentScorer.server.js");
@@ -120,6 +123,8 @@ export async function loader({ request, params }) {
     qualityScore,
     versionsByType,
     templates,
+    planName: plan.planName,
+    entitlements: getEntitlements(plan.planName),
   };
 }
 
@@ -723,7 +728,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates } = useLoaderData();
+  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates, entitlements } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const fetcher = useFetcher();
@@ -1245,15 +1250,27 @@ export default function ProductGeneratePage() {
                         {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
                       </Button>
                     )}
-                    <Button
-                      size="large"
-                      onClick={handleGenerateVariants}
-                      loading={isGeneratingVariants}
-                      disabled={isLoading || isGeneratingVariants || noneSelected}
-                      fullWidth
-                    >
-                      {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
-                    </Button>
+                    {entitlements?.abVariants ? (
+                      <Button
+                        size="large"
+                        onClick={handleGenerateVariants}
+                        loading={isGeneratingVariants}
+                        disabled={isLoading || isGeneratingVariants || noneSelected}
+                        fullWidth
+                      >
+                        {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="large"
+                        fullWidth
+                        disabled
+                        tone="critical"
+                        onClick={() => navigate("/app/plans")}
+                      >
+                        🔒 A/B Variants — Growth Plan
+                      </Button>
+                    )}
 
                     {actionData?.limitReached && (
                       <UpgradePrompt

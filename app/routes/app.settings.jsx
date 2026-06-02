@@ -417,7 +417,7 @@ export default function SettingsPage() {
                     <Text as="h2" variant="headingMd">Tips for Better Content</Text>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm">
-                        <strong>Be specific with your audience.</strong> "Health-conscious Australians aged 30-50" beats "everyone."
+                        <strong>Be specific with your audience.</strong> "Active women aged 25-45 who love outdoor sports" beats "everyone."
                       </Text>
                       <Text as="p" variant="bodySm">
                         <strong>Add real keywords.</strong> Woven naturally — no keyword stuffing.
