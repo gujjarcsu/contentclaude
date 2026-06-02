@@ -101,14 +101,14 @@ export const action = async ({ request }) => {
 
 const TONE_CARDS = [
   { value: "professional", emoji: "💼", label: "Professional", desc: "Authoritative & trustworthy" },
-  { value: "friendly",     emoji: "ðŸ˜Š", label: "Friendly",     desc: "Warm & conversational" },
+  { value: "friendly",     emoji: "😊", label: "Friendly",     desc: "Warm & conversational" },
   { value: "premium",      emoji: "✨", label: "Premium",      desc: "Luxury & aspirational" },
   { value: "bold",         emoji: "⚡", label: "Bold",         desc: "High energy & direct" },
   { value: "scientific",   emoji: "🔬", label: "Scientific",   desc: "Technical & evidence-based" },
   { value: "warm",         emoji: "🌿", label: "Warm",         desc: "Nurturing & empathetic" },
-  { value: "minimalist",   emoji: "◻",  label: "Minimalist",  desc: "Clean & understated" },
+  { value: "minimalist",   emoji: "□",  label: "Minimalist",  desc: "Clean & understated" },
   { value: "playful",      emoji: "🎉", label: "Playful",      desc: "Fun & engaging" },
-  { value: "custom",       emoji: "âœï¸", label: "Custom",       desc: "Define your own tone" },
+  { value: "custom",       emoji: "✏️", label: "Custom",       desc: "Define your own tone" },
 ];
 
 const languageOptions = [
