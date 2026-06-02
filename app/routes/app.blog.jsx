@@ -308,7 +308,7 @@ export default function BlogPage() {
                           label="Blog Topic"
                           value={topic}
                           onChange={setTopic}
-                          placeholder="e.g., The benefits of BPC-157 for recovery"
+                          placeholder="e.g., The benefits of Vitamin C for recovery"
                           helpText="Be specific — a focused topic generates better content"
                           autoComplete="off"
                         />
@@ -317,7 +317,7 @@ export default function BlogPage() {
                           label="Target Keywords"
                           value={keywords}
                           onChange={setKeywords}
-                          placeholder="e.g., peptides, muscle recovery, research chemicals"
+                          placeholder="e.g., skincare, beauty, wellness"
                           helpText="Keywords to weave naturally into the post"
                           autoComplete="off"
                         />
@@ -465,7 +465,7 @@ export default function BlogPage() {
                   <Card>
                     <Box padding="600">
                       <BlockStack gap="300" inlineAlign="center">
-                        <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic âœï¸</Text>
+                        <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic ✏️</Text>
                         <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
                           Write your first AI-powered blog post in under 60 seconds.
                         </Text>

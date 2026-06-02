@@ -28,7 +28,7 @@ import { useState, useCallback, useMemo } from "react";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 
@@ -132,6 +132,15 @@ export const action = async ({ request }) => {
   );
   if (contentTypes.length === 0) return { error: "Select at least one content type." };
   const autoPublish = formData.get("bulk_autoPublish") === "true";
+
+  // Bulk jobs are a Growth+ feature — enforce server-side
+  const bulkEnt = await checkEntitlement(shop, "bulkJobs");
+  if (!bulkEnt.allowed) {
+    return {
+      error: `Bulk generation requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock bulk jobs.`,
+      limitReached: true,
+    };
+  }
 
   if (actionType === "generateAll") {
     const allIds = [];

@@ -6,6 +6,14 @@ export const FREE_PLAN = {
   planName: "free",
   amount: 0,
   monthlyLimit: 25,
+  // Entitlements — what this plan can access
+  entitlements: {
+    bulkJobs: false,
+    abVariants: false,
+    autopilot: false,
+    contentTemplates: false,
+    versionHistory: false,
+  },
 };
 
 export const BILLING_PLANS = {
@@ -14,17 +22,45 @@ export const BILLING_PLANS = {
     planName: "starter",
     amount: 9.99,
     monthlyLimit: 50,
+    entitlements: {
+      bulkJobs: false,
+      abVariants: false,
+      autopilot: false,
+      contentTemplates: true,
+      versionHistory: true,
+    },
   },
   growth: {
     key: "Growth Plan",
     planName: "growth",
     amount: 29.99,
     monthlyLimit: 200,
+    entitlements: {
+      bulkJobs: true,
+      abVariants: true,
+      autopilot: true,
+      contentTemplates: true,
+      versionHistory: true,
+    },
   },
   pro: {
     key: "Professional Plan",
     planName: "pro",
     amount: 79.99,
     monthlyLimit: 1000,
+    entitlements: {
+      bulkJobs: true,
+      abVariants: true,
+      autopilot: true,
+      contentTemplates: true,
+      versionHistory: true,
+    },
   },
 };
+
+/** Returns the entitlements for a given planName string. */
+export function getEntitlements(planName) {
+  if (planName === "free") return FREE_PLAN.entitlements;
+  const plan = Object.values(BILLING_PLANS).find((p) => p.planName === planName);
+  return plan?.entitlements ?? FREE_PLAN.entitlements;
+}

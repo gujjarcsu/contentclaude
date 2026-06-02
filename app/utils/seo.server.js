@@ -43,12 +43,24 @@ export function faqToJsonLd(faqText) {
  * product shape: { description, seoTitle, seoDescription, images: [{ altText }] }
  */
 export function calculateSeoScore(product) {
+  const hasImages = !!(product.images && product.images.length > 0);
+  // hasAltText is only meaningful when images exist; if there are no images it
+  // is "not applicable" rather than a separate failure.
+  const hasAltText = hasImages
+    ? !!(product.images.some((img) => img.altText && img.altText.trim()))
+    : false; // no images → no alt text possible; scored once via hasImages
+
   const checks = {
     hasDescription: !!(product.description && product.description.trim().length >= 50),
     hasMetaTitle:   !!(product.seoTitle && product.seoTitle.trim().length > 0),
     hasMetaDesc:    !!(product.seoDescription && product.seoDescription.trim().length > 0),
-    hasImages:      !!(product.images && product.images.length > 0),
-    hasAltText:     !!(product.images && product.images.some((img) => img.altText && img.altText.trim())),
+    hasImages,
+    hasAltText,
+    // Distinguish cause for the "Issues Found" label:
+    // noImages = product has no images at all (alt text not applicable)
+    // missingAltText = has images but none have alt text
+    noImages:        !hasImages,
+    missingAltText:  hasImages && !hasAltText,
   };
   const score =
     (checks.hasDescription ? 30 : 0) +

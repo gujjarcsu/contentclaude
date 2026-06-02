@@ -16,6 +16,7 @@ import { useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan } from "../utils/plans.server";
+import { getContentMetrics, coveragePct as calcCoveragePct } from "../utils/metrics.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -29,14 +30,10 @@ export const loader = async ({ request }) => {
   // Clamp to a real YYYY-MM format to prevent injection
   const safeMonth = /^\d{4}-\d{2}$/.test(selectedMonth) ? selectedMonth : currentMonth;
 
-  const [plan, usageCount, contentStats, recentUsage, jobStats] = await Promise.all([
+  const [plan, usageCount, metrics, recentUsage, jobStats, productCountResponse] = await Promise.all([
     getOrCreatePlan(shop),
     prisma.usageRecord.count({ where: { shop, month: safeMonth } }),
-    prisma.generatedContent.groupBy({
-      by: ["status"],
-      where: { shop },
-      _count: { status: true },
-    }),
+    getContentMetrics(shop),
     prisma.usageRecord.groupBy({
       by: ["month"],
       where: { shop },
@@ -49,17 +46,17 @@ export const loader = async ({ request }) => {
       where: { shop },
       _count: { status: true },
     }),
+    admin.graphql(`query { productsCount { count } }`),
   ]);
 
-  const productCountResponse = await admin.graphql(`query { productsCount { count } }`);
   const productCountData = await productCountResponse.json();
   const totalProducts = productCountData.data.productsCount.count;
 
-  const published = contentStats.find((s) => s.status === "published")?._count.status ?? 0;
-  const draft = contentStats.find((s) => s.status === "draft")?._count.status ?? 0;
-  const rejected = contentStats.find((s) => s.status === "rejected")?._count.status ?? 0;
-
-  const coveragePct = totalProducts > 0 ? Math.round((published / totalProducts) * 100) : 0;
+  // Use distinct-product counts so coverage can never exceed 100%
+  const published = metrics.publishedProducts;
+  const draft = metrics.draftProducts;
+  const publishedPieces = metrics.publishedPieces;
+  const coveragePct = calcCoveragePct(published, totalProducts);
 
   const monthlyRows = recentUsage.map((r) => ({
     month: r.month,
@@ -83,9 +80,9 @@ export const loader = async ({ request }) => {
 
   return Response.json({
     totalProducts,
-    published,
-    draft,
-    rejected,
+    published,      // distinct products with ≥1 published field
+    draft,          // distinct products with ≥1 draft field
+    publishedPieces,// raw content-piece count for the "pieces" metric
     coveragePct,
     monthlyRows,
     completedJobs,
@@ -103,7 +100,7 @@ export const loader = async ({ request }) => {
 
 export default function AnalyticsPage() {
   const {
-    totalProducts, published, draft, rejected, coveragePct,
+    totalProducts, published, draft, publishedPieces, coveragePct,
     monthlyRows, completedJobs, failedJobs,
     plan, usageCount, daysRemaining, selectedMonth, currentMonth, availableMonths,
   } = useLoaderData();
@@ -140,28 +137,31 @@ export default function AnalyticsPage() {
                   {coveragePct}%
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {published} of {totalProducts} products have published AI content
+                  {published} of {totalProducts} products optimised
                 </Text>
                 <ProgressBar progress={coveragePct} tone={coveragePct >= 50 ? "success" : "critical"} size="small" />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {publishedPieces} content pieces generated in total
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">Content Status</Text>
+                <Text as="h2" variant="headingMd">Products by Status</Text>
                 <BlockStack gap="100">
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Published</Text>
+                    <Text as="p" variant="bodySm">Published (distinct products)</Text>
                     <Badge tone="success">{published}</Badge>
                   </InlineStack>
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Drafts</Text>
+                    <Text as="p" variant="bodySm">Drafts (distinct products)</Text>
                     <Badge tone="info">{draft}</Badge>
                   </InlineStack>
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Rejected</Text>
-                    <Badge>{rejected}</Badge>
+                    <Text as="p" variant="bodySm">No AI content</Text>
+                    <Badge>{Math.max(0, totalProducts - published - draft)}</Badge>
                   </InlineStack>
                 </BlockStack>
               </BlockStack>

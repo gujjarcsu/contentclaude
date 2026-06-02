@@ -49,21 +49,42 @@ export const action = async ({ request }) => {
     if (!planKey || !validKeys.includes(planKey)) {
       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
     }
-    await billing.request({
-      plan: planKey,
-      isTest: BILLING_TEST,
-      returnUrl: `${process.env.SHOPIFY_APP_URL}/app/plans`,
-    });
+    // billing.request() internally throws a redirect Response to Shopify's
+    // approval screen. Any non-redirect throw (Shopify userErrors, network
+    // failures, bad returnUrl) must be caught and returned as a user-facing
+    // message — never let it bubble to the ErrorBoundary.
+    try {
+      await billing.request({
+        plan: planKey,
+        isTest: BILLING_TEST,
+        returnUrl: `${process.env.SHOPIFY_APP_URL}/app/plans`,
+      });
+    } catch (err) {
+      // The framework throws a redirect Response on success — re-throw so
+      // React Router can follow it.
+      if (err instanceof Response) throw err;
+      // Anything else is a real error; surface it to the user.
+      const msg = err?.message ?? String(err);
+      return Response.json(
+        { error: `Could not start subscription: ${msg}. Please try again or contact support.` },
+        { status: 500 }
+      );
+    }
   }
 
   if (actionType === "cancel") {
-    const { appSubscriptions } = await billing.check({
-      plans: Object.values(BILLING_PLANS).map((p) => p.key),
-      isTest: BILLING_TEST,
-    });
-    const activeSub = appSubscriptions.find((s) => s.status === "ACTIVE");
-    if (activeSub) {
-      await billing.cancel({ subscriptionId: activeSub.id, isTest: BILLING_TEST, prorate: true });
+    try {
+      const { appSubscriptions } = await billing.check({
+        plans: Object.values(BILLING_PLANS).map((p) => p.key),
+        isTest: BILLING_TEST,
+      });
+      const activeSub = appSubscriptions.find((s) => s.status === "ACTIVE");
+      if (activeSub) {
+        await billing.cancel({ subscriptionId: activeSub.id, isTest: BILLING_TEST, prorate: true });
+      }
+    } catch (err) {
+      if (err instanceof Response) throw err;
+      return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });
     }
     return Response.json({ cancelled: true });
   }

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
-import { BILLING_PLANS, FREE_PLAN } from "./billing-plans.js";
+import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 
 export { FREE_PLAN };
@@ -8,6 +8,22 @@ export { FREE_PLAN };
 // Map Shopify billing plan key → our internal plan definition
 export function getPlanByKey(shopifyKey) {
   return Object.values(BILLING_PLANS).find((p) => p.key === shopifyKey) ?? null;
+}
+
+/**
+ * Server-side entitlement check.
+ * Returns { allowed: boolean, planName, requiredPlan } so the action
+ * can return a structured upgrade prompt.
+ */
+export async function checkEntitlement(shop, feature) {
+  const plan = await getOrCreatePlan(shop);
+  const ents = getEntitlements(plan.planName);
+  const allowed = !!ents[feature];
+  // Find the lowest plan that grants this feature
+  const requiredPlan = allowed
+    ? null
+    : (Object.values(BILLING_PLANS).find((p) => p.entitlements[feature])?.planName ?? "growth");
+  return { allowed, planName: plan.planName, requiredPlan };
 }
 
 export async function getOrCreatePlan(shop) {
@@ -67,24 +83,9 @@ export async function canGenerate(shop) {
 export async function tryConsumeGeneration(shop, contentType, productId = null) {
   const month = new Date().toISOString().slice(0, 7);
 
-  // Free re-generation: first 3 re-gens of the same product within 24h are free.
-  // 4th+ re-gen within 24h costs a credit (cap prevents unlimited free abuse).
-  if (productId) {
-    const MAX_FREE_REGENS = 3;
-    const recentCount = await prisma.usageRecord.count({
-      where: {
-        shop,
-        productId,
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      },
-    });
-    if (recentCount > 0 && recentCount <= MAX_FREE_REGENS) {
-      return { allowed: true, isFreeRegeneration: true, planName: "free", monthlyLimit: 0, remaining: 0 };
-    }
-    // recentCount === 0 → first generation, charge a credit
-    // recentCount > MAX_FREE_REGENS → cap reached, charge a credit
-  }
-
+  // Every generation — including regenerate, Enhance, A/B variants — consumes
+  // exactly one credit. The previous "free first-3-regens" bypass was removed
+  // because it allowed unlimited unmetered AI calls on the Free tier (P0-2 fix).
   try {
     const result = await prisma.$transaction(
       async (tx) => {

@@ -11,6 +11,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
 import { getCache } from "../utils/cache.server";
+import { getContentMetrics } from "../utils/metrics.server";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -36,12 +37,8 @@ export const loader = async ({ request }) => {
     300
   );
 
-  const [contentStats, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
-    prisma.generatedContent.groupBy({
-      by: ["status"],
-      where: { shop },
-      _count: { status: true },
-    }),
+  const [metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
+    getContentMetrics(shop),
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.generationJob.count({
       where: { shop, status: { in: ["queued", "processing"] } },
@@ -71,8 +68,9 @@ export const loader = async ({ request }) => {
     }),
   ]);
 
-  const generatedCount = contentStats.find((s) => s.status === "published")?._count.status ?? 0;
-  const draftCount = contentStats.find((s) => s.status === "draft")?._count.status ?? 0;
+  // Use distinct-product counts so coverage can never exceed 100%
+  const generatedCount = metrics.publishedProducts;
+  const draftCount = metrics.draftProducts;
   const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
   const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
   const blogsTotal = blogsPublished + blogsDraft;

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher, useNavigation } from "react-router";
 import {
   Page,
   Card,
@@ -12,6 +12,9 @@ import {
   Box,
   Banner,
   Divider,
+  SkeletonPage,
+  SkeletonBodyText,
+  SkeletonDisplayText,
 } from "@shopify/polaris";
 import { useEffect, useRef } from "react";
 import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
@@ -155,7 +158,9 @@ export default function JobsPage() {
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
+  const navigation = useNavigation();
 
+  // Hooks must all be called before any conditional return
   const hasActiveJobs = jobs.some((j) => j.status === "queued" || j.status === "processing");
 
   const pollIntervalRef = useRef(5000);
@@ -213,6 +218,18 @@ export default function JobsPage() {
 
   const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "processing");
   const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "failed");
+
+  // Skeleton while navigating to this page — no blank flash
+  if (navigation.state === "loading") {
+    return (
+      <SkeletonPage title="Bulk Generation Jobs" primaryAction>
+        <BlockStack gap="400">
+          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={3} /></Box></Card>
+          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={5} /></Box></Card>
+        </BlockStack>
+      </SkeletonPage>
+    );
+  }
 
   return (
     <Page

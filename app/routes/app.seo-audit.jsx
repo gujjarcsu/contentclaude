@@ -101,10 +101,12 @@ export const loader = async ({ request }) => {
 
   const missingDesc = products.filter((p) => !p.checks.hasDescription).length;
   const missingMeta = products.filter((p) => !p.checks.hasMetaTitle).length;
-  const missingAlt = products.filter((p) => !p.checks.hasAltText).length;
+  // Distinguish: products with no images vs products with images but missing alt text
+  const noImages = products.filter((p) => p.checks.noImages).length;
+  const missingAltText = products.filter((p) => p.checks.missingAltText).length;
   const staleCount = products.filter((p) => p.isStale).length;
 
-  return Response.json({ products, totalScore, missingDesc, missingMeta, missingAlt, staleCount });
+  return Response.json({ products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount });
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -129,7 +131,7 @@ function CheckIcon({ pass }) {
 }
 
 export default function SeoAuditPage() {
-  const { products, totalScore, missingDesc, missingMeta, missingAlt, staleCount } = useLoaderData();
+  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount } = useLoaderData();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -144,7 +146,9 @@ export default function SeoAuditPage() {
     <CheckIcon key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
     <CheckIcon key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
     <CheckIcon key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
-    <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />,
+    p.checks.noImages
+      ? <Badge key={`${p.id}-alt`} tone="subdued">No images</Badge>
+      : <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />,
   ]);
 
   return (
@@ -207,8 +211,12 @@ export default function SeoAuditPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Missing meta titles</Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{missingAlt}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Images without alt text</Text>
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{noImages}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">No product images</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{missingAltText}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Images missing alt text</Text>
                   </BlockStack>
                   {staleCount > 0 && (
                     <BlockStack gap="100">

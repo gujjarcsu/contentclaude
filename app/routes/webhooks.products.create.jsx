@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
-import { FREE_PLAN } from "../utils/billing-plans.js";
+import { FREE_PLAN, getEntitlements } from "../utils/billing-plans.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
@@ -19,6 +19,13 @@ export const action = async ({ request }) => {
     .filter(Boolean);
 
   const plan = await prisma.plan.findUnique({ where: { shop } });
+
+  // Autopilot is a Growth+ feature — silently skip if plan doesn't allow it
+  const ents = getEntitlements(plan?.planName ?? "free");
+  if (!ents.autopilot) {
+    return new Response("Autopilot requires Growth plan", { status: 200 });
+  }
+
   const month = new Date().toISOString().slice(0, 7);
   const usageCount = await prisma.usageRecord.count({ where: { shop, month } });
   const limit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;

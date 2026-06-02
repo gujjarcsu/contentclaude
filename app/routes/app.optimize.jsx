@@ -2,12 +2,14 @@ import { useLoaderData, useNavigate, useSubmit, useNavigation, redirect } from "
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
+  SkeletonPage, SkeletonBodyText, SkeletonDisplayText,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
+import { checkEntitlement } from "../utils/plans.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +50,15 @@ export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+
+  // Optimise Store uses bulk jobs — Growth+ feature
+  const bulkEnt = await checkEntitlement(shop, "bulkJobs");
+  if (!bulkEnt.allowed) {
+    return Response.json({
+      error: `Bulk optimisation requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock.`,
+      limitReached: true,
+    });
+  }
 
   const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
     (t) => formData.get(t) === "true"
@@ -133,6 +144,7 @@ export default function OptimizePage() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
+  // All hooks before any conditional return
   const coveragePct = totalProducts > 0 ? Math.round((publishedCount / totalProducts) * 100) : 0;
 
   const [genDesc, setGenDesc] = useState(true);
@@ -161,6 +173,17 @@ export default function OptimizePage() {
 
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
+
+  if (navigation.state === "loading") {
+    return (
+      <SkeletonPage title="Optimise Store" primaryAction>
+        <BlockStack gap="400">
+          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={4} /></Box></Card>
+          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={6} /></Box></Card>
+        </BlockStack>
+      </SkeletonPage>
+    );
+  }
 
   return (
     <Page

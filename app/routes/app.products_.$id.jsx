@@ -137,7 +137,7 @@ export async function action({ request, params }) {
   // Dynamic imports keep server-only modules out of the client bundle
   const [
     { generateProductContent, generateAltText, enhanceExistingContent },
-    { tryConsumeGeneration },
+    { tryConsumeGeneration, checkEntitlement },
     { checkRateLimit },
     { getCache },
   ] = await Promise.all([
@@ -517,6 +517,15 @@ export async function action({ request, params }) {
 
   // ── Generate A/B Variants ─────────────────────────────────────────────────
   if (actionType === "generateVariants") {
+    // Server-side entitlement gate — A/B is a Growth+ feature
+    const ent = await checkEntitlement(shop, "abVariants");
+    if (!ent.allowed) {
+      return {
+        error: `A/B Variants require the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
+        limitReached: true,
+      };
+    }
+
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
       return { error: "You're generating too fast. Please wait a moment before trying again." };
@@ -527,9 +536,14 @@ export async function action({ request, params }) {
     if (contentTypes.length === 0) {
       return { error: "Select at least one content type to generate variants for." };
     }
-    const gate = await tryConsumeGeneration(shop, contentTypes[0], productId);
-    if (!gate.allowed) {
+    // A/B makes 2 parallel AI calls — consume 2 credits (one per call).
+    const gate1 = await tryConsumeGeneration(shop, contentTypes[0], productId);
+    if (!gate1.allowed) {
       return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
+    }
+    const gate2 = await tryConsumeGeneration(shop, contentTypes[0], productId);
+    if (!gate2.allowed) {
+      return { error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.", limitReached: true };
     }
 
     const [productResp, brandVoice] = await Promise.all([
@@ -1074,7 +1088,7 @@ export default function ProductGeneratePage() {
                         label="Target Keywords (optional)"
                         value={targetKeywords}
                         onChange={setTargetKeywords}
-                        placeholder="e.g., peptides Australia, BPC-157"
+                        placeholder="e.g., organic skincare Australia, Vitamin C"
                         helpText="Overrides global keywords for this product"
                         autoComplete="off"
                       />
@@ -1116,7 +1130,7 @@ export default function ProductGeneratePage() {
                     disabled={isLoading || noneSelected}
                     fullWidth
                   >
-                    {isGenerating ? "Generating..." : "Generate Content âŒ˜↵"}
+                    {isGenerating ? "Generating..." : "Generate Content ⌘↵"}
                   </Button>
 
                   {(product.descriptionHtml || product.seoTitle) && (
@@ -1218,7 +1232,7 @@ export default function ProductGeneratePage() {
                       disabled={isLoading || noneSelected}
                       fullWidth
                     >
-                      {isGenerating ? "Generating..." : "Generate Content âŒ˜↵"}
+                      {isGenerating ? "Generating..." : "Generate Content ⌘↵"}
                     </Button>
                     {(product.descriptionHtml || product.seoTitle) && (
                       <Button

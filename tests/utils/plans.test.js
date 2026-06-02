@@ -188,39 +188,9 @@ describe("tryConsumeGeneration (atomic gate)", () => {
     expect(result.allowed).toBe(false);
   });
 
-  it("allows free re-generation when product was generated in the last 24h", async () => {
-    // recentCount = 1 → within free re-gen window (1–3), bypass transaction
-    prisma.usageRecord.count.mockResolvedValue(1);
-
-    const result = await tryConsumeGeneration(
-      "shop.myshopify.com",
-      "description",
-      "gid://shopify/Product/999"
-    );
-
-    expect(result.allowed).toBe(true);
-    expect(result.isFreeRegeneration).toBe(true);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
-
-  it("allows free re-generation up to 3 times within 24h", async () => {
-    // recentCount = 3 → still within the free cap (1–3)
-    prisma.usageRecord.count.mockResolvedValue(3);
-
-    const result = await tryConsumeGeneration(
-      "shop.myshopify.com",
-      "description",
-      "gid://shopify/Product/123"
-    );
-
-    expect(result.allowed).toBe(true);
-    expect(result.isFreeRegeneration).toBe(true);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
-
-  it("charges a credit after 3 free re-generations", async () => {
-    // recentCount = 4 → past the cap, falls through to normal transaction
-    prisma.usageRecord.count.mockResolvedValue(4);
+  // P0-2: the free-regen bypass was removed — every generation including
+  // regenerations and enhances now consumes exactly one credit.
+  it("charges a credit for regenerating a product (no free bypass)", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
@@ -240,12 +210,42 @@ describe("tryConsumeGeneration (atomic gate)", () => {
     const result = await tryConsumeGeneration(
       "shop.myshopify.com",
       "description",
+      "gid://shopify/Product/999"
+    );
+
+    // Every call now goes through the transaction — no free bypass
+    expect(result.allowed).toBe(true);
+    expect(result.isFreeRegeneration).toBeUndefined();
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(result.remaining).toBe(19);
+  });
+
+  it("charges a credit for repeated regenerations of the same product", async () => {
+    prisma.$transaction.mockImplementation(async (fn) =>
+      fn({
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({
+            planName: "free",
+            status: "active",
+            monthlyLimit: 25,
+          }),
+        },
+        usageRecord: {
+          count: vi.fn().mockResolvedValue(10),
+          create: vi.fn().mockResolvedValue({}),
+        },
+      })
+    );
+
+    const result = await tryConsumeGeneration(
+      "shop.myshopify.com",
+      "description",
       "gid://shopify/Product/123"
     );
 
     expect(result.allowed).toBe(true);
     expect(result.isFreeRegeneration).toBeUndefined();
-    expect(result.remaining).toBe(19);
+    expect(prisma.$transaction).toHaveBeenCalled();
   });
 });
 

@@ -167,7 +167,7 @@ export default function SetupPage() {
                   label="Store Name"
                   value={storeName}
                   onChange={setStoreName}
-                  placeholder="e.g., Elite Peps Australia"
+                  placeholder="e.g., Elite Botanics Australia"
                   helpText="Your brand name as it should appear in content"
                   autoComplete="off"
                 />
@@ -199,7 +199,7 @@ export default function SetupPage() {
                   label="Target Audience"
                   value={targetAudience}
                   onChange={setTargetAudience}
-                  placeholder="e.g., Health-conscious Australians aged 25-55 interested in peptides and biohacking"
+                  placeholder="e.g., Health-conscious Australians aged 25-55 interested in fitness and wellness"
                   helpText="Age, interests, location, motivations"
                   multiline={3}
                   autoComplete="off"
@@ -235,7 +235,7 @@ export default function SetupPage() {
                   label="Target Keywords"
                   value={targetKeywords}
                   onChange={setTargetKeywords}
-                  placeholder="e.g., peptides Australia, BPC-157, research peptides"
+                  placeholder="e.g., organic skincare Australia, Vitamin C, natural supplements"
                   helpText="Comma-separated. Woven naturally into descriptions and meta tags."
                   autoComplete="off"
                 />

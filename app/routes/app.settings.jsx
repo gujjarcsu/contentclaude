@@ -210,7 +210,7 @@ export default function SettingsPage() {
                       label="Store Name"
                       value={storeName}
                       onChange={setStoreName}
-                      placeholder="e.g., Elite Peps Australia"
+                      placeholder="e.g., Elite Botanics Australia"
                       autoComplete="off"
                     />
                     <Select
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                       onChange={setTargetAudience}
                       multiline={3}
                       autoComplete="off"
-                      placeholder="e.g., Health-conscious Australians 25-55 interested in peptides"
+                      placeholder="e.g., Health-conscious Australians aged 25-55"
                     />
                   </BlockStack>
                 </Card>
@@ -297,7 +297,7 @@ export default function SettingsPage() {
                       value={targetKeywords}
                       onChange={setTargetKeywords}
                       autoComplete="off"
-                      placeholder="e.g., peptides Australia, buy BPC-157"
+                      placeholder="e.g., organic skincare Australia, buy Vitamin C"
                       helpText="Comma-separated. Override per-product on the Generate page."
                     />
                   </BlockStack>
@@ -319,7 +319,7 @@ export default function SettingsPage() {
                       onChange={setKeyDifferentiators}
                       multiline={3}
                       autoComplete="off"
-                      placeholder="e.g., Australian lab tested, 99%+ purity, same-day dispatch from Sydney"
+                      placeholder="e.g., Australian lab tested, sustainably sourced, fast dispatch"
                     />
                     <TextField
                       name="avoidPhrases"
@@ -358,7 +358,7 @@ export default function SettingsPage() {
                       onChange={setAdditionalNotes}
                       multiline={3}
                       autoComplete="off"
-                      placeholder="e.g., Always mention we ship from Sydney. Never make medical claims."
+                      placeholder="e.g., Always mention free shipping. Never make unsubstantiated claims."
                     />
                   </BlockStack>
                 </Card>
@@ -417,7 +417,7 @@ export default function SettingsPage() {
                     <Text as="h2" variant="headingMd">Tips for Better Content</Text>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm">
-                        <strong>Be specific with your audience.</strong> "Health-conscious Australian men 30-50" beats "everyone."
+                        <strong>Be specific with your audience.</strong> "Health-conscious Australians aged 30-50" beats "everyone."
                       </Text>
                       <Text as="p" variant="bodySm">
                         <strong>Add real keywords.</strong> Woven naturally — no keyword stuffing.
