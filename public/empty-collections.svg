@@ -1,0 +1,26 @@
+<svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="ec-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EAF4FF"/>
+      <stop offset="100%" stop-color="#D6EBFF"/>
+    </linearGradient>
+    <linearGradient id="ec-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055CC"/>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="90" r="80" fill="url(#ec-bg)" opacity="0.55"/>
+  <!-- Folder shape (back) -->
+  <path d="M72 72 Q72 64 80 64 L106 64 L112 58 L158 58 Q166 58 166 66 L166 130 Q166 138 158 138 L80 138 Q72 138 72 130 Z" fill="#D6EBFF" stroke="#C8E0FF" stroke-width="1.5"/>
+  <!-- Folder shape (front) -->
+  <path d="M66 78 Q66 70 74 70 L100 70 L106 64 L164 64 Q172 64 172 72 L172 130 Q172 138 164 138 L74 138 Q66 138 66 130 Z" fill="white" stroke="#C8E0FF" stroke-width="1.5"/>
+  <!-- Items inside folder -->
+  <rect x="80" y="82" width="88" height="7" rx="3.5" fill="#C8E0FF"/>
+  <rect x="80" y="94" width="72" height="7" rx="3.5" fill="#D6EBFF"/>
+  <rect x="80" y="106" width="80" height="7" rx="3.5" fill="#D6EBFF"/>
+  <rect x="80" y="118" width="56" height="7" rx="3.5" fill="#EAF4FF"/>
+  <!-- Plus badge on folder -->
+  <circle cx="160" cy="78" r="12" fill="url(#ec-accent)"/>
+  <line x1="156" y1="78" x2="164" y2="78" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="160" y1="74" x2="160" y2="82" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

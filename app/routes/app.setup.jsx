@@ -1,4 +1,5 @@
 import { useLoaderData, useNavigation, useNavigate, redirect, Form } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack,
   Button, TextField, Select, ProgressBar, Badge, Box, Banner,
@@ -17,8 +18,21 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const step = parseInt(url.searchParams.get("step") || "1", 10);
 
-  const brandVoice = await prisma.brandVoice.findUnique({ where: { shop } });
-  return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS), shopName: "" });
+  const [brandVoice, firstGenerated, firstPublished] = await Promise.all([
+    prisma.brandVoice.findUnique({ where: { shop } }),
+    prisma.generatedContent.findFirst({ where: { shop } }),
+    prisma.generatedContent.findFirst({ where: { shop, status: "published" } }),
+  ]);
+
+  const milestones = {
+    brandVoice: !!(brandVoice?.storeName),
+    firstGenerated: !!firstGenerated,
+    firstPublished: !!firstPublished,
+  };
+  const milestonesCompleted = Object.values(milestones).filter(Boolean).length;
+  const onboardingPct = Math.round((milestonesCompleted / 3) * 100);
+
+  return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS), shopName: "", milestones, onboardingPct });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -83,10 +97,11 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
-  const { brandVoice, step } = useLoaderData();
+  const { brandVoice, step, milestones, onboardingPct } = useLoaderData();
   const navigation = useNavigation();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
+
   const progress = Math.round(((step - 1) / TOTAL_STEPS) * 100);
 
   // Step 1 state
@@ -100,6 +115,7 @@ export default function SetupPage() {
   // Step 3 state
   const [targetKeywords, setTargetKeywords] = useState(brandVoice?.targetKeywords || "");
   const [language, setLanguage] = useState(brandVoice?.language || "en");
+
 
   const toneOptions = [
     { label: "Professional & Trustworthy", value: "professional" },
@@ -135,10 +151,37 @@ export default function SetupPage() {
     "You're all set!",
   ];
 
-  return (
+
+  return navigation.state === "loading" ? (
+    <AppSkeleton title="Setup" sections={2} layout="full" />
+  ) : (
     <Page title="Welcome to ContentClaude" subtitle="Let's set up your brand voice in 4 quick steps">
       <BlockStack gap="500">
-        {/* Progress bar */}
+        {/* Onboarding milestone progress */}
+        {onboardingPct < 100 && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Onboarding Progress</Text>
+                <Badge tone={onboardingPct === 100 ? "success" : "attention"}>{onboardingPct}% complete</Badge>
+              </InlineStack>
+              <ProgressBar progress={onboardingPct} tone={onboardingPct === 100 ? "success" : "highlight"} />
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone={milestones.brandVoice ? "success" : "subdued"}>
+                  {milestones.brandVoice ? "✓" : "○"} Brand voice configured
+                </Text>
+                <Text as="p" variant="bodySm" tone={milestones.firstGenerated ? "success" : "subdued"}>
+                  {milestones.firstGenerated ? "✓" : "○"} First product content generated
+                </Text>
+                <Text as="p" variant="bodySm" tone={milestones.firstPublished ? "success" : "subdued"}>
+                  {milestones.firstPublished ? "✓" : "○"} First content published to store
+                </Text>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* Setup step progress bar */}
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">

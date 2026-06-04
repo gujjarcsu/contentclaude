@@ -1,0 +1,37 @@
+<svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="er-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EAF4FF"/>
+      <stop offset="100%" stop-color="#D6EBFF"/>
+    </linearGradient>
+    <linearGradient id="er-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055CC"/>
+    </linearGradient>
+    <linearGradient id="er-check" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C48C"/>
+      <stop offset="100%" stop-color="#00875A"/>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="90" r="80" fill="url(#er-bg)" opacity="0.55"/>
+  <!-- Stack of cards -->
+  <!-- Back card -->
+  <rect x="74" y="60" width="100" height="76" rx="8" fill="#EAF4FF" stroke="#D6EBFF" stroke-width="1.5" opacity="0.7"/>
+  <!-- Middle card -->
+  <rect x="68" y="54" width="100" height="76" rx="8" fill="#F4F9FF" stroke="#D6EBFF" stroke-width="1.5" opacity="0.85"/>
+  <!-- Front card -->
+  <rect x="62" y="48" width="100" height="76" rx="8" fill="white" stroke="#C8E0FF" stroke-width="1.5"/>
+  <!-- Front card content lines -->
+  <rect x="74" y="58" width="60" height="5" rx="2.5" fill="#C8E0FF"/>
+  <rect x="74" y="68" width="76" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="74" y="76" width="72" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="74" y="84" width="50" height="4" rx="2" fill="#D6EBFF"/>
+  <!-- Check mark circle (approved state) -->
+  <circle cx="146" cy="108" r="14" fill="url(#er-check)" opacity="0.15"/>
+  <circle cx="146" cy="108" r="10" fill="url(#er-check)"/>
+  <path d="M140 108 L144 112 L152 104" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Dots for "more items" -->
+  <circle cx="80" cy="145" r="3.5" fill="#0A84FF" opacity="0.25"/>
+  <circle cx="92" cy="145" r="3.5" fill="#0A84FF" opacity="0.18"/>
+  <circle cx="104" cy="145" r="3.5" fill="#0A84FF" opacity="0.12"/>
+</svg>

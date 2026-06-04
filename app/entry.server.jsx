@@ -8,7 +8,7 @@ import { addDocumentResponseHeaders } from "./shopify.server";
 import "./utils/startup.server.js";
 import logger from "./utils/logger.server.js";
 
-export const streamTimeout = 5000;
+export const streamTimeout = 15_000; // 15 seconds — accommodates slow DB queries under load
 
 export default async function handleRequest(
   request,

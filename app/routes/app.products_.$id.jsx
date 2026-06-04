@@ -1,4 +1,5 @@
-import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useRevalidator, useNavigation } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   Layout,
@@ -19,6 +20,7 @@ import {
   Tabs,
   ProgressBar,
   Collapsible,
+  Modal,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
@@ -28,6 +30,7 @@ import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
+import { snapshotAndPrune } from "../utils/contentVersion.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +66,7 @@ export async function loader({ request, params }) {
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
-    prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }),
+    prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }], take: 50 }),
     getOrCreatePlan(shop),
   ]);
 
@@ -125,6 +128,7 @@ export async function loader({ request, params }) {
     templates,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
+    shopDomain: shop,
   };
 }
 
@@ -206,11 +210,7 @@ export async function action({ request, params }) {
     const existing = await prisma.generatedContent.findMany({
       where: { shop, productId, contentType: { in: typesToSave } },
     });
-    if (existing.length > 0) {
-      await prisma.contentVersion.createMany({
-        data: existing.map((c) => ({ shop, productId, contentType: c.contentType, content: c.generatedContent, version: c.version })),
-      });
-    }
+    await snapshotAndPrune(shop, productId, existing);
     await Promise.all(
       typesToSave.map((type) =>
         prisma.generatedContent.upsert({
@@ -306,14 +306,7 @@ export async function action({ request, params }) {
       const existing = await prisma.generatedContent.findMany({
         where: { shop, productId, contentType: { in: typesToSave } },
       });
-      if (existing.length > 0) {
-        await prisma.contentVersion.createMany({
-          data: existing.map((c) => ({
-            shop, productId, contentType: c.contentType,
-            content: c.generatedContent, version: c.version,
-          })),
-        });
-      }
+      await snapshotAndPrune(shop, productId, existing);
 
       await Promise.all(
         typesToSave.map((type) => {
@@ -607,11 +600,7 @@ export async function action({ request, params }) {
     const existing = await prisma.generatedContent.findMany({
       where: { shop, productId, contentType: { in: typesToSave } },
     });
-    if (existing.length > 0) {
-      await prisma.contentVersion.createMany({
-        data: existing.map((c) => ({ shop, productId, contentType: c.contentType, content: c.generatedContent, version: c.version })),
-      });
-    }
+    await snapshotAndPrune(shop, productId, existing);
     await Promise.all(
       typesToSave.map((type) =>
         prisma.generatedContent.upsert({
@@ -638,6 +627,17 @@ export async function action({ request, params }) {
       data: { generatedContent: existing.originalContent, status: "draft" },
     });
     return { success: true, reverted: true, contentType, message: `${contentType} reverted to original content.` };
+  }
+
+  if (actionType === "saveTemplate") {
+    const name = (formData.get("name") || "").slice(0, 100).trim() || `Template ${new Date().toLocaleDateString()}`;
+    const contentTypes = (formData.get("contentTypes") || "description").slice(0, 200);
+    const tplContentLength = (formData.get("contentLength") || "standard").slice(0, 50);
+    const keywords = (formData.get("keywords") || "").slice(0, 500);
+    await prisma.contentTemplate.create({
+      data: { shop, name, contentTypes, contentLength: tplContentLength, keywords },
+    });
+    return { success: true, message: "Template saved! Available in Advanced Options." };
   }
 
   return { error: "Unknown action." };
@@ -728,9 +728,10 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates, entitlements } = useLoaderData();
+  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+
   const fetcher = useFetcher();
   const revertFetcher = useFetcher();
   const socialFetcher = useFetcher();
@@ -770,6 +771,8 @@ export default function ProductGeneratePage() {
   const [genFaq, setGenFaq] = useState(false);
   const [genAltText, setGenAltText] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
+  const [showAutoPublishConfirm, setShowAutoPublishConfirm] = useState(false);
+  const [pendingGenerateTypes, setPendingGenerateTypes] = useState(null);
   const [targetKeywords, setTargetKeywords] = useState("");
   const [contentLength, setContentLength] = useState("standard");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -812,10 +815,11 @@ export default function ProductGeneratePage() {
   const hasGeneratedContent = !!(rawDescription || rawMetaTitle || rawMetaDescription || faq);
 
   // Track whether the merchant has hand-edited content since it was last generated/saved
+  // Include empty-string clears so intentionally clearing a field triggers the unsaved warning
   const hasUnsavedEdits =
-    (editedDescription !== rawDescription && editedDescription !== "") ||
-    (editedMetaTitle !== rawMetaTitle && editedMetaTitle !== "") ||
-    (editedMetaDescription !== rawMetaDescription && editedMetaDescription !== "");
+    editedDescription !== rawDescription ||
+    editedMetaTitle !== rawMetaTitle ||
+    editedMetaDescription !== rawMetaDescription;
 
   useEffect(() => {
     const handler = (e) => {
@@ -853,7 +857,7 @@ export default function ProductGeneratePage() {
     }
   }, [revertFetcher.data, revalidator]);
 
-  const handleGenerate = useCallback((overrideTypes = null) => {
+  const doGenerate = useCallback((overrideTypes = null) => {
     const fd = new FormData();
     fd.append("actionType", "generate");
     const types = overrideTypes || {
@@ -873,6 +877,15 @@ export default function ProductGeneratePage() {
     fd.append("contentLength", contentLength);
     fetcher.submit(fd, { method: "POST" });
   }, [genDescription, genMetaTitle, genMetaDescription, genFaq, genAltText, autoPublish, targetKeywords, contentLength, fetcher]);
+
+  const handleGenerate = useCallback((overrideTypes = null) => {
+    if (autoPublish && !overrideTypes) {
+      setPendingGenerateTypes(null);
+      setShowAutoPublishConfirm(true);
+      return;
+    }
+    doGenerate(overrideTypes);
+  }, [autoPublish, doGenerate]);
 
   const handleRegenerateSection = useCallback((type) => {
     const types = { description: false, metaTitle: false, metaDescription: false, faq: false, altText: false };
@@ -926,7 +939,9 @@ export default function ProductGeneratePage() {
   ];
 
   // Auto-switch to Content tab when generation completes
+  const navigation = useNavigation();
   const prevGeneratingRef = useRef(false);
+
   useEffect(() => {
     if (prevGeneratingRef.current && !isGenerating && !isEnhancing && actionData?.success) {
       setSelectedTab(1);
@@ -956,7 +971,10 @@ export default function ProductGeneratePage() {
     { label: "Detailed (~400-500 words) — complex/high-value products", value: "detailed" },
   ];
 
-  return (
+
+  return navigation.state === "loading" ? (
+    <AppSkeleton title="Product" sections={3} layout="full" />
+  ) : (
     <Page
       title={product.title}
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
@@ -1097,6 +1115,27 @@ export default function ProductGeneratePage() {
                         helpText="Overrides global keywords for this product"
                         autoComplete="off"
                       />
+                      {(genDescription || genMetaTitle || genMetaDescription || genFaq) && (
+                        <Button
+                          variant="plain"
+                          size="slim"
+                          onClick={() => {
+                            const templateFd = new FormData();
+                            templateFd.append("actionType", "saveTemplate");
+                            templateFd.append("contentTypes", [
+                              genDescription && "description",
+                              genMetaTitle && "metaTitle",
+                              genMetaDescription && "metaDescription",
+                              genFaq && "faq",
+                            ].filter(Boolean).join(","));
+                            templateFd.append("contentLength", contentLength);
+                            templateFd.append("keywords", targetKeywords);
+                            fetcher.submit(templateFd, { method: "POST" });
+                          }}
+                        >
+                          Save current settings as template →
+                        </Button>
+                      )}
                     </BlockStack>
                   </Collapsible>
 
@@ -1125,29 +1164,6 @@ export default function ProductGeneratePage() {
                         </Text>
                       </BlockStack>
                     </Box>
-                  )}
-
-                  <Button
-                    variant="primary"
-                    size="large"
-                    onClick={() => handleGenerate()}
-                    loading={isGenerating}
-                    disabled={isLoading || noneSelected}
-                    fullWidth
-                  >
-                    {isGenerating ? "Generating..." : "Generate Content ⌘↵"}
-                  </Button>
-
-                  {(product.descriptionHtml || product.seoTitle) && (
-                    <Button
-                      size="large"
-                      onClick={handleEnhance}
-                      loading={isEnhancing}
-                      disabled={isLoading || (!genDescription && !genMetaTitle && !genMetaDescription)}
-                      fullWidth
-                    >
-                      {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
-                    </Button>
                   )}
 
                   {actionData?.limitReached && (
@@ -1188,6 +1204,17 @@ export default function ProductGeneratePage() {
                       {!actionData.autoPublished && (
                         <Button size="slim" onClick={() => setSelectedTab(1)}>
                           Review Generated Content →
+                        </Button>
+                      )}
+                      {(actionData.autoPublished || actionData.published) && product.handle && shopDomain && (
+                        <Button
+                          variant="plain"
+                          size="slim"
+                          url={`https://${shopDomain}/products/${product.handle}`}
+                          external
+                          target="_blank"
+                        >
+                          Preview in store →
                         </Button>
                       )}
                     </BlockStack>
@@ -1239,6 +1266,11 @@ export default function ProductGeneratePage() {
                     >
                       {isGenerating ? "Generating..." : "Generate Content ⌘↵"}
                     </Button>
+                    {!isGenerating && !isEnhancing && (
+                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                        Tip: Press ⌘↵ (Mac) or Ctrl+↵ (Windows) to generate
+                      </Text>
+                    )}
                     {(product.descriptionHtml || product.seoTitle) && (
                       <Button
                         size="large"
@@ -1379,6 +1411,25 @@ export default function ProductGeneratePage() {
                         helpText="Edit the HTML directly — changes are saved when you click Publish"
                         autoComplete="off"
                       />
+                      {editedDescription && (
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {editedDescription.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length} words
+                            {" · "}
+                            {editedDescription.replace(/<[^>]+>/g, "").length} characters
+                          </Text>
+                          <Button
+                            size="slim"
+                            variant="plain"
+                            onClick={() => {
+                              navigator.clipboard.writeText(editedDescription.replace(/<[^>]+>/g, ""));
+                              window.shopify?.toast?.show("Copied!", { duration: 1500 });
+                            }}
+                          >
+                            Copy text
+                          </Button>
+                        </InlineStack>
+                      )}
                     </BlockStack>
                   )}
 
@@ -1406,11 +1457,21 @@ export default function ProductGeneratePage() {
                   <BlockStack gap="200">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">Meta Title</Text>
-                      {rawMetaTitle && (
-                        <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaTitle")} loading={isGenerating}>
-                          Regenerate
-                        </Button>
-                      )}
+                      <InlineStack gap="200">
+                        {rawMetaTitle && (
+                          <Button size="slim" variant="plain" onClick={() => {
+                            navigator.clipboard.writeText(editedMetaTitle);
+                            window.shopify?.toast?.show("Copied!", { duration: 1500 });
+                          }}>
+                            Copy
+                          </Button>
+                        )}
+                        {rawMetaTitle && (
+                          <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaTitle")} loading={isGenerating}>
+                            Regenerate
+                          </Button>
+                        )}
+                      </InlineStack>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Current: {product.seoTitle || "(using product title)"}
@@ -1422,9 +1483,18 @@ export default function ProductGeneratePage() {
                           labelHidden
                           value={editedMetaTitle}
                           onChange={setEditedMetaTitle}
-                          helpText={`${editedMetaTitle.length}/60 characters`}
                           error={editedMetaTitle.length > 60 ? "Over 60 characters — shorten before publishing" : ""}
                           autoComplete="off"
+                        />
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone={editedMetaTitle.length > 60 ? "critical" : "subdued"}>
+                            {editedMetaTitle.length}/60 characters
+                          </Text>
+                        </InlineStack>
+                        <ProgressBar
+                          progress={Math.min(100, Math.round((editedMetaTitle.length / 60) * 100))}
+                          tone={editedMetaTitle.length > 60 ? "critical" : editedMetaTitle.length >= 48 ? "highlight" : "success"}
+                          size="small"
                         />
                       </BlockStack>
                     )}
@@ -1447,26 +1517,47 @@ export default function ProductGeneratePage() {
                   <BlockStack gap="200">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">Meta Description</Text>
-                      {rawMetaDescription && (
-                        <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaDescription")} loading={isGenerating}>
-                          Regenerate
-                        </Button>
-                      )}
+                      <InlineStack gap="200">
+                        {rawMetaDescription && (
+                          <Button size="slim" variant="plain" onClick={() => {
+                            navigator.clipboard.writeText(editedMetaDescription);
+                            window.shopify?.toast?.show("Copied!", { duration: 1500 });
+                          }}>
+                            Copy
+                          </Button>
+                        )}
+                        {rawMetaDescription && (
+                          <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaDescription")} loading={isGenerating}>
+                            Regenerate
+                          </Button>
+                        )}
+                      </InlineStack>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
                       Current: {product.seoDescription || "(none set)"}
                     </Text>
                     {rawMetaDescription && (
-                      <TextField
-                        label=""
-                        labelHidden
-                        value={editedMetaDescription}
-                        onChange={setEditedMetaDescription}
-                        multiline={2}
-                        helpText={`${editedMetaDescription.length}/155 characters`}
-                        error={editedMetaDescription.length > 155 ? "Over 155 characters — shorten before publishing" : ""}
-                        autoComplete="off"
-                      />
+                      <BlockStack gap="100">
+                        <TextField
+                          label=""
+                          labelHidden
+                          value={editedMetaDescription}
+                          onChange={setEditedMetaDescription}
+                          multiline={2}
+                          error={editedMetaDescription.length > 155 ? "Over 155 characters — shorten before publishing" : ""}
+                          autoComplete="off"
+                        />
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone={editedMetaDescription.length > 155 ? "critical" : "subdued"}>
+                            {editedMetaDescription.length}/155 characters
+                          </Text>
+                        </InlineStack>
+                        <ProgressBar
+                          progress={Math.min(100, Math.round((editedMetaDescription.length / 155) * 100))}
+                          tone={editedMetaDescription.length > 155 ? "critical" : editedMetaDescription.length >= 124 ? "highlight" : "success"}
+                          size="small"
+                        />
+                      </BlockStack>
                     )}
                     {existingContent.metaDescription?.original && (
                       <>
@@ -1721,6 +1812,24 @@ export default function ProductGeneratePage() {
           </Layout.Section>
         </Layout>
       </BlockStack>
+
+      <Modal
+        open={showAutoPublishConfirm}
+        onClose={() => setShowAutoPublishConfirm(false)}
+        title="Auto-publish is enabled"
+        primaryAction={{
+          content: "Generate & Publish Now",
+          destructive: true,
+          onAction: () => { setShowAutoPublishConfirm(false); doGenerate(pendingGenerateTypes); },
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setShowAutoPublishConfirm(false) }]}
+      >
+        <Modal.Section>
+          <Text as="p" variant="bodyMd">
+            This will generate content and immediately publish it to your live Shopify store, skipping the review step. Are you sure?
+          </Text>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

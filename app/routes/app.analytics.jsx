@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams, useNavigation } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   Layout,
@@ -105,7 +106,10 @@ export default function AnalyticsPage() {
     plan, usageCount, daysRemaining, selectedMonth, currentMonth, availableMonths,
   } = useLoaderData();
   const navigate = useNavigate();
+
+  const navigation = useNavigation();
   const [, setSearchParams] = useSearchParams();
+
 
   const handleMonthChange = useCallback((month) => {
     setSearchParams({ month });
@@ -120,7 +124,10 @@ export default function AnalyticsPage() {
     <ProgressBar key={r.month} progress={Math.min(100, Math.round((r.count / plan.monthlyLimit) * 100))} size="small" />,
   ]);
 
-  return (
+
+  return navigation.state === "loading" ? (
+    <AppSkeleton title="Analytics" sections={3} layout="full" />
+  ) : (
     <Page
       title="Analytics"
       subtitle="Content performance and usage overview"

@@ -1,0 +1,44 @@
+<svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="ep-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EAF4FF"/>
+      <stop offset="100%" stop-color="#D6EBFF"/>
+    </linearGradient>
+    <linearGradient id="ep-card" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F4F9FF"/>
+    </linearGradient>
+    <linearGradient id="ep-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="120" cy="90" r="80" fill="url(#ep-bg)" opacity="0.6"/>
+  <!-- Product card shadow -->
+  <rect x="62" y="52" width="116" height="96" rx="10" fill="#0A84FF" opacity="0.08"/>
+  <!-- Product card -->
+  <rect x="58" y="48" width="116" height="96" rx="10" fill="url(#ep-card)" stroke="#E3EFFF" stroke-width="1.5"/>
+  <!-- Image placeholder area -->
+  <rect x="68" y="58" width="44" height="40" rx="6" fill="#EAF4FF"/>
+  <!-- Image placeholder icon -->
+  <rect x="76" y="66" width="28" height="3" rx="1.5" fill="#B0D4FF"/>
+  <rect x="76" y="72" width="20" height="3" rx="1.5" fill="#B0D4FF"/>
+  <circle cx="80" cy="84" r="5" fill="#B0D4FF" opacity="0.7"/>
+  <!-- Content lines -->
+  <rect x="120" y="62" width="46" height="5" rx="2.5" fill="#C8E0FF"/>
+  <rect x="120" y="72" width="36" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="120" y="80" width="42" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="120" y="88" width="30" height="4" rx="2" fill="#D6EBFF"/>
+  <!-- Divider -->
+  <line x1="68" y1="106" x2="164" y2="106" stroke="#E3EFFF" stroke-width="1"/>
+  <!-- Price area -->
+  <rect x="68" y="112" width="28" height="6" rx="3" fill="#C8E0FF"/>
+  <!-- Sparkle / AI spark icon -->
+  <circle cx="120" cy="90" r="14" fill="url(#ep-accent)" opacity="0.12"/>
+  <path d="M120 80 L121.8 87.2 L129 89 L121.8 90.8 L120 98 L118.2 90.8 L111 89 L118.2 87.2 Z" fill="url(#ep-accent)" opacity="0.7"/>
+  <!-- Plus button -->
+  <circle cx="158" cy="118" r="10" fill="url(#ep-accent)"/>
+  <line x1="154" y1="118" x2="162" y2="118" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="158" y1="114" x2="158" y2="122" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

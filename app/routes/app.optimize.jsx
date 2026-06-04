@@ -66,12 +66,13 @@ export const action = async ({ request }) => {
   if (contentTypes.length === 0) return Response.json({ error: "Select at least one content type." });
   const autoPublish = formData.get("autoPublish") === "true";
 
-  // Fetch IDs of products that have NO published or draft description
-  const generatedProductIds = await prisma.generatedContent.findMany({
-    where: { shop, contentType: "description" },
-    select: { productId: true },
-  });
-  const existingIds = new Set(generatedProductIds.map((r) => r.productId));
+  // Use $queryRaw for O(1) ID lookup — findMany would load all rows into memory
+  // which is prohibitive at 100k+ products per merchant.
+  const generatedRows = await prisma.$queryRaw`
+    SELECT DISTINCT "productId" FROM "GeneratedContent"
+    WHERE shop = ${shop} AND "contentType" = 'description'
+  `;
+  const existingIds = new Set(generatedRows.map((r) => r.productId));
 
   // Paginate all Shopify product IDs and filter to those missing content.
   // Hard-limit to 80 pages (80 × 250 = 20,000 products max) to prevent runaway loops.
@@ -321,6 +322,13 @@ export default function OptimizePage() {
       >
         <Modal.Section>
           <TextContainer>
+            <Banner tone="warning">
+              <p>
+                <strong>This will replace existing product descriptions entirely.</strong>{" "}
+                Original content is saved automatically and can be restored from each product&apos;s History tab.
+                If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+              </p>
+            </Banner>
             <Text as="p">
               Auto-publish will overwrite the live product descriptions on your Shopify storefront
               for all <strong>{canOptimize}</strong> products — without a review step.

@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, EmptyState, Divider,
@@ -156,6 +157,11 @@ export default function BlogPosts() {
   const navigate = useNavigate();
 
   const published = posts.filter((p) => p.status === "published");
+
+  const navigation = useNavigation();
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Blog Posts" sections={2} layout="twoThird" />;
+  }
   const drafts = posts.filter((p) => p.status === "draft");
 
   const handleView = (post) => {
@@ -181,7 +187,7 @@ export default function BlogPosts() {
                 <EmptyState
                   heading="No blog posts yet"
                   action={{ content: "Write Your First Post", onAction: () => navigate("/app/blog") }}
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                  image="/empty-blog.svg"
                 >
                   <p>Generate SEO-optimised blog posts in your brand voice in under 60 seconds.</p>
                 </EmptyState>

@@ -524,6 +524,14 @@ export default function ProductsPage() {
                 <>
                   {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
 
+                  <Banner tone="warning">
+                    <p>
+                      <strong>This will replace existing product descriptions entirely.</strong>{" "}
+                      Original content is saved automatically and can be restored from each product&apos;s History tab.
+                      If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+                    </p>
+                  </Banner>
+
                   {/* BlockStack + minHeight 44px = Apple/Google touch-target minimum */}
                   <BlockStack gap="200">
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
@@ -602,7 +610,15 @@ export default function ProductsPage() {
                   onClick={() => navigate(`/app/products/${numericId}`)}
                   shortcutActions={[
                     {
-                      content: "Generate",
+                      content: "Quick Generate",
+                      onAction: () => {
+                        const gid = `gid://shopify/Product/${numericId}`;
+                        const fd = buildBulkFormData("generateSelected", [gid]);
+                        submit(fd, { method: "POST" });
+                      },
+                    },
+                    {
+                      content: "Edit Content",
                       onAction: () => navigate(`/app/products/${numericId}`),
                     },
                   ]}
@@ -635,7 +651,7 @@ export default function ProductsPage() {
                     ? "Your store is all set!"
                     : `No ${statusFilter} products found`
                 }
-                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                image="/empty-products.svg"
                 action={
                   statusFilter !== "all"
                     ? { content: "View all products", onAction: () => setSearchParams({}) }

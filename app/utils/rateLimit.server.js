@@ -15,8 +15,16 @@ import logger from "./logger.server.js";
 const REDIS_URL = process.env.REDIS_URL;
 const RL_PREFIX = "rl:";
 
-// In-process store: shop → { count, windowStart }
-const memStore = new Map();
+// In-process fallback store — bounded to prevent unbounded memory growth
+const RL_MEM_MAX = 5_000; // covers 5k concurrent shops in Redis-down scenario
+const memStore = new Map(); // shop → { count, windowStart }
+
+function memStoreSet(key, entry) {
+  if (memStore.size >= RL_MEM_MAX && !memStore.has(key)) {
+    memStore.delete(memStore.keys().next().value);
+  }
+  memStore.set(key, entry);
+}
 
 let _redis = null;
 
@@ -83,7 +91,7 @@ export async function checkRateLimit(shop, { maxPerMinute = 10 } = {}) {
   const entry = memStore.get(shop) ?? { count: 0, windowStart: now };
   if (now - entry.windowStart > windowMs) {
     // Window expired, reset
-    memStore.set(shop, { count: 1, windowStart: now });
+    memStoreSet(shop, { count: 1, windowStart: now });
     return { allowed: true, remaining: maxPerMinute - 1, retryAfterSeconds: 0 };
   }
   if (entry.count >= maxPerMinute) {
@@ -91,6 +99,6 @@ export async function checkRateLimit(shop, { maxPerMinute = 10 } = {}) {
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
   entry.count++;
-  memStore.set(shop, entry);
+  memStoreSet(shop, entry);
   return { allowed: true, remaining: maxPerMinute - entry.count, retryAfterSeconds: 0 };
 }

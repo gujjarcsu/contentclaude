@@ -52,7 +52,10 @@ export function runStartupChecks() {
     warnings.push("SQLite detected in production — migrate to PostgreSQL for multi-tenant reliability");
   }
   if (!process.env.REDIS_URL && process.env.NODE_ENV === "production") {
-    warnings.push("REDIS_URL not set in production — bulk jobs will run inline (slower, not crash-safe)");
+    warnings.push(
+      "REDIS_URL not set in production — bulk jobs run in-process. " +
+      "Concurrent jobs share the same process and will compete for Anthropic rate limits."
+    );
   }
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
     warnings.push("Shopify API credentials not configured");
@@ -66,11 +69,30 @@ export function runStartupChecks() {
       logger.debug("SHOPIFY_APP_URL placeholder is OK in dev (CLI auto-updates via tunnel)");
     }
   }
+  const envScopes = new Set((process.env.SCOPES || "").split(",").map((s) => s.trim()).filter(Boolean));
+  const requiredScopes = ["write_products", "write_metaobjects"];
+  const missingScopes = requiredScopes.filter((s) => !envScopes.has(s));
+  if (missingScopes.length > 0) {
+    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — FAQ metafield writes will fail`);
+  }
   if (process.env.NODE_ENV === "production" && !process.env.CONTENTCLAUDE_API_TOKEN) {
     warnings.push("CONTENTCLAUDE_API_TOKEN not set — /api/generate external endpoint will reject all requests");
   }
   if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
     warnings.push("SENTRY_DSN not set — runtime errors will not be captured by Sentry");
+  }
+
+  const dbUrl = process.env.DATABASE_URL || "";
+  if (process.env.NODE_ENV === "production") {
+    if (dbUrl.includes("neon.tech") && !dbUrl.includes("pgbouncer=true")) {
+      warnings.push(
+        "DATABASE_URL is a Neon connection but missing ?pgbouncer=true&connection_limit=1 — " +
+        "connection pool exhaustion will occur under concurrent load. Add these params to DATABASE_URL immediately."
+      );
+    }
+    if (dbUrl.includes("neon.tech") && !dbUrl.includes("connection_limit=")) {
+      warnings.push("DATABASE_URL missing connection_limit parameter for Neon — set connection_limit=1 with pgbouncer.");
+    }
   }
 
   warnings.forEach((w) => logger.warn(`⚠️ STARTUP: ${w}`));
@@ -104,3 +126,37 @@ export const startupPromise = (async () => {
     }
   }
 })();
+
+// ── Graceful shutdown ──────────────────────────────────────────────────────
+let _shuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  logger.info({ signal }, "Shutdown signal received — closing BullMQ and Prisma gracefully");
+
+  try {
+    if (process.env.REDIS_URL) {
+      const { closeQueue } = await import("../queues/generationQueue.server.js");
+      await Promise.race([
+        closeQueue(false),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Drain timeout")), 30_000)),
+      ]);
+      logger.info("BullMQ worker drained and closed");
+    }
+  } catch (err) {
+    logger.error({ err }, "Error closing BullMQ — forcing exit anyway");
+  }
+
+  try {
+    await prisma.$disconnect();
+    logger.info("Prisma connection pool closed");
+  } catch (err) {
+    logger.error({ err }, "Error disconnecting Prisma");
+  }
+
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT",  () => gracefulShutdown("SIGINT"));

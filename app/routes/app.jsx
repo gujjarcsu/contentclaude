@@ -7,6 +7,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { useEffect, useRef, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { ContentClaudeBrand } from "../components/ContentClaudeBrand";
+import { AppRenderBoundary } from "../components/RouteError";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -24,7 +25,7 @@ const MESSAGES = [
 
 function JobProgressTicker({ navigate }) {
   const fetcher = useFetcher();
-  const pollRef = useRef(null);
+  const timerRef = useRef(null);
   const [msgIdx, setMsgIdx] = useState(0);
 
   const data = fetcher.data;
@@ -33,17 +34,34 @@ function JobProgressTicker({ navigate }) {
   const completedProducts = data?.completedProducts ?? 0;
   const totalProducts = data?.totalProducts ?? 0;
 
-  // Poll every 5s when jobs are active, 15s when idle
+  // Stable recursive setTimeout — prevents interval-cascade when hasJobs toggles rapidly.
+  // An interval re-created on every hasJobs change fires multiple overlapping intervals
+  // if hasJobs oscillates quickly; recursive setTimeout is always single-fire.
   useEffect(() => {
-    function poll() {
+    let cancelled = false;
+
+    const poll = () => {
+      if (cancelled) return;
       fetcher.load("/api/jobs-status");
-    }
+    };
+
+    const scheduleNext = (delay) => {
+      if (cancelled) return;
+      timerRef.current = setTimeout(() => {
+        poll();
+        scheduleNext(data?.count > 0 ? 5_000 : 15_000);
+      }, delay);
+    };
+
     poll(); // immediate first fetch
-    const delay = hasJobs ? 5000 : 15000;
-    pollRef.current = setInterval(poll, delay);
-    return () => clearInterval(pollRef.current);
+    scheduleNext(data?.count > 0 ? 5_000 : 15_000);
+
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasJobs]);
+  }, []); // Intentionally empty — fetcher is stable; delay is read from closure data
 
   // Rotate messages while jobs are running
   useEffect(() => {
@@ -142,7 +160,9 @@ export default function App() {
         </s-app-nav>
         {/* Live job progress ticker — polls /api/jobs-status every 5s when active */}
         <JobProgressTicker navigate={navigate} />
-        <Outlet />
+        <AppRenderBoundary>
+          <Outlet />
+        </AppRenderBoundary>
       </PolarisProvider>
     </AppProvider>
   );

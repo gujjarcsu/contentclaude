@@ -1,4 +1,5 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   Layout,
@@ -204,6 +205,7 @@ export default function BlogPage() {
   const navigate = useNavigate();
 
   const isGenerating = navigation.state === "submitting" && navigation.formData?.get("actionType") === "generate";
+
   const isPublishing = navigation.state === "submitting" && navigation.formData?.get("actionType") === "publish";
 
   const [topic, setTopic] = useState(resumePost?.topic || "");
@@ -235,6 +237,7 @@ export default function BlogPage() {
   const [editedTitle, setEditedTitle] = useState(generated?.title || resumePost?.title || "");
   const [editedContent, setEditedContent] = useState(generated?.content || resumePost?.content || "");
 
+
   if (generated?.title && editedTitle !== generated.title && !isGenerating) {
     setEditedTitle(generated.title);
   }
@@ -251,7 +254,10 @@ export default function BlogPage() {
     { label: "Long (~2000 words)", value: "long" },
   ];
 
-  return (
+
+  return navigation.state === "loading" ? (
+    <AppSkeleton title="Blog Generator" sections={2} layout="twoThird" />
+  ) : (
     <Page
       title="Blog Post Generator"
       subtitle="Generate SEO-friendly blog posts in your brand voice"

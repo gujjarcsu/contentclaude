@@ -15,28 +15,25 @@ import prisma from "../db.server.js";
  *             publishedPieces: number, draftPieces: number }}
  */
 export async function getContentMetrics(shop) {
-  // Count DISTINCT productIds that have ≥1 published field
-  const publishedDistinct = await prisma.generatedContent.findMany({
-    where: { shop, status: "published" },
-    select: { productId: true },
-    distinct: ["productId"],
-  });
-
-  const draftDistinct = await prisma.generatedContent.findMany({
-    where: { shop, status: "draft" },
-    select: { productId: true },
-    distinct: ["productId"],
-  });
-
-  // Raw piece counts (for the "content pieces" metric)
-  const [publishedPieces, draftPieces] = await Promise.all([
+  const [publishedResult, draftResult, publishedPieces, draftPieces] = await Promise.all([
+    prisma.$queryRaw`
+      SELECT COUNT(DISTINCT "productId")::integer AS count
+      FROM "GeneratedContent"
+      WHERE shop = ${shop} AND status = 'published'
+    `,
+    prisma.$queryRaw`
+      SELECT COUNT(DISTINCT "productId")::integer AS count
+      FROM "GeneratedContent"
+      WHERE shop = ${shop} AND status = 'draft'
+    `,
     prisma.generatedContent.count({ where: { shop, status: "published" } }),
     prisma.generatedContent.count({ where: { shop, status: "draft" } }),
   ]);
 
   return {
-    publishedProducts: publishedDistinct.length,
-    draftProducts: draftDistinct.length,
+    // Number() cast handles BigInt returned by PostgreSQL COUNT() via $queryRaw
+    publishedProducts: Number(publishedResult[0]?.count ?? 0),
+    draftProducts:     Number(draftResult[0]?.count ?? 0),
     publishedPieces,
     draftPieces,
   };

@@ -3,14 +3,11 @@
 
 client_id = "1279a14cca41d4a6f8e6e3c485870b77"
 name = "ContentClaude"
-# IMPORTANT: Replace https://example.com with your production domain before running
-# `shopify app deploy`. During local development the CLI auto-updates this via tunnel
-# (automatically_update_urls_on_dev = true below). Set SHOPIFY_APP_URL in .env as well.
 application_url = "https://contentclaude.fly.dev"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,write_content"
+scopes = "write_products,write_content,write_metaobjects,write_metaobject_definitions"
 
 [webhooks]
 api_version = "2026-04"
@@ -24,24 +21,30 @@ api_version = "2026-04"
   uri = "/webhooks/app/scopes_update"
   topics = ["app/scopes_update"]
 
-  # Billing — subscription created, upgraded, cancelled, frozen
+  # Billing
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/subscriptions_update"
   topics = ["app_subscriptions/update"]
 
-  # Autopilot — generate content when a new product is created
+  # Autopilot
   [[webhooks.subscriptions]]
   uri = "/webhooks/products/create"
   topics = ["products/create"]
 
-  # NOTE: GDPR compliance webhooks (customers/data_request, customers/redact,
-  # shop/redact) are NOT registered via toml. They must be configured in the
-  # Shopify Partner Dashboard → App → App setup → GDPR data requests.
-  # Handler files: webhooks.customers.data_request.jsx / .customers.redact.jsx
-  # / .shop.redact.jsx — those files ARE in place and ready.
+  # GDPR mandatory compliance webhooks — required for App Store listing
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request"]
+  uri = "/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/redact"]
+  uri = "/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["shop/redact"]
+  uri = "/webhooks/shop/redact"
 
 [auth]
-# IMPORTANT: Update this to match your production application_url before deploying.
 redirect_urls = ["https://contentclaude.fly.dev/api/auth"]
 
 [build]

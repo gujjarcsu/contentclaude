@@ -1,0 +1,132 @@
+/* ContentClaude — mobile & responsive overrides
+   Supplements Polaris's own responsive utilities.
+   Targets embedded-app webview widths ≤480px (phones) and ≤768px (tablets).
+*/
+
+/* ─── Plans page: 4-col grid → 2-col → 1-col ─────────────────────────── */
+@media (max-width: 900px) {
+  [data-cc-plans-grid] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 540px) {
+  [data-cc-plans-grid] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── Plans usage bar: prevent wrap={false} overflow ─────────────────── */
+@media (max-width: 600px) {
+  [data-cc-usage-bar] {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+  [data-cc-usage-bar] > * {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+}
+
+/* ─── DataTable horizontal scroll container ──────────────────────────── */
+.Polaris-DataTable__ScrollContainer {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Ensure tables don't explode layout ─────────────────────────────── */
+@media (max-width: 480px) {
+  .Polaris-DataTable {
+    min-width: 0;
+  }
+}
+
+/* ─── Stat card grids on Dashboard ───────────────────────────────────── */
+@media (max-width: 600px) {
+  [data-cc-stat-grid] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 380px) {
+  [data-cc-stat-grid] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── Product editor layout ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Polaris Layout twoThird becomes full-width stacked on small screens */
+  .Polaris-Layout__Section--oneThird,
+  .Polaris-Layout__Section--oneHalf {
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+}
+
+/* ─── Generation studio textarea ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .Polaris-TextField__Input {
+    font-size: 16px !important; /* prevent iOS auto-zoom on focus */
+  }
+}
+
+/* ─── Global: min tap target 44×44px ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .Polaris-Button {
+    min-height: 44px;
+  }
+  .Polaris-Button--sizeMicro,
+  .Polaris-Button--sizeSlim {
+    min-height: 36px; /* micro/slim intentionally smaller — leave their height but keep touch area via padding */
+    padding-block: 8px;
+  }
+  /* Inline icon buttons (ResourceItem actions, etc.) */
+  .Polaris-ResourceItem__Actions .Polaris-Button--iconOnly {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ─── Page header actions: stack on very narrow ──────────────────────── */
+@media (max-width: 480px) {
+  .Polaris-Page-Header__RightAlign {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
+/* ─── Modal: full-screen on phones ───────────────────────────────────── */
+@media (max-width: 480px) {
+  .Polaris-Modal-Dialog__Modal {
+    max-height: 95dvh !important;
+    overflow-y: auto;
+  }
+}
+
+/* ─── Navigation tabs: horizontal scroll ─────────────────────────────── */
+@media (max-width: 480px) {
+  .Polaris-Tabs__Wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+  }
+}
+
+/* ─── Review & Publish AB variant cards: stack ───────────────────────── */
+@media (max-width: 600px) {
+  [data-cc-ab-grid] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── SEO Audit score circles: center on mobile ──────────────────────── */
+@media (max-width: 480px) {
+  [data-cc-score-ring] {
+    margin: 0 auto;
+  }
+}
+
+/* ─── Prevent body horizontal scroll in embedded iframe ──────────────── */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}

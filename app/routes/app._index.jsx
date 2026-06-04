@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, redirect } from "react-router";
+import { useLoaderData, useNavigate, redirect, useNavigation } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, ProgressBar, Banner, Divider,
@@ -45,11 +46,13 @@ export const loader = async ({ request }) => {
     }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
-    prisma.generatedContent.findMany({
-      where: { shop, contentType: "description" },
-      orderBy: { updatedAt: "desc" },
-      take: 3,
-      select: { productId: true, productTitle: true, status: true, updatedAt: true },
+    prisma.generatedContent.groupBy({
+      by: ["productId", "productTitle"],
+      where: { shop },
+      _max: { updatedAt: true },
+      _count: { contentType: true },
+      orderBy: { _max: { updatedAt: "desc" } },
+      take: 5,
     }),
     prisma.blogPost.groupBy({
       by: ["status"],
@@ -99,8 +102,8 @@ export const loader = async ({ request }) => {
     recentActivity: recentActivity.map((r) => ({
       productId: r.productId,
       productTitle: r.productTitle || "Product",
-      status: r.status,
-      updatedAt: r.updatedAt.toISOString(),
+      contentTypesCount: r._count.contentType,
+      updatedAt: r._max.updatedAt.toISOString(),
     })),
     storeName,
     blogsTotal,
@@ -185,6 +188,11 @@ export default function Dashboard() {
     blogsTotal, blogsPublished, blogsDraft, recentlyCompletedJob,
   } = useLoaderData();
   const navigate = useNavigate();
+
+  const navigation = useNavigation();
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Dashboard" sections={3} layout="full" />;
+  }
 
   const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
   const remaining = Math.max(0, plan.monthlyLimit - usageCount);
@@ -376,29 +384,25 @@ export default function Dashboard() {
                   <TrendingUp size={18} color="#2C6ECB" />
                   <Text as="h2" variant="headingMd">Recent Activity</Text>
                 </InlineStack>
-                <Button variant="plain" onClick={() => navigate("/app/products")}>View all →</Button>
+                <Button variant="plain" onClick={() => navigate("/app/analytics")}>View all activity →</Button>
               </InlineStack>
 
               <BlockStack gap="200">
                 {recentActivity.map((item) => {
                   const numId = item.productId.replace("gid://shopify/Product/", "");
+                  const typeLabel = item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
                   return (
                     <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <BlockStack gap="050">
                           <Text as="p" variant="bodyMd" fontWeight="semibold">{item.productTitle}</Text>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Description · {timeAgo(item.updatedAt)}
+                            {typeLabel} · {timeAgo(item.updatedAt)}
                           </Text>
                         </BlockStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Badge tone={item.status === "published" ? "success" : "info"}>
-                            {item.status === "published" ? "Published" : "Draft"}
-                          </Badge>
-                          <Button size="slim" onClick={() => navigate(`/app/products/${numId}`)}>
-                            View
-                          </Button>
-                        </InlineStack>
+                        <Button size="slim" onClick={() => navigate(`/app/products/${numId}`)}>
+                          View
+                        </Button>
                       </InlineStack>
                     </Box>
                   );

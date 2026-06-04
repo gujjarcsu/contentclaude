@@ -14,8 +14,19 @@ import logger from "./logger.server.js";
 const REDIS_URL = process.env.REDIS_URL;
 const CACHE_PREFIX = "cc:"; // contentclaude
 
-// In-process fallback cache for dev
-const memCache = new Map(); // key → { value, expiresAt }
+// In-process fallback cache — bounded LRU to prevent memory growth on long-running servers.
+// At 100k merchants with Redis available, this Map stays near-empty (Redis handles everything).
+// In the rare case Redis is down, cap at 2000 entries so RAM stays bounded.
+const MEM_CACHE_MAX = 2_000;
+const memCache = new Map(); // key → { value, expiresAt } — insertion-ordered (oldest = first)
+
+function memCacheSet(key, entry) {
+  // Evict oldest entry when at capacity (O(1) — Map preserves insertion order)
+  if (memCache.size >= MEM_CACHE_MAX && !memCache.has(key)) {
+    memCache.delete(memCache.keys().next().value);
+  }
+  memCache.set(key, entry);
+}
 
 let _redis = null;
 
@@ -73,7 +84,7 @@ export async function getCache(key, supplier, ttlSeconds = 300) {
   if (entry && entry.expiresAt > Date.now()) return entry.value;
 
   const value = await supplier();
-  memCache.set(fullKey, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  memCacheSet(fullKey, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
   return value;
 }
 
@@ -91,7 +102,7 @@ export async function setCache(key, value, ttlSeconds = 300) {
   } catch (err) {
     logger.warn({ key, err: err.message }, "Redis cache set failed");
   }
-  memCache.set(fullKey, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  memCacheSet(fullKey, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 
 /**

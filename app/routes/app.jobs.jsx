@@ -252,14 +252,18 @@ export default function JobsPage() {
         {jobs.length === 0 ? (
           <Card>
             <EmptyState
-              heading="No bulk jobs yet"
-              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              heading="No generation jobs yet"
+              image="/empty-jobs.svg"
               action={{
-                content: "Go to Products",
+                content: "Go to Products →",
                 onAction: () => navigate("/app/products"),
               }}
+              secondaryAction={{
+                content: "Learn how bulk generation works →",
+                onAction: () => navigate("/app/optimize"),
+              }}
             >
-              <p>Select products and hit "Generate All" to start your first bulk generation job.</p>
+              <p>Generate content for multiple products at once — jobs run in the background so you can keep working.</p>
             </EmptyState>
           </Card>
         ) : (
@@ -419,16 +423,31 @@ export default function JobsPage() {
                           <Text as="p" variant="bodySm" fontWeight="bold" tone="critical">
                             Errors ({job.errorLog.length})
                           </Text>
-                          {job.errorLog.slice(0, 5).map((err, i) => (
-                            <Box key={i} padding="200" background="bg-surface-critical-subdued" borderRadius="100">
-                              <Text as="p" variant="bodySm">
-                                <strong>
-                                  {err.productId.replace("gid://shopify/Product/", "Product #")}
-                                </strong>{" "}
-                                — {err.error}
-                              </Text>
-                            </Box>
-                          ))}
+                          {job.errorLog.slice(0, 10).map((err, i) => {
+                            const numericId = err.productId?.replace("gid://shopify/Product/", "");
+                            const isValidId = numericId && /^\d+$/.test(numericId);
+                            return (
+                              <Box key={i} padding="200" background="bg-surface-critical-subdued" borderRadius="100">
+                                <InlineStack align="space-between" blockAlign="start" gap="200">
+                                  <Text as="p" variant="bodySm">
+                                    {isValidId ? (
+                                      <Button
+                                        variant="plain"
+                                        size="slim"
+                                        onClick={() => navigate(`/app/products/${numericId}`)}
+                                      >
+                                        Product #{numericId}
+                                      </Button>
+                                    ) : (
+                                      <strong>{err.productId || "Unknown"}</strong>
+                                    )}
+                                    {" — "}
+                                    {err.error}
+                                  </Text>
+                                </InlineStack>
+                              </Box>
+                            );
+                          })}
                           {job.errorLog.length > 5 && (
                             <Text as="p" variant="bodySm" tone="subdued">
                               ...and {job.errorLog.length - 5} more errors

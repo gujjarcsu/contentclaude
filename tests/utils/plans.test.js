@@ -46,6 +46,10 @@ vi.mock("../../app/utils/cache.server.js", () => ({
   invalidateCache: vi.fn(),
 }));
 
+vi.mock("../../app/utils/logger.server.js", () => ({
+  default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
 const prisma = (await import("../../app/db.server.js")).default;

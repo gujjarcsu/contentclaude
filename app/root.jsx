@@ -1,8 +1,19 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import mobileStyles from "./mobile.css?url";
+
+// PostgreSQL COUNT() returns BigInt via Prisma $queryRaw.
+// This global patch ensures BigInts serialize to JSON correctly.
+// Must run here (root module) before any route loader.
+if (typeof BigInt.prototype.toJSON === "undefined") {
+  BigInt.prototype.toJSON = function () { return Number(this); };
+}
 
 export function links() {
-  return [{ rel: "stylesheet", href: polarisStyles }];
+  return [
+    { rel: "stylesheet", href: polarisStyles },
+    { rel: "stylesheet", href: mobileStyles },
+  ];
 }
 
 export default function App() {
@@ -16,8 +27,10 @@ export default function App() {
         <meta name="theme-color" content="#0A84FF" />
         <meta property="og:title" content="ContentClaude - AI Product Content" />
         <meta property="og:description" content="AI-powered product content and blog generation for Shopify merchants" />
-        <meta property="og:image" content="/logos/contentclaude-icon-square.svg" />
-        <link rel="icon" href="/logos/contentclaude-icon-square.svg" type="image/svg+xml" />
+        <meta property="og:image" content="/icon-512.svg" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/logos/contentclaude-icon-square.svg" type="image/svg+xml" sizes="any" />
+        <link rel="apple-touch-icon" href="/icon-512.svg" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
         <link
           rel="stylesheet"

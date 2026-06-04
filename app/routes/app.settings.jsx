@@ -1,4 +1,5 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   TextField, Select, Button, Banner, Box, Checkbox, Divider, Badge,
@@ -133,6 +134,7 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
+
   const [storeName, setStoreName] = useState(brandVoice.storeName);
   const [brandTone, setBrandTone] = useState(brandVoice.brandTone);
   const [targetAudience, setTargetAudience] = useState(brandVoice.targetAudience);
@@ -160,6 +162,7 @@ export default function SettingsPage() {
   const [tplDefault, setTplDefault] = useState(false);
 
   const prevActionData = useRef(null);
+
   useEffect(() => {
     if (actionData && actionData !== prevActionData.current) {
       prevActionData.current = actionData;
@@ -172,6 +175,7 @@ export default function SettingsPage() {
       }
     }
   }, [actionData]);
+
 
   return (
     <Page
@@ -251,7 +255,9 @@ export default function SettingsPage() {
                     >
                       {TONE_CARDS.map((card) => {
                         const isSelected = brandTone === card.value;
-                        return (
+                        return navigation.state === "loading" ? (
+    <AppSkeleton title="Settings" sections={3} layout="twoThird" />
+  ) : (
                           <button
                             key={card.value}
                             type="button"

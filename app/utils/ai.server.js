@@ -413,8 +413,46 @@ async function callClaude(apiKey, body, attempt = 0) {
   if (response.ok) {
     recordSuccess();
     const data = await response.json();
+    // Proactively back off when Anthropic rate limit is nearly exhausted
+    if (response.headers?.get) {
+      const remaining = parseInt(response.headers.get("anthropic-ratelimit-requests-remaining") || "50", 10);
+      const resetMs   = parseFloat(response.headers.get("anthropic-ratelimit-requests-reset") || "1") * 1000;
+      if (remaining <= 5 && resetMs > 0) {
+        logger.warn({ remaining, resetMs }, "Anthropic rate limit nearly exhausted — backing off");
+        await new Promise((r) => setTimeout(r, Math.min(resetMs, 10_000)));
+      }
+    }
     logger.debug({ model: body.model, attempt, ms: Date.now() - t0 }, "Claude API call succeeded");
     return data.content[0]?.text ?? "";
+  }
+
+  // 429 — Rate limited: respect Retry-After header before retrying
+  if (response.status === 429) {
+    recordFailure();
+    if (attempt < MAX_RETRIES) {
+      const retryAfter = parseInt(response.headers?.get?.("Retry-After") || "60", 10);
+      const delay = Math.max(retryAfter * 1000, (attempt + 1) * 5_000);
+      logger.warn({ model: body.model, attempt, retryAfterMs: delay }, "Anthropic 429 — backing off before retry");
+      await new Promise((r) => setTimeout(r, delay));
+      return callClaude(apiKey, body, attempt + 1);
+    }
+    throw Object.assign(
+      new Error("Anthropic rate limit exceeded after max retries. Try again in a minute."),
+      { isRateLimit: true }
+    );
+  }
+
+  // 400 — Distinguish content policy refusal from other bad requests
+  if (response.status === 400) {
+    let errorBody;
+    try { errorBody = await response.json(); } catch { errorBody = {}; }
+    const errorType = errorBody?.error?.type;
+    const errorMsg  = errorBody?.error?.message ?? "Bad request";
+    logger.warn({ model: body.model, errorType, attempt }, "Anthropic 400 error");
+    throw Object.assign(
+      new Error(`Anthropic refused request: ${errorMsg}`),
+      { isContentPolicy: errorType === "invalid_request_error", isAnthropicClientError: true }
+    );
   }
 
   if (response.status >= 500 && attempt < MAX_RETRIES) {
@@ -600,6 +638,7 @@ function extractTag(text, tagName) {
 function sanitizeHtml(html) {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
     .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
     .replace(/<embed\b[^>]*>/gi, "")

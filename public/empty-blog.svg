@@ -1,0 +1,37 @@
+<svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="eb-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EAF4FF"/>
+      <stop offset="100%" stop-color="#D6EBFF"/>
+    </linearGradient>
+    <linearGradient id="eb-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055CC"/>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="90" r="80" fill="url(#eb-bg)" opacity="0.55"/>
+  <!-- Document / article shape -->
+  <rect x="72" y="38" width="96" height="114" rx="8" fill="white" stroke="#D6EBFF" stroke-width="1.5"/>
+  <!-- Header image area -->
+  <rect x="80" y="46" width="80" height="32" rx="5" fill="#EAF4FF"/>
+  <!-- Tiny mountain/image icon -->
+  <path d="M96 70 L108 54 L120 70Z" fill="#B0D4FF" opacity="0.8"/>
+  <path d="M110 70 L120 58 L136 70Z" fill="#C8E0FF" opacity="0.6"/>
+  <!-- Title line -->
+  <rect x="80" y="86" width="72" height="6" rx="3" fill="#C8E0FF"/>
+  <!-- Body lines -->
+  <rect x="80" y="97" width="80" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="80" y="105" width="76" height="4" rx="2" fill="#D6EBFF"/>
+  <rect x="80" y="113" width="60" height="4" rx="2" fill="#D6EBFF"/>
+  <!-- Tag chip -->
+  <rect x="80" y="122" width="28" height="14" rx="7" fill="#EAF4FF" stroke="#B0D4FF" stroke-width="1"/>
+  <rect x="84" y="128" width="20" height="3" rx="1.5" fill="#B0D4FF"/>
+  <!-- AI pen spark -->
+  <circle cx="148" cy="50" r="14" fill="url(#eb-accent)" opacity="0.12"/>
+  <path d="M145 57 L148 43 L151 57 L148 55 Z" fill="url(#eb-accent)" opacity="0.6"/>
+  <path d="M143 55 L148 43 L153 55" fill="none" stroke="url(#eb-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+  <!-- Sparkle dots -->
+  <circle cx="90" cy="143" r="3" fill="#0A84FF" opacity="0.3"/>
+  <circle cx="150" cy="135" r="2.5" fill="#0A84FF" opacity="0.2"/>
+  <circle cx="165" cy="75" r="2" fill="#0A84FF" opacity="0.2"/>
+</svg>

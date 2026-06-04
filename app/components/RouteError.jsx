@@ -1,9 +1,9 @@
 import { useRouteError, isRouteErrorResponse, useNavigate } from "react-router";
-import { Page, Card, BlockStack, Text, Button, InlineStack, Box } from "@shopify/polaris";
-import { AlertCircle } from "lucide-react";
+import { Component } from "react";
+import { Page, Banner, Text } from "@shopify/polaris";
 
 /**
- * Drop-in ErrorBoundary for any route.
+ * Data-layer error boundary (React Router loaders/actions throwing).
  * Usage at bottom of any route file:
  *   export { RouteError as ErrorBoundary } from "../components/RouteError";
  */
@@ -11,49 +11,72 @@ export function RouteError() {
   const error = useRouteError();
   const navigate = useNavigate();
 
-  let title = "Something went wrong";
-  let message = "An unexpected error occurred. Please try again.";
-  let status = null;
+  const status = isRouteErrorResponse(error) ? error.status : null;
+  const is404 = status === 404;
+  const is401 = status === 401 || status === 403;
 
-  if (isRouteErrorResponse(error)) {
-    status = error.status;
-    if (error.status === 404) {
-      title = "Page not found";
-      message = "The page you're looking for doesn't exist or has been moved.";
-    } else if (error.status === 403) {
-      title = "Access denied";
-      message = "You don't have permission to view this page.";
-    } else if (error.status >= 500) {
-      title = "Server error";
-      message = "Something went wrong on our end. Please try refreshing the page.";
-    } else {
-      message = error.statusText || message;
-    }
-  } else if (error instanceof Error) {
-    message = error.message || message;
-  }
+  const title = is404
+    ? "Page not found"
+    : is401
+    ? "Session expired — please re-authenticate"
+    : "An unexpected error occurred";
+
+  const message = is404
+    ? "This product or page doesn't exist. It may have been deleted from your Shopify store."
+    : is401
+    ? "Your session has expired. Click below to log back in — your data is safe."
+    : `Something went wrong on our end.${error?.message ? ` Details: ${error.message}` : ""} Please try refreshing the page.`;
+
+  const action = is404
+    ? { content: "← Back to Products", onAction: () => navigate("/app/products") }
+    : is401
+    ? { content: "Re-authenticate", onAction: () => { window.location.href = "/auth/login"; } }
+    : { content: "← Back to Dashboard", onAction: () => navigate("/app") };
 
   return (
-    <Page backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
-      <Card>
-        <BlockStack gap="400" inlineAlign="center">
-          <Box paddingBlockStart="400">
-            <AlertCircle size={40} color="#D82C0D" />
-          </Box>
-          <BlockStack gap="200" inlineAlign="center">
-            <Text as="h1" variant="headingLg" alignment="center">{title}</Text>
-            {status && (
-              <Text as="p" variant="bodySm" tone="subdued" alignment="center">Error {status}</Text>
-            )}
-            <Text as="p" variant="bodyMd" tone="subdued" alignment="center">{message}</Text>
-          </BlockStack>
-          <InlineStack gap="300">
-            <Button onClick={() => navigate("/app")}>Go to Dashboard</Button>
-            <Button variant="plain" onClick={() => window.location.reload()}>Refresh page</Button>
-          </InlineStack>
-          <Box paddingBlockEnd="400" />
-        </BlockStack>
-      </Card>
+    <Page>
+      <Banner tone={is404 ? "warning" : "critical"} title={title} action={action}>
+        <Text as="p" variant="bodyMd">{message}</Text>
+      </Banner>
     </Page>
   );
+}
+
+/**
+ * React class-based render error boundary.
+ * Catches JS errors during render that React Router's ErrorBoundary cannot.
+ * Usage in app.jsx: wrap <Outlet /> with <AppRenderBoundary>
+ */
+export class AppRenderBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+    this.reset = this.reset.bind(this);
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  reset() {
+    this.setState({ hasError: false, error: null });
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <Page>
+        <Banner
+          tone="critical"
+          title="A component crashed unexpectedly"
+          action={{ content: "Reload page", onAction: () => window.location.reload() }}
+          secondaryAction={{ content: "Try again", onAction: this.reset }}
+        >
+          <Text as="p" variant="bodyMd">
+            {this.state.error?.message ?? "An unexpected rendering error occurred."}
+          </Text>
+        </Banner>
+      </Page>
+    );
+  }
 }

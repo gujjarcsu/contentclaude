@@ -19,7 +19,7 @@
 import crypto from "node:crypto";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
-import { FREE_PLAN } from "../utils/billing-plans.js";
+import { checkRateLimit } from "../utils/rateLimit.server.js";
 import logger from "../utils/logger.server";
 
 const AUTH_MODE = process.env.CONTENTCLAUDE_AUTH_MODE || "hmac";
@@ -116,13 +116,13 @@ export const action = async ({ request }) => {
     contentTypes = ["description", "metaTitle", "metaDescription"];
   }
 
-  const plan = await prisma.plan.findUnique({ where: { shop } });
-  const month = new Date().toISOString().slice(0, 7);
-  const usageCount = await prisma.usageRecord.count({ where: { shop, month } });
-  const limit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
-
-  if ((plan?.status ?? "active") !== "active" || usageCount >= limit) {
-    return Response.json({ error: "Monthly generation limit reached" }, { status: 429 });
+  // Rate limit: max 20 requests/minute per shop (prevents runaway Shopify Flow automation)
+  const rl = await checkRateLimit(shop, { maxPerMinute: 20 });
+  if (!rl.allowed) {
+    return Response.json(
+      { error: "Rate limit exceeded. Please retry after a moment." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+    );
   }
 
   const gid = productId.startsWith("gid://")

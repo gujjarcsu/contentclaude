@@ -1,7 +1,8 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
-import { FREE_PLAN, getEntitlements } from "../utils/billing-plans.js";
+import { getEntitlements } from "../utils/billing-plans.js";
+import { canGenerate } from "../utils/plans.server.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
@@ -26,11 +27,10 @@ export const action = async ({ request }) => {
     return new Response("Autopilot requires Growth plan", { status: 200 });
   }
 
-  const month = new Date().toISOString().slice(0, 7);
-  const usageCount = await prisma.usageRecord.count({ where: { shop, month } });
-  const limit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
-
-  if ((plan?.status ?? "active") !== "active" || usageCount >= limit) {
+  // Fast-fail if clearly over limit — avoids creating jobs that will immediately fail.
+  // The bulk processor performs the atomic tryConsumeGeneration gate when it runs.
+  const quota = await canGenerate(shop);
+  if (!quota.allowed) {
     return new Response("Plan limit reached", { status: 200 });
   }
 

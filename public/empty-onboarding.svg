@@ -1,0 +1,39 @@
+<svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="eo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EAF4FF"/>
+      <stop offset="100%" stop-color="#D6EBFF"/>
+    </linearGradient>
+    <linearGradient id="eo-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055CC"/>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="90" r="80" fill="url(#eo-bg)" opacity="0.55"/>
+  <!-- Rocket body -->
+  <ellipse cx="120" cy="80" rx="16" ry="30" fill="white" stroke="#C8E0FF" stroke-width="1.5"/>
+  <!-- Rocket nose -->
+  <path d="M104 76 Q120 36 136 76" fill="url(#eo-accent)" opacity="0.8"/>
+  <!-- Rocket window -->
+  <circle cx="120" cy="72" r="7" fill="#EAF4FF" stroke="#C8E0FF" stroke-width="1.5"/>
+  <circle cx="120" cy="72" r="4" fill="url(#eo-accent)" opacity="0.5"/>
+  <!-- Rocket fins -->
+  <path d="M104 94 L96 110 L108 102" fill="url(#eo-accent)" opacity="0.5"/>
+  <path d="M136 94 L144 110 L132 102" fill="url(#eo-accent)" opacity="0.5"/>
+  <!-- Exhaust flames -->
+  <ellipse cx="120" cy="114" rx="7" ry="5" fill="#FF9F0A" opacity="0.6"/>
+  <ellipse cx="120" cy="116" rx="4" ry="4" fill="#FF6B00" opacity="0.4"/>
+  <!-- Stars / sparkles -->
+  <path d="M80 52 L81.5 57 L77 54.5 L84 54.5 L79.5 57 Z" fill="#0A84FF" opacity="0.35"/>
+  <path d="M162 68 L163 71.5 L160 70 L165 70 L162 71.5 Z" fill="#0A84FF" opacity="0.3"/>
+  <circle cx="72" cy="90" r="3" fill="#0A84FF" opacity="0.2"/>
+  <circle cx="168" cy="100" r="2.5" fill="#0A84FF" opacity="0.2"/>
+  <circle cx="152" cy="50" r="2" fill="#0A84FF" opacity="0.25"/>
+  <!-- ContentClaude C mark (small, at top) -->
+  <path d="M113 145 Q107 145 107 150 Q107 155 113 155" fill="none" stroke="url(#eo-accent)" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="110" y1="148" x2="115" y2="148" stroke="url(#eo-accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="110" y1="151" x2="115" y2="151" stroke="url(#eo-accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+  <!-- Right of mark: text placeholder suggesting "ContentClaude" -->
+  <rect x="118" y="147" width="26" height="4" rx="2" fill="#C8E0FF" opacity="0.7"/>
+  <rect x="118" y="153" width="18" height="3" rx="1.5" fill="#D6EBFF" opacity="0.5"/>
+</svg>

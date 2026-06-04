@@ -1,4 +1,6 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, useSubmit } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
+import { scoreContent } from "../utils/contentScorer.server.js";
 import {
   Page,
   Card,
@@ -20,17 +22,29 @@ import prisma from "../db.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 100;
+
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Fetch all draft GeneratedContent records for this shop
-  const drafts = await prisma.generatedContent.findMany({
-    where: { shop, status: "draft" },
-    orderBy: { updatedAt: "desc" },
-  });
+  const url = new URL(request.url);
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const skip = (page - 1) * PAGE_SIZE;
 
-  if (drafts.length === 0) return Response.json({ products: [] });
+  const [drafts, totalDraftCount] = await Promise.all([
+    prisma.generatedContent.findMany({
+      where: { shop, status: "draft" },
+      orderBy: { updatedAt: "desc" },
+      take: PAGE_SIZE,
+      skip,
+    }),
+    prisma.generatedContent.count({ where: { shop, status: "draft" } }),
+  ]);
+
+  if (drafts.length === 0 && page === 1) {
+    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0 });
+  }
 
   // Group by productId
   const byProduct = {};
@@ -45,47 +59,78 @@ export const loader = async ({ request }) => {
     byProduct[d.productId].content[d.contentType] = d.generatedContent;
   }
 
-  // Batch-fetch product info from Shopify
+  // Batch-fetch product info from Shopify (chunked at 200 per request)
   const productIds = Object.keys(byProduct);
   const shopifyData = await fetchProductsBatch(admin, productIds);
 
-  // Merge Shopify data into our grouped records
+  // Merge Shopify data + quality scores
   const products = productIds.map((pid) => {
     const info = shopifyData[pid] || {};
+    const content = byProduct[pid].content;
+    const score = scoreContent({
+      description: content.description || "",
+      metaTitle: content.metaTitle || "",
+      metaDescription: content.metaDescription || "",
+      faq: content.faq || "",
+    });
     return {
       ...byProduct[pid],
       productTitle: info.title || byProduct[pid].productTitle,
       imageUrl: info.imageUrl || "",
+      qualityScore: score.score,
     };
   });
 
-  return Response.json({ products });
+  return Response.json({
+    products,
+    page,
+    totalPages: Math.ceil(totalDraftCount / PAGE_SIZE),
+    totalDraftCount,
+  });
 };
 
 async function fetchProductsBatch(admin, productIds) {
   if (productIds.length === 0) return {};
-  const response = await admin.graphql(
-    `query getNodes($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Product {
-          id
-          title
-          featuredImage { url altText }
-        }
-      }
-    }`,
-    { variables: { ids: productIds } }
-  );
-  const { data } = await response.json();
+  const BATCH_SIZE = 200;
   const result = {};
-  for (const node of data?.nodes ?? []) {
-    if (node?.id) {
-      result[node.id] = {
-        title: node.title,
-        imageUrl: node.featuredImage?.url || "",
-      };
+
+  for (let i = 0; i < productIds.length; i += BATCH_SIZE) {
+    const batch = productIds.slice(i, i + BATCH_SIZE);
+    let response;
+    try {
+      response = await admin.graphql(
+        `query getNodes($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on Product {
+              id
+              title
+              featuredImage { url altText }
+            }
+          }
+        }`,
+        { variables: { ids: batch } }
+      );
+    } catch (err) {
+      console.error(`fetchProductsBatch batch ${Math.floor(i / BATCH_SIZE) + 1} failed:`, err.message);
+      continue;
+    }
+
+    const { data } = await response.json();
+    if (data?.errors) {
+      console.error("Shopify nodes query error:", JSON.stringify(data.errors));
+      continue;
+    }
+
+    for (const node of data?.nodes ?? []) {
+      if (node?.id) {
+        result[node.id] = {
+          title: node.title || "",
+          imageUrl: node.featuredImage?.url || "",
+        };
+      }
     }
   }
+
   return result;
 }
 
@@ -121,9 +166,10 @@ export const action = async ({ request }) => {
       byProduct[r.productId][r.contentType] = r.generatedContent;
     }
 
-    let published = 0;
     let failed = 0;
     const errors = [];
+    const successfulProductIds = [];
+    const successfulEdits = {};
 
     for (const productId of approved) {
       // Merge DB drafts with any inline edits (edits take precedence)
@@ -152,30 +198,42 @@ export const action = async ({ request }) => {
           failed++;
           errors.push({ productId, error: userErrors.map((e) => e.message).join("; ") });
         } else {
-          // Mark published content types — persist any inline edits too so
-          // the DB reflects what was actually published to Shopify.
-          const publishedTypes = Object.keys(content).filter((t) =>
-            ["description", "metaTitle", "metaDescription", "faq"].includes(t)
-          );
-          const productEdits = edits[productId] || {};
-          await Promise.all(
-            publishedTypes.map((type) =>
-              prisma.generatedContent.updateMany({
-                where: { shop, productId, contentType: type, status: "draft" },
-                data: {
-                  status: "published",
-                  ...(productEdits[type] !== undefined ? { generatedContent: productEdits[type] } : {}),
-                },
-              })
-            )
-          );
-          published++;
+          successfulProductIds.push(productId);
+          if (edits[productId]) successfulEdits[productId] = edits[productId];
         }
       } catch (err) {
         failed++;
         errors.push({ productId, error: err.message });
       }
     }
+
+    // BATCH all DB status updates in a single transaction
+    if (successfulProductIds.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.generatedContent.updateMany({
+          where: { shop, productId: { in: successfulProductIds }, status: "draft" },
+          data: { status: "published" },
+        });
+
+        const editedProductIds = Object.keys(successfulEdits).filter((id) =>
+          successfulProductIds.includes(id)
+        );
+        if (editedProductIds.length > 0) {
+          await Promise.all(
+            editedProductIds.flatMap((productId) =>
+              Object.entries(successfulEdits[productId]).map(([type, content]) =>
+                tx.generatedContent.updateMany({
+                  where: { shop, productId, contentType: type, status: "published" },
+                  data: { generatedContent: content },
+                })
+              )
+            )
+          );
+        }
+      });
+    }
+
+    const published = successfulProductIds.length;
 
     return Response.json({
       success: true,
@@ -208,12 +266,13 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products } = useLoaderData();
+  const { products, page, totalPages } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
   const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
+
 
   const [approved, setApproved] = useState(() => new Set(products.map((p) => p.productId)));
   const [search, setSearch] = useState("");
@@ -287,7 +346,7 @@ export default function ReviewPage() {
       >
         <EmptyState
           heading="Nothing to review — you're all caught up! 🎉"
-          image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+          image="/empty-review.svg"
           action={{ content: "Go to Products", onAction: () => navigate("/app/products") }}
         >
           <p>Generate content from the Products page, then come back here to review and publish.</p>
@@ -296,7 +355,10 @@ export default function ReviewPage() {
     );
   }
 
-  return (
+
+  return navigation.state === "loading" ? (
+    <AppSkeleton title="Review & Publish" sections={2} layout="full" />
+  ) : (
     <Page
       title="Review & Publish"
       subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} with draft content ready to review`}
@@ -393,6 +455,26 @@ export default function ReviewPage() {
             </InlineStack>
           </Card>
         )}
+
+        {totalPages > 1 && (
+          <Card>
+            <InlineStack align="center" gap="400">
+              <Button
+                disabled={page <= 1}
+                onClick={() => navigate(`/app/review?page=${page - 1}`)}
+              >
+                ← Previous
+              </Button>
+              <Text as="p" variant="bodySm" tone="subdued">Page {page} of {totalPages}</Text>
+              <Button
+                disabled={page >= totalPages}
+                onClick={() => navigate(`/app/review?page=${page + 1}`)}
+              >
+                Next →
+              </Button>
+            </InlineStack>
+          </Card>
+        )}
       </BlockStack>
     </Page>
   );
@@ -421,7 +503,14 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
               size="medium"
             />
             <BlockStack gap="100">
-              <Text as="h3" variant="headingMd">{product.productTitle}</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h3" variant="headingMd">{product.productTitle}</Text>
+                {product.qualityScore != null && (
+                  <Badge tone={product.qualityScore >= 80 ? "success" : product.qualityScore >= 60 ? "attention" : "critical"}>
+                    Score: {product.qualityScore}
+                  </Badge>
+                )}
+              </InlineStack>
               <InlineStack gap="200">
                 {contentTypes.map((t) => (
                   <Badge key={t} tone="info">{t}</Badge>
@@ -455,6 +544,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
 
 function ContentSection({ type, content, expanded, onToggle, onEdit }) {
   const [editedValue, setEditedValue] = useState(content);
+
 
   const labels = {
     description: "Description",

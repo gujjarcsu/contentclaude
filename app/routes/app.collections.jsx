@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   Layout,
@@ -201,6 +202,7 @@ export default function CollectionsPage() {
   const fetcher = useFetcher();
   const voiceFetcher = useFetcher();
   const [expandedId, setExpandedId] = useState(null);
+
   const [editedContent, setEditedContent] = useState({});
   const [voiceOpen, setVoiceOpen] = useState({});
   const [voiceForms, setVoiceForms] = useState(() => {
@@ -221,7 +223,9 @@ export default function CollectionsPage() {
   const isPublishing = fetcher.state !== "idle" && fetcher.formData?.get("actionType") === "publish";
   const fetcherData = fetcher.data;
 
+  const navigation = useNavigation();
   const prevFetcherData = useRef(null);
+
   useEffect(() => {
     if (fetcherData && fetcherData !== prevFetcherData.current) {
       prevFetcherData.current = fetcherData;
@@ -304,13 +308,14 @@ export default function CollectionsPage() {
       >
         <EmptyState
           heading="No collections found"
-          image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+          image="/empty-collections.svg"
         >
           <p>Create collections in your Shopify admin, then come back to generate descriptions.</p>
         </EmptyState>
       </Page>
     );
   }
+
 
   return (
     <Page
@@ -334,7 +339,9 @@ export default function CollectionsPage() {
           const generated = fetcherData?.collectionId === collection.id ? fetcherData?.generated : null;
           const edited = editedContent[collection.id] || {};
 
-          return (
+          return navigation.state === "loading" ? (
+    <AppSkeleton title="Collections" sections={2} layout="full" />
+  ) : (
             <Card key={collection.id}>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">

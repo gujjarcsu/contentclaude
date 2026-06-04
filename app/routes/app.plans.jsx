@@ -1,4 +1,5 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Banner,
   Box, ProgressBar, Badge, Divider, DataTable,
@@ -39,7 +40,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
@@ -86,6 +87,11 @@ export const action = async ({ request }) => {
       if (err instanceof Response) throw err;
       return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });
     }
+
+    // Immediately reflect cancelled state — don't wait for Shopify webhook delivery
+    // (webhook can take up to 5 minutes; merchant should lose access instantly)
+    await syncBillingToPlan(session.shop, []);
+
     return Response.json({ cancelled: true });
   }
 
@@ -384,6 +390,10 @@ export default function PlansPage() {
   const navigate = useNavigate();
 
   const isSubmitting = navigation.state === "submitting";
+
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Plans & Billing" sections={3} layout="full" />;
+  }
   const submittingPlan = navigation.formData?.get("planKey");
   const isCancelling = navigation.formData?.get("actionType") === "cancel";
 
@@ -411,7 +421,7 @@ export default function PlansPage() {
 
         {/* Usage summary — compact horizontal bar */}
         <Card>
-          <InlineStack align="space-between" blockAlign="center" gap="600" wrap={false}>
+          <InlineStack align="space-between" blockAlign="center" gap="600" wrap={true}>
             <BlockStack gap="100">
               <InlineStack gap="200" blockAlign="center">
                 <Text as="h2" variant="headingMd">Monthly Usage</Text>
@@ -457,7 +467,7 @@ export default function PlansPage() {
           <Text as="h2" variant="headingLg">Choose Your Plan</Text>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "16px",
             alignItems: "stretch",
           }}>

@@ -1,4 +1,5 @@
 import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   Layout,
@@ -136,6 +137,10 @@ export default function SeoAuditPage() {
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading" || revalidator.state === "loading";
+
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="SEO Audit" sections={2} layout="full" />;
+  }
 
   const rows = products.map((p) => [
     <InlineStack gap="200" blockAlign="center" key={p.id}>

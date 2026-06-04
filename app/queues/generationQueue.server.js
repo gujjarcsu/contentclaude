@@ -80,7 +80,10 @@ export async function startWorker() {
     },
     {
       connection: redisConnection,
-      concurrency: 3, // Process up to 3 bulk jobs simultaneously
+      // Configurable via BULLMQ_CONCURRENCY env var — increase for higher throughput servers.
+      // Default 3: safe for a single Fly.io machine sharing Anthropic rate limits.
+      // At 100k merchants scale, run multiple worker machines each with concurrency 3-5.
+      concurrency: parseInt(process.env.BULLMQ_CONCURRENCY || "3", 10),
       lockDuration: 300_000, // 5-minute lock; jobs taking longer are re-queued
     }
   );
@@ -97,7 +100,8 @@ export async function startWorker() {
     logger.warn({ bullJobId: jobId }, "Worker: job stalled — will be retried");
   });
 
-  logger.info({ concurrency: 3 }, "BullMQ worker started");
+  const concurrency = parseInt(process.env.BULLMQ_CONCURRENCY || "3", 10);
+  logger.info({ concurrency }, "BullMQ worker started");
 }
 
 /**
@@ -132,9 +136,16 @@ export async function enqueueGenerationJob(jobId) {
 
 /**
  * Graceful shutdown — call on SIGTERM.
+ * force=false: waits for active jobs to finish (up to lockDuration).
+ * force=true:  closes immediately without waiting.
  */
-export async function closeQueue() {
-  await _worker?.close();
-  await _queue?.close();
-  logger.info("BullMQ queue and worker closed");
+export async function closeQueue(force = false) {
+  if (_worker) {
+    await _worker.close(force);
+    logger.info({ force }, "BullMQ worker closed");
+  }
+  if (_queue) {
+    await _queue.close();
+    logger.info("BullMQ queue closed");
+  }
 }

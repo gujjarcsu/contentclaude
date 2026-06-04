@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
 import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
+import logger from "./logger.server.js";
 
 export { FREE_PLAN };
 
@@ -27,16 +28,18 @@ export async function checkEntitlement(shop, feature) {
 }
 
 export async function getOrCreatePlan(shop) {
-  const existing = await prisma.plan.findUnique({ where: { shop } });
-  if (existing) return existing;
-  return prisma.plan.create({
-    data: {
-      shop,
-      planName: FREE_PLAN.planName,
-      status: "active",
-      monthlyLimit: FREE_PLAN.monthlyLimit,
-    },
-  });
+  return getCache(`plan:${shop}`, async () => {
+    const existing = await prisma.plan.findUnique({ where: { shop } });
+    if (existing) return existing;
+    return prisma.plan.create({
+      data: {
+        shop,
+        planName: FREE_PLAN.planName,
+        status: "active",
+        monthlyLimit: FREE_PLAN.monthlyLimit,
+      },
+    });
+  }, 60); // 60-second TTL — plan changes only via billing webhooks which call syncBillingToPlan
 }
 
 export async function getMonthlyUsageCount(shop) {
@@ -137,9 +140,22 @@ export async function tryConsumeGeneration(shop, contentType, productId = null) 
   } catch (err) {
     // P2034 = "Transaction failed due to a write conflict or a deadlock"
     // This can happen under very high concurrent load with Serializable isolation.
-    // Treat it as rate-limited to be safe.
     if (err.code === "P2034") {
-      return { allowed: false, planName: "unknown", monthlyLimit: 0, remaining: 0 };
+      if (contentType !== "__retry__") {
+        // Retry once after brief jitter — write conflict is transient
+        const jitter = 50 + Math.random() * 100;
+        await new Promise((r) => setTimeout(r, jitter));
+        return tryConsumeGeneration(shop, "__retry__", productId);
+      }
+      // Second failure — return safe denial with distinct error tag
+      logger.warn({ shop, err: err.message }, "tryConsumeGeneration: P2034 write conflict after retry — denying safely");
+      return {
+        allowed: false,
+        planName: "contention",
+        monthlyLimit: 0,
+        remaining: 0,
+        isContention: true,
+      };
     }
     throw err;
   }
