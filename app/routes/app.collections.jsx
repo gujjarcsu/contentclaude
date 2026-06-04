@@ -339,9 +339,7 @@ export default function CollectionsPage() {
           const generated = fetcherData?.collectionId === collection.id ? fetcherData?.generated : null;
           const edited = editedContent[collection.id] || {};
 
-          return navigation.state === "loading" ? (
-    <AppSkeleton title="Collections" sections={2} layout="full" />
-  ) : (
+          return (
             <Card key={collection.id}>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">

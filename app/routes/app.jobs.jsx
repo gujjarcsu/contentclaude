@@ -423,7 +423,7 @@ export default function JobsPage() {
                           <Text as="p" variant="bodySm" fontWeight="bold" tone="critical">
                             Errors ({job.errorLog.length})
                           </Text>
-                          {job.errorLog.slice(0, 10).map((err, i) => {
+                          {job.errorLog.slice(0, 10).map((err, i) => { // show first 10
                             const numericId = err.productId?.replace("gid://shopify/Product/", "");
                             const isValidId = numericId && /^\d+$/.test(numericId);
                             return (
@@ -448,9 +448,9 @@ export default function JobsPage() {
                               </Box>
                             );
                           })}
-                          {job.errorLog.length > 5 && (
+                          {job.errorLog.length > 10 && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              ...and {job.errorLog.length - 5} more errors
+                              ...and {job.errorLog.length - 10} more errors
                             </Text>
                           )}
                         </BlockStack>

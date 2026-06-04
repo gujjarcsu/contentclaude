@@ -273,9 +273,17 @@ export default function ProductsPage() {
 
   // Derived values (no hooks below)
   const totalProducts = products.length;
-  const publishedCount = Object.values(contentMap).filter((m) => m.description?.status === "published").length;
-  const draftCount = Object.values(contentMap).filter((m) => m.description?.status === "draft").length;
-  const noContentCount = totalProducts - publishedCount - draftCount;
+  // A product "has content" if ANY content type is present (not just description).
+  // Using description as the primary signal for published/draft counts; "needs content"
+  // means no description exists — other content types (meta, FAQ) are secondary.
+  const publishedCount = Object.values(contentMap).filter((m) =>
+    Object.values(m).some((c) => c.status === "published")
+  ).length;
+  const draftCount = Object.values(contentMap).filter((m) =>
+    Object.values(m).some((c) => c.status === "draft") &&
+    !Object.values(m).some((c) => c.status === "published")
+  ).length;
+  const noContentCount = Math.max(0, totalProducts - publishedCount - draftCount);
   const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
   const isLowUsage = usageRemaining > 0 && usageRemaining <= 5;
   const isOutOfUsage = usageRemaining === 0;
