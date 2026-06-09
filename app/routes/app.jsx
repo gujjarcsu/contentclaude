@@ -27,6 +27,9 @@ function JobProgressTicker({ navigate }) {
   const fetcher = useFetcher();
   const timerRef = useRef(null);
   const [msgIdx, setMsgIdx] = useState(0);
+  // Use a ref so the recursive timer always reads the latest count without
+  // needing to restart the effect (which would create overlapping timers).
+  const hasJobsRef = useRef(false);
 
   const data = fetcher.data;
   const hasJobs = data ? data.count > 0 : false;
@@ -34,9 +37,9 @@ function JobProgressTicker({ navigate }) {
   const completedProducts = data?.completedProducts ?? 0;
   const totalProducts = data?.totalProducts ?? 0;
 
-  // Stable recursive setTimeout — prevents interval-cascade when hasJobs toggles rapidly.
-  // An interval re-created on every hasJobs change fires multiple overlapping intervals
-  // if hasJobs oscillates quickly; recursive setTimeout is always single-fire.
+  // Keep ref in sync with latest render value.
+  hasJobsRef.current = hasJobs;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -45,23 +48,25 @@ function JobProgressTicker({ navigate }) {
       fetcher.load("/api/jobs-status");
     };
 
-    const scheduleNext = (delay) => {
+    const scheduleNext = () => {
       if (cancelled) return;
+      // Read latest job state from ref so delay adapts after each poll response.
+      const delay = hasJobsRef.current ? 5_000 : 15_000;
       timerRef.current = setTimeout(() => {
         poll();
-        scheduleNext(data?.count > 0 ? 5_000 : 15_000);
+        scheduleNext();
       }, delay);
     };
 
     poll(); // immediate first fetch
-    scheduleNext(data?.count > 0 ? 5_000 : 15_000);
+    scheduleNext();
 
     return () => {
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally empty — fetcher is stable; delay is read from closure data
+  }, []); // Effect is intentionally mount-only; hasJobsRef carries live state
 
   // Rotate messages while jobs are running
   useEffect(() => {
