@@ -78,7 +78,7 @@ npm run dev
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
 SHOPIFY_APP_URL=
-SCOPES=write_products,write_metaobjects,write_metaobject_definitions
+SCOPES=write_products,write_metaobjects,write_metaobject_definitions,write_content
 ANTHROPIC_API_KEY=
 LOG_LEVEL=debug
 ```
@@ -103,7 +103,7 @@ Plans are defined in [app/shopify.server.js](app/shopify.server.js):
 
 | Plan | Generations/month | Price |
 |---|---|---|
-| Free | 10 | $0 |
+| Free | 25 | $0 |
 | Starter | 50 | $9.99/mo |
 | Growth | 200 | $29.99/mo |
 | Professional | 1,000 | $79.99/mo |

@@ -20,7 +20,7 @@ Create a `.env` file (never commit this):
 SHOPIFY_API_KEY=your_api_key
 SHOPIFY_API_SECRET=your_api_secret
 SHOPIFY_APP_URL=https://your-production-domain.com
-SCOPES=write_products,write_metaobjects,write_metaobject_definitions
+SCOPES=write_products,write_metaobjects,write_metaobject_definitions,write_content
 
 # AI content generation
 ANTHROPIC_API_KEY=sk-ant-your-key-here
