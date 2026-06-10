@@ -1,5 +1,4 @@
-import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
-import { AppSkeleton } from "../components/AppSkeleton.jsx";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -223,7 +222,6 @@ export default function CollectionsPage() {
   const isPublishing = fetcher.state !== "idle" && fetcher.formData?.get("actionType") === "publish";
   const fetcherData = fetcher.data;
 
-  const navigation = useNavigation();
   const prevFetcherData = useRef(null);
 
   useEffect(() => {

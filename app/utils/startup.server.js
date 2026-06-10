@@ -70,10 +70,10 @@ export function runStartupChecks() {
     }
   }
   const envScopes = new Set((process.env.SCOPES || "").split(",").map((s) => s.trim()).filter(Boolean));
-  const requiredScopes = ["write_products", "write_metaobjects"];
+  const requiredScopes = ["write_products", "write_content", "write_metaobjects"];
   const missingScopes = requiredScopes.filter((s) => !envScopes.has(s));
   if (missingScopes.length > 0) {
-    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — FAQ metafield writes will fail`);
+    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — blog/article/metafield writes will fail`);
   }
   if (process.env.NODE_ENV === "production" && !process.env.CONTENTCLAUDE_API_TOKEN) {
     warnings.push("CONTENTCLAUDE_API_TOKEN not set — /api/generate external endpoint will reject all requests");
