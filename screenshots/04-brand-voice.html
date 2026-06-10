@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1280">
+<title>ContentPilot AI – Brand Voice</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#F1F1F1; display:flex; min-height:100vh; }
+  .nav { width:240px; background:#1A1A1A; min-height:100vh; padding:16px 0; flex-shrink:0; }
+  .nav-logo { padding:8px 16px 20px; color:#fff; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 20px; color:#C9CCCF; font-size:13px; cursor:pointer; }
+  .nav-item.active { background:rgba(44,110,203,0.25); color:#6EA8F7; border-left:3px solid #2C6ECB; }
+  .main { flex:1; padding:24px; }
+  .page-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
+  .page-title { font-size:22px; font-weight:700; color:#202223; }
+  .page-sub { font-size:13px; color:#6D7175; margin-top:4px; }
+  .layout { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .card { background:#fff; border-radius:12px; border:1px solid #E1E3E5; margin-bottom:16px; }
+  .card-header { padding:16px 20px; border-bottom:1px solid #E1E3E5; }
+  .card-title { font-size:15px; font-weight:600; color:#202223; display:flex; align-items:center; gap:8px; }
+  .card-sub { font-size:12px; color:#6D7175; margin-top:3px; }
+  .card-body { padding:20px; }
+  .field { margin-bottom:18px; }
+  .field-label { font-size:13px; font-weight:600; color:#202223; margin-bottom:6px; }
+  .field-sub { font-size:12px; color:#6D7175; margin-bottom:6px; }
+  .field-input { width:100%; border:1px solid #C9CCCF; border-radius:8px; padding:10px 12px; font-size:13px; color:#202223; background:#fff; font-family:inherit; }
+  .field-input:focus { outline:none; border-color:#2C6ECB; box-shadow:0 0 0 3px rgba(44,110,203,0.1); }
+  textarea.field-input { min-height:80px; resize:vertical; line-height:1.6; }
+  .tone-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .tone-btn { padding:10px; border:2px solid #E1E3E5; border-radius:8px; text-align:center; cursor:pointer; font-size:13px; font-weight:500; color:#6D7175; }
+  .tone-btn.selected { border-color:#2C6ECB; background:#EAF2FF; color:#2C6ECB; font-weight:600; }
+  .btn { padding:10px 20px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer; border:1px solid #C9CCCF; background:#fff; color:#202223; }
+  .btn-primary { background:#2C6ECB; color:#fff; border-color:#2C6ECB; font-weight:600; }
+  .autopilot-card { background:linear-gradient(135deg,#F0F7FF,#EAF2FF); border:1px solid #BDD4F8; border-radius:12px; padding:20px; margin-bottom:16px; }
+  .autopilot-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .autopilot-title { font-size:16px; font-weight:600; color:#202223; display:flex; align-items:center; gap:8px; }
+  .toggle { width:44px; height:24px; background:#2C6ECB; border-radius:12px; position:relative; cursor:pointer; }
+  .toggle-thumb { width:20px; height:20px; background:#fff; border-radius:50%; position:absolute; top:2px; right:2px; transition:right 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+  .toggle.off { background:#C9CCCF; }
+  .toggle.off .toggle-thumb { right:auto; left:2px; }
+  .ap-desc { font-size:13px; color:#6D7175; margin-bottom:14px; line-height:1.5; }
+  .ap-options { display:flex; gap:12px; flex-wrap:wrap; }
+  .ap-chip { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; border:1.5px solid; }
+  .ap-chip.on { background:#E3F1E9; color:#1a7345; border-color:#95C9A5; }
+  .ap-chip.off { background:#fff; color:#6D7175; border-color:#C9CCCF; }
+  .banner-success { background:#E3F1E9; border:1px solid #95C9A5; border-radius:8px; padding:12px 16px; display:flex; align-items:center; gap:10px; font-size:13px; color:#1a7345; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> ContentPilot AI</div>
+  <div class="nav-item">Dashboard</div>
+  <div class="nav-item">Products</div>
+  <div class="nav-item">Bulk Jobs</div>
+  <div class="nav-item">Blog Generator</div>
+  <div class="nav-item">SEO Audit</div>
+  <div class="nav-item">Analytics</div>
+  <div class="nav-item active">Brand Voice</div>
+  <div class="nav-item">Plans & Billing</div>
+</nav>
+<main class="main">
+  <div class="page-top">
+    <div>
+      <div class="page-title">Brand Voice Settings</div>
+      <div class="page-sub">Configure your brand personality so Claude writes in your exact voice every time.</div>
+    </div>
+    <button class="btn btn-primary">Save Changes</button>
+  </div>
+
+  <div class="banner-success">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a7345" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    Brand voice saved successfully — all future generations will use these settings.
+  </div>
+
+  <!-- Autopilot -->
+  <div class="autopilot-card">
+    <div class="autopilot-header">
+      <div class="autopilot-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Autopilot Mode
+        <span style="background:#EAF2FF;color:#2C6ECB;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid #BDD4F8;">Growth Plan</span>
+      </div>
+      <div class="toggle"><div class="toggle-thumb"></div></div>
+    </div>
+    <div class="ap-desc">Automatically generate content for new products the moment they're added to your store. Zero manual effort required.</div>
+    <div class="ap-options">
+      <div class="ap-chip on">✓ Description</div>
+      <div class="ap-chip on">✓ Meta Title</div>
+      <div class="ap-chip on">✓ Meta Description</div>
+      <div class="ap-chip off">FAQ</div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Left column -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            Store Identity
+          </div>
+          <div class="card-sub">Core brand information Claude uses in every generation</div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <div class="field-label">Store Name</div>
+            <input class="field-input" value="Elite Peps Australia">
+          </div>
+          <div class="field">
+            <div class="field-label">Target Audience</div>
+            <div class="field-sub">Who are your ideal customers?</div>
+            <textarea class="field-input">Serious gym-goers, competitive athletes, and fitness enthusiasts aged 18–40 in Australia who prioritise performance and clean nutrition over price.</textarea>
+          </div>
+          <div class="field">
+            <div class="field-label">Key Differentiators</div>
+            <div class="field-sub">What makes your store unique?</div>
+            <textarea class="field-input">Premium quality ingredients, no fillers or artificial colours, lab-tested products, Australian-owned, fast local shipping, expert formulations backed by sports science.</textarea>
+          </div>
+          <div class="field">
+            <div class="field-label">Phrases to Avoid</div>
+            <div class="field-sub">Words or claims Claude should never use</div>
+            <input class="field-input" value="miracle, magic, instant results, clinically proven, #1 in Australia">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Voice & Tone
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <div class="field-label">Brand Tone</div>
+            <div class="field-sub">How Claude should sound when writing your content</div>
+            <div class="tone-grid">
+              <div class="tone-btn">Professional</div>
+              <div class="tone-btn selected">Bold</div>
+              <div class="tone-btn">Friendly</div>
+              <div class="tone-btn">Scientific</div>
+              <div class="tone-btn">Premium</div>
+              <div class="tone-btn">Warm</div>
+              <div class="tone-btn">Playful</div>
+              <div class="tone-btn">Minimalist</div>
+              <div class="tone-btn">Custom</div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">Output Language</div>
+            <select class="field-input">
+              <option selected>English (en)</option>
+              <option>Spanish (es)</option>
+              <option>French (fr)</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label">Sample Content</div>
+            <div class="field-sub">Paste an example of your existing best product copy — Claude will match this style exactly.</div>
+            <textarea class="field-input" style="min-height:110px;">Train harder. Recover faster. Perform at your peak. Our supplements aren't for the casual gym-goer — they're engineered for athletes who refuse to settle. Every ingredient earns its place on the label.</textarea>
+          </div>
+          <div class="field">
+            <div class="field-label">Target Keywords</div>
+            <div class="field-sub">Keywords Claude will naturally weave into descriptions</div>
+            <input class="field-input" value="protein powder Australia, whey protein, sports supplements, gym supplements, pre-workout">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

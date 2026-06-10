@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1280">
+<title>ContentPilot AI – Plans & Billing</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#F1F1F1; display:flex; min-height:100vh; }
+  .nav { width:240px; background:#1A1A1A; min-height:100vh; padding:16px 0; flex-shrink:0; }
+  .nav-logo { padding:8px 16px 20px; color:#fff; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 20px; color:#C9CCCF; font-size:13px; cursor:pointer; }
+  .nav-item.active { background:rgba(44,110,203,0.25); color:#6EA8F7; border-left:3px solid #2C6ECB; }
+  .main { flex:1; padding:28px; }
+  .page-title { font-size:24px; font-weight:700; color:#202223; margin-bottom:6px; }
+  .page-sub { font-size:14px; color:#6D7175; margin-bottom:28px; }
+  .current-plan { background:#fff; border-radius:12px; border:1px solid #E1E3E5; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+  .current-left { display:flex; align-items:center; gap:16px; }
+  .plan-icon { width:48px; height:48px; border-radius:10px; background:#EAF2FF; display:flex; align-items:center; justify-content:center; }
+  .current-name { font-size:18px; font-weight:700; color:#202223; }
+  .current-sub { font-size:13px; color:#6D7175; margin-top:2px; }
+  .usage-section { display:flex; align-items:center; gap:20px; }
+  .usage-num { text-align:center; }
+  .usage-num .val { font-size:22px; font-weight:700; color:#2C6ECB; }
+  .usage-num .lbl { font-size:11px; color:#6D7175; }
+  .progress-bar { width:180px; height:8px; background:#E1E3E5; border-radius:4px; overflow:hidden; }
+  .progress-fill { height:100%; background:#2C6ECB; border-radius:4px; }
+  .plans-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+  .plan-card { background:#fff; border-radius:14px; border:2px solid #E1E3E5; padding:24px; position:relative; display:flex; flex-direction:column; }
+  .plan-card.current { border-color:#2C6ECB; }
+  .plan-card.popular { border-color:#2C6ECB; }
+  .current-badge { position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:#2C6ECB; color:#fff; font-size:11px; font-weight:700; padding:4px 12px; border-radius:20px; white-space:nowrap; }
+  .popular-badge { position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:#8A2BE2; color:#fff; font-size:11px; font-weight:700; padding:4px 12px; border-radius:20px; white-space:nowrap; }
+  .plan-icon-lg { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+  .plan-name { font-size:16px; font-weight:700; color:#202223; margin-bottom:4px; }
+  .plan-price { font-size:28px; font-weight:800; color:#202223; margin-bottom:2px; }
+  .plan-price span { font-size:14px; font-weight:400; color:#6D7175; }
+  .plan-desc { font-size:12px; color:#6D7175; margin-bottom:16px; }
+  .plan-divider { height:1px; background:#E1E3E5; margin:16px 0; }
+  .plan-feature { display:flex; align-items:flex-start; gap:8px; font-size:13px; color:#202223; margin-bottom:8px; line-height:1.4; }
+  .plan-feature:last-child { margin-bottom:0; }
+  .check { color:#1a7345; font-weight:700; flex-shrink:0; }
+  .lock { color:#8C9196; flex-shrink:0; }
+  .plan-btn { margin-top:auto; padding-top:16px; }
+  .btn { width:100%; padding:11px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; border:none; text-align:center; }
+  .btn-current { background:#F6F6F7; color:#6D7175; cursor:default; }
+  .btn-upgrade { background:#2C6ECB; color:#fff; }
+  .btn-growth { background:linear-gradient(135deg,#8A2BE2,#5B6BF8); color:#fff; }
+  .trial-note { font-size:11px; color:#6D7175; text-align:center; margin-top:8px; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> ContentPilot AI</div>
+  <div class="nav-item">Dashboard</div>
+  <div class="nav-item">Products</div>
+  <div class="nav-item">Bulk Jobs</div>
+  <div class="nav-item">Blog Generator</div>
+  <div class="nav-item">SEO Audit</div>
+  <div class="nav-item">Analytics</div>
+  <div class="nav-item">Brand Voice</div>
+  <div class="nav-item active">Plans & Billing</div>
+</nav>
+<main class="main">
+  <div class="page-title">Plans & Billing</div>
+  <div class="page-sub">Choose the plan that fits your store. Upgrade or downgrade anytime.</div>
+
+  <!-- Current plan summary -->
+  <div class="current-plan">
+    <div class="current-left">
+      <div class="plan-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div>
+        <div class="current-name">Growth Plan — $29.99/month</div>
+        <div class="current-sub">Your plan renews on 1 July 2026 · 7-day free trial active</div>
+      </div>
+    </div>
+    <div class="usage-section">
+      <div class="usage-num"><div class="val">47</div><div class="lbl">used</div></div>
+      <div>
+        <div style="font-size:12px;color:#6D7175;margin-bottom:6px;">47 / 200 generations this month</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:23.5%;"></div></div>
+      </div>
+      <div class="usage-num"><div class="val" style="color:#1a7345;">153</div><div class="lbl">remaining</div></div>
+    </div>
+  </div>
+
+  <!-- Plans grid -->
+  <div class="plans-grid">
+
+    <!-- Free -->
+    <div class="plan-card">
+      <div class="plan-icon-lg" style="background:#F1F1F1;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6D7175" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </div>
+      <div class="plan-name">Free</div>
+      <div class="plan-price">$0<span>/month</span></div>
+      <div class="plan-desc">Perfect for trying ContentPilot AI</div>
+      <div class="plan-divider"></div>
+      <div class="plan-feature"><span class="check">✓</span> 10 generations / month</div>
+      <div class="plan-feature"><span class="check">✓</span> Product descriptions</div>
+      <div class="plan-feature"><span class="check">✓</span> Meta titles & descriptions</div>
+      <div class="plan-feature"><span class="lock">✗</span><span style="color:#6D7175;">FAQ generation</span></div>
+      <div class="plan-feature"><span class="lock">✗</span><span style="color:#6D7175;">Bulk generation</span></div>
+      <div class="plan-feature"><span class="lock">✗</span><span style="color:#6D7175;">Blog generator</span></div>
+      <div class="plan-btn">
+        <button class="btn btn-current">Downgrade</button>
+      </div>
+    </div>
+
+    <!-- Starter -->
+    <div class="plan-card">
+      <div class="plan-icon-lg" style="background:#EAF2FF;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">$9.99<span>/month</span></div>
+      <div class="plan-desc">For small stores getting started</div>
+      <div class="plan-divider"></div>
+      <div class="plan-feature"><span class="check">✓</span> 50 generations / month</div>
+      <div class="plan-feature"><span class="check">✓</span> Product descriptions</div>
+      <div class="plan-feature"><span class="check">✓</span> Meta titles & descriptions</div>
+      <div class="plan-feature"><span class="check">✓</span> FAQ generation</div>
+      <div class="plan-feature"><span class="lock">✗</span><span style="color:#6D7175;">Bulk generation</span></div>
+      <div class="plan-feature"><span class="lock">✗</span><span style="color:#6D7175;">Blog generator</span></div>
+      <div class="plan-btn">
+        <button class="btn btn-current">Downgrade to Starter</button>
+        <div class="trial-note">7-day free trial</div>
+      </div>
+    </div>
+
+    <!-- Growth (current) -->
+    <div class="plan-card current">
+      <div class="current-badge">✓ Current Plan</div>
+      <div class="plan-icon-lg" style="background:#E3F1E9;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a7345" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      </div>
+      <div class="plan-name">Growth</div>
+      <div class="plan-price">$29.99<span>/month</span></div>
+      <div class="plan-desc">For growing stores that need more</div>
+      <div class="plan-divider"></div>
+      <div class="plan-feature"><span class="check">✓</span> 200 generations / month</div>
+      <div class="plan-feature"><span class="check">✓</span> Product descriptions</div>
+      <div class="plan-feature"><span class="check">✓</span> Meta titles & descriptions</div>
+      <div class="plan-feature"><span class="check">✓</span> FAQ generation</div>
+      <div class="plan-feature"><span class="check">✓</span> Bulk generation</div>
+      <div class="plan-feature"><span class="check">✓</span> Blog generator</div>
+      <div class="plan-feature"><span class="check">✓</span> Autopilot mode</div>
+      <div class="plan-btn">
+        <button class="btn btn-current">Current Plan</button>
+      </div>
+    </div>
+
+    <!-- Professional -->
+    <div class="plan-card popular">
+      <div class="popular-badge">⭐ Most Powerful</div>
+      <div class="plan-icon-lg" style="background:#F3F0FF;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A2BE2" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </div>
+      <div class="plan-name">Professional</div>
+      <div class="plan-price">$79.99<span>/month</span></div>
+      <div class="plan-desc">For high-volume stores at scale</div>
+      <div class="plan-divider"></div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> 1,000 generations / month</div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> Everything in Growth</div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> Priority AI processing</div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> Image alt text generation</div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> Advanced analytics</div>
+      <div class="plan-feature"><span class="check" style="color:#8A2BE2;">✓</span> SEO audit & scoring</div>
+      <div class="plan-btn">
+        <button class="btn btn-growth">Upgrade to Professional</button>
+        <div class="trial-note">7-day free trial</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

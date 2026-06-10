@@ -1,0 +1,103 @@
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" font-family="Inter,-apple-system,sans-serif">
+  <rect width="1280" height="800" fill="#F6F6F7"/>
+  <!-- Top bar -->
+  <rect width="1280" height="56" fill="#1A1A1A"/>
+  <rect x="16" y="16" width="24" height="24" rx="4" fill="#0A84FF"/>
+  <text x="48" y="32" fill="white" font-size="14" font-weight="600">ContentClaude</text>
+
+  <!-- Left nav -->
+  <rect x="0" y="56" width="220" height="744" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <rect x="8" y="112" width="204" height="36" rx="6" fill="#EAF4FF"/>
+  <text x="36" y="135" fill="#0A84FF" font-size="13" font-weight="600">Products</text>
+  <text x="36" y="92" fill="#6B7280" font-size="13">Dashboard</text>
+  <text x="36" y="167" fill="#6B7280" font-size="13">Optimise Store</text>
+
+  <!-- Main content -->
+  <rect x="220" y="56" width="1060" height="744" fill="#F6F6F7"/>
+
+  <!-- Back + Title -->
+  <text x="252" y="88" fill="#0A84FF" font-size="13">← Products</text>
+  <text x="252" y="115" fill="#1A1A1A" font-size="20" font-weight="700">Organic Argan Oil Serum</text>
+  <rect x="900" y="96" width="80" height="28" rx="4" fill="#0A84FF"/>
+  <text x="940" y="114" fill="white" font-size="12" font-weight="600" text-anchor="middle">Publish</text>
+  <rect x="988" y="96" width="80" height="28" rx="4" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="1028" y="114" fill="#1A1A1A" font-size="12" text-anchor="middle">Discard</text>
+
+  <!-- Left panel — controls -->
+  <rect x="252" y="132" width="300" height="520" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Product image -->
+  <rect x="268" y="148" width="268" height="160" rx="6" fill="#EAF4FF"/>
+  <text x="402" y="235" fill="#0A84FF" font-size="22" text-anchor="middle" font-weight="700">Argan</text>
+  <text x="402" y="256" fill="#6B7280" font-size="11" text-anchor="middle">Oil Serum · 30ml</text>
+
+  <!-- Controls -->
+  <text x="268" y="336" fill="#1A1A1A" font-size="13" font-weight="600">Generate Content</text>
+  <rect x="268" y="346" width="268" height="1" fill="#E5E7EB"/>
+
+  <rect x="268" y="356" width="14" height="14" rx="2" fill="#0A84FF"/>
+  <text x="288" y="367" fill="#1A1A1A" font-size="12">Description</text>
+  <rect x="268" y="378" width="14" height="14" rx="2" fill="#0A84FF"/>
+  <text x="288" y="389" fill="#1A1A1A" font-size="12">Meta Title &amp; Description</text>
+  <rect x="268" y="400" width="14" height="14" rx="3" fill="white" stroke="#D1D5DB" stroke-width="1.5"/>
+  <text x="288" y="411" fill="#6B7280" font-size="12">FAQ Content</text>
+
+  <!-- Advanced options -->
+  <text x="268" y="436" fill="#0A84FF" font-size="12">▾ Advanced Options</text>
+  <text x="268" y="458" fill="#6B7280" font-size="11">Description Length</text>
+  <rect x="268" y="464" width="268" height="28" rx="4" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="280" y="482" fill="#1A1A1A" font-size="12">Standard</text>
+
+  <!-- Generate button -->
+  <rect x="268" y="512" width="268" height="40" rx="6" fill="#0A84FF"/>
+  <text x="402" y="536" fill="white" font-size="13" font-weight="600" text-anchor="middle">Generate Content ⌘↵</text>
+  <text x="402" y="560" fill="#9CA3AF" font-size="10" text-anchor="middle">Tip: Press ⌘↵ (Mac) or Ctrl+↵ (Windows)</text>
+
+  <!-- Right panel — content tabs -->
+  <rect x="564" y="132" width="688" height="520" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Tabs -->
+  <rect x="564" y="132" width="688" height="44" rx="8" fill="#F9FAFB"/>
+  <rect x="564" y="164" width="688" height="12" fill="#F9FAFB"/>
+  <rect x="564" y="132" width="172" height="44" rx="0" fill="white"/>
+  <rect x="564" y="168" width="172" height="8" fill="white"/>
+  <text x="650" y="158" fill="#1A1A1A" font-size="13" font-weight="600" text-anchor="middle">Generate</text>
+  <text x="822" y="158" fill="#6B7280" font-size="13" text-anchor="middle">Content</text>
+  <text x="994" y="158" fill="#6B7280" font-size="13" text-anchor="middle">History</text>
+  <text x="1166" y="158" fill="#6B7280" font-size="13" text-anchor="middle">Alt Text</text>
+
+  <!-- Success banner -->
+  <rect x="576" y="184" width="664" height="52" rx="6" fill="#D4F1E4"/>
+  <text x="592" y="205" fill="#1B7E4A" font-size="13" font-weight="600">✓ Content generated — review &amp; publish</text>
+  <text x="592" y="222" fill="#1B7E4A" font-size="11">Description, Meta Title and Meta Description generated successfully.</text>
+
+  <!-- Quality score -->
+  <rect x="576" y="244" width="664" height="36" rx="6" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="592" y="266" fill="#6B7280" font-size="12">Quality Score</text>
+  <rect x="740" y="250" width="140" height="22" rx="4" fill="#D4F1E4"/>
+  <text x="810" y="265" fill="#1B7E4A" font-size="12" font-weight="600" text-anchor="middle">85 / 100 — Excellent</text>
+
+  <!-- Description section -->
+  <text x="592" y="302" fill="#1A1A1A" font-size="14" font-weight="600">Description</text>
+  <rect x="900" y="287" width="54" height="22" rx="4" fill="#D4F1E4"/>
+  <text x="927" y="301" fill="#1B7E4A" font-size="11" text-anchor="middle">Published</text>
+
+  <rect x="576" y="312" width="664" height="130" rx="6" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="592" y="334" fill="#374151" font-size="12">Infused with pure Moroccan Argan Oil, this luxurious serum delivers</text>
+  <text x="592" y="352" fill="#374151" font-size="12">deep nourishment and intense hydration. Rich in Vitamin E and</text>
+  <text x="592" y="370" fill="#374151" font-size="12">essential fatty acids, it visibly reduces fine lines while restoring</text>
+  <text x="592" y="388" fill="#374151" font-size="12">your skin's natural radiance. Suitable for all skin types.</text>
+  <text x="592" y="424" fill="#9CA3AF" font-size="11">87 words · 489 characters</text>
+  <text x="1224" y="424" fill="#0A84FF" font-size="11" text-anchor="end">Copy text</text>
+
+  <!-- Meta Title -->
+  <text x="592" y="458" fill="#1A1A1A" font-size="14" font-weight="600">Meta Title</text>
+  <text x="1050" y="458" fill="#0A84FF" font-size="11" text-anchor="end">Copy</text>
+  <text x="1100" y="458" fill="#0A84FF" font-size="11">Regenerate</text>
+  <rect x="576" y="466" width="664" height="36" rx="4" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="592" y="488" fill="#374151" font-size="12">Organic Argan Oil Serum | Deep Nourishing Skin Care</text>
+  <rect x="576" y="508" width="396" height="5" rx="2.5" fill="#D4F1E4"/>
+  <text x="592" y="526" fill="#6B7280" font-size="11">51/60 characters</text>
+
+  <text x="252" y="772" fill="#9CA3AF" font-size="11" text-anchor="middle">ContentClaude — AI Product Content for Shopify · contentclaude.fly.dev</text>
+</svg>

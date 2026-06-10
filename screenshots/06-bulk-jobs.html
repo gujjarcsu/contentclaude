@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1280">
+<title>ContentPilot AI – Bulk Jobs</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#F1F1F1; display:flex; min-height:100vh; }
+  .nav { width:240px; background:#1A1A1A; min-height:100vh; padding:16px 0; flex-shrink:0; }
+  .nav-logo { padding:8px 16px 20px; color:#fff; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 20px; color:#C9CCCF; font-size:13px; cursor:pointer; }
+  .nav-item.active { background:rgba(44,110,203,0.25); color:#6EA8F7; border-left:3px solid #2C6ECB; }
+  .main { flex:1; padding:28px; }
+  .page-title { font-size:22px; font-weight:700; color:#202223; margin-bottom:4px; }
+  .page-sub { font-size:13px; color:#6D7175; margin-bottom:24px; }
+  .card { background:#fff; border-radius:12px; border:1px solid #E1E3E5; margin-bottom:16px; overflow:hidden; }
+  .card-header { padding:16px 20px; border-bottom:1px solid #E1E3E5; display:flex; align-items:center; justify-content:space-between; }
+  .card-title { font-size:15px; font-weight:600; color:#202223; display:flex; align-items:center; gap:8px; }
+  .badge { display:inline-flex; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge-processing { background:#EAF2FF; color:#1656AC; }
+  .badge-success { background:#E3F1E9; color:#1a7345; }
+  .badge-queued { background:#FFF5EA; color:#916A00; }
+  .badge-failed { background:#FFF0EF; color:#D82C0D; }
+  .progress-bar { height:12px; background:#E1E3E5; border-radius:6px; overflow:hidden; margin:8px 0; }
+  .progress-fill-blue { height:100%; background:linear-gradient(90deg,#2C6ECB,#5B8FE8); border-radius:6px; transition:width 0.3s; }
+  .progress-fill-green { height:100%; background:linear-gradient(90deg,#1a7345,#2ecc71); border-radius:6px; }
+  .job-card { padding:20px; }
+  .job-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; }
+  .job-title { font-size:15px; font-weight:600; color:#202223; margin-bottom:4px; }
+  .job-meta { font-size:12px; color:#6D7175; display:flex; gap:16px; }
+  .job-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .job-stat { background:#F6F6F7; border-radius:8px; padding:12px; text-align:center; }
+  .job-stat-val { font-size:22px; font-weight:700; color:#202223; }
+  .job-stat-val.green { color:#1a7345; }
+  .job-stat-val.blue { color:#1656AC; }
+  .job-stat-lbl { font-size:11px; color:#6D7175; margin-top:3px; }
+  .progress-section { }
+  .progress-label { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#202223; margin-bottom:6px; font-weight:500; }
+  .progress-sub { font-size:12px; color:#6D7175; margin-top:4px; }
+  .product-log { border-top:1px solid #F1F1F1; margin-top:16px; }
+  .log-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #F8F8F8; font-size:13px; }
+  .log-item:last-child { border-bottom:none; }
+  .log-icon { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; }
+  .log-icon-green { background:#E3F1E9; }
+  .log-icon-blue { background:#EAF2FF; }
+  .log-icon-spin { background:#EAF2FF; }
+  .log-name { flex:1; color:#202223; font-weight:500; }
+  .log-types { font-size:11px; color:#6D7175; }
+  .log-time { font-size:12px; color:#6D7175; }
+  .divider { height:1px; background:#E1E3E5; margin:20px 0; }
+
+  /* Completed job */
+  .completed-card { padding:20px; }
+  .completed-banner { background:#E3F1E9; border-radius:8px; padding:14px 16px; display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .completed-banner-text { font-size:14px; font-weight:600; color:#1a7345; }
+  .completed-banner-sub { font-size:12px; color:#2d6a4f; margin-top:2px; }
+  .btn { padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid #C9CCCF; background:#fff; color:#202223; }
+  .btn-primary { background:#2C6ECB; color:#fff; border-color:#2C6ECB; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> ContentPilot AI</div>
+  <div class="nav-item">Dashboard</div>
+  <div class="nav-item">Products</div>
+  <div class="nav-item active">Bulk Jobs</div>
+  <div class="nav-item">Blog Generator</div>
+  <div class="nav-item">SEO Audit</div>
+  <div class="nav-item">Analytics</div>
+  <div class="nav-item">Brand Voice</div>
+  <div class="nav-item">Plans & Billing</div>
+</nav>
+<main class="main">
+  <div class="page-title">Bulk Generation Jobs</div>
+  <div class="page-sub">Background AI jobs — navigate freely while generation runs. Page auto-refreshes every 5 seconds.</div>
+
+  <!-- Active job -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1656AC" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Job #4 — Running Now
+      </div>
+      <span class="badge badge-processing">● Processing</span>
+    </div>
+    <div class="job-card">
+      <div class="job-header">
+        <div>
+          <div class="job-title">Selected 34 Products · Descriptions + Meta Tags</div>
+          <div class="job-meta">
+            <span>Started: 4 min ago</span>
+            <span>Est. completion: ~2 min</span>
+            <span>Auto-publish: Off</span>
+          </div>
+        </div>
+        <button class="btn">Cancel</button>
+      </div>
+
+      <div class="job-stats">
+        <div class="job-stat"><div class="job-stat-val green">28</div><div class="job-stat-lbl">Completed</div></div>
+        <div class="job-stat"><div class="job-stat-val blue">1</div><div class="job-stat-lbl">In Progress</div></div>
+        <div class="job-stat"><div class="job-stat-val">5</div><div class="job-stat-lbl">Queued</div></div>
+        <div class="job-stat"><div class="job-stat-val" style="color:#D82C0D;">0</div><div class="job-stat-lbl">Errors</div></div>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-label">
+          <span>Progress — 28 of 34 products</span>
+          <span style="color:#1656AC;font-weight:700;">82%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill-blue" style="width:82%;"></div></div>
+        <div class="progress-sub">Generating: Fat Burner Thermo – Capsules 120ct...</div>
+      </div>
+
+      <!-- Live log -->
+      <div class="product-log">
+        <div class="log-item">
+          <div class="log-icon log-icon-green">✓</div>
+          <div class="log-name">Vanilla Protein Powder 2kg</div>
+          <div class="log-types">Description, Meta Title, Meta Desc</div>
+          <div class="log-time">23s</div>
+        </div>
+        <div class="log-item">
+          <div class="log-icon log-icon-green">✓</div>
+          <div class="log-name">Pre-Workout Extreme – Watermelon</div>
+          <div class="log-types">Description, Meta Title, Meta Desc</div>
+          <div class="log-time">31s</div>
+        </div>
+        <div class="log-item">
+          <div class="log-icon log-icon-green">✓</div>
+          <div class="log-name">Creatine Monohydrate 500g</div>
+          <div class="log-types">Description, Meta Title, Meta Desc</div>
+          <div class="log-time">19s</div>
+        </div>
+        <div class="log-item" style="background:#EAF2FF;border-radius:6px;padding:10px 8px;margin:4px 0;">
+          <div class="log-icon log-icon-blue" style="animation:pulse 1s ease-in-out infinite;">⏳</div>
+          <div class="log-name" style="color:#1656AC;">Fat Burner Thermo – Capsules 120ct</div>
+          <div class="log-types" style="color:#1656AC;">Generating...</div>
+          <div class="log-time" style="color:#1656AC;">~8s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completed job -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a7345" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Job #3 — Completed
+      </div>
+      <span class="badge badge-success">✓ Complete</span>
+    </div>
+    <div class="completed-card">
+      <div class="completed-banner">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a7345" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <div>
+          <div class="completed-banner-text">50 products generated successfully in 3 min 12 sec</div>
+          <div class="completed-banner-sub">Descriptions, meta titles, and meta descriptions are ready to review and publish.</div>
+        </div>
+      </div>
+      <div class="job-stats">
+        <div class="job-stat"><div class="job-stat-val green">50</div><div class="job-stat-lbl">Completed</div></div>
+        <div class="job-stat"><div class="job-stat-val">50</div><div class="job-stat-lbl">Total Products</div></div>
+        <div class="job-stat"><div class="job-stat-val">3m 12s</div><div class="job-stat-lbl">Duration</div></div>
+        <div class="job-stat"><div class="job-stat-val green">100%</div><div class="job-stat-lbl">Success Rate</div></div>
+      </div>
+      <div class="progress-section">
+        <div class="progress-label"><span>Completed</span><span style="color:#1a7345;font-weight:700;">100%</span></div>
+        <div class="progress-bar"><div class="progress-fill-green" style="width:100%;"></div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-primary">Review & Publish Drafts →</button>
+        <button class="btn">View Products</button>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1280">
+<title>ContentPilot AI – Products</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F1F1F1; display: flex; min-height: 100vh; }
+  .nav { width: 240px; background: #1A1A1A; min-height: 100vh; padding: 16px 0; flex-shrink: 0; }
+  .nav-logo { padding: 8px 16px 20px; color: #fff; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 20px; color: #C9CCCF; font-size: 13px; cursor: pointer; }
+  .nav-item.active { background: rgba(44,110,203,0.25); color: #6EA8F7; border-left: 3px solid #2C6ECB; }
+  .main { flex: 1; padding: 24px; }
+  .page-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 22px; font-weight: 700; color: #202223; }
+  .page-sub { font-size: 13px; color: #6D7175; margin-top: 4px; }
+  .actions { display: flex; gap: 10px; }
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid #C9CCCF; background: #fff; color: #202223; }
+  .btn-primary { background: #2C6ECB; color: #fff; border-color: #2C6ECB; font-weight: 600; }
+  .stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 16px; }
+  .stat { background:#fff; border-radius:10px; border:1px solid #E1E3E5; padding:16px 20px; display:flex; align-items:center; gap:14px; }
+  .stat-val { font-size:28px; font-weight:700; }
+  .stat-val.green { color:#1a7345; }
+  .stat-val.blue { color:#1656AC; }
+  .stat-val.red { color:#D82C0D; }
+  .stat-label { font-size:12px; color:#6D7175; margin-top:2px; }
+  .card { background:#fff; border-radius:12px; border:1px solid #E1E3E5; overflow:hidden; }
+  .tabs { display:flex; border-bottom:1px solid #E1E3E5; }
+  .tab { padding:12px 20px; font-size:13px; color:#6D7175; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tab.active { color:#2C6ECB; border-bottom-color:#2C6ECB; font-weight:600; }
+  .search-bar { padding:12px 16px; border-bottom:1px solid #E1E3E5; display:flex; align-items:center; gap:10px; }
+  .search-input { flex:1; border:1px solid #C9CCCF; border-radius:8px; padding:8px 12px; font-size:13px; color:#202223; display:flex; align-items:center; gap:8px; color:#8C9196; }
+  .product-row { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid #F1F1F1; gap:14px; }
+  .product-row:last-child { border-bottom:none; }
+  .product-row:hover { background:#F9F9F9; }
+  .checkbox { width:16px; height:16px; border:1.5px solid #C9CCCF; border-radius:4px; flex-shrink:0; }
+  .checkbox.checked { background:#2C6ECB; border-color:#2C6ECB; display:flex;align-items:center;justify-content:center; }
+  .product-img { width:48px; height:48px; border-radius:8px; background:#F1F1F1; border:1px solid #E1E3E5; object-fit:cover; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+  .product-info { flex:1; }
+  .product-title { font-size:14px; font-weight:600; color:#202223; margin-bottom:3px; }
+  .product-meta { font-size:12px; color:#6D7175; display:flex; gap:8px; margin-bottom:5px; }
+  .pill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:500; }
+  .pill-green { background:#E3F1E9; color:#1a7345; }
+  .pill-blue { background:#EAF2FF; color:#1656AC; }
+  .pill-gray { background:#F1F1F1; color:#6D7175; }
+  .badge { display:inline-flex; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge-success { background:#E3F1E9; color:#1a7345; }
+  .badge-info { background:#EAF2FF; color:#1656AC; }
+  .badge-attention { background:#FFF5EA; color:#916A00; }
+  .product-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .btn-sm { padding:5px 12px; border-radius:6px; font-size:12px; font-weight:500; border:1px solid #C9CCCF; background:#fff; color:#202223; cursor:pointer; }
+  .btn-sm.primary { background:#2C6ECB; color:#fff; border-color:#2C6ECB; }
+  .bulk-panel { background:#EAF2FF; border:1px solid #BDD4F8; border-radius:10px; padding:16px 20px; margin-bottom:14px; }
+  .bulk-title { font-size:15px; font-weight:600; color:#202223; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+  .bulk-options { display:flex; gap:20px; margin-bottom:14px; }
+  .check-option { display:flex; align-items:center; gap:8px; font-size:13px; color:#202223; }
+  .check-box { width:16px; height:16px; border-radius:4px; background:#2C6ECB; border:1.5px solid #2C6ECB; display:flex; align-items:center; justify-content:center; }
+  .check-empty { width:16px; height:16px; border-radius:4px; background:#fff; border:1.5px solid #C9CCCF; }
+  .bulk-footer { display:flex; align-items:center; gap:14px; }
+  .time-est { font-size:12px; color:#6D7175; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> ContentPilot AI</div>
+  <div class="nav-item">Dashboard</div>
+  <div class="nav-item active">Products</div>
+  <div class="nav-item">Bulk Jobs</div>
+  <div class="nav-item">Blog Generator</div>
+  <div class="nav-item">SEO Audit</div>
+  <div class="nav-item">Analytics</div>
+  <div class="nav-item">Brand Voice</div>
+  <div class="nav-item">Plans & Billing</div>
+</nav>
+<main class="main">
+  <div class="page-top">
+    <div>
+      <div class="page-title">Products</div>
+      <div class="page-sub">84 products · 47 optimised · 34 need content</div>
+    </div>
+    <div class="actions">
+      <button class="btn">Review Drafts</button>
+      <button class="btn">Generate All (84)</button>
+      <button class="btn">Bulk Jobs →</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a7345" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <div><div class="stat-val green">47</div><div class="stat-label">AI Content Published</div></div>
+    </div>
+    <div class="stat">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1656AC" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <div><div class="stat-val blue">3</div><div class="stat-label">Drafts to Review</div></div>
+    </div>
+    <div class="stat">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D82C0D" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div><div class="stat-val red">34</div><div class="stat-label">Need Content</div></div>
+    </div>
+  </div>
+
+  <!-- Bulk panel (3 selected) -->
+  <div class="bulk-panel">
+    <div class="bulk-title">
+      Generate for 3 selected products
+      <span style="font-size:13px;font-weight:400;color:#D82C0D;cursor:pointer;">Clear selection</span>
+    </div>
+    <div class="bulk-options">
+      <label class="check-option"><div class="check-box"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div> Description</label>
+      <label class="check-option"><div class="check-box"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div> Meta Title & Description</label>
+      <label class="check-option"><div class="check-empty"></div> FAQ Content</label>
+      <label class="check-option"><div class="check-empty"></div> Auto-publish</label>
+    </div>
+    <div class="bulk-footer">
+      <button class="btn-sm primary">Generate 3 Products →</button>
+      <span class="time-est">~1 min estimated · runs in background</span>
+    </div>
+  </div>
+
+  <!-- Product list -->
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active">All (84)</div>
+      <div class="tab">Needs Content (34)</div>
+      <div class="tab">Draft (3)</div>
+      <div class="tab">Published (47)</div>
+    </div>
+    <div class="search-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8C9196" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span class="search-input">Search products...</span>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox checked"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div>
+      <div class="product-img">🥤</div>
+      <div class="product-info">
+        <div class="product-title">Vanilla Protein Powder 2kg</div>
+        <div class="product-meta"><span>$89.99</span><span>· Protein</span></div>
+        <div><span class="pill pill-green">Desc ✓</span> <span class="pill pill-green">Meta ✓</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-success">Published</span><button class="btn-sm">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox checked"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div>
+      <div class="product-img">⚡</div>
+      <div class="product-info">
+        <div class="product-title">Pre-Workout Extreme – Watermelon</div>
+        <div class="product-meta"><span>$59.99</span><span>· Pre-Workout</span></div>
+        <div><span class="pill pill-blue">Desc ✓</span> <span class="pill pill-blue">Meta ✓</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-info">Draft Ready</span><button class="btn-sm">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox checked"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div>
+      <div class="product-img">💪</div>
+      <div class="product-info">
+        <div class="product-title">Creatine Monohydrate 500g</div>
+        <div class="product-meta"><span>$39.99</span><span>· Creatine</span></div>
+        <div><span class="pill pill-green">Desc ✓</span> <span class="pill pill-green">Meta ✓</span> <span class="pill pill-green">FAQ ✓</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-success">Published</span><button class="btn-sm">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox"></div>
+      <div class="product-img">🌿</div>
+      <div class="product-info">
+        <div class="product-title">BCAA Recovery Blend – Mixed Berry</div>
+        <div class="product-meta"><span>$49.99</span><span>· Amino Acids</span></div>
+        <div><span class="pill pill-gray">Desc</span> <span class="pill pill-gray">Meta</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-attention">No AI Content</span><button class="btn-sm primary">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox"></div>
+      <div class="product-img">🔥</div>
+      <div class="product-info">
+        <div class="product-title">Fat Burner Thermo – Capsules 120ct</div>
+        <div class="product-meta"><span>$69.99</span><span>· Weight Management</span></div>
+        <div><span class="pill pill-gray">Desc</span> <span class="pill pill-gray">Meta</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-attention">No AI Content</span><button class="btn-sm primary">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox"></div>
+      <div class="product-img">🍋</div>
+      <div class="product-info">
+        <div class="product-title">Electrolyte Hydration Mix – Lemon Lime</div>
+        <div class="product-meta"><span>$29.99</span><span>· Hydration</span></div>
+        <div><span class="pill pill-green">Desc ✓</span> <span class="pill pill-gray">Meta</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-success">Published</span><button class="btn-sm">Generate</button></div>
+    </div>
+
+    <div class="product-row">
+      <div class="checkbox"></div>
+      <div class="product-img">🏋️</div>
+      <div class="product-info">
+        <div class="product-title">Whey Isolate – Chocolate Fudge 1kg</div>
+        <div class="product-meta"><span>$74.99</span><span>· Protein</span></div>
+        <div><span class="pill pill-gray">Desc</span> <span class="pill pill-gray">Meta</span> <span class="pill pill-gray">FAQ</span></div>
+      </div>
+      <div class="product-actions"><span class="badge badge-attention">No AI Content</span><button class="btn-sm primary">Generate</button></div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

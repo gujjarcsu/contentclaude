@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1280">
+<title>ContentPilot AI – Product Editor</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#F1F1F1; display:flex; min-height:100vh; }
+  .nav { width:240px; background:#1A1A1A; min-height:100vh; padding:16px 0; flex-shrink:0; }
+  .nav-logo { padding:8px 16px 20px; color:#fff; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 20px; color:#C9CCCF; font-size:13px; cursor:pointer; }
+  .nav-item.active { background:rgba(44,110,203,0.25); color:#6EA8F7; border-left:3px solid #2C6ECB; }
+  .main { flex:1; padding:24px; overflow-y:auto; }
+  .breadcrumb { font-size:13px; color:#6D7175; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+  .breadcrumb a { color:#2C6ECB; }
+  .page-title { font-size:22px; font-weight:700; color:#202223; margin-bottom:4px; }
+  .page-sub { font-size:13px; color:#6D7175; margin-bottom:20px; }
+  .layout { display:grid; grid-template-columns:1fr 320px; gap:20px; }
+  .card { background:#fff; border-radius:12px; border:1px solid #E1E3E5; }
+  .card-header { padding:16px 20px; border-bottom:1px solid #E1E3E5; display:flex; align-items:center; justify-content:space-between; }
+  .card-title { font-size:15px; font-weight:600; color:#202223; display:flex; align-items:center; gap:8px; }
+  .card-body { padding:20px; }
+  .tabs { display:flex; border-bottom:1px solid #E1E3E5; overflow-x:auto; }
+  .tab { padding:12px 20px; font-size:13px; color:#6D7175; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .tab.active { color:#2C6ECB; border-bottom-color:#2C6ECB; font-weight:600; }
+  .tab-dot { width:7px; height:7px; border-radius:50%; }
+  .tab-dot-green { background:#1a7345; }
+  .tab-dot-blue { background:#1656AC; }
+  .tab-dot-gray { background:#C9CCCF; }
+  .content-area { padding:20px; }
+  .content-label { font-size:12px; font-weight:600; color:#6D7175; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+  .content-text { font-size:14px; color:#202223; line-height:1.7; background:#F8F9FA; border:1px solid #E1E3E5; border-radius:8px; padding:16px; min-height:120px; }
+  .content-actions { display:flex; gap:10px; margin-top:14px; }
+  .btn { padding:8px 16px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:1px solid #C9CCCF; background:#fff; color:#202223; }
+  .btn-primary { background:#2C6ECB; color:#fff; border-color:#2C6ECB; }
+  .btn-success { background:#1a7345; color:#fff; border-color:#1a7345; }
+  .btn-danger { background:#fff; color:#D82C0D; border-color:#D82C0D; }
+  .badge { display:inline-flex; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge-success { background:#E3F1E9; color:#1a7345; }
+  .badge-info { background:#EAF2FF; color:#1656AC; }
+  .badge-attention { background:#FFF5EA; color:#916A00; }
+  /* Right sidebar */
+  .sidebar-section { padding:16px 20px; border-bottom:1px solid #E1E3E5; }
+  .sidebar-section:last-child { border-bottom:none; }
+  .sidebar-label { font-size:12px; font-weight:600; color:#6D7175; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+  .product-preview { display:flex; gap:12px; align-items:flex-start; }
+  .product-thumb { width:64px; height:64px; border-radius:8px; background:#F1F1F1; border:1px solid #E1E3E5; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; }
+  .product-preview-info h3 { font-size:14px; font-weight:600; color:#202223; margin-bottom:3px; }
+  .product-preview-info p { font-size:12px; color:#6D7175; }
+  .generate-section { padding:16px 20px; }
+  .generate-title { font-size:14px; font-weight:600; color:#202223; margin-bottom:12px; }
+  .checkbox-row { display:flex; align-items:center; gap:8px; font-size:13px; color:#202223; margin-bottom:10px; }
+  .check-box { width:16px; height:16px; border-radius:4px; background:#2C6ECB; border:1.5px solid #2C6ECB; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .check-empty { width:16px; height:16px; border-radius:4px; background:#fff; border:1.5px solid #C9CCCF; flex-shrink:0; }
+  .check-label { flex:1; }
+  .check-sub { font-size:11px; color:#6D7175; }
+  .generate-btn { width:100%; padding:12px; background:#2C6ECB; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; }
+  .history-item { padding:10px 0; border-bottom:1px solid #F1F1F1; display:flex; justify-content:space-between; align-items:center; }
+  .history-item:last-child { border-bottom:none; }
+  .history-date { font-size:12px; color:#6D7175; }
+  .history-btn { font-size:12px; color:#2C6ECB; cursor:pointer; border:none; background:none; }
+  /* AI thinking animation */
+  .ai-thinking { background:linear-gradient(135deg,#EAF2FF,#F0F4FF); border:1px solid #BDD4F8; border-radius:8px; padding:16px; display:flex; align-items:center; gap:12px; }
+  .spinner { width:20px; height:20px; border:2px solid #BDD4F8; border-top-color:#2C6ECB; border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> ContentPilot AI</div>
+  <div class="nav-item">Dashboard</div>
+  <div class="nav-item active">Products</div>
+  <div class="nav-item">Bulk Jobs</div>
+  <div class="nav-item">Blog Generator</div>
+  <div class="nav-item">SEO Audit</div>
+  <div class="nav-item">Analytics</div>
+  <div class="nav-item">Brand Voice</div>
+  <div class="nav-item">Plans & Billing</div>
+</nav>
+<main class="main">
+  <div class="breadcrumb">
+    <a>← Products</a>
+    <span>/</span>
+    <span>Vanilla Protein Powder 2kg</span>
+  </div>
+  <div class="page-title">Vanilla Protein Powder 2kg</div>
+  <div class="page-sub">$89.99 · Protein · Last generated 2 min ago</div>
+
+  <div class="layout">
+    <!-- Left: Content tabs -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active"><div class="tab-dot tab-dot-green"></div> Description</div>
+        <div class="tab"><div class="tab-dot tab-dot-green"></div> Meta Title</div>
+        <div class="tab"><div class="tab-dot tab-dot-green"></div> Meta Description</div>
+        <div class="tab"><div class="tab-dot tab-dot-blue"></div> FAQ</div>
+        <div class="tab"><div class="tab-dot tab-dot-gray"></div> Alt Text</div>
+        <div class="tab">History</div>
+      </div>
+      <div class="content-area">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="content-label">AI-Generated Description</div>
+          <span class="badge badge-success">✓ Published</span>
+        </div>
+        <div class="content-text">Fuel your performance with our premium <strong>Vanilla Protein Powder</strong> — delivering 25g of fast-absorbing whey protein per serving. Crafted for serious athletes and fitness enthusiasts, this 2kg pack keeps you covered for weeks of consistent training.<br><br>
+          Our cold-processed formula preserves key amino acids for optimal muscle recovery and growth. With a clean, creamy vanilla flavour that mixes smoothly in water or milk, there's no chalky aftertaste — just pure, effective nutrition your body can use.<br><br>
+          <strong>Key Benefits:</strong><br>
+          • 25g protein per serving — supports lean muscle growth<br>
+          • 5.5g BCAAs naturally occurring — aids rapid recovery<br>
+          • <5g carbs and fat — ideal for lean bulking and cutting phases<br>
+          • Gluten-free, no artificial colours — clean label you can trust<br>
+          • Mixes instantly with a shaker — no blender required
+        </div>
+        <div class="content-actions">
+          <button class="btn btn-success">✓ Published to Shopify</button>
+          <button class="btn">Edit</button>
+          <button class="btn btn-danger">Revert to Original</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- Product preview -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Product</div></div>
+        <div class="sidebar-section">
+          <div class="product-preview">
+            <div class="product-thumb">🥤</div>
+            <div class="product-preview-info">
+              <h3>Vanilla Protein Powder 2kg</h3>
+              <p>$89.99 · In stock</p>
+              <p style="margin-top:4px;font-size:11px;color:#6D7175;">SKU: VPP-2KG-VAN</p>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Content Status</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;"><span style="color:#202223;">Description</span><span class="badge badge-success">Published</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;"><span style="color:#202223;">Meta Title</span><span class="badge badge-success">Published</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;"><span style="color:#202223;">Meta Description</span><span class="badge badge-success">Published</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;"><span style="color:#202223;">FAQ</span><span class="badge badge-info">Draft</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;"><span style="color:#202223;">Alt Text</span><span class="badge badge-attention">Not generated</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate panel -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2C6ECB" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Regenerate Content
+        </div></div>
+        <div class="generate-section">
+          <div class="generate-title">Select content to generate:</div>
+          <div class="checkbox-row"><div class="check-box"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div><div class="check-label">Description<div class="check-sub">Full product description</div></div></div>
+          <div class="checkbox-row"><div class="check-box"><svg width="10" height="10" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" stroke="#fff" stroke-width="1.8" fill="none"/></svg></div><div class="check-label">Meta Title & Description<div class="check-sub">SEO meta tags</div></div></div>
+          <div class="checkbox-row"><div class="check-empty"></div><div class="check-label">FAQ Content<div class="check-sub">Q&A pairs</div></div></div>
+          <div class="checkbox-row"><div class="check-empty"></div><div class="check-label">Image Alt Text<div class="check-sub">Applied to product images</div></div></div>
+          <button class="generate-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Generate with AI
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

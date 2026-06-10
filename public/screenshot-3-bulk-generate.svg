@@ -1,0 +1,88 @@
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" font-family="Inter,-apple-system,sans-serif">
+  <rect width="1280" height="800" fill="#F6F6F7"/>
+  <rect width="1280" height="56" fill="#1A1A1A"/>
+  <rect x="16" y="16" width="24" height="24" rx="4" fill="#0A84FF"/>
+  <text x="48" y="32" fill="white" font-size="14" font-weight="600">ContentClaude</text>
+  <rect x="0" y="56" width="220" height="744" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="36" y="92" fill="#6B7280" font-size="13">Dashboard</text>
+  <text x="36" y="124" fill="#6B7280" font-size="13">Products</text>
+  <rect x="8" y="136" width="204" height="36" rx="6" fill="#EAF4FF"/>
+  <text x="36" y="159" fill="#0A84FF" font-size="13" font-weight="600">Optimise Store</text>
+  <text x="36" y="191" fill="#6B7280" font-size="13">Review &amp; Publish</text>
+  <text x="36" y="223" fill="#6B7280" font-size="13">Jobs</text>
+  <rect x="220" y="56" width="1060" height="744" fill="#F6F6F7"/>
+
+  <!-- Page title -->
+  <text x="252" y="100" fill="#1A1A1A" font-size="22" font-weight="700">Optimise Store</text>
+  <text x="252" y="120" fill="#6B7280" font-size="13">Generate AI content for all products missing descriptions — runs in the background.</text>
+
+  <!-- Stats row -->
+  <rect x="252" y="136" width="200" height="88" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="272" y="162" fill="#6B7280" font-size="12">Total Products</text>
+  <text x="272" y="196" fill="#1A1A1A" font-size="36" font-weight="700">40</text>
+
+  <rect x="464" y="136" width="200" height="88" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="484" y="162" fill="#6B7280" font-size="12">Already Optimised</text>
+  <text x="484" y="196" fill="#1B7E4A" font-size="36" font-weight="700">24</text>
+
+  <rect x="676" y="136" width="200" height="88" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="696" y="162" fill="#6B7280" font-size="12">Need Content</text>
+  <text x="696" y="196" fill="#F59E0B" font-size="36" font-weight="700">16</text>
+
+  <rect x="888" y="136" width="200" height="88" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="908" y="162" fill="#6B7280" font-size="12">Can Generate Now</text>
+  <text x="908" y="196" fill="#0A84FF" font-size="36" font-weight="700">7</text>
+  <text x="908" y="212" fill="#9CA3AF" font-size="11">Quota limited</text>
+
+  <!-- Coverage bar -->
+  <rect x="252" y="244" width="836" height="60" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="272" y="268" fill="#1A1A1A" font-size="13" font-weight="600">Store Coverage</text>
+  <text x="1068" y="268" fill="#1B7E4A" font-size="13" font-weight="600" text-anchor="end">60%</text>
+  <rect x="272" y="278" width="796" height="10" rx="5" fill="#EAF4FF"/>
+  <rect x="272" y="278" width="478" height="10" rx="5" fill="#0A84FF"/>
+
+  <!-- Main action card -->
+  <rect x="252" y="324" width="600" height="400" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="272" y="352" fill="#1A1A1A" font-size="15" font-weight="600">Generate Content for 16 Products</text>
+
+  <!-- Warning banner -->
+  <rect x="264" y="364" width="576" height="60" rx="6" fill="#FEF3C7"/>
+  <text x="280" y="386" fill="#92400E" font-size="12" font-weight="600">⚠ This will replace existing product descriptions entirely.</text>
+  <text x="280" y="403" fill="#92400E" font-size="11">Original content is saved automatically and can be restored from each product's History tab.</text>
+
+  <!-- Content types -->
+  <text x="272" y="448" fill="#1A1A1A" font-size="13" font-weight="500">Content to generate:</text>
+  <rect x="272" y="458" width="14" height="14" rx="2" fill="#0A84FF"/>
+  <text x="292" y="469" fill="#1A1A1A" font-size="12">Product descriptions</text>
+  <rect x="272" y="480" width="14" height="14" rx="2" fill="#0A84FF"/>
+  <text x="292" y="491" fill="#1A1A1A" font-size="12">Meta title &amp; description (SEO)</text>
+  <rect x="272" y="502" width="14" height="14" rx="3" fill="white" stroke="#D1D5DB" stroke-width="1.5"/>
+  <text x="292" y="513" fill="#6B7280" font-size="12">FAQ content</text>
+
+  <!-- Auto-publish toggle -->
+  <rect x="272" y="532" width="556" height="1" fill="#E5E7EB"/>
+  <text x="272" y="556" fill="#1A1A1A" font-size="12" font-weight="500">Auto-publish after generation</text>
+  <text x="272" y="572" fill="#6B7280" font-size="11">Skips the review step — publishes immediately to Shopify</text>
+  <rect x="780" y="544" width="40" height="22" rx="11" fill="#E5E7EB"/>
+  <circle cx="791" cy="555" r="9" fill="white"/>
+
+  <!-- Generate button -->
+  <rect x="272" y="596" width="256" height="44" rx="6" fill="#0A84FF"/>
+  <text x="400" y="622" fill="white" font-size="14" font-weight="600" text-anchor="middle">Start Bulk Generation →</text>
+
+  <!-- Right info card -->
+  <rect x="868" y="324" width="340" height="400" rx="8" fill="white" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="888" y="352" fill="#1A1A1A" font-size="14" font-weight="600">How it works</text>
+  <text x="888" y="376" fill="#6B7280" font-size="12">1. Select content types to generate</text>
+  <text x="888" y="398" fill="#6B7280" font-size="12">2. Optionally enable auto-publish</text>
+  <text x="888" y="420" fill="#6B7280" font-size="12">3. Click Start — jobs run in the background</text>
+  <text x="888" y="442" fill="#6B7280" font-size="12">4. Monitor progress in the Jobs tab</text>
+  <text x="888" y="464" fill="#6B7280" font-size="12">5. Review &amp; publish from Review &amp; Publish</text>
+
+  <rect x="888" y="484" width="300" height="1" fill="#E5E7EB"/>
+  <text x="888" y="508" fill="#1A1A1A" font-size="13" font-weight="600">Estimated time</text>
+  <text x="888" y="528" fill="#6B7280" font-size="12">~1 minute for 16 products</text>
+  <text x="888" y="548" fill="#6B7280" font-size="11">(3.5s per product × 16)</text>
+
+  <text x="640" y="788" fill="#9CA3AF" font-size="11" text-anchor="middle">ContentClaude — AI Product Content for Shopify · contentclaude.fly.dev</text>
+</svg>
