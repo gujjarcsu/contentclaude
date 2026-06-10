@@ -84,7 +84,7 @@ model Plan {
   shop             String    @unique
   planName         String    @default("free")   // "free" | "starter" | "growth" | "pro"
   status           String    @default("active") // "active" | "cancelled" | "frozen"
-  monthlyLimit     Int       @default(10)       // max generations per calendar month
+  monthlyLimit     Int       @default(25)       // max generations per calendar month (free plan)
   shopifyChargeId  String?                      // Shopify AppSubscription GID
   currentPeriodEnd DateTime?                    // when the current billing period ends
   trialEndsAt      DateTime?
