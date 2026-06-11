@@ -88,6 +88,7 @@ module.exports = {
         ".graphqlrc.{js,ts}",
         "shopify.server.{js,ts}",
         "**/*.server.{js,ts}",
+        "screenshots/**/*.js",
       ],
       env: {
         node: true,
@@ -100,6 +101,8 @@ module.exports = {
     process: "readonly",
     Buffer: "readonly",
     globalThis: "readonly",
+    // ES2020 globals not covered by es6 env
+    BigInt: "readonly",
   },
   rules: {
     // JS project — prop-types is noisy without TypeScript.

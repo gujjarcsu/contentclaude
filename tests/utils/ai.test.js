@@ -5,7 +5,7 @@
  * the prompt-building logic without hitting the real Anthropic API.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Mock fetch so no real API calls are made ────────────────────────────────
 
