@@ -5,6 +5,7 @@ client_id = "1279a14cca41d4a6f8e6e3c485870b77"
 name = "ContentClaude"
 application_url = "https://contentclaude.fly.dev"
 embedded = true
+icon = "public/contentclaude-icon-1200.png"
 
 [access_scopes]
 scopes = "write_products,write_content,write_metaobjects,write_metaobject_definitions"

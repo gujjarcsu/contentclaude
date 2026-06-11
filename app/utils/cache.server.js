@@ -29,28 +29,36 @@ function memCacheSet(key, entry) {
 }
 
 let _redis = null;
+let _redisFailedAt = 0;
+const REDIS_RETRY_BACKOFF_MS = 60_000; // only retry once per minute after a failure
 
 async function getRedis() {
   if (!REDIS_URL) return null;
   if (_redis) return _redis;
+  // Circuit breaker: don't hammer a broken Redis on every request
+  if (_redisFailedAt && Date.now() - _redisFailedAt < REDIS_RETRY_BACKOFF_MS) return null;
   try {
     const { default: Redis } = await import("ioredis");
     _redis = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: 1,
+      maxRetriesPerRequest: 0,
+      retryStrategy: () => null, // disable ioredis internal retries — we handle retries ourselves
       connectTimeout: 3000,
       lazyConnect: true,
       enableOfflineQueue: false,
     });
     _redis.on("error", (err) => {
       logger.warn({ err: err.message }, "Redis cache connection error — falling back to in-process cache");
-      _redis = null; // Force reconnect on next call
+      _redis = null;
+      _redisFailedAt = Date.now();
     });
     await _redis.connect();
+    _redisFailedAt = 0;
     logger.info("Redis cache connected");
     return _redis;
   } catch (err) {
     logger.warn({ err: err.message }, "Could not connect to Redis — using in-process cache");
     _redis = null;
+    _redisFailedAt = Date.now();
     return null;
   }
 }
