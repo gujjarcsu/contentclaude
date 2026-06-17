@@ -27,7 +27,11 @@ export const loader = async ({ request }) => {
     }
   }
 
-  const errors = loginErrorMessage(await login(request));
+  // Only call login() when there's a shop param to process — the Shopify
+  // library calls request.formData() internally, which Node 24+ rejects on
+  // plain GET requests that have no form body.
+  const shopParam = url.searchParams.get("shop");
+  const errors = shopParam ? loginErrorMessage(await login(request)) : {};
   return { errors };
 };
 
