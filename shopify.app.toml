@@ -44,6 +44,14 @@ api_version = "2026-04"
   compliance_topics = ["shop/redact"]
   uri = "/webhooks/shop/redact"
 
+# App Proxy — serves the GEO llms.txt / llms-full.txt at the storefront:
+#   https://<shop-domain>/apps/contentclaude/llms.txt      → /proxy/llms.txt
+#   https://<shop-domain>/apps/contentclaude/llms-full.txt → /proxy/llms-full.txt
+[app_proxy]
+url = "https://contentclaude.fly.dev/proxy"
+subpath = "contentclaude"
+prefix = "apps"
+
 [auth]
 redirect_urls = ["https://contentclaude.fly.dev/api/auth"]
 

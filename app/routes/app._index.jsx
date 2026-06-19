@@ -14,6 +14,7 @@ import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
 import { getCache } from "../utils/cache.server";
 import { getContentMetrics } from "../utils/metrics.server";
 import { BILLING_PLANS } from "../utils/billing-plans.js";
+import { isFeatureEnabled } from "../utils/featureFlags.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -85,6 +86,12 @@ export const loader = async ({ request }) => {
   );
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
+  // Phase 1 magic moment (flag-gated, dev-only for now): new shops land on the
+  // auto-scan + live before→after first-run experience. Falls back to the
+  // existing setup wizard when the flag is off.
+  if (isNewShop && isFeatureEnabled("magicMoment")) {
+    throw redirect(`/app/welcome?${authParams.toString()}`);
+  }
   if (isNewShop && !brandVoice) {
     throw redirect(`/app/setup?${authParams.toString()}`);
   }

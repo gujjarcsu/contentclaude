@@ -3,9 +3,14 @@ import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
+import { invalidateLlmsTxt } from "../utils/llms.server.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
+
+  // Catalog changed → the cached llms.txt is now stale; drop it so the next
+  // crawler/agent hit regenerates a current index.
+  await invalidateLlmsTxt(shop);
 
   const brandVoice = await prisma.brandVoice.findUnique({ where: { shop } });
   if (!brandVoice?.autopilotEnabled) {

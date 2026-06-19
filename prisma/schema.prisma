@@ -192,6 +192,40 @@ model CollectionVoice {
   @@index([shop])
 }
 
+// Per-shop growth/engagement state — powers the review loop (frequency caps),
+// activation tracking, continuous-monitoring scan cadence, and benchmark opt-in.
+model GrowthState {
+  id                      String    @id @default(cuid())
+  shop                    String    @unique
+  // Review loop (Phase 6) — compliant frequency capping
+  reviewPromptLastAt      DateTime?
+  reviewPromptDismissedAt DateTime?
+  reviewPromptCount       Int       @default(0)
+  // Activation (Phase 1) — first published win
+  activationAt            DateTime?
+  // Continuous monitoring (Phase 2)
+  lastScanAt              DateTime?
+  // Category benchmarking (Phase 4) — explicit opt-in only
+  benchmarkOptIn          Boolean   @default(false)
+  benchmarkCategory       String    @default("")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+// Aggregated, privacy-safe category benchmarks (the data-flywheel moat).
+// Stores ONLY anonymized 10-bucket score histograms + a sample count per
+// category — never any per-store row. Percentiles are derived from the
+// histogram, so no individual shop's score is recoverable.
+model CategoryBenchmark {
+  id          String   @id @default(cuid())
+  category    String   @unique
+  geoBuckets  String   @default("[0,0,0,0,0,0,0,0,0,0]") // JSON histogram, index = score/10
+  seoBuckets  String   @default("[0,0,0,0,0,0,0,0,0,0]")
+  sampleCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // AI-generated blog posts — saved before/after publishing to Shopify
 model BlogPost {
   id               String    @id @default(cuid())

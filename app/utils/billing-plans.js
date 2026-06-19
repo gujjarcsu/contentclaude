@@ -13,6 +13,10 @@ export const FREE_PLAN = {
     autopilot: false,
     contentTemplates: false,
     versionHistory: false,
+    // GEO / AEO entitlements
+    geoScore: true,       // GEO Readiness Score is the free hook (read-only)
+    llmsTxt: false,       // llms.txt generation/serving — Starter+
+    aiVisibility: false,  // P1 live AI-visibility tracker — Pro only, flag-gated
   },
 };
 
@@ -28,6 +32,9 @@ export const BILLING_PLANS = {
       autopilot: false,
       contentTemplates: true,
       versionHistory: true,
+      geoScore: true,
+      llmsTxt: true,
+      aiVisibility: false,
     },
   },
   growth: {
@@ -41,6 +48,9 @@ export const BILLING_PLANS = {
       autopilot: true,
       contentTemplates: true,
       versionHistory: true,
+      geoScore: true,
+      llmsTxt: true,
+      aiVisibility: false,
     },
   },
   pro: {
@@ -54,6 +64,9 @@ export const BILLING_PLANS = {
       autopilot: true,
       contentTemplates: true,
       versionHistory: true,
+      geoScore: true,
+      llmsTxt: true,
+      aiVisibility: true,  // P1 tracker entitled at Pro; still flag-gated off by default
     },
   },
 };
