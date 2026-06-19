@@ -284,7 +284,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
       {/* Header */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-          <Icon size={22} color={displayPlan.iconColor} />
+          <Icon size={22} color={displayPlan.iconColor} aria-hidden="true" />
         </div>
         <div style={{ color: displayPlan.textColor, fontSize: "18px", fontWeight: "700", marginBottom: "4px" }}>
           {displayPlan.label}
@@ -306,7 +306,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
         {displayPlan.features.map((f) => (
           <div key={f} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-            <Check size={14} color={displayPlan.highlight ? "#a8d5b5" : "#00A047"} style={{ flexShrink: 0, marginTop: "2px" }} />
+            <Check aria-hidden="true" size={14} color={displayPlan.highlight ? "#a8d5b5" : "#00A047"} style={{ flexShrink: 0, marginTop: "2px" }} />
             <span style={{ color: isLight ? "#202223" : "rgba(255,255,255,0.9)", fontSize: "13px", lineHeight: "1.4" }}>
               {f}
             </span>
@@ -349,7 +349,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
               opacity: isSubmitting && submittingPlan === displayPlan.planKey ? 0.7 : 1,
             }}>
               {isSubmitting && submittingPlan === displayPlan.planKey ? "Processing…" : (
-                <>Upgrade to {displayPlan.label} <ArrowRight size={14} /></>
+                <>Upgrade to {displayPlan.label} <ArrowRight aria-hidden="true" size={14} /></>
               )}
             </button>
           </Form>
@@ -465,7 +465,7 @@ export default function PlansPage() {
         {/* Horizontal plan cards */}
         <BlockStack gap="300">
           <Text as="h2" variant="headingLg">Choose Your Plan</Text>
-          <div style={{
+          <div data-cc-plans-grid style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "16px",

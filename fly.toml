@@ -3,6 +3,13 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
 
 [build]
 
+# Sync the database schema before the new release goes live. This project uses
+# Prisma's schema-push workflow (no migrations folder), so `db push` is the
+# correct, idempotent command — it applies additive changes (new indexes, columns)
+# with no data loss and is a no-op when the schema is already current.
+[deploy]
+  release_command = "npx prisma db push --skip-generate"
+
 [env]
   NODE_ENV = "production"
   LOG_LEVEL = "info"

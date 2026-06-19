@@ -295,7 +295,7 @@ export default function BlogPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">Generate a Blog Post</Text>
-                    <BookOpen size={18} color="#1656AC" />
+                    <BookOpen aria-hidden="true" size={18} color="#1656AC" />
                   </InlineStack>
 
                   {isOutOfUsage ? (
@@ -457,7 +457,7 @@ export default function BlogPage() {
                 <Card>
                   <Box padding="800">
                     <BlockStack gap="300" inlineAlign="center">
-                      <FileText size={40} color="#8C9196" />
+                      <FileText aria-hidden="true" size={40} color="#8C9196" />
                       <Text as="p" variant="headingMd" alignment="center" tone="subdued">
                         No blog post yet
                       </Text>
@@ -490,7 +490,7 @@ export default function BlogPage() {
                 {/* Success / resume indicator */}
                 <Box padding="300" background="bg-surface-success" borderRadius="200">
                   <InlineStack gap="200" blockAlign="center">
-                    <CheckCircle2 size={18} color="#00A047" />
+                    <CheckCircle2 aria-hidden="true" size={18} color="#00A047" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
                       {generated
                         ? "Blog post generated and saved as draft — review and edit below"

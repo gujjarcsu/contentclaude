@@ -21,7 +21,7 @@ export function UpgradePrompt({ title, message, ctaLabel = "See Plans →", onUp
       <Box padding="300" background={bg} borderRadius="200">
         <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
           <InlineStack gap="200" blockAlign="center">
-            <Zap size={16} color={iconColor} />
+            <Zap aria-hidden="true" size={16} color={iconColor} />
             <Text as="p" variant="bodySm" fontWeight="semibold">
               {title || "Ready to scale?"}{message ? ` — ${message}` : ""}
             </Text>
@@ -38,7 +38,7 @@ export function UpgradePrompt({ title, message, ctaLabel = "See Plans →", onUp
     <Box padding="400" background={bg} borderRadius="200">
       <BlockStack gap="300">
         <InlineStack gap="200" blockAlign="center">
-          <Zap size={18} color={iconColor} />
+          <Zap aria-hidden="true" size={18} color={iconColor} />
           <Text as="p" variant="bodyMd" fontWeight="semibold">
             {title || "Ready to scale?"}
           </Text>

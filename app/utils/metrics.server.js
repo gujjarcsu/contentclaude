@@ -15,27 +15,29 @@ import prisma from "../db.server.js";
  *             publishedPieces: number, draftPieces: number }}
  */
 export async function getContentMetrics(shop) {
-  const [publishedResult, draftResult, publishedPieces, draftPieces] = await Promise.all([
-    prisma.$queryRaw`
-      SELECT COUNT(DISTINCT "productId")::integer AS count
-      FROM "GeneratedContent"
-      WHERE shop = ${shop} AND status = 'published'
-    `,
-    prisma.$queryRaw`
-      SELECT COUNT(DISTINCT "productId")::integer AS count
-      FROM "GeneratedContent"
-      WHERE shop = ${shop} AND status = 'draft'
-    `,
-    prisma.generatedContent.count({ where: { shop, status: "published" } }),
-    prisma.generatedContent.count({ where: { shop, status: "draft" } }),
-  ]);
+  // Single grouped query returns BOTH distinct-product counts AND raw piece
+  // counts per status in one round-trip — replacing the previous 4 separate
+  // queries. Served by the (shop, status, productId) covering index, so the
+  // COUNT(DISTINCT productId) is an index-only scan.
+  const rows = await prisma.$queryRaw`
+    SELECT status,
+           COUNT(DISTINCT "productId")::integer AS products,
+           COUNT(*)::integer               AS pieces
+    FROM "GeneratedContent"
+    WHERE shop = ${shop} AND status IN ('published', 'draft')
+    GROUP BY status
+  `;
+
+  const row = (s) => rows.find((r) => r.status === s);
+  const pub = row("published");
+  const draft = row("draft");
 
   return {
     // Number() cast handles BigInt returned by PostgreSQL COUNT() via $queryRaw
-    publishedProducts: Number(publishedResult[0]?.count ?? 0),
-    draftProducts:     Number(draftResult[0]?.count ?? 0),
-    publishedPieces,
-    draftPieces,
+    publishedProducts: Number(pub?.products ?? 0),
+    draftProducts:     Number(draft?.products ?? 0),
+    publishedPieces:   Number(pub?.pieces ?? 0),
+    draftPieces:       Number(draft?.pieces ?? 0),
   };
 }
 

@@ -13,6 +13,7 @@ import prisma from "../db.server";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
 import { getCache } from "../utils/cache.server";
 import { getContentMetrics } from "../utils/metrics.server";
+import { BILLING_PLANS } from "../utils/billing-plans.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -128,7 +129,7 @@ function StatCard({ icon: Icon, iconColor, label, value, subtext, tone }) {
             <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>{value}</Text>
           </BlockStack>
           <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-            <Icon size={20} color={iconColor} />
+            <Icon size={20} color={iconColor} aria-hidden="true" />
           </Box>
         </InlineStack>
         <Text as="p" variant="bodySm" tone="subdued">{subtext}</Text>
@@ -165,7 +166,7 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
           <Badge tone="success">Done</Badge>
         ) : (
           <Button size="slim" variant="primary" onClick={onAction}>
-            {actionLabel} <ArrowRight size={14} />
+            {actionLabel} <ArrowRight aria-hidden="true" size={14} />
           </Button>
         )}
       </InlineStack>
@@ -245,7 +246,7 @@ export default function Dashboard() {
           <InlineStack align="space-between" blockAlign="center" gap="400">
             <BlockStack gap="200">
               <InlineStack gap="200" blockAlign="center">
-                <Sparkles size={22} color="#ffffff" />
+                <Sparkles aria-hidden="true" size={22} color="#ffffff" />
                 <Text as="h1" variant="headingXl" fontWeight="bold">
                   <span style={{ color: "#ffffff" }}>Welcome back, {storeName}!</span>
                 </Text>
@@ -272,7 +273,7 @@ export default function Dashboard() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <Sparkles size={20} color="#2C6ECB" />
+                <Sparkles aria-hidden="true" size={20} color="#2C6ECB" />
                 <Text as="h2" variant="headingLg">Get started in 3 steps</Text>
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
@@ -332,7 +333,7 @@ export default function Dashboard() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <Zap size={18} color={usagePct >= 90 ? "#D82C0D" : usagePct >= 60 ? "#916A00" : "#1a7345"} />
+                <Zap aria-hidden="true" size={18} color={usagePct >= 90 ? "#D82C0D" : usagePct >= 60 ? "#916A00" : "#1a7345"} />
                 <Text as="h2" variant="headingMd">Monthly Usage</Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {planLabels[plan.planName] ?? plan.planName} Plan
@@ -365,9 +366,9 @@ export default function Dashboard() {
             )}
             {isFreePlan && (
               <InlineStack gap="200" blockAlign="center">
-                <Zap size={14} color="#2C6ECB" />
+                <Zap aria-hidden="true" size={14} color="#2C6ECB" />
                 <Text as="p" variant="bodySm">
-                  <strong>Starter plan</strong> gives you {50} generations/month for $9.99.{" "}
+                  <strong>Starter plan</strong> gives you {BILLING_PLANS.starter.monthlyLimit} generations/month for ${BILLING_PLANS.starter.amount}.{" "}
                   <Button variant="plain" onClick={() => navigate("/app/plans")}>View all plans →</Button>
                 </Text>
               </InlineStack>
@@ -381,7 +382,7 @@ export default function Dashboard() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <TrendingUp size={18} color="#2C6ECB" />
+                  <TrendingUp aria-hidden="true" size={18} color="#2C6ECB" />
                   <Text as="h2" variant="headingMd">Recent Activity</Text>
                 </InlineStack>
                 <Button variant="plain" onClick={() => navigate("/app/analytics")}>View all activity →</Button>
@@ -418,7 +419,7 @@ export default function Dashboard() {
             <InlineStack align="space-between" blockAlign="center" wrap={false}>
               <BlockStack gap="100">
                 <InlineStack gap="200" blockAlign="center">
-                  <Sparkles size={18} color="#6D7175" />
+                  <Sparkles aria-hidden="true" size={18} color="#6D7175" />
                   <Text as="h2" variant="headingLg">Optimise Your Entire Store</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
@@ -439,7 +440,7 @@ export default function Dashboard() {
               <Card>
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
-                    <Search size={18} color="#2C6ECB" />
+                    <Search aria-hidden="true" size={18} color="#2C6ECB" />
                     <Text as="h2" variant="headingMd">SEO Audit</Text>
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
@@ -453,7 +454,7 @@ export default function Dashboard() {
               <Card>
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
-                    <BarChart2 size={18} color="#2C6ECB" />
+                    <BarChart2 aria-hidden="true" size={18} color="#2C6ECB" />
                     <Text as="h2" variant="headingMd">Analytics</Text>
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
@@ -467,7 +468,7 @@ export default function Dashboard() {
               <Card>
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
-                    <BookOpen size={18} color="#2C6ECB" />
+                    <BookOpen aria-hidden="true" size={18} color="#2C6ECB" />
                     <Text as="h2" variant="headingMd">Blog Generator</Text>
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">

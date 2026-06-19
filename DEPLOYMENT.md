@@ -1,4 +1,4 @@
-# ContentPilot AI — Production Deployment Guide
+# ContentClaude — Production Deployment Guide
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ SCOPES=write_products,write_metaobjects,write_metaobject_definitions,write_conte
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 
 # Database (PostgreSQL required for production)
-DATABASE_URL=postgresql://user:password@host:5432/contentpilot
+DATABASE_URL=postgresql://user:password@host:5432/ContentClaude
 
 # Logging (debug | info | warn | error)
 LOG_LEVEL=info
@@ -53,9 +53,9 @@ LOG_LEVEL=info
 ### Option 2 — Fly.io
 
 ```bash
-fly launch --name contentpilot-ai
-fly postgres create --name contentpilot-db
-fly postgres attach contentpilot-db
+fly launch --name ContentClaude-ai
+fly postgres create --name ContentClaude-db
+fly postgres attach ContentClaude-db
 fly secrets set SHOPIFY_API_KEY=... SHOPIFY_API_SECRET=... ANTHROPIC_API_KEY=...
 fly deploy
 ```
@@ -100,7 +100,7 @@ When deploying to serverless or edge platforms (Vercel, Cloudflare Workers, Rail
 2. Append `?pgbouncer=true&connection_limit=1` to your `DATABASE_URL`
 3. Example:
    ```
-   DATABASE_URL=postgresql://user:pass@host:5432/contentpilot?pgbouncer=true&connection_limit=1
+   DATABASE_URL=postgresql://user:pass@host:5432/ContentClaude?pgbouncer=true&connection_limit=1
    ```
 
 For traditional server deployments (VPS, Docker):
@@ -160,7 +160,7 @@ GDPR webhooks (registered manually in Partner Dashboard):
 
 ## Scaling Notes
 
-ContentPilot is designed for growth. Here's what to address at each scale milestone:
+ContentClaude is designed for growth. Here's what to address at each scale milestone:
 
 ### < 50 shops
 Current architecture is fine. PostgreSQL + BullMQ background jobs (Redis optional, falls back to inline).

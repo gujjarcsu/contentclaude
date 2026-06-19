@@ -28,7 +28,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
     <Card>
       <BlockStack gap="400">
         <InlineStack gap="200" blockAlign="center">
-          <HelpCircle size={18} color="#2C6ECB" />
+          <HelpCircle aria-hidden="true" size={18} color="#2C6ECB" />
           <Text as="h2" variant="headingMd">{title}</Text>
         </InlineStack>
 
@@ -36,7 +36,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
           <BlockStack key={section.heading} gap="200">
             <Divider />
             <InlineStack gap="150" blockAlign="center">
-              <Zap size={14} color="#2C6ECB" />
+              <Zap aria-hidden="true" size={14} color="#2C6ECB" />
               <Text as="p" variant="bodySm" fontWeight="semibold">{section.heading}</Text>
             </InlineStack>
             <BlockStack gap="150">
@@ -54,7 +54,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
           <BlockStack gap="200">
             <Divider />
             <InlineStack gap="150" blockAlign="center">
-              <MessageSquare size={14} color="#2C6ECB" />
+              <MessageSquare aria-hidden="true" size={14} color="#2C6ECB" />
               <Text as="p" variant="bodySm" fontWeight="semibold">Frequently Asked</Text>
             </InlineStack>
             <BlockStack gap="100">
@@ -78,9 +78,9 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
                   >
                     <Text as="span" variant="bodySm" fontWeight="semibold">{faq.question}</Text>
                     {openFaq === idx ? (
-                      <ChevronUp size={14} color="#6D7175" style={{ flexShrink: 0 }} />
+                      <ChevronUp aria-hidden="true" size={14} color="#6D7175" style={{ flexShrink: 0 }} />
                     ) : (
-                      <ChevronDown size={14} color="#6D7175" style={{ flexShrink: 0 }} />
+                      <ChevronDown aria-hidden="true" size={14} color="#6D7175" style={{ flexShrink: 0 }} />
                     )}
                   </button>
                   <Collapsible open={openFaq === idx} id={`faq-${idx}`} transition={{ duration: "150ms" }}>
@@ -98,7 +98,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
           <BlockStack gap="200">
             <Divider />
             <InlineStack gap="150" blockAlign="center">
-              <BookOpen size={14} color="#2C6ECB" />
+              <BookOpen aria-hidden="true" size={14} color="#2C6ECB" />
               <Text as="p" variant="bodySm" fontWeight="semibold">Resources</Text>
             </InlineStack>
             <BlockStack gap="100">
@@ -107,7 +107,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
                   variant="plain"
                   url={docsUrl}
                   external
-                  icon={<BookOpen size={14} />}
+                  icon={<BookOpen aria-hidden="true" size={14} />}
                 >
                   View Documentation →
                 </Button>
@@ -117,7 +117,7 @@ export function HelpSidebar({ title = "Help & Tips", sections = [], faqs = [], d
                   variant="plain"
                   url={supportUrl}
                   external
-                  icon={<MessageSquare size={14} />}
+                  icon={<MessageSquare aria-hidden="true" size={14} />}
                 >
                   Contact Support →
                 </Button>

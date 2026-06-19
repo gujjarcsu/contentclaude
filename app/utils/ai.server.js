@@ -630,9 +630,24 @@ function parseGeneratedContent(rawText) {
   };
 }
 
-function extractTag(text, tagName) {
-  const match = text.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`));
-  return match ? sanitizeHtml(match[1].trim()) : "";
+export function extractTag(text, tagName) {
+  if (!text || typeof text !== "string") return "";
+
+  // Normal case: both opening and closing tags are present.
+  const full = text.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`));
+  if (full) return sanitizeHtml(full[1].trim());
+
+  // Truncation fallback: the response was cut off at max_tokens before the
+  // closing tag was emitted. Capture from the opening tag to the end of the
+  // buffer so a truncated-but-usable generation is never silently dropped.
+  // Only the final tag of a response can lack its closer, and tags are unique
+  // per response, so an open-ended capture is safe. Still passes through the
+  // sanitiser. A dangling partial tag of another type (e.g. "<META") is left
+  // as inert text by the sanitiser.
+  const open = text.match(new RegExp(`<${tagName}>([\\s\\S]*)$`));
+  if (open && open[1].trim()) return sanitizeHtml(open[1].trim());
+
+  return "";
 }
 
 function sanitizeHtml(html) {

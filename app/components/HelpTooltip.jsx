@@ -28,7 +28,7 @@ export function HelpTooltip({ title, content, width = "200px" }) {
       }}
       aria-label={title ? `Help: ${title}` : "Help"}
     >
-      <HelpCircle size={15} />
+      <HelpCircle aria-hidden="true" size={15} />
     </button>
   );
 

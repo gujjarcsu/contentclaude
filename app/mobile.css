@@ -1,7 +1,34 @@
-/* ContentClaude — mobile & responsive overrides
-   Supplements Polaris's own responsive utilities.
-   Targets embedded-app webview widths ≤480px (phones) and ≤768px (tablets).
+/* ContentClaude — mobile, responsive & accessibility polish layer
+   Supplements Polaris's own responsive + a11y utilities.
+   Targets embedded-app webview widths ≤480px (phones) and ≤768px (tablets),
+   plus app-wide keyboard-focus visibility and reduced-motion support.
 */
+
+/* ─── Keyboard focus visibility (WCAG 2.4.7) ─────────────────────────────
+   Polaris components ship their own focus rings; this guarantees a clearly
+   visible focus indicator on the custom (non-Polaris) interactive elements
+   used on the Plans/Settings pages, so keyboard users are never lost. */
+button:not([class*="Polaris"]):focus-visible,
+a:not([class*="Polaris"]):focus-visible,
+[role="button"]:not([class*="Polaris"]):focus-visible,
+[tabindex]:not([class*="Polaris"]):focus-visible {
+  outline: 2px solid #2C6ECB !important;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ─── Respect reduced-motion preference ──────────────────────────────────
+   Users who set "reduce motion" get instant, non-animated transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ─── Plans page: 4-col grid → 2-col → 1-col ─────────────────────────── */
 @media (max-width: 900px) {

@@ -31,7 +31,7 @@ check_env() {
   local var=$1
   local val
   val=$(grep "^${var}=" .env 2>/dev/null | cut -d'=' -f2- | tr -d '"')
-  if [ -z "$val" ] || [ "$val" = "postgresql://user:password@localhost:5432/contentpilot" ] || [ "$val" = "your-real-url-here" ]; then
+  if [ -z "$val" ] || [ "$val" = "postgresql://user:password@localhost:5432/contentclaude" ] || [ "$val" = "your-real-url-here" ]; then
     fail "$var is not set or still has placeholder value. Edit .env first."
   fi
   ok "$var is set"

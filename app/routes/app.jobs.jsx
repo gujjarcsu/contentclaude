@@ -116,10 +116,10 @@ function statusBadge(status) {
 
 function statusIcon(status) {
   switch (status) {
-    case "queued":     return <Clock size={16} color="#916A00" />;
-    case "processing": return <Loader size={16} color="#1656AC" />;
-    case "complete":   return <CheckCircle2 size={16} color="#00A047" />;
-    case "failed":     return <XCircle size={16} color="#E51C00" />;
+    case "queued":     return <Clock aria-hidden="true" size={16} color="#916A00" />;
+    case "processing": return <Loader aria-hidden="true" size={16} color="#1656AC" />;
+    case "complete":   return <CheckCircle2 aria-hidden="true" size={16} color="#00A047" />;
+    case "failed":     return <XCircle aria-hidden="true" size={16} color="#E51C00" />;
     default:           return null;
   }
 }

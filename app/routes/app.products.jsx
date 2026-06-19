@@ -30,6 +30,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
+import { getContentMetrics } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 
@@ -68,14 +69,12 @@ export const loader = async ({ request }) => {
           }
         }`;
 
-  const [gqlResponse, generatedContent, plan, usageCount] = await Promise.all([
+  const [gqlResponse, plan, usageCount, metrics, productCountResp] = await Promise.all([
     admin.graphql(gqlQuery, { variables: { cursor } }),
-    prisma.generatedContent.findMany({
-      where: { shop },
-      select: { productId: true, contentType: true, status: true, updatedAt: true },
-    }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
+    getContentMetrics(shop),
+    admin.graphql(`query { productsCount { count } }`),
   ]);
 
   const gqlData = await gqlResponse.json();
@@ -95,17 +94,32 @@ export const loader = async ({ request }) => {
     tags: node.tags || [],
   }));
 
-  // Per-product map: { [productId]: { description: {status, updatedAt}, metaTitle: ..., ... } }
+  const productCountData = await productCountResp.json();
+  const totalStoreProducts = productCountData.data?.productsCount?.count ?? products.length;
+
+  // Content status only for the products visible on THIS page — a bounded query
+  // (≤ PAGE_SIZE rows) instead of loading every GeneratedContent row for the shop.
+  // This is the fix for the unbounded findMany that did not scale past ~10k products.
+  const visibleIds = products.map((p) => p.id);
+  const generatedContent = visibleIds.length
+    ? await prisma.generatedContent.findMany({
+        where: { shop, productId: { in: visibleIds } },
+        select: { productId: true, contentType: true, status: true, updatedAt: true },
+      })
+    : [];
+
+  // Per-product map for the visible page: { [productId]: { description: {status, updatedAt}, ... } }
   const contentMap = {};
-  const dbCounts = { draft: 0, published: 0 };
   generatedContent.forEach(({ productId, contentType, status, updatedAt }) => {
     if (!contentMap[productId]) contentMap[productId] = {};
     contentMap[productId][contentType] = { status, updatedAt };
-    if (contentType === "description") {
-      if (status === "draft") dbCounts.draft++;
-      else if (status === "published") dbCounts.published++;
-    }
   });
+
+  // Store-wide coverage counts from a single aggregated source of truth
+  // (distinct products, never > total) — accurate across all pages, tiny query.
+  const publishedProducts = metrics.publishedProducts;
+  const draftProducts = metrics.draftProducts;
+  const noContentProducts = Math.max(0, totalStoreProducts - publishedProducts - draftProducts);
 
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
@@ -114,7 +128,10 @@ export const loader = async ({ request }) => {
     contentMap,
     pageInfo,
     statusFilter,
-    dbCounts,
+    totalStoreProducts,
+    publishedProducts,
+    draftProducts,
+    noContentProducts,
     usageCount,
     usageRemaining,
     monthlyLimit: plan.monthlyLimit,
@@ -251,7 +268,8 @@ function ProductListSkeleton() {
 
 export default function ProductsPage() {
   const {
-    products, contentMap, pageInfo, statusFilter, dbCounts,
+    products, contentMap, pageInfo, statusFilter,
+    totalStoreProducts, publishedProducts, draftProducts, noContentProducts,
     usageCount, usageRemaining, monthlyLimit, planName, entitlements,
   } = useLoaderData();
   const navigate = useNavigate();
@@ -271,19 +289,8 @@ export default function ProductsPage() {
   const handleSearchChange = useCallback((v) => setSearchValue(v), []);
   const handleSearchClear = useCallback(() => setSearchValue(""), []);
 
-  // Derived values (no hooks below)
-  const totalProducts = products.length;
-  // A product "has content" if ANY content type is present (not just description).
-  // Using description as the primary signal for published/draft counts; "needs content"
-  // means no description exists — other content types (meta, FAQ) are secondary.
-  const publishedCount = Object.values(contentMap).filter((m) =>
-    Object.values(m).some((c) => c.status === "published")
-  ).length;
-  const draftCount = Object.values(contentMap).filter((m) =>
-    Object.values(m).some((c) => c.status === "draft") &&
-    !Object.values(m).some((c) => c.status === "published")
-  ).length;
-  const noContentCount = Math.max(0, totalProducts - publishedCount - draftCount);
+  // Store-wide coverage counts come from the loader (aggregated, accurate across
+  // all pages). contentMap below is scoped to the visible page for per-row pills.
   const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
   const isLowUsage = usageRemaining > 0 && usageRemaining <= 5;
   const isOutOfUsage = usageRemaining === 0;
@@ -300,11 +307,11 @@ export default function ProductsPage() {
   );
 
   const tabs = useMemo(() => [
-    { id: "all", content: `All (${totalProducts})`, panelID: "all" },
-    { id: "needsContent", content: `Needs Content (${noContentCount})`, panelID: "needsContent" },
-    { id: "draft", content: `Draft (${dbCounts.draft})`, panelID: "draft" },
-    { id: "published", content: `Published (${dbCounts.published})`, panelID: "published" },
-  ], [totalProducts, noContentCount, dbCounts.draft, dbCounts.published]);
+    { id: "all", content: `All (${totalStoreProducts})`, panelID: "all" },
+    { id: "needsContent", content: `Needs Content (${noContentProducts})`, panelID: "needsContent" },
+    { id: "draft", content: `Draft (${draftProducts})`, panelID: "draft" },
+    { id: "published", content: `Published (${publishedProducts})`, panelID: "published" },
+  ], [totalStoreProducts, noContentProducts, draftProducts, publishedProducts]);
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
 
@@ -399,17 +406,17 @@ export default function ProductsPage() {
   return (
     <Page
       title="Products"
-      subtitle={`${totalProducts} products · ${publishedCount} optimised · ${noContentCount} need content`}
+      subtitle={`${totalStoreProducts} products · ${publishedProducts} optimised · ${noContentProducts} need content`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       secondaryActions={[
         {
           content: "Review Drafts",
           onAction: () => navigate("/app/review"),
-          disabled: dbCounts.draft === 0,
+          disabled: draftProducts === 0,
         },
         {
           content: entitlements?.bulkJobs
-            ? `Generate All (${totalProducts})`
+            ? `Generate All (${totalStoreProducts})`
             : `🔒 Generate All — Growth Plan`,
           onAction: entitlements?.bulkJobs
             ? () => setGenerateAllModal(true)
@@ -449,8 +456,8 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <CheckCircle2 size={20} color="#00A047" />
-                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">{publishedCount}</Text>
+                  <CheckCircle2 aria-hidden="true" size={20} color="#00A047" />
+                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">{publishedProducts}</Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">AI Content Published</Text>
               </BlockStack>
@@ -460,8 +467,8 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <Clock size={20} color="#1656AC" />
-                  <Text as="p" variant="headingXl" fontWeight="bold">{draftCount}</Text>
+                  <Clock aria-hidden="true" size={20} color="#1656AC" />
+                  <Text as="p" variant="headingXl" fontWeight="bold">{draftProducts}</Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">Drafts to Review</Text>
               </BlockStack>
@@ -471,9 +478,9 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <AlertCircle size={20} color={noContentCount > 0 ? "#E51C00" : "#8C9196"} />
-                  <Text as="p" variant="headingXl" fontWeight="bold" tone={noContentCount > 0 ? "critical" : undefined}>
-                    {noContentCount}
+                  <AlertCircle aria-hidden="true" size={20} color={noContentProducts > 0 ? "#E51C00" : "#8C9196"} />
+                  <Text as="p" variant="headingXl" fontWeight="bold" tone={noContentProducts > 0 ? "critical" : undefined}>
+                    {noContentProducts}
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">Need Content</Text>
@@ -705,14 +712,14 @@ export default function ProductsPage() {
         <Modal
           open={generateAllModal}
           onClose={() => setGenerateAllModal(false)}
-          title={`Generate content for all ${totalProducts} products?`}
+          title={`Generate content for all ${totalStoreProducts} products?`}
           primaryAction={{ content: "Start Bulk Job", onAction: handleGenerateAll }}
           secondaryActions={[{ content: "Cancel", onAction: () => setGenerateAllModal(false) }]}
         >
           <Modal.Section>
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
-                This creates a background job for all {totalProducts} products. Estimated time: ~{Math.ceil((totalProducts * 3.5) / 60)} minutes.
+                This creates a background job for all {totalStoreProducts} products. Estimated time: ~{Math.ceil((totalStoreProducts * 3.5) / 60)} minutes.
               </Text>
               <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
               <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />

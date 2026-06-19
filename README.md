@@ -1,4 +1,4 @@
-# ContentPilot AI
+# ContentClaude
 
 AI-powered product content generation for Shopify stores. Generate SEO-optimised product descriptions, meta titles, meta descriptions, FAQ content, and image alt text — all in your brand's voice.
 

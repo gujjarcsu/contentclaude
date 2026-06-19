@@ -1085,7 +1085,7 @@ export default function ProductGeneratePage() {
                   <Button
                     variant="plain"
                     size="slim"
-                    icon={advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    icon={advancedOpen ? <ChevronUp aria-hidden="true" size={14} /> : <ChevronDown aria-hidden="true" size={14} />}
                     onClick={() => setAdvancedOpen((v) => !v)}
                   >
                     Advanced Options
@@ -1195,7 +1195,7 @@ export default function ProductGeneratePage() {
                   <Box padding="400" background="bg-surface-success" borderRadius="200">
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center">
-                        <CheckCircle2 size={20} color="#00A047" />
+                        <CheckCircle2 aria-hidden="true" size={20} color="#00A047" />
                         <Text as="p" variant="headingSm" fontWeight="semibold">
                           {actionData.autoPublished ? "Content published to your store!" : "Content generated — review & publish"}
                         </Text>

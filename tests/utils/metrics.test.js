@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../app/db.server.js", () => ({
   default: {
     $queryRaw: vi.fn(),
-    generatedContent: { count: vi.fn() },
   },
 }));
 
@@ -16,30 +15,28 @@ const { getContentMetrics, coveragePct } = await import("../../app/utils/metrics
 describe("getContentMetrics", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns Number not BigInt from COUNT DISTINCT", async () => {
-    // PostgreSQL $queryRaw returns BigInt for COUNT
-    prisma.$queryRaw
-      .mockResolvedValueOnce([{ count: 5n }])  // published — BigInt
-      .mockResolvedValueOnce([{ count: 3n }]); // draft — BigInt
-    prisma.generatedContent.count
-      .mockResolvedValueOnce(15)
-      .mockResolvedValueOnce(9);
+  it("returns Number not BigInt from the single grouped query", async () => {
+    // One round-trip: grouped rows with distinct-product + raw-piece counts.
+    // PostgreSQL $queryRaw returns BigInt for COUNT.
+    prisma.$queryRaw.mockResolvedValueOnce([
+      { status: "published", products: 5n, pieces: 15n },
+      { status: "draft", products: 3n, pieces: 9n },
+    ]);
 
     const result = await getContentMetrics("test.myshopify.com");
 
+    // Exactly one DB round-trip (down from 4)
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(typeof result.publishedProducts).toBe("number");
     expect(typeof result.draftProducts).toBe("number");
     expect(result.publishedProducts).toBe(5);
     expect(result.draftProducts).toBe(3);
+    expect(result.publishedPieces).toBe(15);
+    expect(result.draftPieces).toBe(9);
   });
 
-  it("returns 0 for shop with no content", async () => {
-    prisma.$queryRaw
-      .mockResolvedValueOnce([{ count: 0 }])
-      .mockResolvedValueOnce([{ count: 0 }]);
-    prisma.generatedContent.count
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
+  it("returns 0 for shop with no content (no rows)", async () => {
+    prisma.$queryRaw.mockResolvedValueOnce([]);
 
     const result = await getContentMetrics("empty.myshopify.com");
 
@@ -49,18 +46,16 @@ describe("getContentMetrics", () => {
     expect(result.draftPieces).toBe(0);
   });
 
-  it("handles missing count in result gracefully", async () => {
-    prisma.$queryRaw
-      .mockResolvedValueOnce([{}])  // no count property
-      .mockResolvedValueOnce([{}]);
-    prisma.generatedContent.count
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0);
+  it("handles a status present with missing count fields gracefully", async () => {
+    prisma.$queryRaw.mockResolvedValueOnce([
+      { status: "published" }, // no products/pieces fields
+    ]);
 
     const result = await getContentMetrics("test.myshopify.com");
 
     expect(result.publishedProducts).toBe(0);
     expect(result.draftProducts).toBe(0);
+    expect(result.publishedPieces).toBe(0);
   });
 });
 

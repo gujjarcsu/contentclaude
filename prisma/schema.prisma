@@ -78,6 +78,10 @@ model GeneratedContent {
   @@index([shop, status])
   @@index([shop, contentType, status])
   @@index([shop, updatedAt])
+  // Covering index for getContentMetrics' COUNT(DISTINCT productId) per status —
+  // lets Postgres satisfy the dashboard/analytics/products coverage query with an
+  // index-only scan instead of touching the heap.
+  @@index([shop, status, productId])
 }
 
 // Subscription plan per shop

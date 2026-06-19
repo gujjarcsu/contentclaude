@@ -176,6 +176,10 @@ export default function SettingsPage() {
     }
   }, [actionData]);
 
+  // Instant feedback while navigating into Settings — single page-level skeleton.
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Settings" sections={3} layout="twoThird" />;
+  }
 
   return (
     <Page
@@ -255,12 +259,12 @@ export default function SettingsPage() {
                     >
                       {TONE_CARDS.map((card) => {
                         const isSelected = brandTone === card.value;
-                        return navigation.state === "loading" ? (
-    <AppSkeleton title="Settings" sections={3} layout="twoThird" />
-  ) : (
+                        return (
                           <button
                             key={card.value}
                             type="button"
+                            aria-pressed={isSelected}
+                            aria-label={`Brand tone: ${card.label} — ${card.desc}`}
                             onClick={() => setBrandTone(card.value)}
                             style={{
                               border: isSelected ? "2px solid #005BD3" : "1px solid #e1e3e5",

@@ -82,9 +82,9 @@ function PostCard({ post, onView }) {
             borderRadius="200"
           >
             {isDraft ? (
-              <PenLine size={18} color="#6D7175" />
+              <PenLine aria-hidden="true" size={18} color="#6D7175" />
             ) : (
-              <Globe size={18} color="#1a7345" />
+              <Globe aria-hidden="true" size={18} color="#1a7345" />
             )}
           </Box>
           <BlockStack gap="100">
@@ -99,12 +99,12 @@ function PostCard({ post, onView }) {
               )}
               {post.wordCount > 0 && (
                 <InlineStack gap="100" blockAlign="center">
-                  <FileText size={12} color="#8C9196" />
+                  <FileText aria-hidden="true" size={12} color="#8C9196" />
                   <Text as="p" variant="bodySm" tone="subdued">{post.wordCount.toLocaleString()} words</Text>
                 </InlineStack>
               )}
               <InlineStack gap="100" blockAlign="center">
-                <Clock size={12} color="#8C9196" />
+                <Clock aria-hidden="true" size={12} color="#8C9196" />
                 <Text as="p" variant="bodySm" tone="subdued">{timeAgo(post.updatedAt)}</Text>
               </InlineStack>
             </InlineStack>
@@ -140,7 +140,7 @@ function PostCard({ post, onView }) {
               size="slim"
               tone="critical"
               variant="plain"
-              icon={<Trash2 size={14} />}
+              icon={<Trash2 aria-hidden="true" size={14} />}
               loading={isDeleting}
               submit
               accessibilityLabel="Delete post"
@@ -198,7 +198,7 @@ export default function BlogPosts() {
                   <Card>
                     <BlockStack gap="400">
                       <InlineStack gap="200" blockAlign="center">
-                        <PenLine size={18} color="#6D7175" />
+                        <PenLine aria-hidden="true" size={18} color="#6D7175" />
                         <Text as="h2" variant="headingMd">Drafts</Text>
                         <Badge tone="info">{drafts.length}</Badge>
                       </InlineStack>
@@ -215,7 +215,7 @@ export default function BlogPosts() {
                   <Card>
                     <BlockStack gap="400">
                       <InlineStack gap="200" blockAlign="center">
-                        <Globe size={18} color="#1a7345" />
+                        <Globe aria-hidden="true" size={18} color="#1a7345" />
                         <Text as="h2" variant="headingMd">Published</Text>
                         <Badge tone="success">{published.length}</Badge>
                       </InlineStack>
@@ -238,7 +238,7 @@ export default function BlogPosts() {
             <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
-                  <BookOpen size={18} color="#2C6ECB" />
+                  <BookOpen aria-hidden="true" size={18} color="#2C6ECB" />
                   <Text as="h2" variant="headingMd">Blog Stats</Text>
                 </InlineStack>
                 <Divider />

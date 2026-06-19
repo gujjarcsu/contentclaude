@@ -23,7 +23,7 @@ function makeApiResponse(text) {
 
 // ─── Import after mocking globals ────────────────────────────────────────────
 
-const { generateProductContent, generateAltText } = await import(
+const { generateProductContent, generateAltText, extractTag } = await import(
   "../../app/utils/ai.server.js"
 );
 
@@ -261,6 +261,70 @@ describe("generateProductContent", () => {
 
     // 400 should never retry — only one call
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("extractTag — truncation safety", () => {
+  it("extracts content when both opening and closing tags are present", () => {
+    expect(extractTag("<DESCRIPTION><p>Hello</p></DESCRIPTION>", "DESCRIPTION")).toBe(
+      "<p>Hello</p>"
+    );
+  });
+
+  it("recovers content when the closing tag is missing (response cut at max_tokens)", () => {
+    // Simulates a long, structured description truncated before </DESCRIPTION>
+    const truncated =
+      "<DESCRIPTION><p>This is a long product description that was cut off before the model could emit the closing tag because it ran into the max_tokens ceiling and the buffer just ends here";
+    const result = extractTag(truncated, "DESCRIPTION");
+    expect(result).toContain("long product description");
+    expect(result).toContain("buffer just ends here");
+    expect(result).not.toBe("");
+  });
+
+  it("still extracts a complete earlier tag when a later tag is truncated", () => {
+    const partial =
+      "<META_TITLE>Complete Title</META_TITLE>\n<DESCRIPTION><p>Truncated body without a closer";
+    expect(extractTag(partial, "META_TITLE")).toBe("Complete Title");
+    expect(extractTag(partial, "DESCRIPTION")).toContain("Truncated body");
+  });
+
+  it("sanitises truncated content too (no script survives the fallback path)", () => {
+    const malicious =
+      "<DESCRIPTION><p>ok</p><script>alert('xss')</script><p>more text without a closing tag";
+    const result = extractTag(malicious, "DESCRIPTION");
+    expect(result).not.toContain("<script>");
+    expect(result).not.toContain("alert");
+    expect(result).toContain("more text");
+  });
+
+  it("returns empty string for missing tag and non-string input", () => {
+    expect(extractTag("<META_TITLE>x</META_TITLE>", "DESCRIPTION")).toBe("");
+    expect(extractTag(null, "DESCRIPTION")).toBe("");
+    expect(extractTag(undefined, "DESCRIPTION")).toBe("");
+  });
+});
+
+describe("generateProductContent — truncated generation is not dropped", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-test-key";
+  });
+
+  it("returns the partial description when Claude stops before the closing tag", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse(
+        "<DESCRIPTION><p>A detailed, structured description that keeps going and going until the token budget runs out mid-sentence and"
+      )
+    );
+
+    const result = await generateProductContent(
+      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {},
+      ["description"]
+    );
+
+    expect(result.description).toContain("detailed, structured description");
+    expect(result.description).not.toBe("");
   });
 });
 

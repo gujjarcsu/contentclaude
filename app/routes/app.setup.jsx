@@ -258,7 +258,7 @@ export default function SetupPage() {
                   autoComplete="off"
                 />
                 <InlineStack gap="300">
-                  <Button onClick={() => navigate("/app/setup?step=1")}>â† Back</Button>
+                  <Button onClick={() => navigate("/app/setup?step=1")}>← Back</Button>
                   <Button variant="primary" submit loading={isSaving}>Continue →</Button>
                 </InlineStack>
               </BlockStack>
@@ -291,7 +291,7 @@ export default function SetupPage() {
                   helpText="All generated content will be written in this language"
                 />
                 <InlineStack gap="300">
-                  <Button onClick={() => navigate("/app/setup?step=2")}>â† Back</Button>
+                  <Button onClick={() => navigate("/app/setup?step=2")}>← Back</Button>
                   <Button variant="primary" submit loading={isSaving}>Continue →</Button>
                 </InlineStack>
               </BlockStack>
@@ -337,7 +337,7 @@ export default function SetupPage() {
                 </Banner>
 
                 <InlineStack gap="300">
-                  <Button onClick={() => navigate("/app/setup?step=3")}>â† Back</Button>
+                  <Button onClick={() => navigate("/app/setup?step=3")}>← Back</Button>
                   <Button variant="primary" submit loading={isSaving}>
                     Looks great — let's go! →
                   </Button>
