@@ -11,8 +11,9 @@
 // existing onboarding (app.setup) is untouched. No fabricated data — every score
 // and the after-content come from the merchant's own catalog + a real generation.
 
-import { useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, useNavigate, redirect } from "react-router";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useLoaderData, useFetcher, useNavigate, useNavigation, redirect } from "react-router";
+import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, Badge,
   Banner, Divider, Spinner, Layout,
@@ -25,7 +26,7 @@ import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 
-const SCAN_LIMIT = 50;
+const SCAN_LIMIT = 30;
 
 function authParamString(request) {
   const url = new URL(request.url);
@@ -38,39 +39,36 @@ function authParamString(request) {
 }
 
 async function scanProducts(admin) {
+  // Lean query — scoring only needs text/seo/alt-text/type/vendor/tags/price.
+  // The full product (descriptionHtml, image URLs) is re-fetched in the action
+  // only for the single demo product that actually gets generated.
   const resp = await admin.graphql(
     `query welcomeScan($n: Int!) {
       products(first: $n, sortKey: UPDATED_AT) {
         edges { node {
-          id title handle descriptionHtml description productType vendor tags
+          id title description productType vendor tags
           seo { title description }
-          featuredImage { url altText }
-          images(first: 5) { edges { node { url altText } } }
-          variants(first: 5) { edges { node { price } } }
+          images(first: 3) { edges { node { altText } } }
+          variants(first: 3) { edges { node { price } } }
         } }
       }
     }`,
     { variables: { n: SCAN_LIMIT } }
   );
   const { data } = await resp.json();
-  return (data?.products?.edges ?? []).map(({ node }) => {
-    const images = (node.images?.edges ?? []).map((e) => e.node);
-    return {
-      id: node.id,
-      numericId: node.id.replace("gid://shopify/Product/", ""),
-      title: node.title,
-      description: node.description || "",
-      descriptionHtml: node.descriptionHtml || "",
-      seoTitle: node.seo?.title || "",
-      seoDescription: node.seo?.description || "",
-      productType: node.productType || "",
-      vendor: node.vendor || "",
-      tags: node.tags || [],
-      images,
-      imageUrl: node.featuredImage?.url || "",
-      variants: (node.variants?.edges ?? []).map((e) => e.node),
-    };
-  });
+  return (data?.products?.edges ?? []).map(({ node }) => ({
+    id: node.id,
+    numericId: node.id.replace("gid://shopify/Product/", ""),
+    title: node.title,
+    description: node.description || "",
+    seoTitle: node.seo?.title || "",
+    seoDescription: node.seo?.description || "",
+    productType: node.productType || "",
+    vendor: node.vendor || "",
+    tags: node.tags || [],
+    images: (node.images?.edges ?? []).map((e) => e.node),
+    variants: (node.variants?.edges ?? []).map((e) => e.node),
+  }));
 }
 
 /** Score a scanned product on both rubrics. */
@@ -94,7 +92,15 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${authParamString(request)}`);
   }
 
-  const products = await scanProducts(admin);
+  // Scan + all shop-level lookups run in parallel — none depend on the scan.
+  const [products, brandVoice, plan, usageCount, publishedCount, draftCount] = await Promise.all([
+    scanProducts(admin),
+    prisma.brandVoice.findUnique({ where: { shop } }),
+    getOrCreatePlan(shop),
+    getMonthlyUsageCount(shop),
+    prisma.generatedContent.count({ where: { shop, status: "published" } }),
+    prisma.generatedContent.count({ where: { shop, status: "draft" } }),
+  ]);
 
   if (products.length === 0) {
     return Response.json({ empty: true });
@@ -111,31 +117,22 @@ export const loader = async ({ request }) => {
   const storeGeo = Math.round(scored.reduce((s, p) => s + p.scores.geo, 0) / scored.length);
   const storeSeo = Math.round(scored.reduce((s, p) => s + p.scores.seo, 0) / scored.length);
 
-  // Has the demo already been generated (so refresh doesn't re-charge)?
+  // Only this lookup depends on the chosen demo product (so it can't be parallel).
   const existing = await prisma.generatedContent.findFirst({
     where: { shop, productId: worst.id, contentType: "description" },
-    select: { generatedContent: true, status: true },
+    select: { generatedContent: true },
   });
-
-  // Checklist + activation state from data we already have.
-  const [brandVoice, plan, usageCount, publishedCount] = await Promise.all([
-    prisma.brandVoice.findUnique({ where: { shop } }),
-    getOrCreatePlan(shop),
-    getMonthlyUsageCount(shop),
-    prisma.generatedContent.count({ where: { shop, status: "published" } }),
-  ]);
-  const draftCount = await prisma.generatedContent.count({ where: { shop, status: "draft" } });
 
   const ents = getEntitlements(plan.planName);
 
+  // If the demo product was already generated before, show that cached result
+  // (HTML stripped for the preview) instead of re-charging a credit.
   let demoAfter = null;
   if (existing?.generatedContent) {
-    const afterGeo = calculateGeoScore({ ...worst, description: existing.generatedContent, faq: "" }).geo ?? 0;
     demoAfter = {
-      content: existing.generatedContent.slice(0, 600),
+      content: existing.generatedContent.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
       geoAfter: calculateGeoScore({ ...worst, description: existing.generatedContent }).score,
     };
-    void afterGeo;
   }
 
   return Response.json({
@@ -230,17 +227,24 @@ export const action = async ({ request }) => {
       return Response.json({ error: `Generation failed: ${err.message}` }, { status: 502 });
     }
 
-    if (generated.description) {
-      await prisma.generatedContent.upsert({
-        where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
-        update: { generatedContent: generated.description, status: "draft", version: { increment: 1 } },
-        create: { shop, productId, productTitle: node.title, contentType: "description", originalContent: node.descriptionHtml || "", generatedContent: generated.description, status: "draft" },
-      });
+    // Empty draft is a failure, not a success — surface it so the UI can retry
+    // instead of silently sticking on a "preparing" state.
+    if (!generated.description || !generated.description.trim()) {
+      return Response.json(
+        { error: "The AI returned an empty draft. Please retry." },
+        { status: 502 }
+      );
     }
+
+    await prisma.generatedContent.upsert({
+      where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+      update: { generatedContent: generated.description, status: "draft", version: { increment: 1 } },
+      create: { shop, productId, productTitle: node.title, contentType: "description", originalContent: node.descriptionHtml || "", generatedContent: generated.description, status: "draft" },
+    });
 
     const geoAfter = calculateGeoScore({
       ...product,
-      description: generated.description || product.description,
+      description: generated.description,
       seoTitle: generated.metaTitle || product.seoTitle,
       seoDescription: generated.metaDescription || product.seoDescription,
       faq: generated.faq || "",
@@ -248,7 +252,7 @@ export const action = async ({ request }) => {
 
     return Response.json({
       demoDone: true,
-      content: (generated.description || "").replace(/<[^>]+>/g, " ").trim().slice(0, 600),
+      content: generated.description.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
       geoAfter,
     });
   }
@@ -300,22 +304,42 @@ function ScoreStat({ label, value, tone }) {
 export default function WelcomePage() {
   const data = useLoaderData();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const demoFetcher = useFetcher();
   const optimizeFetcher = useFetcher();
   const autoFired = useRef(false);
+  const [timedOut, setTimedOut] = useState(false);
 
-  // Auto-generate the demo once on first view (guarded so refresh never re-charges).
-  useEffect(() => {
+  const fireDemo = useCallback(() => {
     if (data.empty) return;
-    if (autoFired.current) return;
-    if (data.demo?.alreadyGenerated) return;
-    if (data.remaining <= 0) return;
-    autoFired.current = true;
+    setTimedOut(false);
     const fd = new FormData();
     fd.append("intent", "generateDemo");
     fd.append("productId", data.demo.productId);
     demoFetcher.submit(fd, { method: "post" });
   }, [data, demoFetcher]);
+
+  // Auto-generate the demo once on first view (guarded so refresh never re-charges).
+  useEffect(() => {
+    if (data.empty || autoFired.current) return;
+    if (data.demo?.alreadyGenerated || data.demo?.after?.content) return;
+    if (data.remaining <= 0) return;
+    autoFired.current = true;
+    fireDemo();
+  }, [data, fireDemo]);
+
+  // Watchdog — never let the AFTER spinner hang forever; flip to error + retry.
+  const demoGenerating = demoFetcher.state !== "idle";
+  useEffect(() => {
+    if (!demoGenerating) return undefined;
+    const t = setTimeout(() => setTimedOut(true), 55000);
+    return () => clearTimeout(t);
+  }, [demoGenerating]);
+
+  // Loading skeleton while the scan loader runs on client navigation (Bug 3).
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Welcome to ContentClaude" sections={3} layout="full" />;
+  }
 
   if (data.empty) {
     return (
@@ -334,8 +358,9 @@ export default function WelcomePage() {
   const result = demoFetcher.data;
   const generating = demoFetcher.state !== "idle";
   const geoAfter = result?.geoAfter ?? data.demo.after?.geoAfter ?? null;
-  const afterContent = result?.content ?? data.demo.after?.content ?? null;
-  const lift = geoAfter != null ? geoAfter - data.demo.geoBefore : null;
+  const afterContent = (result?.content || data.demo.after?.content || "").trim();
+  const demoFailed = !generating && !!result?.error && !result?.limitReached;
+  const lift = geoAfter != null && afterContent ? geoAfter - data.demo.geoBefore : null;
   const optimizing = optimizeFetcher.state !== "idle";
 
   return (
@@ -377,14 +402,27 @@ export default function WelcomePage() {
                 <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
                   <BlockStack gap="200">
                     <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="success">AFTER (AI-optimized)</Text>{geoAfter != null && <Badge tone="success">{`GEO ${geoAfter}`}</Badge>}</InlineStack>
-                    {generating ? (
+                    {generating && !timedOut ? (
                       <InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="p" variant="bodySm" tone="subdued">Generating a real sample from your product…</Text></InlineStack>
-                    ) : result?.limitReached ? (
-                      <Banner tone="warning"><p>{result.error}</p></Banner>
                     ) : afterContent ? (
                       <Text as="p" variant="bodySm">{afterContent}…</Text>
+                    ) : result?.limitReached ? (
+                      <BlockStack gap="200">
+                        <Banner tone="warning"><p>{result.error}</p></Banner>
+                        <Button onClick={() => navigate("/app/plans")}>See plans →</Button>
+                      </BlockStack>
+                    ) : demoFailed || timedOut ? (
+                      <BlockStack gap="200">
+                        <Banner tone="critical"><p>{timedOut ? "This is taking longer than expected — please retry." : (result?.error || "Couldn't generate the sample.")}</p></Banner>
+                        <Button onClick={fireDemo}>Retry</Button>
+                      </BlockStack>
+                    ) : data.remaining <= 0 ? (
+                      <BlockStack gap="200">
+                        <Banner tone="warning"><p>You&apos;re out of free generations this month.</p></Banner>
+                        <Button onClick={() => navigate("/app/plans")}>Upgrade →</Button>
+                      </BlockStack>
                     ) : (
-                      <Text as="p" variant="bodySm" tone="subdued">Preparing your sample…</Text>
+                      <Button variant="primary" onClick={fireDemo}>Generate my sample →</Button>
                     )}
                   </BlockStack>
                 </Box>
