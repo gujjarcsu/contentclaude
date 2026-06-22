@@ -11,12 +11,12 @@
 // existing onboarding (app.setup) is untouched. No fabricated data — every score
 // and the after-content come from the merchant's own catalog + a real generation.
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, useNavigate, useNavigation, redirect } from "react-router";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
+import { useLoaderData, useFetcher, useNavigate, useNavigation, useRevalidator, Await, redirect } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, Badge,
-  Banner, Divider, Spinner, Layout,
+  Banner, Divider, Spinner, Layout, SkeletonBodyText, SkeletonDisplayText,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -92,65 +92,68 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${authParamString(request)}`);
   }
 
-  // Scan + all shop-level lookups run in parallel — none depend on the scan.
-  const [products, brandVoice, plan, usageCount, publishedCount, draftCount] = await Promise.all([
-    scanProducts(admin),
+  // Fast, awaited — DB-only, so the page shell + checklist paint immediately
+  // without waiting on the catalog scan.
+  const [brandVoice, plan, usageCount, publishedCount, draftCount] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     prisma.generatedContent.count({ where: { shop, status: "published" } }),
     prisma.generatedContent.count({ where: { shop, status: "draft" } }),
   ]);
-
-  if (products.length === 0) {
-    return Response.json({ empty: true });
-  }
-
-  const scored = products.map((p) => ({ ...p, scores: scoreProduct(p) }));
-  // Demo target = the weakest product (biggest visible lift). Best = the strongest.
-  const byCombined = [...scored].sort(
-    (a, b) => a.scores.geo + a.scores.seo - (b.scores.geo + b.scores.seo)
-  );
-  const worst = byCombined[0];
-  const best = byCombined[byCombined.length - 1];
-
-  const storeGeo = Math.round(scored.reduce((s, p) => s + p.scores.geo, 0) / scored.length);
-  const storeSeo = Math.round(scored.reduce((s, p) => s + p.scores.seo, 0) / scored.length);
-
-  // Only this lookup depends on the chosen demo product (so it can't be parallel).
-  const existing = await prisma.generatedContent.findFirst({
-    where: { shop, productId: worst.id, contentType: "description" },
-    select: { generatedContent: true },
-  });
-
   const ents = getEntitlements(plan.planName);
 
-  // If the demo product was already generated before, show that cached result
-  // (HTML stripped for the preview) instead of re-charging a credit.
-  let demoAfter = null;
-  if (existing?.generatedContent) {
-    demoAfter = {
-      content: existing.generatedContent.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
-      geoAfter: calculateGeoScore({ ...worst, description: existing.generatedContent }).score,
-    };
-  }
+  // Deferred (streamed) — the catalog scan + GEO/SEO scoring is the slow part.
+  // Returning it as a promise (NOT awaited) lets the component paint a skeleton
+  // immediately and stream the scores in, so the loader never blocks first paint
+  // or the UI thread.
+  const scan = (async () => {
+    const products = await scanProducts(admin);
+    if (products.length === 0) return { empty: true };
 
-  return Response.json({
-    empty: false,
-    storeGeo,
-    storeSeo,
-    totalScanned: scored.length,
-    demo: {
-      productId: worst.id,
-      numericId: worst.numericId,
-      title: worst.title,
-      geoBefore: worst.scores.geo,
-      seoBefore: worst.scores.seo,
-      beforeSnippet: (worst.description || "").replace(/<[^>]+>/g, " ").trim().slice(0, 280),
-      alreadyGenerated: !!existing?.generatedContent,
-      after: demoAfter,
-    },
-    best: { title: best.title, geo: best.scores.geo },
+    const scored = products.map((p) => ({ ...p, scores: scoreProduct(p) }));
+    // Demo target = the weakest product (biggest visible lift). Best = the strongest.
+    const byCombined = [...scored].sort(
+      (a, b) => a.scores.geo + a.scores.seo - (b.scores.geo + b.scores.seo)
+    );
+    const worst = byCombined[0];
+    const best = byCombined[byCombined.length - 1];
+    const storeGeo = Math.round(scored.reduce((s, p) => s + p.scores.geo, 0) / scored.length);
+    const storeSeo = Math.round(scored.reduce((s, p) => s + p.scores.seo, 0) / scored.length);
+
+    const existing = await prisma.generatedContent.findFirst({
+      where: { shop, productId: worst.id, contentType: "description" },
+      select: { generatedContent: true },
+    });
+    const after = existing?.generatedContent
+      ? {
+          content: existing.generatedContent.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
+          geoAfter: calculateGeoScore({ ...worst, description: existing.generatedContent }).score,
+        }
+      : null;
+
+    return {
+      empty: false,
+      storeGeo,
+      storeSeo,
+      totalScanned: scored.length,
+      demo: {
+        productId: worst.id,
+        numericId: worst.numericId,
+        title: worst.title,
+        geoBefore: worst.scores.geo,
+        seoBefore: worst.scores.seo,
+        beforeSnippet: (worst.description || "").replace(/<[^>]+>/g, " ").trim().slice(0, 280),
+        alreadyGenerated: !!existing?.generatedContent,
+        after,
+      },
+      best: { title: best.title, geo: best.scores.geo },
+    };
+  })();
+
+  // Return a plain object (NOT Response.json) so React Router streams `scan`.
+  return {
+    scan,
     checklist: {
       brandVoice: !!(brandVoice && (brandVoice.storeName?.trim() || brandVoice.targetAudience?.trim())),
       generated: draftCount + publishedCount > 0,
@@ -159,7 +162,7 @@ export const loader = async ({ request }) => {
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit, usageCount },
     canBulk: !!ents.bulkJobs,
     remaining: Math.max(0, plan.monthlyLimit - usageCount),
-  });
+  };
 };
 
 export const action = async ({ request }) => {
@@ -301,32 +304,90 @@ function ScoreStat({ label, value, tone }) {
   );
 }
 
+// Streamed-section skeleton — shown instantly while the catalog scan resolves.
+function ScanSkeleton() {
+  return (
+    <>
+      <Card>
+        <BlockStack gap="400">
+          <SkeletonDisplayText size="small" />
+          <Box paddingBlockStart="200"><SkeletonBodyText lines={2} /></Box>
+        </BlockStack>
+      </Card>
+      <Card>
+        <BlockStack gap="400">
+          <SkeletonDisplayText size="small" />
+          <SkeletonBodyText lines={4} />
+        </BlockStack>
+      </Card>
+    </>
+  );
+}
+
+// Graceful degrade if the scan promise rejects (Shopify error etc.) — no blank.
+function ScanError() {
+  const revalidator = useRevalidator();
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <Banner tone="critical"><p>We couldn&apos;t scan your store just now.</p></Banner>
+        <InlineStack>
+          <Button onClick={() => revalidator.revalidate()} loading={revalidator.state === "loading"}>
+            Retry scan
+          </Button>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
 export default function WelcomePage() {
   const data = useLoaderData();
-  const navigate = useNavigate();
   const navigation = useNavigation();
+
+  // Full-page skeleton during a client navigation into the route.
+  if (navigation.state === "loading") {
+    return <AppSkeleton title="Welcome to ContentClaude" sections={3} layout="full" />;
+  }
+
+  // The Page shell paints immediately; the scan streams in behind a skeleton.
+  return (
+    <Page title="Welcome to ContentClaude" subtitle="Here's your store's AI-search readiness — scanned just now.">
+      <BlockStack gap="500">
+        <Suspense fallback={<ScanSkeleton />}>
+          <Await resolve={data.scan} errorElement={<ScanError />}>
+            {(scan) => <MagicMomentBody scan={scan} loader={data} />}
+          </Await>
+        </Suspense>
+      </BlockStack>
+    </Page>
+  );
+}
+
+function MagicMomentBody({ scan, loader }) {
+  const navigate = useNavigate();
   const demoFetcher = useFetcher();
   const optimizeFetcher = useFetcher();
   const autoFired = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
 
   const fireDemo = useCallback(() => {
-    if (data.empty) return;
+    if (scan.empty) return;
     setTimedOut(false);
     const fd = new FormData();
     fd.append("intent", "generateDemo");
-    fd.append("productId", data.demo.productId);
+    fd.append("productId", scan.demo.productId);
     demoFetcher.submit(fd, { method: "post" });
-  }, [data, demoFetcher]);
+  }, [scan, demoFetcher]);
 
   // Auto-generate the demo once on first view (guarded so refresh never re-charges).
   useEffect(() => {
-    if (data.empty || autoFired.current) return;
-    if (data.demo?.alreadyGenerated || data.demo?.after?.content) return;
-    if (data.remaining <= 0) return;
+    if (scan.empty || autoFired.current) return;
+    if (scan.demo?.alreadyGenerated || scan.demo?.after?.content) return;
+    if (loader.remaining <= 0) return;
     autoFired.current = true;
     fireDemo();
-  }, [data, fireDemo]);
+  }, [scan, loader.remaining, fireDemo]);
 
   // Watchdog — never let the AFTER spinner hang forever; flip to error + retry.
   const demoGenerating = demoFetcher.state !== "idle";
@@ -336,148 +397,137 @@ export default function WelcomePage() {
     return () => clearTimeout(t);
   }, [demoGenerating]);
 
-  // Loading skeleton while the scan loader runs on client navigation (Bug 3).
-  if (navigation.state === "loading") {
-    return <AppSkeleton title="Welcome to ContentClaude" sections={3} layout="full" />;
-  }
-
-  if (data.empty) {
+  if (scan.empty) {
     return (
-      <Page title="Welcome to ContentClaude">
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingLg">Add a product to see the magic</Text>
-            <Text as="p" tone="subdued">Once your store has products, ContentClaude will scan them and show your AI-search readiness instantly.</Text>
-            <Button variant="primary" onClick={() => navigate("/app")}>Go to Dashboard</Button>
-          </BlockStack>
-        </Card>
-      </Page>
+      <Card>
+        <BlockStack gap="300">
+          <Text as="h2" variant="headingLg">Add a product to see the magic</Text>
+          <Text as="p" tone="subdued">Once your store has products, ContentClaude will scan them and show your AI-search readiness instantly.</Text>
+          <Button variant="primary" onClick={() => navigate("/app")}>Go to Dashboard</Button>
+        </BlockStack>
+      </Card>
     );
   }
 
   const result = demoFetcher.data;
   const generating = demoFetcher.state !== "idle";
-  const geoAfter = result?.geoAfter ?? data.demo.after?.geoAfter ?? null;
-  const afterContent = (result?.content || data.demo.after?.content || "").trim();
+  const geoAfter = result?.geoAfter ?? scan.demo.after?.geoAfter ?? null;
+  const afterContent = (result?.content || scan.demo.after?.content || "").trim();
   const demoFailed = !generating && !!result?.error && !result?.limitReached;
-  const lift = geoAfter != null && afterContent ? geoAfter - data.demo.geoBefore : null;
+  const lift = geoAfter != null && afterContent ? geoAfter - scan.demo.geoBefore : null;
   const optimizing = optimizeFetcher.state !== "idle";
 
   return (
-    <Page title="Welcome to ContentClaude" subtitle="Here's your store's AI-search readiness — scanned just now.">
-      <BlockStack gap="500">
-
-        {/* Scan result */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">We scanned {data.totalScanned} of your products</Text>
-            <InlineStack gap="800" align="center" wrap>
-              <ScoreStat label="GEO / AI-search score" value={`${data.storeGeo}`} tone={data.storeGeo >= 60 ? "success" : "critical"} />
-              <ScoreStat label="Traditional SEO score" value={`${data.storeSeo}`} tone={data.storeSeo >= 60 ? "success" : "critical"} />
-            </InlineStack>
-            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-              GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini, and Google AI Overviews.
-            </Text>
-          </BlockStack>
-        </Card>
-
-        {/* Live before → after on the merchant's weakest product */}
-        <Card>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Live demo: “{data.demo.title}”</Text>
-              {lift != null && lift > 0 && <Badge tone="success">{`GEO +${lift} points`}</Badge>}
-            </InlineStack>
-
-            <Layout>
-              <Layout.Section variant="oneHalf">
-                <Box padding="400" background="bg-surface-secondary" borderRadius="200">
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">BEFORE</Text><Badge tone="critical">{`GEO ${data.demo.geoBefore}`}</Badge></InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">{data.demo.beforeSnippet || "No real description — invisible to AI answer engines."}</Text>
-                  </BlockStack>
-                </Box>
-              </Layout.Section>
-              <Layout.Section variant="oneHalf">
-                <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="success">AFTER (AI-optimized)</Text>{geoAfter != null && <Badge tone="success">{`GEO ${geoAfter}`}</Badge>}</InlineStack>
-                    {generating && !timedOut ? (
-                      <InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="p" variant="bodySm" tone="subdued">Generating a real sample from your product…</Text></InlineStack>
-                    ) : afterContent ? (
-                      <Text as="p" variant="bodySm">{afterContent}…</Text>
-                    ) : result?.limitReached ? (
-                      <BlockStack gap="200">
-                        <Banner tone="warning"><p>{result.error}</p></Banner>
-                        <Button onClick={() => navigate("/app/plans")}>See plans →</Button>
-                      </BlockStack>
-                    ) : demoFailed || timedOut ? (
-                      <BlockStack gap="200">
-                        <Banner tone="critical"><p>{timedOut ? "This is taking longer than expected — please retry." : (result?.error || "Couldn't generate the sample.")}</p></Banner>
-                        <Button onClick={fireDemo}>Retry</Button>
-                      </BlockStack>
-                    ) : data.remaining <= 0 ? (
-                      <BlockStack gap="200">
-                        <Banner tone="warning"><p>You&apos;re out of free generations this month.</p></Banner>
-                        <Button onClick={() => navigate("/app/plans")}>Upgrade →</Button>
-                      </BlockStack>
-                    ) : (
-                      <Button variant="primary" onClick={fireDemo}>Generate my sample →</Button>
-                    )}
-                  </BlockStack>
-                </Box>
-              </Layout.Section>
-            </Layout>
-            {afterContent && (
-              <InlineStack gap="300">
-                <Button onClick={() => navigate(`/app/products/${data.demo.numericId}`)}>Review &amp; edit this draft →</Button>
-              </InlineStack>
-            )}
-          </BlockStack>
-        </Card>
-
-        {/* One-click optimize */}
-        <Box padding="500" background="bg-fill-brand" borderRadius="300">
-          <InlineStack align="space-between" blockAlign="center" wrap>
-            <BlockStack gap="100">
-              <Text as="h2" variant="headingLg"><span style={{ color: "#fff" }}>Optimize your whole store</span></Text>
-              <Text as="p" variant="bodyMd"><span style={{ color: "rgba(255,255,255,0.85)" }}>Generate AI-search-ready content for every product — runs in the background.</span></Text>
-            </BlockStack>
-            <optimizeFetcher.Form method="post">
-              <input type="hidden" name="intent" value="optimizeStore" />
-              <Button variant="primary" tone="success" size="large" submit loading={optimizing}>
-                {data.canBulk ? "Optimize my store →" : "See plans to optimize all →"}
-              </Button>
-            </optimizeFetcher.Form>
+    <>
+      {/* Scan result */}
+      <Card>
+        <BlockStack gap="400">
+          <Text as="h2" variant="headingMd">We scanned {scan.totalScanned} of your products</Text>
+          <InlineStack gap="800" align="center" wrap>
+            <ScoreStat label="GEO / AI-search score" value={`${scan.storeGeo}`} tone={scan.storeGeo >= 60 ? "success" : "critical"} />
+            <ScoreStat label="Traditional SEO score" value={`${scan.storeSeo}`} tone={scan.storeSeo >= 60 ? "success" : "critical"} />
           </InlineStack>
-        </Box>
+          <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+            GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini, and Google AI Overviews.
+          </Text>
+        </BlockStack>
+      </Card>
 
-        {/* First-run checklist */}
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Your setup checklist</Text>
-            {[
-              { done: data.checklist.brandVoice, label: "Configure your brand voice", to: "/app/settings" },
-              { done: data.checklist.generated, label: "Generate your first product content", to: `/app/products/${data.demo.numericId}` },
-              { done: data.checklist.published, label: "Publish your first AI content (activation!)", to: "/app/review" },
-            ].map((step) => (
-              <InlineStack key={step.label} align="space-between" blockAlign="center">
-                <InlineStack gap="200" blockAlign="center">
-                  <Badge tone={step.done ? "success" : undefined}>{step.done ? "✓ Done" : "To do"}</Badge>
-                  <Text as="p" variant="bodyMd">{step.label}</Text>
-                </InlineStack>
-                {!step.done && <Button variant="plain" onClick={() => navigate(step.to)}>Start →</Button>}
-              </InlineStack>
-            ))}
-            <Divider />
-            <InlineStack align="end">
-              <Button variant="plain" onClick={() => navigate("/app")}>Skip to dashboard</Button>
+      {/* Live before → after on the merchant's weakest product */}
+      <Card>
+        <BlockStack gap="400">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">Live demo: “{scan.demo.title}”</Text>
+            {lift != null && lift > 0 && <Badge tone="success">{`GEO +${lift} points`}</Badge>}
+          </InlineStack>
+
+          <Layout>
+            <Layout.Section variant="oneHalf">
+              <Box padding="400" background="bg-surface-secondary" borderRadius="200">
+                <BlockStack gap="200">
+                  <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">BEFORE</Text><Badge tone="critical">{`GEO ${scan.demo.geoBefore}`}</Badge></InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">{scan.demo.beforeSnippet || "No real description — invisible to AI answer engines."}</Text>
+                </BlockStack>
+              </Box>
+            </Layout.Section>
+            <Layout.Section variant="oneHalf">
+              <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
+                <BlockStack gap="200">
+                  <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="success">AFTER (AI-optimized)</Text>{geoAfter != null && <Badge tone="success">{`GEO ${geoAfter}`}</Badge>}</InlineStack>
+                  {generating && !timedOut ? (
+                    <InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="p" variant="bodySm" tone="subdued">Generating a real sample from your product…</Text></InlineStack>
+                  ) : afterContent ? (
+                    <Text as="p" variant="bodySm">{afterContent}…</Text>
+                  ) : result?.limitReached ? (
+                    <BlockStack gap="200">
+                      <Banner tone="warning"><p>{result.error}</p></Banner>
+                      <Button onClick={() => navigate("/app/plans")}>See plans →</Button>
+                    </BlockStack>
+                  ) : demoFailed || timedOut ? (
+                    <BlockStack gap="200">
+                      <Banner tone="critical"><p>{timedOut ? "This is taking longer than expected — please retry." : (result?.error || "Couldn't generate the sample.")}</p></Banner>
+                      <Button onClick={fireDemo}>Retry</Button>
+                    </BlockStack>
+                  ) : loader.remaining <= 0 ? (
+                    <BlockStack gap="200">
+                      <Banner tone="warning"><p>You&apos;re out of free generations this month.</p></Banner>
+                      <Button onClick={() => navigate("/app/plans")}>Upgrade →</Button>
+                    </BlockStack>
+                  ) : (
+                    <Button variant="primary" onClick={fireDemo}>Generate my sample →</Button>
+                  )}
+                </BlockStack>
+              </Box>
+            </Layout.Section>
+          </Layout>
+          {afterContent && (
+            <InlineStack gap="300">
+              <Button onClick={() => navigate(`/app/products/${scan.demo.numericId}`)}>Review &amp; edit this draft →</Button>
             </InlineStack>
-          </BlockStack>
-        </Card>
+          )}
+        </BlockStack>
+      </Card>
 
-      </BlockStack>
-    </Page>
+      {/* One-click optimize */}
+      <Box padding="500" background="bg-fill-brand" borderRadius="300">
+        <InlineStack align="space-between" blockAlign="center" wrap>
+          <BlockStack gap="100">
+            <Text as="h2" variant="headingLg"><span style={{ color: "#fff" }}>Optimize your whole store</span></Text>
+            <Text as="p" variant="bodyMd"><span style={{ color: "rgba(255,255,255,0.85)" }}>Generate AI-search-ready content for every product — runs in the background.</span></Text>
+          </BlockStack>
+          <optimizeFetcher.Form method="post">
+            <input type="hidden" name="intent" value="optimizeStore" />
+            <Button variant="primary" tone="success" size="large" submit loading={optimizing}>
+              {loader.canBulk ? "Optimize my store →" : "See plans to optimize all →"}
+            </Button>
+          </optimizeFetcher.Form>
+        </InlineStack>
+      </Box>
+
+      {/* First-run checklist */}
+      <Card>
+        <BlockStack gap="300">
+          <Text as="h2" variant="headingMd">Your setup checklist</Text>
+          {[
+            { done: loader.checklist.brandVoice, label: "Configure your brand voice", to: "/app/settings" },
+            { done: loader.checklist.generated, label: "Generate your first product content", to: `/app/products/${scan.demo.numericId}` },
+            { done: loader.checklist.published, label: "Publish your first AI content (activation!)", to: "/app/review" },
+          ].map((step) => (
+            <InlineStack key={step.label} align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <Badge tone={step.done ? "success" : undefined}>{step.done ? "✓ Done" : "To do"}</Badge>
+                <Text as="p" variant="bodyMd">{step.label}</Text>
+              </InlineStack>
+              {!step.done && <Button variant="plain" onClick={() => navigate(step.to)}>Start →</Button>}
+            </InlineStack>
+          ))}
+          <Divider />
+          <InlineStack align="end">
+            <Button variant="plain" onClick={() => navigate("/app")}>Skip to dashboard</Button>
+          </InlineStack>
+        </BlockStack>
+      </Card>
+    </>
   );
 }
 
