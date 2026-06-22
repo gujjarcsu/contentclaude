@@ -29,18 +29,20 @@ export const loader = async ({ request }) => {
     if (val) authParams.set(key, val);
   }
 
-  // Cache product count 5 min — it's read on every dashboard load and rarely changes
-  const totalProducts = await getCache(
-    `productCount:${shop}`,
-    async () => {
-      const r = await admin.graphql(`query { productsCount { count } }`);
-      const d = await r.json();
-      return d.data.productsCount.count;
-    },
-    300
-  );
-
-  const [metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
+  // All dashboard data fetched in ONE parallel batch. The product count (an
+  // Admin GraphQL call, cached 5 min) used to be awaited sequentially *before*
+  // the DB queries, serializing a network round-trip ahead of everything else;
+  // folding it into Promise.all makes total latency ≈ the single slowest call.
+  const [totalProducts, metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
+    getCache(
+      `productCount:${shop}`,
+      async () => {
+        const r = await admin.graphql(`query { productsCount { count } }`);
+        const d = await r.json();
+        return d.data.productsCount.count;
+      },
+      300
+    ),
     getContentMetrics(shop),
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.generationJob.count({

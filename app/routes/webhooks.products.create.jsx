@@ -39,12 +39,25 @@ export const action = async ({ request }) => {
     return new Response("Plan limit reached", { status: 200 });
   }
 
+  // Idempotency: Shopify may redeliver products/create on timeout/retry. If an
+  // autopilot job for this exact product is already queued/processing, skip —
+  // prevents duplicate jobs and double-charging. (The bulk processor's atomic
+  // tryConsumeGeneration is the final guard against any residual race.)
+  const productIdsJson = JSON.stringify([productId]);
+  const pending = await prisma.generationJob.findFirst({
+    where: { shop, status: { in: ["queued", "processing"] }, productIds: productIdsJson },
+    select: { id: true },
+  });
+  if (pending) {
+    return new Response("Already queued for this product", { status: 200 });
+  }
+
   const job = await prisma.generationJob.create({
     data: {
       shop,
       status: "queued",
       totalProducts: 1,
-      productIds: JSON.stringify([productId]),
+      productIds: productIdsJson,
       contentTypes: contentTypes.join(","),
       autoPublish: brandVoice.autopilotAutoPublish,
     },
