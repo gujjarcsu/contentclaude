@@ -174,7 +174,7 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
         {done ? (
           <Badge tone="success">Done</Badge>
         ) : (
-          <Button size="slim" variant="primary" onClick={onAction}>
+          <Button size="slim" variant="primary" tone="success" onClick={onAction}>
             {actionLabel} <ArrowRight aria-hidden="true" size={14} />
           </Button>
         )}
@@ -209,7 +209,7 @@ export default function Dashboard() {
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const isFreePlan = plan.planName === "free";
 
-  const usageTone = usagePct >= 90 ? "critical" : usagePct >= 60 ? "highlight" : "success";
+  const usageTone = usagePct >= 90 ? "critical" : "success";
   const usageBg = usagePct >= 90 ? "bg-surface-critical-subdued" : usagePct >= 60 ? "bg-surface-warning-subdued" : "bg-surface-success-subdued";
 
   // Hero message
@@ -364,7 +364,7 @@ export default function Dashboard() {
                   : "You're in good shape for this month."}
               </Text>
               {isFreePlan && (
-                <Button size="slim" variant="primary" onClick={() => navigate("/app/plans")}>
+                <Button size="slim" variant="primary" tone="success" onClick={() => navigate("/app/plans")}>
                   Upgrade Plan →
                 </Button>
               )}
@@ -435,7 +435,7 @@ export default function Dashboard() {
                   Generate AI content for every product missing a description — one click, runs in the background.
                 </Text>
               </BlockStack>
-              <Button variant="primary" size="large" onClick={() => navigate("/app/optimize")}>
+              <Button variant="primary" size="large" tone="success" onClick={() => navigate("/app/optimize")}>
                 Optimise Store →
               </Button>
             </InlineStack>

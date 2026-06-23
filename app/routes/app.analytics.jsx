@@ -18,6 +18,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreatePlan } from "../utils/plans.server";
 import { getContentMetrics, coveragePct as calcCoveragePct } from "../utils/metrics.server";
+import { getCache } from "../utils/cache.server";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export const loader = async ({ request }) => {
   // Clamp to a real YYYY-MM format to prevent injection
   const safeMonth = /^\d{4}-\d{2}$/.test(selectedMonth) ? selectedMonth : currentMonth;
 
-  const [plan, usageCount, metrics, recentUsage, jobStats, productCountResponse] = await Promise.all([
+  const [plan, usageCount, metrics, recentUsage, jobStats, totalProducts] = await Promise.all([
     getOrCreatePlan(shop),
     prisma.usageRecord.count({ where: { shop, month: safeMonth } }),
     getContentMetrics(shop),
@@ -47,11 +48,18 @@ export const loader = async ({ request }) => {
       where: { shop },
       _count: { status: true },
     }),
-    admin.graphql(`query { productsCount { count } }`),
+    // Shared 5-min cache with the dashboard — keeps the Admin GraphQL call off
+    // most Analytics loads so the loader is effectively DB-only (fast paint).
+    getCache(
+      `productCount:${shop}`,
+      async () => {
+        const r = await admin.graphql(`query { productsCount { count } }`);
+        const d = await r.json();
+        return d.data.productsCount.count;
+      },
+      300
+    ),
   ]);
-
-  const productCountData = await productCountResponse.json();
-  const totalProducts = productCountData.data.productsCount.count;
 
   // Use distinct-product counts so coverage can never exceed 100%
   const published = metrics.publishedProducts;
@@ -140,13 +148,13 @@ export default function AnalyticsPage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Content Coverage</Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold" tone={coveragePct >= 50 ? "success" : "critical"}>
+                <Text as="p" variant="heading2xl" fontWeight="bold" tone={coveragePct >= 50 ? "success" : "caution"}>
                   {coveragePct}%
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   {published} of {totalProducts} products optimised
                 </Text>
-                <ProgressBar progress={coveragePct} tone={coveragePct >= 50 ? "success" : "critical"} size="small" />
+                <ProgressBar progress={coveragePct} tone={coveragePct >= 50 ? "success" : "highlight"} size="small" />
                 <Text as="p" variant="bodySm" tone="subdued">
                   {publishedPieces} content pieces generated in total
                 </Text>
@@ -225,7 +233,7 @@ export default function AnalyticsPage() {
             </Text>
             <ProgressBar
               progress={usagePct}
-              tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? "highlight" : "success"}
+              tone={usagePct >= 90 ? "critical" : "success"}
               size="medium"
             />
           </BlockStack>

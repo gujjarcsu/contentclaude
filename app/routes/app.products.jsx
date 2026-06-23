@@ -508,7 +508,7 @@ export default function ProductsPage() {
               </InlineStack>
               <ProgressBar
                 progress={usagePct}
-                tone={usagePct >= 90 ? "critical" : usagePct >= 60 ? "highlight" : "success"}
+                tone={usagePct >= 90 ? "critical" : "success"}
                 size="small"
               />
             </BlockStack>

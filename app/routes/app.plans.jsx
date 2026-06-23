@@ -1,4 +1,5 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { Suspense, useEffect, useRef } from "react";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator, Await, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Banner,
@@ -13,12 +14,8 @@ export const loader = async ({ request }) => {
   const { billing, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const { appSubscriptions } = await billing.check({
-    plans: Object.values(BILLING_PLANS).map((p) => p.key),
-    isTest: BILLING_TEST,
-  });
-  await syncBillingToPlan(shop, appSubscriptions);
-
+  // Fast path — the DB plan (kept current by the app_subscriptions/update webhook)
+  // is the source of truth for display, so the page paints immediately.
   const [plan, usageCount] = await Promise.all([
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
@@ -26,7 +23,25 @@ export const loader = async ({ request }) => {
 
   const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
-  return Response.json({
+  // Deferred reconciliation — billing.check() is a Shopify API round-trip that
+  // previously blocked the cold-load paint (the Plans freeze). Stream it; if it
+  // finds a change the webhook missed, the component revalidates. Never blocks paint.
+  const reconcile = (async () => {
+    try {
+      const { appSubscriptions } = await billing.check({
+        plans: Object.values(BILLING_PLANS).map((p) => p.key),
+        isTest: BILLING_TEST,
+      });
+      await syncBillingToPlan(shop, appSubscriptions);
+      const fresh = await getOrCreatePlan(shop);
+      return { changed: fresh.planName !== plan.planName };
+    } catch {
+      return { changed: false };
+    }
+  })();
+
+  // Plain object (not Response.json) so `reconcile` streams instead of blocking.
+  return {
     plan: {
       planName: plan.planName,
       status: plan.status,
@@ -36,7 +51,8 @@ export const loader = async ({ request }) => {
     },
     usageCount,
     currentMonth,
-  });
+    reconcile,
+  };
 };
 
 export const action = async ({ request }) => {
@@ -383,8 +399,22 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
   );
 }
 
+// Runs the deferred billing reconciliation in the background; only refreshes the
+// page if Shopify reports a plan different from the DB (a webhook the app missed).
+function ReconcileEffect({ changed }) {
+  const revalidator = useRevalidator();
+  const done = useRef(false);
+  useEffect(() => {
+    if (changed && !done.current) {
+      done.current = true;
+      revalidator.revalidate();
+    }
+  }, [changed, revalidator]);
+  return null;
+}
+
 export default function PlansPage() {
-  const { plan, usageCount, currentMonth } = useLoaderData();
+  const { plan, usageCount, currentMonth, reconcile } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -409,6 +439,13 @@ export default function PlansPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
+
+        {/* Background billing reconciliation — does not block paint. */}
+        <Suspense fallback={null}>
+          <Await resolve={reconcile} errorElement={null}>
+            {(r) => <ReconcileEffect changed={!!r?.changed} />}
+          </Await>
+        </Suspense>
 
         {actionData?.cancelled && (
           <Banner tone="info" title="Subscription cancelled">
@@ -448,7 +485,7 @@ export default function PlansPage() {
               <Box paddingBlockStart="100">
                 <ProgressBar
                   progress={usagePct}
-                  tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? "highlight" : "success"}
+                  tone={usagePct >= 90 ? "critical" : "success"}
                   size="small"
                 />
               </Box>

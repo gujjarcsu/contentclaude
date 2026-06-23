@@ -506,8 +506,11 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
               <InlineStack gap="200" blockAlign="center">
                 <Text as="h3" variant="headingMd">{product.productTitle}</Text>
                 {product.qualityScore != null && (
-                  <Badge tone={product.qualityScore >= 80 ? "success" : product.qualityScore >= 60 ? "attention" : "critical"}>
-                    Score: {product.qualityScore}
+                  // Labelled "Content quality" (distinct from GEO/AI-search and
+                  // traditional SEO scores shown elsewhere). A mid score reads as
+                  // neutral "attention", not alarming red — red only for genuinely poor.
+                  <Badge tone={product.qualityScore >= 75 ? "success" : product.qualityScore >= 45 ? "attention" : "critical"}>
+                    {`Content quality: ${product.qualityScore}`}
                   </Badge>
                 )}
               </InlineStack>

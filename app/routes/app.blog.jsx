@@ -314,7 +314,7 @@ export default function BlogPage() {
                           label="Blog Topic"
                           value={topic}
                           onChange={setTopic}
-                          placeholder="e.g., The benefits of Vitamin C for recovery"
+                          placeholder="e.g., a how-to guide, buying tips, or a seasonal topic for your store"
                           helpText="Be specific — a focused topic generates better content"
                           autoComplete="off"
                         />
@@ -323,7 +323,7 @@ export default function BlogPage() {
                           label="Target Keywords"
                           value={keywords}
                           onChange={setKeywords}
-                          placeholder="e.g., skincare, beauty, wellness"
+                          placeholder="e.g., your main product keywords, comma-separated"
                           helpText="Keywords to weave naturally into the post"
                           autoComplete="off"
                         />
@@ -392,7 +392,7 @@ export default function BlogPage() {
                     </InlineStack>
                     <ProgressBar
                       progress={usagePct}
-                      tone={usagePct >= 90 ? "critical" : usagePct >= 60 ? "highlight" : "success"}
+                      tone={usagePct >= 90 ? "critical" : "success"}
                       size="small"
                     />
                   </BlockStack>
