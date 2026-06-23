@@ -5,3 +5,4 @@
 # the structured Q&A. Without this, the metafield exists but never reaches the page.
 name = "contentclaude-geo-schema"
 type = "theme"
+uid = "6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4"
