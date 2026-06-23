@@ -51,6 +51,25 @@ const shopify = shopifyApp({
       interval: BILLING_PLANS.pro.interval,
       trialDays: BILLING_PLANS.pro.trialDays,
     },
+    // ── Annual plans (2 months free) — additive; monthly plans above unchanged ──
+    [BILLING_PLANS.starter.annualKey]: {
+      amount: BILLING_PLANS.starter.annualAmount,
+      currencyCode: BILLING_PLANS.starter.currencyCode,
+      interval: BillingInterval.Annual,
+      trialDays: BILLING_PLANS.starter.trialDays,
+    },
+    [BILLING_PLANS.growth.annualKey]: {
+      amount: BILLING_PLANS.growth.annualAmount,
+      currencyCode: BILLING_PLANS.growth.currencyCode,
+      interval: BillingInterval.Annual,
+      trialDays: BILLING_PLANS.growth.trialDays,
+    },
+    [BILLING_PLANS.pro.annualKey]: {
+      amount: BILLING_PLANS.pro.annualAmount,
+      currencyCode: BILLING_PLANS.pro.currencyCode,
+      interval: BillingInterval.Annual,
+      trialDays: BILLING_PLANS.pro.trialDays,
+    },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

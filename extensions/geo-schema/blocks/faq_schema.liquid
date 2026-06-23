@@ -1,0 +1,19 @@
+{%- comment -%}
+  ContentClaude — AI-search FAQ schema (app embed).
+  Renders the FAQPage JSON-LD stored in the product metafield
+  `contentclaude.faq_schema` (written when content is published) into the page
+  <head> on product templates, so answer engines can extract the Q&A.
+  Only the FAQPage is emitted here — the theme already provides Product/Offer
+  schema, so we don't duplicate it.
+{%- endcomment -%}
+{%- if template contains 'product' and product.metafields.contentclaude.faq_schema -%}
+  <script type="application/ld+json">{{ product.metafields.contentclaude.faq_schema.value | json }}</script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "AI-search FAQ schema",
+  "target": "head",
+  "settings": []
+}
+{% endschema %}

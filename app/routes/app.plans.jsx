@@ -1,8 +1,8 @@
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator, Await, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Card, Text, BlockStack, InlineStack, Button, Banner,
+  Page, Card, Text, BlockStack, InlineStack, Button, ButtonGroup, Banner,
   Box, ProgressBar, Badge, Divider, DataTable,
 } from "@shopify/polaris";
 import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
@@ -62,7 +62,9 @@ export const action = async ({ request }) => {
 
   if (actionType === "subscribe") {
     const planKey = formData.get("planKey");
-    const validKeys = Object.values(BILLING_PLANS).map((p) => p.key);
+    const validKeys = Object.values(BILLING_PLANS)
+      .flatMap((p) => [p.key, p.annualKey])
+      .filter(Boolean);
     if (!planKey || !validKeys.includes(planKey)) {
       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
     }
@@ -152,6 +154,8 @@ const PLAN_DISPLAY = [
     textColor: "#202223",
     highlight: false,
     planKey: BILLING_PLANS.starter.key,
+    annualPlanKey: BILLING_PLANS.starter.annualKey,
+    annualPrice: "$99.90",
     features: [
       `${BILLING_PLANS.starter.monthlyLimit} generations / month`,
       "Everything in Free",
@@ -175,6 +179,8 @@ const PLAN_DISPLAY = [
     textColor: "#ffffff",
     highlight: true,
     planKey: BILLING_PLANS.growth.key,
+    annualPlanKey: BILLING_PLANS.growth.annualKey,
+    annualPrice: "$299.90",
     features: [
       `${BILLING_PLANS.growth.monthlyLimit} generations / month`,
       "Everything in Starter",
@@ -198,6 +204,8 @@ const PLAN_DISPLAY = [
     textColor: "#202223",
     highlight: false,
     planKey: BILLING_PLANS.pro.key,
+    annualPlanKey: BILLING_PLANS.pro.annualKey,
+    annualPrice: "$799.90",
     features: [
       `${BILLING_PLANS.pro.monthlyLimit} generations / month`,
       "Everything in Growth",
@@ -250,9 +258,13 @@ function FeatureCell({ value }) {
   return <Text as="span" variant="bodySm" fontWeight="semibold">{value}</Text>;
 }
 
-function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting, submittingPlan }) {
+function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting, submittingPlan, billingPeriod }) {
   const Icon = displayPlan.icon;
   const isLight = !displayPlan.highlight;
+  const isAnnual = billingPeriod === "annual" && !!displayPlan.annualPlanKey;
+  const shownPrice = isAnnual ? displayPlan.annualPrice : displayPlan.price;
+  const shownPeriod = isAnnual ? "/ year" : displayPlan.period;
+  const activeKey = isAnnual ? displayPlan.annualPlanKey : displayPlan.planKey;
 
   return (
     <div style={{
@@ -310,12 +322,17 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
           <span style={{ color: displayPlan.textColor, fontSize: "32px", fontWeight: "800", lineHeight: 1 }}>
-            {displayPlan.price}
+            {shownPrice}
           </span>
           <span style={{ color: isLight ? "#8C9196" : "rgba(255,255,255,0.6)", fontSize: "13px" }}>
-            {displayPlan.period}
+            {shownPeriod}
           </span>
         </div>
+        {isAnnual && (
+          <div style={{ color: displayPlan.highlight ? "#a8d5b5" : "#1a7345", fontSize: "12px", fontWeight: 600, marginTop: "4px" }}>
+            2 months free vs monthly
+          </div>
+        )}
       </div>
 
       {/* Features */}
@@ -347,7 +364,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
         ) : displayPlan.planKey && isUpgrade ? (
           <Form method="post">
             <input type="hidden" name="actionType" value="subscribe" />
-            <input type="hidden" name="planKey" value={displayPlan.planKey} />
+            <input type="hidden" name="planKey" value={activeKey} />
             <button type="submit" style={{
               width: "100%",
               padding: "12px 16px",
@@ -362,9 +379,9 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
               alignItems: "center",
               justifyContent: "center",
               gap: "6px",
-              opacity: isSubmitting && submittingPlan === displayPlan.planKey ? 0.7 : 1,
+              opacity: isSubmitting && submittingPlan === activeKey ? 0.7 : 1,
             }}>
-              {isSubmitting && submittingPlan === displayPlan.planKey ? "Processing…" : (
+              {isSubmitting && submittingPlan === activeKey ? "Processing…" : (
                 <>Upgrade to {displayPlan.label} <ArrowRight aria-hidden="true" size={14} /></>
               )}
             </button>
@@ -418,6 +435,7 @@ export default function PlansPage() {
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
+  const [billingPeriod, setBillingPeriod] = useState("monthly");
 
   const isSubmitting = navigation.state === "submitting";
 
@@ -501,7 +519,17 @@ export default function PlansPage() {
 
         {/* Horizontal plan cards */}
         <BlockStack gap="300">
-          <Text as="h2" variant="headingLg">Choose Your Plan</Text>
+          <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+            <Text as="h2" variant="headingLg">Choose Your Plan</Text>
+            <ButtonGroup variant="segmented">
+              <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
+                Monthly
+              </Button>
+              <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
+                Annual · 2 months free
+              </Button>
+            </ButtonGroup>
+          </InlineStack>
           <div data-cc-plans-grid style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -523,6 +551,7 @@ export default function PlansPage() {
                   isDowngrade={isDowngrade}
                   isSubmitting={isSubmitting}
                   submittingPlan={submittingPlan}
+                  billingPeriod={billingPeriod}
                 />
               );
             })}

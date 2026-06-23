@@ -25,6 +25,9 @@ export const BILLING_PLANS = {
     key: "Starter Plan",
     planName: "starter",
     amount: 9.99,
+    // Annual = 10× monthly (2 months free). Same generation limit; billed yearly.
+    annualKey: "Starter Annual",
+    annualAmount: 99.9,
     monthlyLimit: 50,
     entitlements: {
       bulkJobs: false,
@@ -41,6 +44,8 @@ export const BILLING_PLANS = {
     key: "Growth Plan",
     planName: "growth",
     amount: 29.99,
+    annualKey: "Growth Annual",
+    annualAmount: 299.9,
     monthlyLimit: 200,
     entitlements: {
       bulkJobs: true,
@@ -57,6 +62,8 @@ export const BILLING_PLANS = {
     key: "Professional Plan",
     planName: "pro",
     amount: 79.99,
+    annualKey: "Professional Annual",
+    annualAmount: 799.9,
     monthlyLimit: 1000,
     entitlements: {
       bulkJobs: true,

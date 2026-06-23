@@ -6,9 +6,13 @@ import logger from "./logger.server.js";
 
 export { FREE_PLAN };
 
-// Map Shopify billing plan key → our internal plan definition
+// Map a Shopify billing plan key → our internal plan definition. Matches both
+// the monthly key and the annual key, so an annual subscription resolves to the
+// same plan (same generation limit + entitlements; only the billing interval differs).
 export function getPlanByKey(shopifyKey) {
-  return Object.values(BILLING_PLANS).find((p) => p.key === shopifyKey) ?? null;
+  return Object.values(BILLING_PLANS).find(
+    (p) => p.key === shopifyKey || p.annualKey === shopifyKey
+  ) ?? null;
 }
 
 /**

@@ -1,0 +1,7 @@
+# ContentClaude — GEO/AEO theme app extension.
+# Emits the FAQ JSON-LD (written to the `contentclaude.faq_schema` product
+# metafield on publish) onto the live storefront product page as an app embed,
+# so AI answer engines (ChatGPT/Perplexity/Gemini/Google AI Overviews) can read
+# the structured Q&A. Without this, the metafield exists but never reaches the page.
+name = "contentclaude-geo-schema"
+type = "theme"
