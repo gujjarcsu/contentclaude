@@ -4,7 +4,31 @@
 **Prod:** `https://contentclaude.fly.dev` — deployed and verified (new bundles live, immutable).
 **Toolchain:** typecheck ✓ · lint ✓ · build ✓ · 149 tests ✓ (necessary, not sufficient).
 
-> **Honesty note.** I can fetch the prod origin and confirm code/bundles/timings, but I **cannot drive the embedded OAuth'd browser**, so I cannot visually confirm a screen "paints in 2s" or that colours look right. Where the proof is visual, I say so and put it on the founder's-eyes list. I did not fabricate any browser measurement.
+> **Honesty note.** I can fetch the prod origin and confirm code/bundles/timings, but I **cannot drive the embedded OAuth'd browser** (nor the password-protected dev storefront), so I cannot visually confirm a screen "paints in 2s", that colours look right, that a billing approval succeeds, or that JSON-LD appears on a live product page. Where the proof is visual, I say so and put it on the founder's-eyes list. I did not fabricate any browser measurement.
+
+---
+
+## ISSUE 0 (P0) — Verify & finish the GEO/AEO differentiator + annual billing
+*(Added this pass. Issues 1–4 below were completed and deployed in the prior pass — still live.)*
+
+### 0.1 Annual billing — was **MISSING**, now **SHIPPED**
+The Plans page had monthly only. Implemented additively (monthly billing untouched):
+- `billing-plans.js` — `annualKey` + `annualAmount` per paid tier at **10× monthly (2 months free)**: Starter $99.90, Growth $299.90, Pro $799.90/yr.
+- `shopify.server.js` — annual entries in the Shopify billing config with `BillingInterval.Annual` (verified prod **boots clean** with them — `/api/health` 200).
+- `plans.server.js` — `getPlanByKey` maps annual keys → same plan (same limit/entitlements; only interval differs), so `syncBillingToPlan` + the webhook recognise annual subs.
+- `app.plans.jsx` — a **Monthly / Annual segmented toggle** that switches every card's price, period, "2 months free" note, and the **plan key the subscribe button submits**; the subscribe action accepts annual keys.
+- **Deployed** (fly + `shopify app deploy` → contentclaude-6). **Founder's eyes:** the actual annual charge needs the live Shopify approval click (managed pricing screen) — I can't drive it.
+
+### 0.2 LLMs.txt — **LIVE in code; storefront verification BLOCKED**
+The App Proxy routes (`/proxy/llms.txt`, `/proxy/llms-full.txt`) + `[app_proxy]` config are deployed. I tried to fetch `https://contentpilot-dev2.myshopify.com/apps/contentclaude/llms.txt` → **302 → /password**: the **dev store storefront is password-protected**, so I cannot externally confirm the served file. **Founder's eyes:** disable the storefront password (Online Store → Preferences) or open the proxy URL while logged in, and confirm it returns a current llms.txt. (Status surface in Settings: **not added this pass** — flagged, minor.)
+
+### 0.3 GEO structured data on the storefront — was **PARTIAL (broken last mile)**, now **FINISHED in code**
+Root cause: publishing wrote the FAQ JSON-LD to a product **metafield** (`contentclaude.faq_schema`) "so Liquid themes can embed it" — but **no theme extension existed** (`extensions/` was empty), so nothing ever put `<script type="application/ld+json">` on the page. The GEO promise's last mile was missing.
+**Fix:** built a **theme app extension** (`extensions/geo-schema/`, app embed, `target: head`) that emits the FAQ metafield as **FAQPage JSON-LD on product pages** (theme already provides Product/Offer, so no duplication). Registered via `shopify app deploy` (contentclaude-6, theme-check clean).
+**Founder's eyes (required to go live):** (1) **enable the app embed** — Online Store → Themes → Customize → App embeds → toggle "ContentClaude"; (2) publish a product's FAQ; (3) view the product page source and confirm the FAQPage `ld+json` is present (and test in Google Rich Results). **Also flagged:** the metafield is currently written on the **single-product publish** path; bulk-published products don't yet get it — a follow-up to wire the same metafield write into the bulk worker.
+
+### 0.4 High-volume "Scale" tier — **FOUNDER DECISION (flagged, not built)**
+Top tier is Professional ($79.99 / 1,000 generations); large-catalog merchants (best LTV) cap out there. **Decision for you:** add a usage-based/Scale tier (e.g. ~$149–199 or metered overage) **now vs. post-launch.** The plumbing (entitlements registry, atomic metering, annual interval) is in place to add a tier quickly when you decide the number — I did not invent a price.
 
 ---
 
