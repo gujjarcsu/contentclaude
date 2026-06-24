@@ -30,7 +30,7 @@ export function ContentClaudeBrand() {
           Content<span style={{ color: "#0A84FF" }}>Claude</span>
         </div>
         <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>
-          Powered by Claude AI
+          Powered by premium AI
         </div>
       </div>
     </div>

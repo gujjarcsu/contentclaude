@@ -22,8 +22,8 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>ContentClaude - AI Product Content Powered by Claude</title>
-        <meta name="description" content="Generate product descriptions, blogs, and SEO content powered by Claude AI" />
+        <title>ContentClaude — AI product content & AI-search (GEO) optimization</title>
+        <meta name="description" content="Generate product descriptions, blogs, and SEO/GEO content with premium AI — written to rank and to be cited by AI search engines." />
         <meta name="theme-color" content="#0A84FF" />
         <meta property="og:title" content="ContentClaude - AI Product Content" />
         <meta property="og:description" content="AI-powered product content and blog generation for Shopify merchants" />

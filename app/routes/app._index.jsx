@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useLoaderData, useNavigate, redirect, useNavigation } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Box, Badge, ProgressBar, Banner, Divider,
+  Button, Box, Badge, ProgressBar, Banner, Divider, Collapsible,
 } from "@shopify/polaris";
 import {
   Package, CheckCircle, Clock, Zap, TrendingUp,
@@ -198,6 +199,7 @@ export default function Dashboard() {
     blogsTotal, blogsPublished, blogsDraft, recentlyCompletedJob,
   } = useLoaderData();
   const navigate = useNavigate();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const navigation = useNavigation();
   if (navigation.state === "loading") {
@@ -502,6 +504,52 @@ export default function Dashboard() {
             </Layout.Section>
           </Layout>
         )}
+
+        {/* How ContentClaude works — value-communication + guidance (clean, collapsible) */}
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <Sparkles aria-hidden="true" size={18} color="#2C6ECB" />
+                <Text as="h2" variant="headingMd">How ContentClaude works</Text>
+              </InlineStack>
+              <Button variant="plain" disclosure={helpOpen ? "up" : "down"} onClick={() => setHelpOpen((v) => !v)}>
+                {helpOpen ? "Hide" : "Learn how"}
+              </Button>
+            </InlineStack>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              ContentClaude writes your product content to win two kinds of search at once:{" "}
+              <strong>traditional SEO</strong> (ranking in Google &amp; Bing) and{" "}
+              <strong>GEO / AI-search</strong> — being cited by AI answer engines like ChatGPT,
+              Perplexity, Gemini, and Google&apos;s AI Overviews.
+            </Text>
+            <Collapsible open={helpOpen} id="how-it-works" transition={{ duration: "150ms" }}>
+              <BlockStack gap="400">
+                <Divider />
+                <BlockStack gap="150">
+                  <Text as="h3" variant="headingSm">How your content is made</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Premium AI writes in your brand voice (set it in Settings), using an answer-first
+                    structure and adding structured data — Product &amp; FAQ schema (JSON-LD) — that
+                    search crawlers and AI engines read to understand and quote your products.
+                  </Text>
+                </BlockStack>
+                <BlockStack gap="150">
+                  <Text as="h3" variant="headingSm">The three scores, explained</Text>
+                  <Text as="p" variant="bodySm" tone="subdued"><strong>GEO / AI-search score</strong> — how ready a product is to be cited by AI answer engines.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued"><strong>Traditional SEO score</strong> — how well it&apos;s set up to rank in classic search results.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued"><strong>Content quality</strong> — how complete and well-written a specific draft is before you publish.</Text>
+                </BlockStack>
+                <BlockStack gap="150">
+                  <Text as="h3" variant="headingSm">Get results in 3 steps</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">1. Set your brand voice in Settings so content sounds like you.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">2. Generate content, then review the draft and its GEO lift.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">3. Publish — your content goes live and AI-search FAQ schema is attached to the product.</Text>
+                </BlockStack>
+              </BlockStack>
+            </Collapsible>
+          </BlockStack>
+        </Card>
 
       </BlockStack>
     </Page>
