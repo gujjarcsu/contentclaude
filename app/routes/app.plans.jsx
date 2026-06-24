@@ -1,5 +1,5 @@
-import { Suspense, useState, useEffect, useRef } from "react";
-import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator, Await, Form } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator, useFetcher, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, ButtonGroup, Banner,
@@ -11,11 +11,16 @@ import { BILLING_PLANS, FREE_PLAN } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
 
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Fast path — the DB plan (kept current by the app_subscriptions/update webhook)
-  // is the source of truth for display, so the page paints immediately.
+  // Fast path ONLY — the DB plan (kept current by the app_subscriptions/update
+  // webhook) is the source of truth for display, so this response is just two
+  // quick DB reads and closes immediately. The Shopify billing.check() round-trip
+  // is intentionally NOT here: it runs after first paint via a fetcher to
+  // /app/plans-reconcile. (Doing it inline — even as a streamed deferred promise —
+  // held the response open behind the edge proxy's buffering and froze the page
+  // for the full billing.check duration.)
   const [plan, usageCount] = await Promise.all([
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
@@ -23,24 +28,6 @@ export const loader = async ({ request }) => {
 
   const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
-  // Deferred reconciliation — billing.check() is a Shopify API round-trip that
-  // previously blocked the cold-load paint (the Plans freeze). Stream it; if it
-  // finds a change the webhook missed, the component revalidates. Never blocks paint.
-  const reconcile = (async () => {
-    try {
-      const { appSubscriptions } = await billing.check({
-        plans: Object.values(BILLING_PLANS).map((p) => p.key),
-        isTest: BILLING_TEST,
-      });
-      await syncBillingToPlan(shop, appSubscriptions);
-      const fresh = await getOrCreatePlan(shop);
-      return { changed: fresh.planName !== plan.planName };
-    } catch {
-      return { changed: false };
-    }
-  })();
-
-  // Plain object (not Response.json) so `reconcile` streams instead of blocking.
   return {
     plan: {
       planName: plan.planName,
@@ -51,7 +38,6 @@ export const loader = async ({ request }) => {
     },
     usageCount,
     currentMonth,
-    reconcile,
   };
 };
 
@@ -416,26 +402,32 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
   );
 }
 
-// Runs the deferred billing reconciliation in the background; only refreshes the
-// page if Shopify reports a plan different from the DB (a webhook the app missed).
-function ReconcileEffect({ changed }) {
-  const revalidator = useRevalidator();
-  const done = useRef(false);
-  useEffect(() => {
-    if (changed && !done.current) {
-      done.current = true;
-      revalidator.revalidate();
-    }
-  }, [changed, revalidator]);
-  return null;
-}
-
 export default function PlansPage() {
-  const { plan, usageCount, currentMonth, reconcile } = useLoaderData();
+  const { plan, usageCount, currentMonth } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const reconcileFetcher = useFetcher();
   const [billingPeriod, setBillingPeriod] = useState("monthly");
+
+  // Post-paint billing reconciliation. Fires once after the page has rendered, so
+  // the Shopify billing.check() round-trip never blocks first paint. Revalidates
+  // only if Shopify reports a plan the webhook missed.
+  const reconcileStarted = useRef(false);
+  const reconcileHandled = useRef(false);
+  useEffect(() => {
+    if (!reconcileStarted.current) {
+      reconcileStarted.current = true;
+      reconcileFetcher.load("/app/plans-reconcile");
+    }
+  }, [reconcileFetcher]);
+  useEffect(() => {
+    if (reconcileFetcher.data?.changed && !reconcileHandled.current) {
+      reconcileHandled.current = true;
+      revalidator.revalidate();
+    }
+  }, [reconcileFetcher.data, revalidator]);
 
   const isSubmitting = navigation.state === "submitting";
 
@@ -457,13 +449,6 @@ export default function PlansPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
-
-        {/* Background billing reconciliation — does not block paint. */}
-        <Suspense fallback={null}>
-          <Await resolve={reconcile} errorElement={null}>
-            {(r) => <ReconcileEffect changed={!!r?.changed} />}
-          </Await>
-        </Suspense>
 
         {actionData?.cancelled && (
           <Banner tone="info" title="Subscription cancelled">
