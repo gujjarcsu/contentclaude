@@ -10,6 +10,7 @@ import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement } from "../utils/plans.server.js";
+import { getCache } from "../utils/cache.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -17,11 +18,18 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const productCountResp = await admin.graphql(`query { productsCount { count } }`);
-  const { data } = await productCountResp.json();
-  const totalProducts = data.productsCount.count;
-
-  const [publishedCount, draftCount, plan, usageCount] = await Promise.all([
+  // productsCount shares the dashboard/analytics 5-min cache and runs in parallel
+  // with the DB queries, so the loader isn't blocked on a serial Admin API call.
+  const [totalProducts, publishedCount, draftCount, plan, usageCount] = await Promise.all([
+    getCache(
+      `productCount:${shop}`,
+      async () => {
+        const r = await admin.graphql(`query { productsCount { count } }`);
+        const d = await r.json();
+        return d.data.productsCount.count;
+      },
+      300
+    ),
     prisma.generatedContent.count({ where: { shop, contentType: "description", status: "published" } }),
     prisma.generatedContent.count({ where: { shop, contentType: "description", status: "draft" } }),
     prisma.plan.findUnique({ where: { shop } }),

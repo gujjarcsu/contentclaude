@@ -211,13 +211,17 @@ export default function Dashboard() {
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const isFreePlan = plan.planName === "free";
 
-  const usageTone = usagePct >= 90 ? "critical" : "success";
-  const usageBg = usagePct >= 90 ? "bg-surface-critical-subdued" : usagePct >= 60 ? "bg-surface-warning-subdued" : "bg-surface-success-subdued";
+  // Reaching the monthly quota is "complete", not an error — so the high-usage
+  // state is amber/neutral, never alarming red (usagePct is capped at 100).
+  const usageTone = usagePct >= 90 ? "highlight" : "success";
+  const usageBg = usagePct >= 60 ? "bg-surface-warning-subdued" : "bg-surface-success-subdued";
 
   // Hero message
   let heroSubtitle;
   if (isNewShop) {
     heroSubtitle = "Let's generate your first product description — it takes under 30 seconds.";
+  } else if (remaining === 0) {
+    heroSubtitle = `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more →`;
   } else if (remaining <= 3) {
     heroSubtitle = `Only ${remaining} generation${remaining !== 1 ? "s" : ""} left this month — upgrade to keep momentum going.`;
   } else {
@@ -344,13 +348,13 @@ export default function Dashboard() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <Zap aria-hidden="true" size={18} color={usagePct >= 90 ? "#D82C0D" : usagePct >= 60 ? "#916A00" : "#1a7345"} />
+                <Zap aria-hidden="true" size={18} color={usagePct >= 60 ? "#916A00" : "#1a7345"} />
                 <Text as="h2" variant="headingMd">Monthly Usage</Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {planLabels[plan.planName] ?? plan.planName} Plan
                 </Badge>
               </InlineStack>
-              <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "critical" : "subdued"}>
+              <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
                 {usageCount} / {plan.monthlyLimit} used · {remaining} remaining
               </Text>
             </InlineStack>
@@ -359,8 +363,10 @@ export default function Dashboard() {
 
             <InlineStack align="space-between" blockAlign="center">
               <Text as="p" variant="bodySm" tone="subdued">
-                {usagePct >= 90
-                  ? "⚠️ Almost at your limit — upgrade to keep generating without interruption."
+                {remaining === 0
+                  ? `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more.`
+                  : usagePct >= 90
+                  ? "Almost at your limit — upgrade to keep generating without interruption."
                   : usagePct >= 60
                   ? "You're more than halfway through your monthly quota."
                   : "You're in good shape for this month."}

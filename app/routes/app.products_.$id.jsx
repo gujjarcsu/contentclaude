@@ -1037,7 +1037,7 @@ export default function ProductGeneratePage() {
                     <Text as="h2" variant="headingMd">Generate Content</Text>
                     {qualityScore.score > 0 && (
                       <Badge tone={qualityScore.grade === "Excellent" ? "success" : qualityScore.grade === "Good" ? "info" : qualityScore.grade === "Fair" ? "attention" : "critical"}>
-                        {qualityScore.grade} · {qualityScore.score}/100
+                        {`Content quality: ${qualityScore.grade} · ${qualityScore.score}/100`}
                       </Badge>
                     )}
                   </InlineStack>
