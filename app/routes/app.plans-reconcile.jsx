@@ -9,9 +9,13 @@ import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server";
 // page still blocked the full ~40s until billing.check resolved). Returns { changed }
 // so the page revalidates only if Shopify reports a plan the webhook missed.
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  // authenticate.admin is inside the try on purpose: it throws a REDIRECT on an
+  // auth miss, and this loader is a background fetcher.load — a followed redirect
+  // would yank the embedded app to /auth/login. Swallow everything and return a
+  // no-op; the Plans page's own loader handles real re-auth for the navigation.
   try {
+    const { billing, session } = await authenticate.admin(request);
+    const shop = session.shop;
     const before = await getOrCreatePlan(shop);
     const { appSubscriptions } = await billing.check({
       plans: Object.values(BILLING_PLANS).map((p) => p.key),
