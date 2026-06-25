@@ -15,6 +15,7 @@ import {
   EmptyState,
   TextField,
   Divider,
+  Tooltip,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
@@ -509,11 +510,14 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
                 <Text as="h3" variant="headingMd">{product.productTitle}</Text>
                 {product.qualityScore != null && (
                   // Labelled "Content quality" (distinct from GEO/AI-search and
-                  // traditional SEO scores shown elsewhere). A mid score reads as
-                  // neutral "attention", not alarming red — red only for genuinely poor.
-                  <Badge tone={product.qualityScore >= 75 ? "success" : product.qualityScore >= 45 ? "attention" : "critical"}>
-                    {`Content quality: ${product.qualityScore}`}
-                  </Badge>
+                  // traditional SEO scores shown elsewhere). Unified colour rule:
+                  // >=70 green, 40–69 amber, <40 red — a mid score is "work to do",
+                  // not "broken", so it never shows alarming red.
+                  <Tooltip content="Content quality score — measures how complete and structured this content is for AI search.">
+                    <Badge tone={product.qualityScore >= 70 ? "success" : product.qualityScore >= 40 ? "attention" : "critical"}>
+                      {`Content quality: ${product.qualityScore}`}
+                    </Badge>
+                  </Tooltip>
                 )}
               </InlineStack>
               <InlineStack gap="200">

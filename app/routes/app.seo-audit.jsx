@@ -113,13 +113,14 @@ export const loader = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function ScoreRing({ score }) {
-  const tone = score >= 80 ? "success" : score >= 50 ? "highlight" : "critical";
+  // Unified colour rule: >=70 green, 40–69 amber (highlight), <40 red.
+  const tone = score >= 70 ? "success" : score >= 40 ? "highlight" : "critical";
   return (
     <BlockStack gap="200" inlineAlign="center">
       <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
         {score}
       </Text>
-      <Text as="p" variant="bodySm" tone="subdued">/ 100 average SEO score</Text>
+      <Text as="p" variant="bodySm" tone="subdued">/ 100 — Traditional SEO score</Text>
       <ProgressBar progress={score} tone={tone} size="medium" />
     </BlockStack>
   );
@@ -147,7 +148,7 @@ export default function SeoAuditPage() {
       <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>{p.title}</Button>
       {p.isStale && <Badge tone="attention">Stale</Badge>}
     </InlineStack>,
-    <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={p.score >= 80 ? "success" : p.score >= 50 ? undefined : "critical"}>{p.score}</Text>,
+    <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={p.score >= 70 ? "success" : p.score >= 40 ? undefined : "critical"}>{p.score}</Text>,
     <CheckIcon key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
     <CheckIcon key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
     <CheckIcon key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
@@ -242,7 +243,7 @@ export default function SeoAuditPage() {
           <Card padding="0">
             <DataTable
               columnContentTypes={["text", "numeric", "text", "text", "text", "text"]}
-              headings={["Product", "Score", "Description", "Meta Title", "Meta Desc", "Alt Text"]}
+              headings={["Product", "SEO Score", "Description", "Meta Title", "Meta Desc", "Alt Text"]}
               rows={rows}
               defaultSortDirection="ascending"
               initialSortColumnIndex={1}

@@ -21,6 +21,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { isFeatureEnabled } from "../utils/featureFlags.server.js";
+import logger from "../utils/logger.server.js";
 import { calculateSeoScore } from "../utils/seo.server.js";
 import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
@@ -149,7 +150,13 @@ export const loader = async ({ request }) => {
       },
       best: { title: best.title, geo: best.scores.geo },
     };
-  })();
+  })().catch((err) => {
+    // Streamed promise can't trigger a re-auth redirect (headers already sent),
+    // so a failed Admin API call degrades to the retry UI. Log the real cause
+    // here so the specific failure (token, rate limit, GraphQL field) is visible.
+    logger.error({ shop, err: err?.message, stack: err?.stack }, "welcome scan failed");
+    throw err; // re-throw so <Await errorElement> still renders the retry card
+  });
 
   // Return a plain object (NOT Response.json) so React Router streams `scan`.
   return {
@@ -295,6 +302,12 @@ export const action = async ({ request }) => {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
+// Unified score colour rule across the app: >=70 green, 40–69 amber, <40 red.
+// A mid-range score (e.g. 50) is "work to do", not "broken" — so it must not be red.
+function scoreTone(v) {
+  return v >= 70 ? "success" : v >= 40 ? "caution" : "critical";
+}
+
 function ScoreStat({ label, value, tone }) {
   return (
     <BlockStack gap="100" inlineAlign="center">
@@ -424,8 +437,8 @@ function MagicMomentBody({ scan, loader }) {
         <BlockStack gap="400">
           <Text as="h2" variant="headingMd">We scanned {scan.totalScanned} of your products</Text>
           <InlineStack gap="800" align="center" wrap>
-            <ScoreStat label="GEO / AI-search score" value={`${scan.storeGeo}`} tone={scan.storeGeo >= 60 ? "success" : "critical"} />
-            <ScoreStat label="Traditional SEO score" value={`${scan.storeSeo}`} tone={scan.storeSeo >= 60 ? "success" : "critical"} />
+            <ScoreStat label="GEO / AI-search score" value={`${scan.storeGeo}`} tone={scoreTone(scan.storeGeo)} />
+            <ScoreStat label="Traditional SEO score" value={`${scan.storeSeo}`} tone={scoreTone(scan.storeSeo)} />
           </InlineStack>
           <Text as="p" variant="bodySm" tone="subdued" alignment="center">
             GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini, and Google AI Overviews.

@@ -77,6 +77,19 @@ export async function renderLlmsTxt(shop, { full = false } = {}) {
   );
 }
 
+/**
+ * Plain-text notice served to non-entitled (Free) shops instead of a bare 404,
+ * so merchants and crawlers understand why the file is empty and how to enable it.
+ */
+export function llmsTxtUpgradeNotice(shop) {
+  return (
+    `# ContentClaude — LLMs.txt\n\n` +
+    `This feature requires a Starter plan or higher.\n` +
+    `Upgrade at: https://${shop}/admin/apps/contentclaude\n\n` +
+    `LLMs.txt helps AI assistants like ChatGPT and Perplexity discover and cite your products.\n`
+  );
+}
+
 /** Invalidate both cached variants for a shop (called on catalog changes). */
 export async function invalidateLlmsTxt(shop) {
   try {

@@ -1,7 +1,7 @@
 // App Proxy route → served at the storefront as /apps/contentclaude/llms-full.txt
 // Expanded variant of llms.txt with per-product attributes. See proxy.llms[.]txt.jsx.
 import { authenticate } from "../shopify.server";
-import { renderLlmsTxt } from "../utils/llms.server.js";
+import { renderLlmsTxt, llmsTxtUpgradeNotice } from "../utils/llms.server.js";
 import logger from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
@@ -16,7 +16,15 @@ export const loader = async ({ request }) => {
 
   try {
     const body = await renderLlmsTxt(shop, { full: true });
-    if (!body) return new Response("Not found", { status: 404 });
+    if (!body) {
+      return new Response(llmsTxtUpgradeNotice(shop), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
+    }
     return new Response(body, {
       status: 200,
       headers: {

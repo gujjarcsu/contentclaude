@@ -5,7 +5,7 @@
 // Reachable only via Shopify's signed App Proxy; authenticate.public.appProxy
 // verifies the signature and resolves the shop.
 import { authenticate } from "../shopify.server";
-import { renderLlmsTxt } from "../utils/llms.server.js";
+import { renderLlmsTxt, llmsTxtUpgradeNotice } from "../utils/llms.server.js";
 import logger from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
@@ -20,7 +20,17 @@ export const loader = async ({ request }) => {
 
   try {
     const body = await renderLlmsTxt(shop, { full: false });
-    if (!body) return new Response("Not found", { status: 404 }); // not entitled
+    if (!body) {
+      // Not entitled (Free plan) — serve a helpful 200 explaining how to enable it,
+      // rather than a silent 404 that looks like the app is broken.
+      return new Response(llmsTxtUpgradeNotice(shop), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
+    }
     return new Response(body, {
       status: 200,
       headers: {
