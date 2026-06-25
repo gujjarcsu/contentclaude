@@ -40,7 +40,7 @@ export async function renderLlmsTxt(shop, { full = false } = {}) {
             edges { node { title handle onlineStoreUrl description productType vendor } }
           }
           collections(first: 25, sortKey: TITLE) {
-            edges { node { title handle onlineStoreUrl description } }
+            edges { node { title handle description } }
           }
         }`
       );
@@ -61,7 +61,8 @@ export async function renderLlmsTxt(shop, { full = false } = {}) {
       const collections = (data?.collections?.edges ?? [])
         .map(({ node }) => ({
           title: node.title,
-          url: node.onlineStoreUrl || `${baseUrl}/collections/${node.handle}`,
+          // Collection has no onlineStoreUrl in the Admin API; build it from the handle.
+          url: `${baseUrl}/collections/${node.handle}`,
           summary: node.description || "",
         }))
         .filter((c) => c.title);
