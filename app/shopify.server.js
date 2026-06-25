@@ -40,7 +40,14 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  future: {},
+  future: {
+    // Shopify now rejects non-expiring offline access tokens (HTTP 403:
+    // "Non-expiring access tokens are no longer accepted"). This flag makes
+    // token exchange request EXPIRING offline tokens, which the library then
+    // refreshes automatically before they lapse — so the embedded app never
+    // surfaces a "session expired" error during normal use.
+    expiringOfflineAccessTokens: true,
+  },
   // The installed @shopify/shopify-api requires each subscription plan to use the
   // lineItems format ({ trialDays, lineItems: [{ amount, currencyCode, interval }] }).
   // The older flat shape ({ amount, currencyCode, interval }) is no longer accepted
