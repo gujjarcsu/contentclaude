@@ -4,9 +4,23 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
 import { invalidateLlmsTxt } from "../utils/llms.server.js";
+import { getRedis } from "../utils/cache.server.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
+
+  // Delivery-ID idempotency: Shopify redelivers webhooks on timeout/retry, often
+  // with the same X-Shopify-Webhook-Id. Claim it once in Redis (24h) so a redelivery
+  // short-circuits before doing any work. (The DB pending-job check below remains a
+  // second guard when Redis is unavailable.)
+  const deliveryId = request.headers.get("X-Shopify-Webhook-Id");
+  if (deliveryId) {
+    const redis = await getRedis();
+    if (redis) {
+      const claim = await redis.set(`whdedup:${shop}:${deliveryId}`, "1", "EX", 86400, "NX");
+      if (!claim) return new Response("Duplicate", { status: 200 });
+    }
+  }
 
   // Catalog changed → the cached llms.txt is now stale; drop it so the next
   // crawler/agent hit regenerates a current index.

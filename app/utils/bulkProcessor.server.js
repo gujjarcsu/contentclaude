@@ -10,7 +10,9 @@ import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 // Lower to 1000ms on Pro plan with higher Anthropic rate limits.
 const THROTTLE_MS = parseInt(process.env.BULK_THROTTLE_MS || "2000", 10);
 
-export async function processBulkJob(jobId) {
+// bullJob/token are supplied by the BullMQ worker wrapper so we can heartbeat the
+// lock between products; they're null on the inline (no-Redis) fallback path.
+export async function processBulkJob(jobId, bullJob = null, token = null) {
   const jobLogger = logger.child({ jobId });
   let job = null;
   try {
@@ -191,6 +193,13 @@ export async function processBulkJob(jobId) {
         completedCount++;
         pendingCompleted++;
         await flushCounters();
+
+        // Heartbeat the BullMQ lock so a long bulk run isn't deemed stalled and
+        // re-queued mid-flight. Uses the real worker token; no-op on the inline path.
+        if (typeof bullJob?.extendLock === "function" && token) {
+          await bullJob.extendLock(token, 5 * 60 * 1000).catch(() => {});
+        }
+
         jobLogger.debug({ shop: job.shop, productId, productTitle: product.title }, "Product content generated");
       } catch (err) {
         jobLogger.error({ shop: job.shop, productId, err }, "Failed to generate content for product");

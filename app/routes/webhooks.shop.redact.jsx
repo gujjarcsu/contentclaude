@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 
 // GDPR: Triggered 48 hours after a shop uninstalls the app and requests
 // full data deletion. All shop data must be permanently removed.
@@ -17,21 +18,15 @@ export const action = async ({ request }) => {
       },
     });
 
-    // Delete every table that holds shop data
-    await tx.generatedContent.deleteMany({ where: { shop } });
-    await tx.contentVersion.deleteMany({ where: { shop } });
-    await tx.contentTemplate.deleteMany({ where: { shop } });
-    await tx.collectionVoice.deleteMany({ where: { shop } });
-    await tx.brandVoice.deleteMany({ where: { shop } });
-    await tx.blogPost.deleteMany({ where: { shop } });
-    await tx.generationJob.deleteMany({ where: { shop } });
-    await tx.usageRecord.deleteMany({ where: { shop } });
-    await tx.plan.deleteMany({ where: { shop } });
-    await tx.session.deleteMany({ where: { shop } });
+    // Delete every table that holds shop data, in bounded batches so a large
+    // tenant's redaction stays within the transaction timeout.
+    for (const model of GDPR_SHOP_MODELS) {
+      await chunkDelete(tx, model, { shop });
+    }
 
     // GDPRRequest rows for this shop are intentionally kept — they are the
     // audit trail proving deletion occurred, which regulators may request.
-  });
+  }, { timeout: 60_000 });
 
   return new Response(null, { status: 200 });
 };

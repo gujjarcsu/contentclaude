@@ -1,9 +1,22 @@
+import sanitizeHtmlLib from "sanitize-html";
 import logger from "./logger.server.js";
 import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 2;
+
+// SSRF guard: only Shopify-CDN https image URLs may be forwarded to the model, so
+// a malicious URL injected via product data can't make Anthropic (or us) fetch an
+// arbitrary host. Shopify product images are always served from cdn.shopify.com.
+function isAllowedImageUrl(raw) {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && /^cdn\.shop(ify)?\.com$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Generate product content using Claude.
@@ -40,9 +53,9 @@ export async function generateProductContent(
   if (Array.isArray(product.images) && product.images.length > 0) {
     product.images.slice(0, 4).forEach((img) => {
       const url = img?.url || img?.src;
-      if (url) imageUrls.push(url);
+      if (url && isAllowedImageUrl(url)) imageUrls.push(url);
     });
-  } else if (product.imageUrl) {
+  } else if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
     imageUrls.push(product.imageUrl);
   }
 
@@ -65,6 +78,10 @@ export async function generateProductContent(
 export async function generateAltText(imageUrl, productTitle) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  // Alt text requires the image itself — refuse non-Shopify-CDN URLs outright.
+  if (!isAllowedImageUrl(imageUrl)) {
+    throw new Error("Unsupported image URL — only Shopify CDN https images are allowed.");
+  }
 
   const rawText = await callClaude(apiKey, {
     model: "claude-haiku-4-5-20251001",
@@ -157,7 +174,7 @@ Output: <META_DESCRIPTION>improved description here</META_DESCRIPTION>`);
   if (Array.isArray(product.images) && product.images.length > 0) {
     product.images.slice(0, 2).forEach((img) => {
       const url = img?.url || img?.src;
-      if (url) imageUrls.push(url);
+      if (url && isAllowedImageUrl(url)) imageUrls.push(url);
     });
   }
 
@@ -650,16 +667,24 @@ export function extractTag(text, tagName) {
   return "";
 }
 
+// Allowlist-based sanitiser (replaces the old regex blocklist, which could be
+// bypassed by e.g. <svg onload>, <math>, or namespaced/exotic tags). Only the
+// formatting tags we actually generate survive; everything else is discarded.
 function sanitizeHtml(html) {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
-    .replace(/<embed\b[^>]*>/gi, "")
-    .replace(/<link\b[^>]*>/gi, "")
-    .replace(/<meta\b[^>]*>/gi, "")
-    .replace(/\s(on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "")
-    .replace(/javascript\s*:/gi, "blocked:")
-    .replace(/data\s*:\s*text\/html/gi, "blocked:");
+  if (!html || typeof html !== "string") return "";
+  return sanitizeHtmlLib(html, {
+    allowedTags: [
+      "p", "strong", "em", "u", "ul", "ol", "li", "a", "br", "span",
+      "h1", "h2", "h3", "h4", "blockquote", "hr",
+    ],
+    allowedAttributes: { a: ["href", "title", "rel"], span: ["class"] },
+    allowedSchemes: ["https", "mailto"],
+    disallowedTagsMode: "discard",
+    transformTags: {
+      a: (tagName, attribs) => ({
+        tagName: "a",
+        attribs: { ...attribs, rel: "noopener noreferrer nofollow", target: "_blank" },
+      }),
+    },
+  });
 }

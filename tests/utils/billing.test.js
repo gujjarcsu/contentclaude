@@ -21,7 +21,7 @@ vi.mock("@prisma/client", () => ({
 vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    usageRecord: { count: vi.fn(), create: vi.fn() },
+    usageRecord: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
     session: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -52,9 +52,10 @@ vi.mock("../../app/utils/billing-plans.js", () => ({
 
 // Import after mocks
 const prisma = (await import("../../app/db.server.js")).default;
-const { tryConsumeGeneration, syncBillingToPlan, getPlanByKey } = await import(
+const { tryConsumeGeneration, syncBillingToPlan, getPlanByKey, refundGeneration } = await import(
   "../../app/utils/plans.server.js"
 );
+const { invalidateCache } = await import("../../app/utils/cache.server.js");
 
 // ─── Billing action helpers ───────────────────────────────────────────────────
 
@@ -190,6 +191,42 @@ describe("billing action — cancel branch (F1)", () => {
     };
     const action = makeBillingAction(billing);
     await expect(action("cancel", null)).rejects.toStrictEqual(redirectResponse);
+  });
+});
+
+// ─── [Ledger #31] A/B variant credit refund (gate2 denial rolls back gate1) ───
+
+describe("refundGeneration — rollback of a consumed credit", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("deletes the most recent matching UsageRecord and busts the quota cache", async () => {
+    prisma.usageRecord.findFirst.mockResolvedValue({ id: "ur_1" });
+    prisma.usageRecord.delete.mockResolvedValue({});
+    const refunded = await refundGeneration("shop.myshopify.com", {
+      productId: "gid://shopify/Product/1",
+      contentType: "description",
+    });
+    expect(refunded).toBe(true);
+    // scoped to shop + product + contentType + current month, newest first
+    expect(prisma.usageRecord.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          shop: "shop.myshopify.com",
+          productId: "gid://shopify/Product/1",
+          contentType: "description",
+        }),
+        orderBy: { createdAt: "desc" },
+      })
+    );
+    expect(prisma.usageRecord.delete).toHaveBeenCalledWith({ where: { id: "ur_1" } });
+    expect(invalidateCache).toHaveBeenCalledWith(expect.stringMatching(/^canGenerate:shop\.myshopify\.com:/));
+  });
+
+  it("is a no-op (no delete) when there's nothing to refund", async () => {
+    prisma.usageRecord.findFirst.mockResolvedValue(null);
+    const refunded = await refundGeneration("shop.myshopify.com", { contentType: "description" });
+    expect(refunded).toBe(false);
+    expect(prisma.usageRecord.delete).not.toHaveBeenCalled();
   });
 });
 

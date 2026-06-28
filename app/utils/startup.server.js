@@ -13,6 +13,12 @@
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 
+// Refuse to boot if NODE_ENV is unset — billing test mode, cookie security and
+// other safety branches depend on it, so an unset value is unsafe to run with.
+if (!process.env.NODE_ENV) {
+  throw new Error("FATAL: NODE_ENV is unset — refuse to boot");
+}
+
 const STALL_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 let _initialized = false;

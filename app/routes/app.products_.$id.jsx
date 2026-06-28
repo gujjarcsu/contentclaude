@@ -146,7 +146,7 @@ export async function action({ request, params }) {
   // Dynamic imports keep server-only modules out of the client bundle
   const [
     { generateProductContent, generateAltText, enhanceExistingContent },
-    { tryConsumeGeneration, checkEntitlement },
+    { tryConsumeGeneration, checkEntitlement, refundGeneration },
     { checkRateLimit },
     { getCache },
   ] = await Promise.all([
@@ -501,8 +501,12 @@ export async function action({ request, params }) {
   // ── Restore Version ───────────────────────────────────────────────────────
   if (actionType === "restoreVersion") {
     const versionId = formData.get("versionId");
-    const ver = await prisma.contentVersion.findUnique({ where: { id: versionId } });
-    if (!ver || ver.shop !== shop || ver.productId !== productId) {
+    // Scope the lookup to this shop + product in the WHERE clause so a guessed
+    // versionId can never read another tenant's row (defence in depth).
+    const ver = await prisma.contentVersion.findFirst({
+      where: { id: versionId, shop, productId },
+    });
+    if (!ver) {
       return { error: "Version not found." };
     }
     await prisma.generatedContent.upsert({
@@ -541,6 +545,9 @@ export async function action({ request, params }) {
     }
     const gate2 = await tryConsumeGeneration(shop, contentTypes[0], productId);
     if (!gate2.allowed) {
+      // A/B needs 2 credits and only 1 was available — refund the credit gate1
+      // consumed so the merchant isn't charged for a generation that won't run.
+      await refundGeneration(shop, { productId, contentType: contentTypes[0] });
       return { error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.", limitReached: true };
     }
 

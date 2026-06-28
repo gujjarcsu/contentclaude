@@ -185,6 +185,9 @@ export const action = async ({ request }) => {
   if (intent === "generateDemo") {
     const productId = form.get("productId");
     if (!productId) return Response.json({ error: "Missing product." }, { status: 400 });
+    if (!/^gid:\/\/shopify\/Product\/\d+$/.test(productId)) {
+      return Response.json({ error: "Invalid product." }, { status: 400 });
+    }
 
     // Don't re-charge if it already exists.
     const existing = await prisma.generatedContent.findFirst({

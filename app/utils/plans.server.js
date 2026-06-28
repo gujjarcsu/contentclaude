@@ -87,7 +87,7 @@ export async function canGenerate(shop) {
  * true, the UsageRecord has already been written inside the transaction.
  * The caller must NOT write another UsageRecord for the same generation.
  */
-export async function tryConsumeGeneration(shop, contentType, productId = null) {
+export async function tryConsumeGeneration(shop, contentType, productId = null, attempt = 0) {
   const month = new Date().toISOString().slice(0, 7);
 
   // Every generation — including regenerate, Enhance, A/B variants — consumes
@@ -145,11 +145,13 @@ export async function tryConsumeGeneration(shop, contentType, productId = null) 
     // P2034 = "Transaction failed due to a write conflict or a deadlock"
     // This can happen under very high concurrent load with Serializable isolation.
     if (err.code === "P2034") {
-      if (contentType !== "__retry__") {
-        // Retry once after brief jitter — write conflict is transient
+      if (attempt < 1) {
+        // Retry once after brief jitter — write conflict is transient. Track the
+        // retry via the attempt counter, NOT by overloading contentType, so the
+        // real contentType is always what gets persisted to UsageRecord.
         const jitter = 50 + Math.random() * 100;
         await new Promise((r) => setTimeout(r, jitter));
-        return tryConsumeGeneration(shop, "__retry__", productId);
+        return tryConsumeGeneration(shop, contentType, productId, attempt + 1);
       }
       // Second failure — return safe denial with distinct error tag
       logger.warn({ shop, err: err.message }, "tryConsumeGeneration: P2034 write conflict after retry — denying safely");
@@ -163,6 +165,27 @@ export async function tryConsumeGeneration(shop, contentType, productId = null) 
     }
     throw err;
   }
+}
+
+/**
+ * Refund a single generation credit previously taken by tryConsumeGeneration.
+ * Used when a multi-credit action (e.g. A/B variants needs 2) acquires the first
+ * credit but can't get the rest — the consumed credit must be rolled back so the
+ * merchant isn't billed for a generation that never happens. Deletes the most
+ * recent matching UsageRecord for the current month and busts the quota cache.
+ * Returns true if a row was refunded.
+ */
+export async function refundGeneration(shop, { productId = null, contentType } = {}) {
+  const month = new Date().toISOString().slice(0, 7);
+  const row = await prisma.usageRecord.findFirst({
+    where: { shop, month, productId, contentType },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!row) return false;
+  await prisma.usageRecord.delete({ where: { id: row.id } });
+  await invalidateCache(`canGenerate:${shop}:${month}`);
+  return true;
 }
 
 /**

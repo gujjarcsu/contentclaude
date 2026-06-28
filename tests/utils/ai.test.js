@@ -339,7 +339,13 @@ describe("generateAltText", () => {
       makeApiResponse("  Red running shoe on white background  ")
     );
 
-    const result = await generateAltText("https://example.com/img.jpg", "Red Shoe");
+    const result = await generateAltText("https://cdn.shopify.com/s/files/1/img.jpg", "Red Shoe");
     expect(result).toBe("Red running shoe on white background");
+  });
+
+  it("rejects non-Shopify image URLs (SSRF guard)", async () => {
+    await expect(
+      generateAltText("https://evil.example.com/img.jpg", "Red Shoe")
+    ).rejects.toThrow(/Shopify CDN/);
   });
 });

@@ -421,7 +421,7 @@ export default function ProductsPage() {
           onAction: entitlements?.bulkJobs
             ? () => setGenerateAllModal(true)
             : () => navigate("/app/plans"),
-          disabled: !entitlements?.bulkJobs && false, // never disabled — redirects to plans instead
+          disabled: false, // never disabled — non-entitled clicks redirect to /app/plans
         },
         {
           content: "Bulk Jobs →",

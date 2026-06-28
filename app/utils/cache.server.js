@@ -32,7 +32,7 @@ let _redis = null;
 let _redisFailedAt = 0;
 const REDIS_RETRY_BACKOFF_MS = 60_000; // only retry once per minute after a failure
 
-async function getRedis() {
+export async function getRedis() {
   if (!REDIS_URL) return null;
   if (_redis) return _redis;
   // Circuit breaker: don't hammer a broken Redis on every request

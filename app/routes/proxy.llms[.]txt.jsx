@@ -27,7 +27,8 @@ export const loader = async ({ request }) => {
         status: 200,
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "public, max-age=300",
+          "Cache-Control": "public, max-age=300, must-revalidate",
+          "Vary": "Accept-Encoding",
         },
       });
     }
@@ -35,7 +36,8 @@ export const loader = async ({ request }) => {
       status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=300, must-revalidate",
+        "Vary": "Accept-Encoding",
       },
     });
   } catch (err) {

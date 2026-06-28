@@ -14,6 +14,7 @@
 
 import prisma from "../db.server";
 import { getCache } from "../utils/cache.server";
+import logger from "../utils/logger.server";
 
 export const loader = async () => {
   const checks = {};
@@ -21,13 +22,15 @@ export const loader = async () => {
 
   const isProd = process.env.NODE_ENV === "production";
 
-  // Database ping
+  // Database ping. Never surface the raw DB error string (can leak host/driver
+  // internals to an unauthenticated caller) — keep details in the logger only.
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = "ok";
   } catch (err) {
-    checks.database = isProd ? "error" : `error: ${err.message}`;
+    checks.database = "error";
     healthy = false;
+    logger.error({ err: err.message }, "Health check: database ping failed");
   }
 
   // Redis ping — reuses the shared singleton from cache.server.js
@@ -37,7 +40,8 @@ export const loader = async () => {
       checks.redis = "ok";
     } catch (err) {
       // Redis failure is degraded, not fatal — app falls back to in-memory cache
-      checks.redis = isProd ? "degraded" : `degraded: ${err.message}`;
+      checks.redis = "degraded";
+      logger.warn({ err: err.message }, "Health check: redis ping degraded");
     }
   }
 

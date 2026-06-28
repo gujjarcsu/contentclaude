@@ -12,6 +12,13 @@ import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
 // Billing test mode: true on dev/staging, false in production.
 const BILLING_TEST = process.env.NODE_ENV !== "production";
 
+// Defensive guard: a production deploy must never run billing in test mode
+// (would let merchants "subscribe" without real charges). Fail loudly at boot
+// rather than silently mis-bill.
+if (process.env.NODE_ENV === "production" && BILLING_TEST) {
+  throw new Error("FATAL: BILLING_TEST true in production");
+}
+
 // Server-enriched plans: base constants + server-only billing properties
 export const BILLING_PLANS = Object.fromEntries(
   Object.entries(BILLING_PLAN_BASE).map(([k, v]) => [

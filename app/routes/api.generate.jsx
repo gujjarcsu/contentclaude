@@ -101,6 +101,17 @@ export const action = async ({ request }) => {
     return Response.json({ error: "Invalid productId or shop format" }, { status: 400 });
   }
 
+  // Token mode trusts the shop from the body — confirm it's an actually-installed
+  // shop before queueing. (HMAC mode already loaded the shop's session to verify
+  // the signature, so it's redundant there.)
+  if (!auth.shop) {
+    const sess = await prisma.session.findFirst({
+      where: { shop, isOnline: false },
+      select: { id: true },
+    });
+    if (!sess) return Response.json({ error: "Unknown shop." }, { status: 404 });
+  }
+
   const VALID_TYPES = new Set(["description", "metaTitle", "metaDescription", "faq"]);
   let contentTypes;
   if (rawTypes !== undefined) {

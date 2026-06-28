@@ -18,8 +18,61 @@ import {
   Tooltip,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect, useRef } from "react";
+import pLimit from "p-limit";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+
+// ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
+const PUBLISH_CONCURRENCY = 3;
+const PUBLISH_MAX_RETRIES = 3;
+const PUBLISH_BACKOFF_BASE_MS = 2000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
+  productUpdate(input: $input) {
+    product { id }
+    userErrors { field message }
+  }
+}`;
+
+// Mirrors bulkProcessor.publishToShopify: honour Retry-After on 429 and the
+// GraphQL THROTTLED extension code, with exponential backoff (base 2s, 3 retries).
+async function publishProductWithRetry(admin, productId, input, attempt = 0) {
+  let res;
+  try {
+    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { input } });
+  } catch (err) {
+    if (attempt < PUBLISH_MAX_RETRIES) {
+      await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** attempt);
+      return publishProductWithRetry(admin, productId, input, attempt + 1);
+    }
+    return { productId, ok: false, error: err.message };
+  }
+
+  if (res.status === 429 && attempt < PUBLISH_MAX_RETRIES) {
+    const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
+    await sleep(Math.max(retryAfter * 1000, PUBLISH_BACKOFF_BASE_MS));
+    return publishProductWithRetry(admin, productId, input, attempt + 1);
+  }
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    return { productId, ok: false, error: `Invalid response (HTTP ${res.status})` };
+  }
+
+  if (json?.errors?.[0]?.extensions?.code === "THROTTLED" && attempt < PUBLISH_MAX_RETRIES) {
+    await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** (attempt + 1));
+    return publishProductWithRetry(admin, productId, input, attempt + 1);
+  }
+
+  const userErrors = json?.data?.productUpdate?.userErrors ?? [];
+  if (userErrors.length > 0) {
+    return { productId, ok: false, error: userErrors.map((e) => e.message).join("; ") };
+  }
+  return { productId, ok: true };
+}
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -172,39 +225,33 @@ export const action = async ({ request }) => {
     const successfulProductIds = [];
     const successfulEdits = {};
 
-    for (const productId of approved) {
-      // Merge DB drafts with any inline edits (edits take precedence)
-      const content = { ...byProduct[productId], ...edits[productId] };
-      const input = { id: productId };
-      if (content.description) input.descriptionHtml = content.description;
-      if (content.metaTitle || content.metaDescription) {
-        input.seo = {};
-        if (content.metaTitle) input.seo.title = content.metaTitle;
-        if (content.metaDescription) input.seo.description = content.metaDescription;
-      }
+    // Publish with bounded concurrency (3) so a large approval batch doesn't
+    // hammer Shopify into throttling; each call retries on 429/THROTTLED.
+    const limit = pLimit(PUBLISH_CONCURRENCY);
+    const results = await Promise.all(
+      approved.map((productId) =>
+        limit(() => {
+          // Merge DB drafts with any inline edits (edits take precedence)
+          const content = { ...byProduct[productId], ...edits[productId] };
+          const input = { id: productId };
+          if (content.description) input.descriptionHtml = content.description;
+          if (content.metaTitle || content.metaDescription) {
+            input.seo = {};
+            if (content.metaTitle) input.seo.title = content.metaTitle;
+            if (content.metaDescription) input.seo.description = content.metaDescription;
+          }
+          return publishProductWithRetry(admin, productId, input);
+        })
+      )
+    );
 
-      try {
-        const result = await admin.graphql(
-          `mutation updateProduct($input: ProductInput!) {
-            productUpdate(input: $input) {
-              product { id }
-              userErrors { field message }
-            }
-          }`,
-          { variables: { input } }
-        );
-        const { data } = await result.json();
-        const userErrors = data?.productUpdate?.userErrors ?? [];
-        if (userErrors.length > 0) {
-          failed++;
-          errors.push({ productId, error: userErrors.map((e) => e.message).join("; ") });
-        } else {
-          successfulProductIds.push(productId);
-          if (edits[productId]) successfulEdits[productId] = edits[productId];
-        }
-      } catch (err) {
+    for (const r of results) {
+      if (r.ok) {
+        successfulProductIds.push(r.productId);
+        if (edits[r.productId]) successfulEdits[r.productId] = edits[r.productId];
+      } else {
         failed++;
-        errors.push({ productId, error: err.message });
+        errors.push({ productId: r.productId, error: r.error });
       }
     }
 

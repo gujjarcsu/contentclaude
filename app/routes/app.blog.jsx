@@ -172,12 +172,16 @@ export const action = async ({ request }) => {
 
     const shopifyArticleId = articleData?.articleCreate?.article?.id ?? null;
 
-    // Update saved BlogPost record to "published"
+    // Update saved BlogPost record to "published" — scope to shop so one tenant
+    // can never publish/overwrite another tenant's post by guessing an id.
     if (savedPostId) {
-      await prisma.blogPost.update({
-        where: { id: savedPostId },
+      const updated = await prisma.blogPost.updateMany({
+        where: { id: savedPostId, shop },
         data: { status: "published", shopifyArticleId, title, content },
       });
+      if (updated.count === 0) {
+        return Response.json({ error: "Post not found." }, { status: 404 });
+      }
     }
 
     return Response.json({

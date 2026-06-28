@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import logger from "../utils/logger.server";
+import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 
 export const action = async ({ request }) => {
   const { shop, topic } = await authenticate.webhook(request);
@@ -9,17 +10,11 @@ export const action = async ({ request }) => {
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.generatedContent.deleteMany({ where: { shop } });
-      await tx.contentVersion.deleteMany({ where: { shop } });
-      await tx.contentTemplate.deleteMany({ where: { shop } });
-      await tx.collectionVoice.deleteMany({ where: { shop } });
-      await tx.brandVoice.deleteMany({ where: { shop } });
-      await tx.blogPost.deleteMany({ where: { shop } });
-      await tx.generationJob.deleteMany({ where: { shop } });
-      await tx.usageRecord.deleteMany({ where: { shop } });
-      await tx.plan.deleteMany({ where: { shop } });
-      await tx.session.deleteMany({ where: { shop } });
-    }, { timeout: 30_000 });
+      // Batched deletion so large tenants stay within the transaction timeout.
+      for (const model of GDPR_SHOP_MODELS) {
+        await chunkDelete(tx, model, { shop });
+      }
+    }, { timeout: 60_000 });
     logger.info({ shop }, "All shop data deleted after uninstall");
   } catch (err) {
     // Log but don't fail — Shopify expects a 200 regardless.
