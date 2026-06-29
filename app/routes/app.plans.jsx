@@ -65,9 +65,17 @@ export const action = async ({ request }) => {
         returnUrl: `${process.env.SHOPIFY_APP_URL}/app/plans`,
       });
     } catch (err) {
-      // The framework throws a redirect Response on success — re-throw so
-      // React Router can follow it.
-      if (err instanceof Response) throw err;
+      // On success, billing.request THROWS a 401 Response whose
+      // X-Shopify-API-Request-Failure-Reauthorize-Url header is Shopify's billing
+      // confirmation URL (it expects App Bridge to redirect the top window there).
+      // Re-throwing it lands in the ErrorBoundary as a misleading "session expired",
+      // so instead surface the URL as data and let the client break out of the
+      // iframe to it (see the redirect effect in the component).
+      if (err instanceof Response) {
+        const confirmationUrl = err.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url");
+        if (confirmationUrl) return Response.json({ confirmationUrl });
+        throw err; // a genuine re-auth redirect, not the billing hand-off
+      }
       // Anything else is a real error; surface it to the user.
       const msg = err?.message ?? String(err);
       return Response.json(
@@ -428,6 +436,19 @@ export default function PlansPage() {
       revalidator.revalidate();
     }
   }, [reconcileFetcher.data, revalidator]);
+
+  // Billing hand-off: the subscribe action returns Shopify's billing confirmation
+  // URL. Break out of the embedded iframe so the merchant lands on the approval
+  // screen at the TOP window (App Bridge intercepts open(url, "_top")). This is
+  // what makes "Upgrade" actually go to checkout instead of the old 401 that the
+  // ErrorBoundary mistook for "session expired".
+  const billingRedirected = useRef(false);
+  useEffect(() => {
+    if (actionData?.confirmationUrl && !billingRedirected.current) {
+      billingRedirected.current = true;
+      open(actionData.confirmationUrl, "_top");
+    }
+  }, [actionData]);
 
   const isSubmitting = navigation.state === "submitting";
 

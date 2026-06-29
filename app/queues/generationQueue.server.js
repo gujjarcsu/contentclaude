@@ -18,18 +18,10 @@
 import { Queue, Worker } from "bullmq";
 import logger from "../utils/logger.server.js";
 import prisma from "../db.server.js";
-import { getRedis } from "../utils/cache.server.js";
 
 const QUEUE_NAME = "content-generation";
 const REDIS_URL = process.env.REDIS_URL;
 const INFLIGHT_CAP = 2; // max concurrent jobs per shop
-
-// Release a shop's in-flight slot. Safe to call with a missing shop/redis.
-async function releaseInflight(shop) {
-  if (!shop) return;
-  const redis = await getRedis();
-  if (redis) await redis.decr(`jobs:inflight:${shop}`).catch(() => {});
-}
 
 // Shared Redis connection options — ioredis parses the URL
 const redisConnection = REDIS_URL ? { url: REDIS_URL } : null;
@@ -103,15 +95,10 @@ export async function startWorker() {
 
   _worker.on("completed", (job) => {
     logger.info({ jobId: job.data.jobId }, "Worker: job completed");
-    releaseInflight(job?.data?.shop);
   });
 
   _worker.on("failed", (job, err) => {
     logger.error({ jobId: job?.data?.jobId, err, attempts: job?.attemptsMade }, "Worker: job failed");
-    // Release only on terminal failure (not intermediate retries) so the per-shop
-    // counter tracks genuinely-active jobs. The 1h key TTL is the backstop.
-    const maxAttempts = job?.opts?.attempts ?? 1;
-    if (!job || job.attemptsMade >= maxAttempts) releaseInflight(job?.data?.shop);
   });
 
   _worker.on("stalled", (jobId) => {
@@ -131,22 +118,19 @@ export async function enqueueGenerationJob(jobId) {
 
   if (queue) {
     // Per-shop in-flight cap: stop one tenant monopolising the worker pool.
-    // Checked before enqueue; a breach throws to the caller (and removes the
-    // just-created job row) instead of falling through to inline processing,
-    // which would bypass the cap. The 1h key TTL is the self-healing backstop.
-    const redis = await getRedis();
-    let shop = null;
-    if (redis) {
-      const row = await prisma.generationJob.findUnique({ where: { id: jobId }, select: { shop: true } });
-      shop = row?.shop ?? null;
-      if (shop) {
-        const inflight = await redis.incr(`jobs:inflight:${shop}`);
-        await redis.expire(`jobs:inflight:${shop}`, 3600);
-        if (inflight > INFLIGHT_CAP) {
-          await redis.decr(`jobs:inflight:${shop}`);
-          await prisma.generationJob.deleteMany({ where: { id: jobId, status: "queued" } });
-          throw new Error("Tenant in-flight cap reached — try again shortly");
-        }
+    // Counted from the DB (queued/processing) — accurate and self-healing, unlike
+    // a Redis counter which leaks on process restarts (Fly auto-stops machines)
+    // and could permanently wedge a shop's bulk jobs. The just-created job is
+    // already 'queued', so it's included in the count.
+    const row = await prisma.generationJob.findUnique({ where: { id: jobId }, select: { shop: true } });
+    const shop = row?.shop ?? null;
+    if (shop) {
+      const active = await prisma.generationJob.count({
+        where: { shop, status: { in: ["queued", "processing"] } },
+      });
+      if (active > INFLIGHT_CAP) {
+        await prisma.generationJob.deleteMany({ where: { id: jobId, status: "queued" } });
+        throw new Error("You already have jobs running — please wait for them to finish, then try again.");
       }
     }
 
@@ -156,8 +140,6 @@ export async function enqueueGenerationJob(jobId) {
       logger.info({ jobId }, "Enqueued generation job in BullMQ");
       return;
     } catch (redisError) {
-      // Enqueue failed after reserving a slot — release it, then fall back inline.
-      await releaseInflight(shop);
       logger.warn({ jobId, err: redisError.message }, "Redis unavailable — processing job inline");
     }
   } else {

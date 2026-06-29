@@ -442,10 +442,10 @@ export default function ProductsPage() {
         )}
         {isLowUsage && (
           <UpgradePrompt
-            compact
             tone="warning"
             title={`Only ${usageRemaining} generation${usageRemaining !== 1 ? "s" : ""} left this month`}
-            message={`${usageCount}/${monthlyLimit} used · upgrade to continue without interruption`}
+            message={`You've used ${usageCount} of ${monthlyLimit}. Upgrade now to keep generating without interruption.`}
+            ctaLabel="Upgrade plan →"
             onUpgrade={() => navigate("/app/plans")}
           />
         )}

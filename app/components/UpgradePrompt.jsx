@@ -16,40 +16,50 @@ export function UpgradePrompt({ title, message, ctaLabel = "See Plans →", onUp
   const bg = tone === "warning" ? "bg-surface-warning-hover" : "bg-surface-info-hover";
   const iconColor = tone === "warning" ? "#916A00" : "#1656AC";
 
+  // Coloured border so the prompt reads as a distinct, can't-miss callout
+  // instead of blending into the page as faint text.
+  const border = tone === "warning" ? "2px solid #E1A500" : "2px solid #2C6ECB";
+
   if (compact) {
     return (
-      <Box padding="300" background={bg} borderRadius="200">
-        <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
-          <InlineStack gap="200" blockAlign="center">
-            <Zap aria-hidden="true" size={16} color={iconColor} />
-            <Text as="p" variant="bodySm" fontWeight="semibold">
-              {title || "Ready to scale?"}{message ? ` — ${message}` : ""}
-            </Text>
+      <div style={{ borderRadius: 8, border }}>
+        <Box padding="400" background={bg} borderRadius="200">
+          <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+            <InlineStack gap="200" blockAlign="center">
+              <Zap aria-hidden="true" size={18} color={iconColor} />
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                {title || "Ready to scale?"}{message ? ` — ${message}` : ""}
+              </Text>
+            </InlineStack>
+            <Button onClick={onUpgrade} variant="primary" tone="success">
+              {ctaLabel}
+            </Button>
           </InlineStack>
-          <Button size="slim" onClick={onUpgrade} variant="plain">
-            {ctaLabel}
-          </Button>
-        </InlineStack>
-      </Box>
+        </Box>
+      </div>
     );
   }
 
   return (
-    <Box padding="400" background={bg} borderRadius="200">
-      <BlockStack gap="300">
-        <InlineStack gap="200" blockAlign="center">
-          <Zap aria-hidden="true" size={18} color={iconColor} />
-          <Text as="p" variant="bodyMd" fontWeight="semibold">
-            {title || "Ready to scale?"}
-          </Text>
-        </InlineStack>
-        {message && (
-          <Text as="p" variant="bodySm" tone="subdued">{message}</Text>
-        )}
-        <Button size="slim" onClick={onUpgrade}>
-          {ctaLabel}
-        </Button>
-      </BlockStack>
-    </Box>
+    <div style={{ borderRadius: 8, border }}>
+      <Box padding="500" background={bg} borderRadius="200">
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Zap aria-hidden="true" size={20} color={iconColor} />
+            <Text as="p" variant="headingMd" fontWeight="bold">
+              {title || "Ready to scale?"}
+            </Text>
+          </InlineStack>
+          {message && (
+            <Text as="p" variant="bodyMd">{message}</Text>
+          )}
+          <div>
+            <Button onClick={onUpgrade} variant="primary" tone="success" size="large">
+              {ctaLabel}
+            </Button>
+          </div>
+        </BlockStack>
+      </Box>
+    </div>
   );
 }
