@@ -195,7 +195,7 @@ export async function generateBlogPost(topic, brandVoice, options = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
 
-  const { keywords = "", length = "medium", tone = brandVoice?.brandTone || "professional" } = options;
+  const { keywords = "", length = "medium", instructions = "", tone = brandVoice?.brandTone || "professional" } = options;
   const wordCounts = { short: "500-700", medium: "900-1100", long: "1800-2200" };
   const targetWords = wordCounts[length] || wordCounts.medium;
   const language = brandVoice?.language || "en";
@@ -215,17 +215,20 @@ Topic: ${topic}
 ${keywords ? `Target Keywords: ${keywords} — use these naturally throughout the post` : ""}
 Length: ${targetWords} words
 Language: Write entirely in ${langName}
-
+${instructions ? `\n=== SPECIAL INSTRUCTIONS (the merchant asked for these — follow them) ===\n${instructions}\n` : ""}
 === INSTRUCTIONS ===
-Write a compelling, SEO-friendly blog post on the given topic.
+Write a compelling, SEO-friendly blog post that is genuinely beautiful to read.
 - Engaging headline (H1)
-- Introduction that hooks the reader in the first 2 sentences
-- Well-structured body with H2 subheadings
-- Practical, valuable content the target audience will share
+- A hook in the first 2 sentences
+- Well-structured body with descriptive <h2> subheadings every 2-3 paragraphs
+- SHORT, scannable paragraphs (2-4 sentences each) — never a wall of text
+- Use <ul>/<ol> lists and <strong> to surface key points
+- Use a <blockquote> for one standout insight or quote where it fits naturally
+- Near the end, add an <h2>Key takeaways</h2> followed by a short <ul> summary
+- Conclusion with a clear, on-brand call to action
 - Natural keyword usage — do NOT keyword-stuff
-- Conclusion with a clear next step or call to action
-- Write in the brand tone — do NOT make the brand voice robotic or AI-sounding
-- HTML formatting: use <h1>, <h2>, <p>, <ul><li>, <strong> tags
+- Write in the brand tone — never robotic or "AI-sounding"
+- HTML only: <h1>, <h2>, <h3>, <p>, <ul>/<ol><li>, <strong>, <em>, <blockquote>
 
 === OUTPUT FORMAT ===
 <BLOG_TITLE>The blog post title</BLOG_TITLE>

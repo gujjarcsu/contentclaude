@@ -8,10 +8,10 @@ import {
   BlockStack,
   InlineStack,
   Button,
+  ButtonGroup,
   Thumbnail,
   Badge,
   Banner,
-  Checkbox,
   EmptyState,
   TextField,
   Divider,
@@ -441,26 +441,25 @@ export default function ReviewPage() {
                 <Button variant="plain" size="slim" onClick={selectAll}>Select All</Button>
                 <Button variant="plain" size="slim" onClick={deselectAll}>Deselect All</Button>
               </InlineStack>
-              <InlineStack gap="200">
+              <ButtonGroup>
                 <Button
-                  variant="plain"
                   tone="critical"
-                  size="slim"
                   onClick={handleRejectUnapproved}
                   loading={isSubmitting && navigation.formData?.get("actionType") === "reject"}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || approvedCount === products.length}
                 >
-                  Reject Unapproved
+                  Reject skipped
                 </Button>
                 <Button
                   variant="primary"
+                  tone="success"
                   onClick={handlePublish}
                   loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                   disabled={isSubmitting || approvedCount === 0}
                 >
-                  Publish {approvedCount} Approved →
+                  Publish {approvedCount} approved →
                 </Button>
-              </InlineStack>
+              </ButtonGroup>
             </InlineStack>
 
             <TextField
@@ -492,15 +491,19 @@ export default function ReviewPage() {
         {/* Bottom publish button */}
         {filtered.length > 3 && (
           <Card>
-            <InlineStack align="end">
+            <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                {approvedCount} of {products.length} approved and ready to publish
+              </Text>
               <Button
                 variant="primary"
+                tone="success"
                 size="large"
                 onClick={handlePublish}
                 loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                 disabled={isSubmitting || approvedCount === 0}
               >
-                Publish {approvedCount} Approved →
+                Publish {approvedCount} approved →
               </Button>
             </InlineStack>
           </Card>
@@ -540,9 +543,12 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
   );
 
   return (
+    // Left accent stripe makes each card's include/skip state obvious at a glance:
+    // green = will publish, grey = skipped.
+    <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: `inset 4px 0 0 ${isApproved ? "#00A047" : "#C9CCCF"}` }}>
     <Card>
       <BlockStack gap="400">
-        <InlineStack align="space-between" blockAlign="center">
+        <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
           <InlineStack gap="300" blockAlign="center">
             <Thumbnail
               source={
@@ -574,11 +580,11 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
               </InlineStack>
             </BlockStack>
           </InlineStack>
-          <Checkbox
-            label={isApproved ? "Approved" : "Skipped"}
-            checked={isApproved}
-            onChange={onToggle}
-          />
+          {isApproved ? (
+            <Button variant="primary" tone="success" onClick={onToggle}>✓ Approved</Button>
+          ) : (
+            <Button variant="tertiary" onClick={onToggle}>Skipped — tap to include</Button>
+          )}
         </InlineStack>
 
         <Divider />
@@ -595,6 +601,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
         ))}
       </BlockStack>
     </Card>
+    </div>
   );
 }
 

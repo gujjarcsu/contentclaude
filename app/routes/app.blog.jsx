@@ -15,9 +15,11 @@ import {
   Spinner,
   Badge,
   ProgressBar,
+  Checkbox,
+  ButtonGroup,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, FileText, CheckCircle2 } from "lucide-react";
+import { BookOpen, FileText, CheckCircle2, Lightbulb } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -76,6 +78,7 @@ export const action = async ({ request }) => {
     const topic = (formData.get("topic") || "").slice(0, 500).trim();
     const keywords = (formData.get("keywords") || "").slice(0, 500).trim();
     const length = formData.get("length") || "medium";
+    const instructions = (formData.get("instructions") || "").slice(0, 1000).trim();
 
     if (!topic) return Response.json({ error: "Topic is required." }, { status: 400 });
 
@@ -99,7 +102,7 @@ export const action = async ({ request }) => {
       300
     );
 
-    const generated = await generateBlogPost(topic, brandVoice, { keywords, length });
+    const generated = await generateBlogPost(topic, brandVoice, { keywords, length, instructions });
 
     // Save to BlogPost table
     const wordCount = (generated.content || "").split(/\s+/).filter(Boolean).length;
@@ -221,7 +224,20 @@ export default function BlogPage() {
   const [topic, setTopic] = useState(resumePost?.topic || "");
   const [keywords, setKeywords] = useState(resumePost?.keywords || brandVoice?.targetKeywords || "");
   const [length, setLength] = useState("medium");
+  const [instructions, setInstructions] = useState("");
+  const [suggestVisuals, setSuggestVisuals] = useState(false);
+  const [addFaq, setAddFaq] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const [blogView, setBlogView] = useState("preview"); // "preview" | "html"
+
+  // Combine the free-text instructions with the optional toggles into one field.
+  const combinedInstructions = [
+    instructions.trim(),
+    suggestVisuals
+      ? "Where a visual would strengthen a point, insert an italic placeholder on its own line like: <p><em>[Suggested image: a short description of the ideal image]</em></p>."
+      : "",
+    addFaq ? "Add a short <h2>FAQ</h2> section near the end with 3-4 question/answer pairs relevant to the topic." : "",
+  ].filter(Boolean).join("\n");
 
   useEffect(() => {
     if (!isGenerating) { setLoadingMsgIdx(0); return; }
@@ -280,6 +296,21 @@ export default function BlogPage() {
       ]}
     >
       <BlockStack gap="500">
+        <style>{`
+          .cc-blog-preview { max-width: 760px; margin: 0 auto; color: #202223; font-size: 16px; line-height: 1.7; }
+          .cc-blog-preview h1 { font-size: 30px; line-height: 1.25; font-weight: 700; margin: 0 0 16px; letter-spacing: -0.02em; }
+          .cc-blog-preview h2 { font-size: 22px; line-height: 1.3; font-weight: 700; margin: 32px 0 12px; }
+          .cc-blog-preview h3 { font-size: 18px; font-weight: 600; margin: 24px 0 8px; }
+          .cc-blog-preview p { margin: 0 0 16px; }
+          .cc-blog-preview ul, .cc-blog-preview ol { margin: 0 0 16px; padding-left: 24px; }
+          .cc-blog-preview li { margin: 0 0 8px; }
+          .cc-blog-preview blockquote { margin: 24px 0; padding: 10px 20px; border-left: 4px solid #2C6ECB; background: #f6f9fd; color: #42474c; font-style: italic; border-radius: 0 6px 6px 0; }
+          .cc-blog-preview strong { font-weight: 600; }
+          .cc-blog-preview a { color: #2C6ECB; text-decoration: underline; }
+          .cc-blog-preview em { color: #6d7175; }
+          .cc-blog-preview img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
+          .cc-blog-preview > *:first-child { margin-top: 0; }
+        `}</style>
         {actionData?.error && (
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
         )}
@@ -344,6 +375,29 @@ export default function BlogPage() {
                           value={length}
                           onChange={setLength}
                         />
+                        <TextField
+                          label="Special instructions (optional)"
+                          value={instructions}
+                          onChange={setInstructions}
+                          multiline={3}
+                          maxLength={1000}
+                          placeholder="e.g., mention our spring sale, compare our top 3 products, keep it beginner-friendly…"
+                          helpText="Anything you want included — promotions, angle, examples, structure."
+                          autoComplete="off"
+                        />
+                        <BlockStack gap="150">
+                          <Checkbox
+                            label="Suggest where to add images & visuals"
+                            checked={suggestVisuals}
+                            onChange={setSuggestVisuals}
+                          />
+                          <Checkbox
+                            label="Add an FAQ section (great for AI search)"
+                            checked={addFaq}
+                            onChange={setAddFaq}
+                          />
+                        </BlockStack>
+                        <input type="hidden" name="instructions" value={combinedInstructions} />
 
                         {/* Animated progress during generation */}
                         {isGenerating && (
@@ -391,6 +445,23 @@ export default function BlogPage() {
                   )}
                 </BlockStack>
               </Card>
+
+              {/* Tips for great posts */}
+              <Box padding="400" background="bg-surface-info" borderRadius="300">
+                <BlockStack gap="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Lightbulb aria-hidden="true" size={18} color="#1656AC" />
+                    <Text as="h2" variant="headingSm">Tips for great posts</Text>
+                  </InlineStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm">• <strong>Be specific</strong> — "How to wax a snowboard for beginners" beats "snowboards".</Text>
+                    <Text as="p" variant="bodySm">• Add <strong>target keywords</strong> your customers actually search.</Text>
+                    <Text as="p" variant="bodySm">• Use <strong>special instructions</strong> to mention promos, comparisons, or your angle.</Text>
+                    <Text as="p" variant="bodySm">• <strong>Longer posts</strong> rank better for competitive topics.</Text>
+                    <Text as="p" variant="bodySm">• Turn on <strong>FAQ</strong> to get cited by ChatGPT &amp; Google AI.</Text>
+                  </BlockStack>
+                </BlockStack>
+              </Box>
 
               {/* Usage mini-bar */}
               {(planName === "free" || usagePct >= 50) && (
@@ -510,35 +581,57 @@ export default function BlogPage() {
                 </Box>
 
                 <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">{generated ? "Generated Blog Post" : "Edit Draft"}</Text>
+                  <BlockStack gap="400">
                     <TextField
                       label="Title"
                       value={editedTitle}
                       onChange={setEditedTitle}
                       autoComplete="off"
                     />
-                    <TextField
-                      label="Content (HTML)"
-                      value={editedContent}
-                      onChange={setEditedContent}
-                      multiline={16}
-                      helpText="Edit the HTML content before publishing"
-                      autoComplete="off"
-                    />
+
+                    {/* Preview-first: read the post as it'll look; switch to Edit
+                        HTML only when you want to change the markup. */}
+                    <InlineStack align="space-between" blockAlign="center" wrap>
+                      <ButtonGroup variant="segmented">
+                        <Button
+                          pressed={blogView === "preview"}
+                          onClick={() => setBlogView("preview")}
+                          icon={FileText}
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          pressed={blogView === "html"}
+                          onClick={() => setBlogView("html")}
+                        >
+                          Edit HTML
+                        </Button>
+                      </ButtonGroup>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {editedContent.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length} words
+                      </Text>
+                    </InlineStack>
+
+                    {blogView === "preview" ? (
+                      <Box padding="500" background="bg-surface" borderRadius="300" borderColor="border" borderWidth="025">
+                        <div className="cc-blog-preview">
+                          <h1 style={{ marginTop: 0 }}>{editedTitle}</h1>
+                          <div dangerouslySetInnerHTML={{ __html: editedContent }} />
+                        </div>
+                      </Box>
+                    ) : (
+                      <TextField
+                        label="Content (HTML)"
+                        labelHidden
+                        value={editedContent}
+                        onChange={setEditedContent}
+                        multiline={18}
+                        helpText="Edit the HTML directly. Switch back to Preview to see your changes."
+                        autoComplete="off"
+                      />
+                    )}
                   </BlockStack>
                 </Card>
-
-                {editedContent && (
-                  <Card>
-                    <BlockStack gap="300">
-                      <Text as="h2" variant="headingMd">Preview</Text>
-                      <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                        <div dangerouslySetInnerHTML={{ __html: editedContent }} />
-                      </Box>
-                    </BlockStack>
-                  </Card>
-                )}
 
                 <Card>
                   <Form method="post">
