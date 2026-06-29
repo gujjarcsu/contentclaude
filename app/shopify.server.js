@@ -9,14 +9,23 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
 
-// Billing test mode: true on dev/staging, false in production.
-const BILLING_TEST = process.env.NODE_ENV !== "production";
+// Billing test mode: always on outside production (real charges off). In
+// production it's off — UNLESS explicitly overridden for pre-launch testing.
+// Development stores can only approve TEST charges (never real ones), so to test
+// the upgrade flow on a dev store while deployed, set BILLING_TEST_OVERRIDE=on.
+// ⚠️ REMOVE that override before onboarding real merchants, or no one gets billed.
+const BILLING_TEST =
+  process.env.NODE_ENV !== "production" || process.env.BILLING_TEST_OVERRIDE === "on";
 
-// Defensive guard: a production deploy must never run billing in test mode
-// (would let merchants "subscribe" without real charges). Fail loudly at boot
-// rather than silently mis-bill.
-if (process.env.NODE_ENV === "production" && BILLING_TEST) {
-  throw new Error("FATAL: BILLING_TEST true in production");
+// Defensive guard: in production, test billing is allowed ONLY via the explicit
+// override. This still catches an accidental NODE_ENV slip (which would silently
+// give free subscriptions) while permitting intentional pre-launch testing.
+if (
+  process.env.NODE_ENV === "production" &&
+  BILLING_TEST &&
+  process.env.BILLING_TEST_OVERRIDE !== "on"
+) {
+  throw new Error("FATAL: BILLING_TEST true in production without BILLING_TEST_OVERRIDE");
 }
 
 // Server-enriched plans: base constants + server-only billing properties
