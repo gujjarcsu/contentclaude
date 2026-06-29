@@ -33,9 +33,12 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
     let pendingCompleted = 0;
     let pendingFailed = 0;
 
+    // Flush after every product (was every 10) so the progress bar moves smoothly
+    // and live, instead of sitting at 0% then jumping. The ~2s inter-product
+    // throttle naturally bounds the write rate, so this is cheap.
     const flushCounters = async (force = false) => {
-      if (!force && pendingCompleted + pendingFailed < 10) return;
       if (pendingCompleted === 0 && pendingFailed === 0) return;
+      void force; // always flush when there's pending progress
       await prisma.generationJob.update({
         where: { id: jobId },
         data: {

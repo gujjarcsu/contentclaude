@@ -2,7 +2,7 @@ import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher } from "r
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { Text, InlineStack, ProgressBar } from "@shopify/polaris";
+import { Text, InlineStack } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { useEffect, useRef, useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -51,7 +51,8 @@ function JobProgressTicker({ navigate }) {
     const scheduleNext = () => {
       if (cancelled) return;
       // Read latest job state from ref so delay adapts after each poll response.
-      const delay = hasJobsRef.current ? 5_000 : 15_000;
+      // Poll fast (2s) while a job runs so the bar visibly moves; slow when idle.
+      const delay = hasJobsRef.current ? 2_000 : 15_000;
       timerRef.current = setTimeout(() => {
         poll();
         scheduleNext();
@@ -119,10 +120,18 @@ function JobProgressTicker({ navigate }) {
           </Text>
         </InlineStack>
         <InlineStack gap="300" blockAlign="center">
-          <div style={{ width: 120 }}>
-            <ProgressBar progress={pct} tone="highlight" size="small" />
+          {/* Bigger, smoothly-animating bar — the width transition glides it
+              between poll updates instead of snapping. */}
+          <div style={{ width: 260, height: 10, background: "rgba(255,255,255,0.25)", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{
+              width: `${pct}%`,
+              height: "100%",
+              background: "#ffffff",
+              borderRadius: 999,
+              transition: "width 0.6s ease",
+            }} />
           </div>
-          <Text as="span" variant="bodySm" fontWeight="bold">
+          <Text as="span" variant="bodyMd" fontWeight="bold">
             <span style={{ color: "#ffffff" }}>{pct}%</span>
           </Text>
           <span style={{

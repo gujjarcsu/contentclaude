@@ -163,7 +163,7 @@ export default function JobsPage() {
   // Hooks must all be called before any conditional return
   const hasActiveJobs = jobs.some((j) => j.status === "queued" || j.status === "processing");
 
-  const pollIntervalRef = useRef(5000);
+  const pollIntervalRef = useRef(2000);
   const prevProgressRef = useRef(null);
   const prevRetryData = useRef(null);
   const prevCancelData = useRef(null);
@@ -203,7 +203,7 @@ export default function JobsPage() {
     const currentProgress = jobs.map((j) => j.completedProducts + j.failedProducts).join(",");
 
     if (currentProgress !== prevProgressRef.current) {
-      pollIntervalRef.current = 5000;
+      pollIntervalRef.current = 2000;
       prevProgressRef.current = currentProgress;
     } else {
       pollIntervalRef.current = Math.min(pollIntervalRef.current * 2, 30_000);
@@ -339,7 +339,7 @@ export default function JobsPage() {
                         <ProgressBar
                           progress={progress}
                           tone="highlight"
-                          size="medium"
+                          size="large"
                           animated
                         />
                         <InlineStack align="space-between">

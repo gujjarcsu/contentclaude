@@ -133,6 +133,12 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Title and content are required to publish." }, { status: 400 });
     }
 
+    // ArticleCreateInput requires a non-null author — use the merchant's brand/
+    // store name when set, else a name derived from the shop. (Missing author was
+    // causing a hard GraphQL error and a 500 on publish.)
+    const authorVoice = await prisma.brandVoice.findUnique({ where: { shop }, select: { storeName: true } });
+    const authorName = authorVoice?.storeName?.trim() || shop.replace(".myshopify.com", "");
+
     // Find or create the default Shopify blog
     const blogsResponse = await admin.graphql(`
       query { blogs(first: 1) { edges { node { id title } } } }
@@ -162,7 +168,7 @@ export const action = async ({ request }) => {
           userErrors { field message }
         }
       }`,
-      { variables: { article: { blogId, title, body: content, isPublished: true } } }
+      { variables: { article: { blogId, title, body: content, isPublished: true, author: { name: authorName } } } }
     );
     const { data: articleData } = await articleResult.json();
     const errors = articleData?.articleCreate?.userErrors ?? [];
