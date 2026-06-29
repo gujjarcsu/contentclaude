@@ -596,7 +596,6 @@ export default function BlogPage() {
                         <Button
                           pressed={blogView === "preview"}
                           onClick={() => setBlogView("preview")}
-                          icon={FileText}
                         >
                           Preview
                         </Button>
