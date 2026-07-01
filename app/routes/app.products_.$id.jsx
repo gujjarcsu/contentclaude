@@ -25,6 +25,7 @@ import {
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { UpgradePrompt } from "../components/UpgradePrompt";
+import { GeoValueBanner } from "../components/GeoValueBanner";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
@@ -987,6 +988,7 @@ export default function ProductGeneratePage() {
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
     >
       <BlockStack gap="500">
+        <GeoValueBanner variant="compact" />
         {actionData?.error && (
           <Banner tone="critical" title="Error">
             <p>{actionData.error}</p>

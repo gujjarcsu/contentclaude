@@ -24,6 +24,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { UpgradePrompt } from "../components/UpgradePrompt";
+import { GeoValueBanner } from "../components/GeoValueBanner";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -311,6 +312,7 @@ export default function BlogPage() {
           .cc-blog-preview img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
           .cc-blog-preview > *:first-child { margin-top: 0; }
         `}</style>
+        <GeoValueBanner variant="compact" />
         {actionData?.error && (
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
         )}

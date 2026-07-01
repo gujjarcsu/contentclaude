@@ -1,5 +1,6 @@
 import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
+import { GeoValueBanner } from "../components/GeoValueBanner";
 import {
   Page,
   Layout,
@@ -176,6 +177,7 @@ export default function SeoAuditPage() {
       ]}
     >
       <BlockStack gap="500">
+        <GeoValueBanner variant="compact" />
         {isLoading && (
           <Banner tone="info">
             <InlineStack gap="200" blockAlign="center">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLoaderData, useNavigate, redirect, useNavigation } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
+import { GeoValueBanner } from "../components/GeoValueBanner";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, ProgressBar, Banner, Divider, Collapsible,
@@ -282,6 +283,9 @@ export default function Dashboard() {
             )}
           </InlineStack>
         </Box>
+
+        {/* ── Core value: what this app actually does (GEO / AI-search) ────── */}
+        <GeoValueBanner onLearnMore={() => setHelpOpen(true)} />
 
         {/* ── Onboarding checklist ───────────────────────────────────────── */}
         {isNewShop && (
