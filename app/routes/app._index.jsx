@@ -35,7 +35,7 @@ export const loader = async ({ request }) => {
   // Admin GraphQL call, cached 5 min) used to be awaited sequentially *before*
   // the DB queries, serializing a network round-trip ahead of everything else;
   // folding it into Promise.all makes total latency ≈ the single slowest call.
-  const [totalProducts, metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob] = await Promise.all([
+  const [totalProducts, metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob, growthState] = await Promise.all([
     getCache(
       `productCount:${shop}`,
       async () => {
@@ -75,6 +75,8 @@ export const loader = async ({ request }) => {
       orderBy: { completedAt: "desc" },
       select: { completedProducts: true, completedAt: true },
     }),
+    // First-run: has this shop already seen the welcome / magic-moment flow?
+    prisma.growthState.findUnique({ where: { shop }, select: { welcomeSeenAt: true } }),
   ]);
 
   // Use distinct-product counts so coverage can never exceed 100%
@@ -90,13 +92,15 @@ export const loader = async ({ request }) => {
   );
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
-  // Phase 1 magic moment (flag-gated, dev-only for now): new shops land on the
-  // auto-scan + live before→after first-run experience. Falls back to the
-  // existing setup wizard when the flag is off.
-  if (isNewShop && isFeatureEnabled("magicMoment")) {
+  // Phase 1 magic moment: a brand-new shop lands on the auto-scan + live
+  // before→after first-run experience — but ONLY once (welcomeSeenAt), so
+  // "Skip to dashboard" sticks and we never trap the merchant in a redirect loop.
+  if (isNewShop && isFeatureEnabled("magicMoment") && !growthState?.welcomeSeenAt) {
     throw redirect(`/app/welcome?${authParams.toString()}`);
   }
-  if (isNewShop && !brandVoice) {
+  // Fallback onboarding when the magic moment is off or already seen: nudge a
+  // brand-new shop with no brand voice into the quick setup wizard.
+  if (isNewShop && !brandVoice && !isFeatureEnabled("magicMoment")) {
     throw redirect(`/app/setup?${authParams.toString()}`);
   }
 

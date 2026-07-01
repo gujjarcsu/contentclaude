@@ -26,6 +26,7 @@ import { calculateSeoScore } from "../utils/seo.server.js";
 import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { GeoValueBanner } from "../components/GeoValueBanner";
 
 const SCAN_LIMIT = 30;
 
@@ -101,6 +102,13 @@ export const loader = async ({ request }) => {
     getMonthlyUsageCount(shop),
     prisma.generatedContent.count({ where: { shop, status: "published" } }),
     prisma.generatedContent.count({ where: { shop, status: "draft" } }),
+    // Mark the welcome as seen so it shows exactly once (the dashboard stops
+    // redirecting here after this). Idempotent.
+    prisma.growthState.upsert({
+      where: { shop },
+      create: { shop, welcomeSeenAt: new Date() },
+      update: { welcomeSeenAt: new Date() },
+    }),
   ]);
   const ents = getEntitlements(plan.planName);
 
@@ -370,6 +378,7 @@ export default function WelcomePage() {
   return (
     <Page title="Welcome to ContentClaude" subtitle="Here's your store's AI-search readiness — scanned just now.">
       <BlockStack gap="500">
+        <GeoValueBanner variant="compact" />
         <Suspense fallback={<ScanSkeleton />}>
           <Await resolve={data.scan} errorElement={<ScanError />}>
             {(scan) => <MagicMomentBody scan={scan} loader={data} />}

@@ -203,6 +203,9 @@ model GrowthState {
   reviewPromptCount       Int       @default(0)
   // Activation (Phase 1) — first published win
   activationAt            DateTime?
+  // First-run: set once the merchant has seen the welcome / magic-moment flow,
+  // so it shows exactly once and "Skip" sticks (no redirect loop).
+  welcomeSeenAt           DateTime?
   // Continuous monitoring (Phase 2)
   lastScanAt              DateTime?
   // Category benchmarking (Phase 4) — explicit opt-in only
