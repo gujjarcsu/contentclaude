@@ -4,6 +4,7 @@ import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
 import { tryConsumeGeneration } from "./plans.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
+import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // Configurable via BULK_THROTTLE_MS env var.
 // Default 2000ms: safe for claude-sonnet-4-6 with 3 concurrent workers.
@@ -53,10 +54,19 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     jobLogger.info({ shop: job.shop, productCount: productIds.length, contentTypes }, "Bulk job started");
 
-    const session = await prisma.session.findFirst({
-      where: { shop: job.shop, isOnline: false },
-    });
+    // Start with a freshly-refreshed token; a bulk job can outlive the ~1h token
+    // life, so we also refresh proactively per product (below) and on 401.
+    const session = await getFreshOfflineSession(job.shop);
     if (!session) throw new Error(`No offline session for shop ${job.shop}`);
+
+    // Keep the in-memory session token valid mid-run. Cheap: only refreshes when
+    // within 5 min of expiry. Mutates the session object the fetch/publish helpers use.
+    const keepTokenFresh = async () => {
+      if (session.expires && session.expires.getTime() - Date.now() < 5 * 60 * 1000 && session.refreshToken) {
+        const r = await refreshOfflineToken(job.shop);
+        if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
+      }
+    };
 
     const [brandVoice, recentContent, collectionVoices] = await Promise.all([
       prisma.brandVoice.findUnique({ where: { shop: job.shop } }),
@@ -92,6 +102,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
     for (let i = 0; i < productIds.length; i++) {
       const productId = productIds[i];
       try {
+        await keepTokenFresh(); // refresh the offline token before it lapses mid-run
         const product = await fetchShopifyProduct(session, productId);
         if (!product) {
           jobLogger.warn({ shop: job.shop, productId }, "Product not found in Shopify during bulk job");
@@ -294,6 +305,14 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
     throw new Error(`Shopify rate limit exceeded fetching product ${productId} after ${MAX_SHOPIFY_RETRIES} retries`);
   }
 
+  if (res.status === 401 && attempt < MAX_SHOPIFY_RETRIES) {
+    // Offline token lapsed mid-run — refresh it and retry with the new token.
+    const r = await refreshOfflineToken(session.shop);
+    if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
+    logger.warn({ productId, attempt }, "Shopify 401 on product fetch — refreshed token, retrying");
+    return fetchShopifyProduct(session, productId, attempt + 1);
+  }
+
   if (!res.ok) {
     throw new Error(`Shopify GraphQL error ${res.status} fetching product ${productId}`);
   }
@@ -343,6 +362,14 @@ async function publishToShopify(session, productId, input, attempt = 0) {
       return publishToShopify(session, productId, input, attempt + 1);
     }
     throw networkErr;
+  }
+
+  if (res.status === 401 && attempt < MAX_RETRIES) {
+    // Offline token lapsed mid-run — refresh it and retry the publish.
+    const r = await refreshOfflineToken(session.shop);
+    if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
+    logger.warn({ productId, attempt }, "Shopify 401 on publish — refreshed token, retrying");
+    return publishToShopify(session, productId, input, attempt + 1);
   }
 
   if (res.status === 429) {

@@ -8,6 +8,7 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
+import { refreshOfflineToken } from "./utils/offlineToken.server.js";
 
 // Billing test mode: always on outside production (real charges off). In
 // production it's off — UNLESS explicitly overridden for pre-launch testing.
@@ -103,37 +104,6 @@ function shopFromRequest(request) {
     return payload?.dest ? payload.dest.replace(/^https?:\/\//, "") : null;
   } catch {
     return null;
-  }
-}
-
-async function refreshOfflineToken(shop) {
-  try {
-    const sess = await prisma.session.findFirst({ where: { shop, isOnline: false } });
-    if (!sess?.refreshToken) return false;
-    const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: process.env.SHOPIFY_API_KEY,
-        client_secret: process.env.SHOPIFY_API_SECRET,
-        grant_type: "refresh_token",
-        refresh_token: sess.refreshToken,
-      }),
-    });
-    if (!res.ok) return false;
-    const j = await res.json();
-    if (!j?.access_token) return false;
-    await prisma.session.update({
-      where: { id: sess.id },
-      data: {
-        accessToken: j.access_token,
-        expires: j.expires_in ? new Date(Date.now() + j.expires_in * 1000) : sess.expires,
-        ...(j.refresh_token ? { refreshToken: j.refresh_token } : {}),
-      },
-    });
-    return true;
-  } catch {
-    return false;
   }
 }
 
