@@ -26,6 +26,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 import { GeoValueBanner } from "../components/GeoValueBanner";
+import { ContentBenefits } from "../components/ContentBenefits";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
@@ -1056,25 +1057,25 @@ export default function ProductGeneratePage() {
                     label="Product Description"
                     checked={genDescription}
                     onChange={setGenDescription}
-                    helpText="Full description with SEO optimisation"
+                    helpText="Answer-first & keyword-rich — so Google ranks it and AI engines can quote it."
                   />
                   <Checkbox
                     label="Meta Title"
                     checked={genMetaTitle}
                     onChange={setGenMetaTitle}
-                    helpText="SEO title tag (max 60 characters)"
+                    helpText="≤60 chars, keyword front-loaded — wins the click in search results."
                   />
                   <Checkbox
                     label="Meta Description"
                     checked={genMetaDescription}
                     onChange={setGenMetaDescription}
-                    helpText="SEO meta description (max 155 characters)"
+                    helpText="≤155 chars — lifts your click-through from search."
                   />
                   <Checkbox
                     label="FAQ Content"
                     checked={genFaq}
                     onChange={setGenFaq}
-                    helpText="4–5 questions and answers"
+                    helpText="Adds FAQPage schema — the format ChatGPT, Perplexity & Google AI cite."
                   />
                   <Checkbox
                     label="Image Alt Text"
@@ -1185,6 +1186,8 @@ export default function ProductGeneratePage() {
                   )}
                 </BlockStack>
               </Card>
+              {/* What the generated content actually does for the merchant (GEO/SEO/AI) */}
+              <ContentBenefits />
             </BlockStack>
           </Layout.Section>
 
