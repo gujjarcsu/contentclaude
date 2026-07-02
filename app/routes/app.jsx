@@ -167,6 +167,7 @@ export default function App() {
           <s-link href="/app/seo-audit">SEO Audit</s-link>
           <s-link href="/app/blog">Blog Generator</s-link>
           <s-link href="/app/collections">Collections</s-link>
+          <s-link href="/app/results">Results</s-link>
           <s-link href="/app/analytics">Analytics</s-link>
           <s-link href="/app/jobs">Jobs</s-link>
           <s-link href="/app/settings">Settings</s-link>
