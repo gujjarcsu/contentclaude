@@ -15,7 +15,7 @@ const ENGINES = "ChatGPT, Perplexity, Gemini & Google AI Overviews";
 
 const POINTS = [
   { icon: Bot, title: "Answer-first writing", desc: "Structured the way AI models quote and cite sources." },
-  { icon: FileCode2, title: "FAQ + Product schema", desc: "JSON-LD markup machines read for AI answers & Google rich results." },
+  { icon: FileCode2, title: "FAQPage schema (JSON-LD)", desc: "Structured FAQ markup machines read to quote you in AI answers." },
   { icon: Search, title: "llms.txt catalog feed", desc: "A clean map of your store so AI crawlers can discover every product." },
 ];
 

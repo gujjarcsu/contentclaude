@@ -44,13 +44,16 @@ export async function computeStoreResults(shop, totalProducts = 0) {
   // content-only GEO number (it would understate and contradict the full GEO
   // score shown elsewhere). GEO is proven instead by the schema facts below.
   let seoBeforeSum = 0, seoAfterSum = 0, scored = 0;
-  let hasFaq = false;
   const improvements = [];
+
+  // Products with published FAQ content have the contentclaude/faq_schema
+  // metafield written → FAQPage JSON-LD live on their storefront page. That's the
+  // app's actual, delivered AI-search schema (the theme provides Product schema;
+  // we don't claim it). This is the honest "schema live" count.
+  const faqSchemaProducts = Object.values(byProduct).filter((c) => c.faq?.generatedContent).length;
 
   for (const [productId, c] of Object.entries(byProduct)) {
     const desc = c.description;
-    const faq = c.faq;
-    if (faq?.generatedContent) hasFaq = true;
     if (!desc) continue; // need a description to compare before/after
 
     const beforeSeo = calculateSeoScore({
@@ -78,7 +81,8 @@ export async function computeStoreResults(shop, totalProducts = 0) {
 
   const optimizedProducts = Object.keys(byProduct).length;
   const contentPieces = rows.length;
-  const schemaTypes = ["Product", ...(hasFaq ? ["FAQPage"] : [])];
+  // Only FAQPage is the app's delivered storefront schema (see theme embed).
+  const schemaTypes = faqSchemaProducts > 0 ? ["FAQPage"] : [];
 
   const summary = computeRoiSummary({
     seoBefore: scored ? Math.round(seoBeforeSum / scored) : 0,
@@ -92,5 +96,10 @@ export async function computeStoreResults(shop, totalProducts = 0) {
   // Show the biggest genuine lifts (a small improvement over already-good content
   // isn't proof); cap and only include products that actually improved.
   improvements.sort((a, b) => b.lift - a.lift);
-  return { hasResults: true, summary, improvements: improvements.filter((i) => i.lift > 0).slice(0, 5) };
+  return {
+    hasResults: true,
+    summary,
+    faqSchemaProducts, // products with FAQPage JSON-LD live on their storefront
+    improvements: improvements.filter((i) => i.lift > 0).slice(0, 5),
+  };
 }

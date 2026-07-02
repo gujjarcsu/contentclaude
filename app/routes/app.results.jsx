@@ -82,7 +82,12 @@ export default function ResultsPage() {
           <StatCard value={s.optimizedProducts} label="Products optimized" sub={`${s.coveragePct}% of your catalog`} tone="success" />
           <StatCard value={s.contentPieces} label="Content pieces published" sub="Descriptions, meta tags & FAQs" />
           <StatCard value={s.timeSaved.label} label="Time saved (est.)" sub="vs. writing by hand" />
-          <StatCard value={s.aeoReady ? "Live" : "—"} label="AI-search schema" sub={s.schemaTypesAdded.join(" + ")} tone={s.aeoReady ? "success" : undefined} />
+          <StatCard
+            value={data.faqSchemaProducts}
+            label="FAQ schema live"
+            sub={data.faqSchemaProducts > 0 ? "products citable by AI" : "add FAQ content to activate"}
+            tone={data.faqSchemaProducts > 0 ? "success" : undefined}
+          />
         </div>
 
         {/* SEO readiness lift — only shown when the improvement is genuinely
@@ -112,16 +117,27 @@ export default function ResultsPage() {
           </Card>
         )}
 
-        {/* AI-search / GEO proof — the differentiator */}
+        {/* AI-search / GEO proof — the differentiator (honest: FAQPage is what we emit) */}
         <Box padding="500" background="bg-surface-info" borderRadius="300">
           <BlockStack gap="200">
             <InlineStack gap="200" blockAlign="center" wrap>
-              <Text as="h2" variant="headingMd">Ready for AI answer engines</Text>
-              <Badge tone="success">{`${s.schemaTypesAdded.join(" + ")} schema`}</Badge>
+              <Text as="h2" variant="headingMd">AI-search schema</Text>
+              {data.faqSchemaProducts > 0 && <Badge tone="success">{`FAQPage live on ${data.faqSchemaProducts} product${data.faqSchemaProducts !== 1 ? "s" : ""}`}</Badge>}
             </InlineStack>
-            <Text as="p" variant="bodyMd">
-              Every optimized product is written <strong>answer-first</strong> and now carries <strong>{s.schemaTypesAdded.join(" + ")}</strong> structured data (JSON-LD) — the machine-readable format ChatGPT, Perplexity, Gemini &amp; Google AI Overviews use to quote and cite sources. That's the difference between being <em>found</em> and being <em>cited</em>.
-            </Text>
+            {data.faqSchemaProducts > 0 ? (
+              <Text as="p" variant="bodyMd">
+                <strong>{data.faqSchemaProducts}</strong> of your products now serve <strong>FAQPage structured data (JSON-LD)</strong> on their storefront — the machine-readable format ChatGPT, Perplexity, Gemini &amp; Google AI Overviews read to quote and cite answers. Your content is also written <strong>answer-first</strong>, and your catalog is exposed via <strong>llms.txt</strong> for AI crawlers. That's the difference between being <em>found</em> and being <em>cited</em>.
+              </Text>
+            ) : (
+              <BlockStack gap="300">
+                <Text as="p" variant="bodyMd">
+                  You haven't published <strong>FAQ content</strong> yet — that's what adds <strong>FAQPage schema</strong> to your product pages, the structured data AI answer engines cite. Generate content with the <strong>FAQ</strong> option selected, then publish, to make your products citable by AI.
+                </Text>
+                <div>
+                  <Button variant="primary" tone="success" onClick={() => navigate("/app/products")}>Generate FAQ content →</Button>
+                </div>
+              </BlockStack>
+            )}
           </BlockStack>
         </Box>
 
