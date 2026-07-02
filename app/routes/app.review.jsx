@@ -21,11 +21,28 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { buildFaqSchemaMetafield } from "../utils/seo.server.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
 const PUBLISH_CONCURRENCY = 3;
 const PUBLISH_MAX_RETRIES = 3;
 const PUBLISH_BACKOFF_BASE_MS = 2000;
+
+const METAFIELDS_SET_MUTATION = `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
+  metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message } }
+}`;
+
+// Write a product's FAQ JSON-LD metafield so the theme app embed emits FAQPage
+// schema on the storefront. Non-fatal: the content already published, and the
+// metafield is re-written on the next publish, so we never fail a batch over it.
+async function writeFaqMetafield(admin, metafieldInput) {
+  if (!metafieldInput) return;
+  try {
+    await admin.graphql(METAFIELDS_SET_MUTATION, { variables: { metafields: [metafieldInput] } });
+  } catch {
+    /* non-fatal */
+  }
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
@@ -230,7 +247,7 @@ export const action = async ({ request }) => {
     const limit = pLimit(PUBLISH_CONCURRENCY);
     const results = await Promise.all(
       approved.map((productId) =>
-        limit(() => {
+        limit(async () => {
           // Merge DB drafts with any inline edits (edits take precedence)
           const content = { ...byProduct[productId], ...edits[productId] };
           const input = { id: productId };
@@ -240,7 +257,14 @@ export const action = async ({ request }) => {
             if (content.metaTitle) input.seo.title = content.metaTitle;
             if (content.metaDescription) input.seo.description = content.metaDescription;
           }
-          return publishProductWithRetry(admin, productId, input);
+          const result = await publishProductWithRetry(admin, productId, input);
+          // On success, write the FAQ JSON-LD metafield so the storefront emits
+          // FAQPage schema (the AI-search/GEO promise) — not just for single-product
+          // publishes, but for this bulk review flow too.
+          if (result.ok) {
+            await writeFaqMetafield(admin, buildFaqSchemaMetafield(productId, content.faq));
+          }
+          return result;
         })
       )
     );

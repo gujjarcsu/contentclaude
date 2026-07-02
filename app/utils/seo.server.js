@@ -38,6 +38,22 @@ export function faqToJsonLd(faqText) {
   };
 }
 
+// Build the MetafieldsSetInput for a product's FAQ JSON-LD (or null if there's no
+// usable FAQ). The theme app embed reads contentclaude/faq_schema to emit FAQPage
+// structured data on the storefront — so EVERY publish path must write it, or the
+// AI-search (GEO) promise silently does nothing for that product.
+export function buildFaqSchemaMetafield(productId, faqContent) {
+  const jsonLd = faqToJsonLd(faqContent);
+  if (!jsonLd) return null;
+  return {
+    ownerId: productId,
+    namespace: "contentclaude",
+    key: "faq_schema",
+    type: "json",
+    value: JSON.stringify(jsonLd),
+  };
+}
+
 /**
  * Calculate SEO completeness score (0-100) for a Shopify product object.
  * product shape: { description, seoTitle, seoDescription, images: [{ altText }] }

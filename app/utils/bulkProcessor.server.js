@@ -5,6 +5,7 @@ import { captureException } from "./errorMonitoring.server.js";
 import { tryConsumeGeneration } from "./plans.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
+import { buildFaqSchemaMetafield } from "./seo.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // Configurable via BULK_THROTTLE_MS env var.
 // Default 2000ms: safe for claude-sonnet-4-6 with 3 concurrent workers.
@@ -202,6 +203,11 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           if (Object.keys(input).length > 1) {
             await publishToShopify(session, productId, input);
           }
+          // Write the FAQ JSON-LD metafield so the storefront emits FAQPage schema
+          // (the AI-search/GEO promise) for auto-published products too.
+          if (generated.faq) {
+            await setFaqMetafield(session, productId, generated.faq).catch(() => {});
+          }
         }
 
         completedCount++;
@@ -330,6 +336,31 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
   }
 
   return data?.product ?? null;
+}
+
+// Write the product's FAQ JSON-LD metafield (contentclaude/faq_schema) so the
+// theme app embed emits FAQPage structured data on the storefront. No-op if the
+// FAQ produces no usable schema. Caller treats failures as non-fatal.
+async function setFaqMetafield(session, productId, faqContent) {
+  const metafield = buildFaqSchemaMetafield(productId, faqContent);
+  if (!metafield) return;
+  const res = await fetch(
+    `https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken,
+      },
+      body: JSON.stringify({
+        query: `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message } }
+        }`,
+        variables: { metafields: [metafield] },
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`metafieldsSet failed ${res.status}`);
 }
 
 async function publishToShopify(session, productId, input, attempt = 0) {
