@@ -3,7 +3,7 @@ export function ContentClaudeLogo({ size = "medium" }) {
   return (
     <img
       src="/logos/contentclaude-icon-square.svg"
-      alt="ContentClaude"
+      alt="Navaal"
       width={dim}
       height={dim}
       style={{ display: "block", aspectRatio: "1" }}
@@ -15,7 +15,7 @@ export function ContentClaudeFullLogo({ width = 300 }) {
   return (
     <img
       src="/logos/contentclaude-logo-full.svg"
-      alt="ContentClaude"
+      alt="Navaal"
       style={{ width, height: "auto", maxWidth: "100%", display: "block" }}
     />
   );
@@ -27,7 +27,7 @@ export function ContentClaudeBrand() {
       <ContentClaudeLogo size="medium" />
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", lineHeight: 1.2 }}>
-          Content<span style={{ color: "#0A84FF" }}>Claude</span>
+          Nav<span style={{ color: "#0A84FF" }}>aal</span>
         </div>
         <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>
           Powered by premium AI

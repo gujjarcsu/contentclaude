@@ -3,7 +3,7 @@
   <!-- Top bar -->
   <rect width="1280" height="56" fill="#1A1A1A"/>
   <rect x="16" y="16" width="24" height="24" rx="4" fill="#0A84FF"/>
-  <text x="48" y="32" fill="white" font-size="14" font-weight="600">ContentClaude</text>
+  <text x="48" y="32" fill="white" font-size="14" font-weight="600">Navaal</text>
 
   <!-- Left nav -->
   <rect x="0" y="56" width="220" height="744" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
@@ -99,5 +99,5 @@
   <rect x="576" y="508" width="396" height="5" rx="2.5" fill="#D4F1E4"/>
   <text x="592" y="526" fill="#6B7280" font-size="11">51/60 characters</text>
 
-  <text x="252" y="772" fill="#9CA3AF" font-size="11" text-anchor="middle">ContentClaude — AI Product Content for Shopify · contentclaude.fly.dev</text>
+  <text x="252" y="772" fill="#9CA3AF" font-size="11" text-anchor="middle">Navaal — AI SEO & GEO Content for Shopify · app.navaal.ai</text>
 </svg>

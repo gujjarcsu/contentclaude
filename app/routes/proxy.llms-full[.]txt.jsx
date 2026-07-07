@@ -1,4 +1,4 @@
-// App Proxy route → served at the storefront as /apps/contentclaude/llms-full.txt
+// App Proxy route → served at the storefront as /apps/navaal/llms-full.txt
 // Expanded variant of llms.txt with per-product attributes. See proxy.llms[.]txt.jsx.
 import { authenticate } from "../shopify.server";
 import { renderLlmsTxt, llmsTxtUpgradeNotice } from "../utils/llms.server.js";

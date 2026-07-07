@@ -1,4 +1,4 @@
-// App Proxy route → served at the storefront as /apps/contentclaude/llms.txt
+// App Proxy route → served at the storefront as /apps/navaal/llms.txt
 // (see [app_proxy] in shopify.app.toml). Returns the llms.txt index of the
 // merchant's catalog for AI agents / answer engines.
 //

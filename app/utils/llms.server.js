@@ -83,9 +83,9 @@ export async function renderLlmsTxt(shop, { full = false } = {}) {
  */
 export function llmsTxtUpgradeNotice(shop) {
   return (
-    `# ContentClaude — LLMs.txt\n\n` +
+    `# Navaal — LLMs.txt\n\n` +
     `This feature requires a Starter plan or higher.\n` +
-    `Upgrade at: https://${shop}/admin/apps/contentclaude\n\n` +
+    `Upgrade at: https://${shop}/admin/apps/navaal-seo-geo-content\n\n` +
     `LLMs.txt helps AI assistants like ChatGPT and Perplexity discover and cite your products.\n`
   );
 }

@@ -519,20 +519,20 @@ export default function Dashboard() {
           </Layout>
         )}
 
-        {/* How ContentClaude works — value-communication + guidance (clean, collapsible) */}
+        {/* How Navaal works — value-communication + guidance (clean, collapsible) */}
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
                 <Sparkles aria-hidden="true" size={18} color="#2C6ECB" />
-                <Text as="h2" variant="headingMd">How ContentClaude works</Text>
+                <Text as="h2" variant="headingMd">How Navaal works</Text>
               </InlineStack>
               <Button variant="plain" disclosure={helpOpen ? "up" : "down"} onClick={() => setHelpOpen((v) => !v)}>
                 {helpOpen ? "Hide" : "Learn how"}
               </Button>
             </InlineStack>
             <Text as="p" variant="bodyMd" tone="subdued">
-              ContentClaude writes your product content to win two kinds of search at once:{" "}
+              Navaal writes your product content to win two kinds of search at once:{" "}
               <strong>traditional SEO</strong> (ranking in Google &amp; Bing) and{" "}
               <strong>GEO / AI-search</strong> — being cited by AI answer engines like ChatGPT,
               Perplexity, Gemini, and Google&apos;s AI Overviews.

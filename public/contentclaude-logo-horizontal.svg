@@ -13,9 +13,9 @@
   <circle cx="100" cy="150" r="70" fill="url(#orangeGradient)" filter="url(#shadow)"/>
   <text x="100" y="175" font-family="'Inter', 'Helvetica Neue', sans-serif" font-size="75" font-weight="700" text-anchor="middle" fill="white" letter-spacing="-6">CC</text>
 
-  <!-- Text: ContentClaude -->
+  <!-- Text: Navaal -->
   <text x="210" y="130" font-family="'Inter', 'Helvetica Neue', sans-serif" font-size="64" font-weight="700" fill="#1a1a1a" letter-spacing="-1">
-    ContentClaude
+    Navaal
   </text>
 
   <!-- Tagline: Powered by Claude -->

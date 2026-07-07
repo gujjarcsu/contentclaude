@@ -2,7 +2,7 @@
   <rect width="1280" height="800" fill="#F6F6F7"/>
   <rect width="1280" height="56" fill="#1A1A1A"/>
   <rect x="16" y="16" width="24" height="24" rx="4" fill="#0A84FF"/>
-  <text x="48" y="32" fill="white" font-size="14" font-weight="600">ContentClaude</text>
+  <text x="48" y="32" fill="white" font-size="14" font-weight="600">Navaal</text>
   <rect x="0" y="56" width="220" height="744" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
   <text x="36" y="92" fill="#6B7280" font-size="13">Dashboard</text>
   <text x="36" y="124" fill="#6B7280" font-size="13">Products</text>
@@ -84,5 +84,5 @@
   <text x="888" y="528" fill="#6B7280" font-size="12">~1 minute for 16 products</text>
   <text x="888" y="548" fill="#6B7280" font-size="11">(3.5s per product × 16)</text>
 
-  <text x="640" y="788" fill="#9CA3AF" font-size="11" text-anchor="middle">ContentClaude — AI Product Content for Shopify · contentclaude.fly.dev</text>
+  <text x="640" y="788" fill="#9CA3AF" font-size="11" text-anchor="middle">Navaal — AI SEO & GEO Content for Shopify · app.navaal.ai</text>
 </svg>

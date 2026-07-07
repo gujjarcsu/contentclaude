@@ -1,9 +1,10 @@
-# ContentClaude — Shopify App Configuration
+# Navaal: AI SEO & GEO Content — Shopify App Configuration
 # Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1279a14cca41d4a6f8e6e3c485870b77"
-name = "ContentClaude"
-application_url = "https://contentclaude.fly.dev"
+name = "Navaal: AI SEO & GEO Content"
+handle = "navaal-seo-geo-content"
+application_url = "https://app.navaal.ai"
 embedded = true
 
 [access_scopes]
@@ -45,15 +46,15 @@ api_version = "2026-04"
   uri = "/webhooks/shop/redact"
 
 # App Proxy — serves the GEO llms.txt / llms-full.txt at the storefront:
-#   https://<shop-domain>/apps/contentclaude/llms.txt      → /proxy/llms.txt
-#   https://<shop-domain>/apps/contentclaude/llms-full.txt → /proxy/llms-full.txt
+#   https://<shop-domain>/apps/navaal/llms.txt      → /proxy/llms.txt
+#   https://<shop-domain>/apps/navaal/llms-full.txt → /proxy/llms-full.txt
 [app_proxy]
-url = "https://contentclaude.fly.dev/proxy"
-subpath = "contentclaude"
+url = "https://app.navaal.ai/proxy"
+subpath = "navaal"
 prefix = "apps"
 
 [auth]
-redirect_urls = ["https://contentclaude.fly.dev/api/auth"]
+redirect_urls = ["https://app.navaal.ai/auth/callback"]
 
 [build]
 automatically_update_urls_on_dev = true

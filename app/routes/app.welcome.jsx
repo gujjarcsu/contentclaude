@@ -371,12 +371,12 @@ export default function WelcomePage() {
 
   // Full-page skeleton during a client navigation into the route.
   if (navigation.state === "loading") {
-    return <AppSkeleton title="Welcome to ContentClaude" sections={3} layout="full" />;
+    return <AppSkeleton title="Welcome to Navaal" sections={3} layout="full" />;
   }
 
   // The Page shell paints immediately; the scan streams in behind a skeleton.
   return (
-    <Page title="Welcome to ContentClaude" subtitle="Here's your store's AI-search readiness — scanned just now.">
+    <Page title="Welcome to Navaal" subtitle="Here's your store's AI-search readiness — scanned just now.">
       <BlockStack gap="500">
         <GeoValueBanner variant="compact" />
         <Suspense fallback={<ScanSkeleton />}>
@@ -427,7 +427,7 @@ function MagicMomentBody({ scan, loader }) {
       <Card>
         <BlockStack gap="300">
           <Text as="h2" variant="headingLg">Add a product to see the magic</Text>
-          <Text as="p" tone="subdued">Once your store has products, ContentClaude will scan them and show your AI-search readiness instantly.</Text>
+          <Text as="p" tone="subdued">Once your store has products, Navaal will scan them and show your AI-search readiness instantly.</Text>
           <Button variant="primary" onClick={() => navigate("/app")}>Go to Dashboard</Button>
         </BlockStack>
       </Card>
