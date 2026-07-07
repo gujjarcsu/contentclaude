@@ -27,6 +27,7 @@ import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 import { GeoValueBanner } from "../components/GeoValueBanner";
 import { ContentBenefits } from "../components/ContentBenefits";
+import { ReviewRequest } from "../components/ReviewRequest";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import logger from "../utils/logger.server.js";
@@ -60,7 +61,7 @@ export async function loader({ request, params }) {
   if (!data.product) throw new Response("Product not found", { status: 404 });
   const product = data.product;
 
-  const [existingContent, brandVoice, versions, templates, plan] = await Promise.all([
+  const [existingContent, brandVoice, versions, templates, plan, growthState] = await Promise.all([
     prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.contentVersion.findMany({
@@ -70,6 +71,7 @@ export async function loader({ request, params }) {
     }),
     prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }], take: 50 }),
     getOrCreatePlan(shop),
+    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
   ]);
 
   const { scoreContent } = await import("../utils/contentScorer.server.js");
@@ -125,6 +127,7 @@ export async function loader({ request, params }) {
       return acc;
     }, {}),
     hasBrandVoice: !!brandVoice,
+    reviewRequested: !!growthState?.reviewRequestedAt,
     qualityScore,
     versionsByType,
     templates,
@@ -737,7 +740,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
+  const { product, existingContent, hasBrandVoice, reviewRequested, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
 
@@ -751,6 +754,9 @@ export default function ProductGeneratePage() {
 
   const isLoading = fetcher.state !== "idle";
   const actionData = fetcher.data;
+  // Ask for an App Store review once, right after a publish succeeds (single
+  // publish or generate-with-auto-publish).
+  const askReview = !reviewRequested && (actionData?.published === true || actionData?.autoPublished === true);
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
   const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
@@ -989,6 +995,7 @@ export default function ProductGeneratePage() {
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
     >
       <BlockStack gap="500">
+        <ReviewRequest active={askReview} />
         <GeoValueBanner variant="compact" />
         {actionData?.error && (
           <Banner tone="critical" title="Error">

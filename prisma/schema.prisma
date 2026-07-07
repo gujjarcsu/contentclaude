@@ -201,6 +201,9 @@ model GrowthState {
   reviewPromptLastAt      DateTime?
   reviewPromptDismissedAt DateTime?
   reviewPromptCount       Int       @default(0)
+  // Post-publish App Store review ask — set once we've asked (success OR decline),
+  // so we NEVER ask the same shop twice, independent of App Bridge's own cooldown.
+  reviewRequestedAt       DateTime?
   // Activation (Phase 1) — first published win
   activationAt            DateTime?
   // First-run: set once the merchant has seen the welcome / magic-moment flow,

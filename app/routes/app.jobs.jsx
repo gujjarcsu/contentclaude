@@ -21,24 +21,30 @@ import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import { ReviewRequest } from "../components/ReviewRequest";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const jobs = await prisma.generationJob.findMany({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  const [jobs, growthState] = await Promise.all([
+    prisma.generationJob.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+  ]);
 
   return Response.json({
+    reviewRequested: !!growthState?.reviewRequestedAt,
     jobs: jobs.map((j) => ({
       id: j.id,
       status: j.status,
       totalProducts: j.totalProducts,
       completedProducts: j.completedProducts,
       failedProducts: j.failedProducts,
+      autoPublish: j.autoPublish,
       contentTypes: j.contentTypes,
       errorLog: j.errorLog ? JSON.parse(j.errorLog) : [],
       startedAt: j.startedAt?.toISOString() ?? null,
@@ -153,8 +159,14 @@ function formatDate(iso) {
 }
 
 export default function JobsPage() {
-  const { jobs } = useLoaderData();
+  const { jobs, reviewRequested } = useLoaderData();
   const navigate = useNavigate();
+  // A completed auto-publish job means content actually went live → ask for a
+  // review (once). Non-auto-publish jobs only created drafts, so they don't count
+  // here; the Review & Publish screen handles that path.
+  const askReview = !reviewRequested && jobs.some(
+    (j) => j.autoPublish && j.status === "complete" && j.completedProducts > 0
+  );
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
@@ -242,6 +254,7 @@ export default function JobsPage() {
       }}
     >
       <BlockStack gap="500">
+        <ReviewRequest active={askReview} />
 
         {hasActiveJobs && (
           <Banner tone="info" title="Jobs are running">
