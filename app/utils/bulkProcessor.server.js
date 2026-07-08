@@ -204,9 +204,25 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
             await publishToShopify(session, productId, input);
           }
           // Write the FAQ JSON-LD metafield so the storefront emits FAQPage schema
-          // (the AI-search/GEO promise) for auto-published products too.
+          // (the AI-search/GEO promise) for auto-published products too. The
+          // "faq" generatedContent row was already upserted as `finalStatus`
+          // (e.g. "published") above in saveOps, before we knew whether this
+          // write would actually succeed on Shopify's side — if it fails, we
+          // must downgrade that row back to "draft" so the Products list stops
+          // showing a false "FAQ ✓" for a metafield that was never written.
           if (generated.faq) {
-            await setFaqMetafield(session, productId, generated.faq).catch(() => {});
+            await setFaqMetafield(session, productId, generated.faq).catch(async (err) => {
+              jobLogger.warn(
+                { shop: job.shop, productId, err: err.message },
+                "FAQ metafield write failed — downgrading FAQ status so UI doesn't overclaim"
+              );
+              await prisma.generatedContent
+                .update({
+                  where: { shop_productId_contentType: { shop: job.shop, productId, contentType: "faq" } },
+                  data: { status: "draft" },
+                })
+                .catch(() => {});
+            });
           }
         }
 
@@ -340,7 +356,9 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
 
 // Write the product's FAQ JSON-LD metafield (contentclaude/faq_schema) so the
 // theme app embed emits FAQPage structured data on the storefront. No-op if the
-// FAQ produces no usable schema. Caller treats failures as non-fatal.
+// FAQ produces no usable schema. Caller treats failures as non-fatal (the rest
+// of the product's content still published), but MUST NOT report the FAQ as
+// published when this throws — see the status downgrade at the call site.
 async function setFaqMetafield(session, productId, faqContent) {
   const metafield = buildFaqSchemaMetafield(productId, faqContent);
   if (!metafield) return;
@@ -360,7 +378,21 @@ async function setFaqMetafield(session, productId, faqContent) {
       }),
     }
   );
+  // A rejected mutation (bad owner id, invalid JSON, permission issue, etc.)
+  // still comes back as HTTP 200 — res.ok alone can't detect it. Must inspect
+  // the GraphQL body's userErrors, otherwise a rejected write looks identical
+  // to a successful one to the caller.
   if (!res.ok) throw new Error(`metafieldsSet failed ${res.status}`);
+  const { data, errors } = await res.json();
+  if (errors?.length) {
+    throw new Error(`metafieldsSet GraphQL error: ${errors.map((e) => e.message).join("; ")}`);
+  }
+  const userErrors = data?.metafieldsSet?.userErrors ?? [];
+  if (userErrors.length > 0) {
+    throw new Error(
+      `metafieldsSet rejected: ${userErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ")}`
+    );
+  }
 }
 
 async function publishToShopify(session, productId, input, attempt = 0) {

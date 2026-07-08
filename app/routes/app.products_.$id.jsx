@@ -453,6 +453,7 @@ export async function action({ request, params }) {
     );
 
     // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
+    let faqWarning = null;
     const faqRecord = await prisma.generatedContent.findUnique({
       where: { shop_productId_contentType: { shop, productId, contentType: "faq" } },
     });
@@ -460,7 +461,7 @@ export async function action({ request, params }) {
       const { faqToJsonLd } = await import("../utils/seo.server.js");
       const jsonLd = faqToJsonLd(faqRecord.generatedContent);
       if (jsonLd) {
-        await admin.graphql(
+        const faqMutationResult = await admin.graphql(
           `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
             metafieldsSet(metafields: $metafields) {
               metafields { id }
@@ -479,10 +480,25 @@ export async function action({ request, params }) {
             },
           }
         );
+        // metafieldsSet returns HTTP 200 even when Shopify rejects it — the
+        // rejection only shows up in userErrors. Without checking this, a
+        // failed write looks identical to a successful one and the merchant
+        // is told everything published when the FAQ schema silently didn't.
+        const { data: faqMutationData } = await faqMutationResult.json();
+        const faqUserErrors = faqMutationData?.metafieldsSet?.userErrors ?? [];
+        if (faqUserErrors.length > 0) {
+          faqWarning = faqUserErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ");
+        }
       }
     }
 
-    return { success: true, published: true, message: "Content published to your Shopify store!" };
+    return {
+      success: true,
+      published: true,
+      message: faqWarning
+        ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
+        : "Content published to your Shopify store!",
+    };
   }
 
   // ── Generate Social Media Content ────────────────────────────────────────
