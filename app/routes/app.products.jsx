@@ -343,23 +343,28 @@ export default function ProductsPage() {
       <InlineStack gap="100">
         {types.map(({ key, label }) => {
           const s = m[key]?.status;
-          if (!s) {
+          // A "✓" must mean the content is actually LIVE (published) — for FAQ that
+          // is exactly when the faq_schema metafield is written. Draft = generated
+          // but not yet live (info, no ✓). Rejected / none = not covered (muted, no
+          // ✓). Showing "FAQ ✓" for a rejected or unpublished row overclaims.
+          if (s === "published") {
             return (
-              <Box key={key} padding="100" background="bg-surface-secondary" borderRadius="100">
-                <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
+              <Box key={key} padding="100" background="bg-surface-success" borderRadius="100">
+                <Text as="span" variant="bodySm" tone="success">{label} ✓</Text>
               </Box>
             );
           }
+          if (s === "draft") {
+            return (
+              <Box key={key} padding="100" background="bg-surface-info" borderRadius="100">
+                <Text as="span" variant="bodySm" tone="info">{label} · draft</Text>
+              </Box>
+            );
+          }
+          // rejected, or no content generated → muted, never a checkmark
           return (
-            <Box
-              key={key}
-              padding="100"
-              background={s === "published" ? "bg-surface-success" : "bg-surface-info"}
-              borderRadius="100"
-            >
-              <Text as="span" variant="bodySm" tone={s === "published" ? "success" : "info"}>
-                {label} ✓
-              </Text>
+            <Box key={key} padding="100" background="bg-surface-secondary" borderRadius="100">
+              <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
             </Box>
           );
         })}

@@ -16,6 +16,7 @@ export const GDPR_SHOP_MODELS = [
   "generationJob",
   "usageRecord",
   "plan",
+  "growthState",
   "session",
 ];
 
