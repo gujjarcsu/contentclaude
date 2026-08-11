@@ -64,6 +64,9 @@ fly secrets unset BILLING_TEST_OVERRIDE --app contentclaude
 After unset, production `BILLING_TEST` becomes `false` → real charges. (A built-in guard in `shopify.server.js` will hard-fail boot if test mode is ever true in production without this override, so you can't ship it half-on.)
 
 ### 🔴 Bug 1 — get the real root cause (pick ONE)
+
+> **✅ RESOLVED — verified 2026-08-11.** Option A was executed: with the owner logged into the dev store admin, both `https://contentpilot-dev2.myshopify.com/apps/navaal/llms.txt` and `.../llms-full.txt` were opened while `fly logs` was tailed live. Both requests arrived through Shopify's signed proxy and returned **200** (`GET /proxy/llms.txt … 200 in 28.5 ms`, `GET /proxy/llms-full.txt … 200 in 12.8 ms`) with **no** `App Proxy auth rejected` line. The original 404 no longer reproduces — the post-rename `shopify app deploy` proxy re-registration appears to have fixed it. The instructions below are kept for historical reference only.
+
 The logging is committed but must be **deployed** to help. Then, either:
 
 **Option A — read the live log (most direct):**
