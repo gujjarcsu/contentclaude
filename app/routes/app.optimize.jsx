@@ -2,7 +2,7 @@ import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, re
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
-  SkeletonPage, SkeletonBodyText, SkeletonDisplayText,
+  SkeletonPage, SkeletonBodyText, SkeletonDisplayText, List,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -364,12 +364,40 @@ export default function OptimizePage() {
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">Improve Existing Descriptions</Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Already have descriptions? This enhances them in place — keeping your structure,
-                facts, and voice while improving clarity, formatting, SEO keywords, and readiness
-                for AI search (ChatGPT, Perplexity &amp; friends). Runs on every product that has a
-                description (up to {totalProducts}), including ones optimised before. Results are
-                saved as drafts for your review unless auto-publish is on.
+                Already have descriptions? This takes each one and raises it to a world-class
+                standard — your facts, claims, and voice stay exactly as they are; the clarity,
+                formatting, and search performance get better. Runs on every product that has a
+                description (up to {totalProducts}), including ones optimised before, and saves
+                the results as drafts for your review unless auto-publish is on. Every enhanced
+                description delivers:
               </Text>
+              <List type="bullet">
+                <List.Item>
+                  <strong>Search-friendly structure</strong> — clear headings, scannable
+                  paragraphs, and semantic relevance
+                </List.Item>
+                <List.Item>
+                  <strong>Entity-rich content</strong> — product, brand, category, materials,
+                  features, and use cases explicitly named so search engines and AI assistants
+                  identify them instantly
+                </List.Item>
+                <List.Item>
+                  <strong>Natural keyword coverage</strong> — primary, secondary, and long-tail
+                  search intent, without keyword stuffing
+                </List.Item>
+                <List.Item>
+                  <strong>Answer-ready information</strong> — concise, factual statements that
+                  AI engines like ChatGPT, Perplexity, and Google AI can quote directly
+                </List.Item>
+                <List.Item>
+                  <strong>Complete context &amp; trust signals</strong> — what it is, who
+                  it&apos;s for, benefits, and specs; accurate and verifiable, never invented
+                </List.Item>
+                <List.Item>
+                  <strong>Human-first writing</strong> — easy to read and genuinely persuasive
+                  for real shoppers, not just algorithms
+                </List.Item>
+              </List>
 
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold">Content to enhance:</Text>

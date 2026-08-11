@@ -1307,15 +1307,21 @@ export default function ProductGeneratePage() {
                       </Text>
                     )}
                     {(product.descriptionHtml || product.seoTitle) && (
-                      <Button
-                        size="large"
-                        onClick={handleEnhance}
-                        loading={isEnhancing}
-                        disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
-                        fullWidth
-                      >
-                        {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
-                      </Button>
+                      <BlockStack gap="100">
+                        <Button
+                          size="large"
+                          onClick={handleEnhance}
+                          loading={isEnhancing}
+                          disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
+                          fullWidth
+                        >
+                          {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
+                        </Button>
+                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                          Improves what&apos;s already there — structure, SEO keywords, and
+                          AI-search readiness — without losing your facts or voice
+                        </Text>
+                      </BlockStack>
                     )}
                     {entitlements?.abVariants ? (
                       <Button

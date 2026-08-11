@@ -103,6 +103,19 @@ export async function generateAltText(imageUrl, productTitle) {
   return rawText.trim();
 }
 
+// The quality bar every product description we produce must meet — shared by
+// generation and enhancement so both paths write to the same SEO + AI-search
+// (GEO) standard. Mirrors the merchant-facing feature description on /app/optimize.
+const QUALITY_STANDARD_SECTION = `=== QUALITY STANDARD — SEO + AI SEARCH (GEO) ===
+The description must satisfy ALL seven points:
+1. SEARCH-FRIENDLY STRUCTURE — short scannable paragraphs; <h3> subheadings when the content is long enough to warrant them; <ul><li> lists for features/specs; every section semantically relevant to the product.
+2. ENTITY-RICH CONTENT — explicitly name the product, brand, category, materials, key features, and intended use cases in plain text so search engines and AI assistants can identify them unambiguously.
+3. NATURAL KEYWORD COVERAGE — cover primary, secondary, and long-tail search intent in natural sentences; NEVER keyword-stuff.
+4. ANSWER-READY INFORMATION — concise, factual, self-contained statements that AI engines (ChatGPT, Perplexity, Google AI Overviews) can extract and quote directly.
+5. COMPLETE PRODUCT CONTEXT — what it is, who it's for, key benefits, specifications, and use cases — using only facts from the product data provided.
+6. TRUST SIGNALS — specific, accurate, verifiable claims only; concrete details beat superlatives; never invent specifics that are not in the product data.
+7. HUMAN-FIRST WRITING — easy to read, genuinely persuasive, and useful to a real shopper; write for the human first, algorithms second.`;
+
 export async function enhanceExistingContent(product, brandVoice, contentTypes = ["description"], options = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
@@ -125,9 +138,14 @@ export async function enhanceExistingContent(product, brandVoice, contentTypes =
 
   sections.push(`=== CRITICAL RULES ===
 You are ENHANCING existing content — not rewriting from scratch.
-PRESERVE the structure, key facts, and voice of the original.
-IMPROVE: clarity, readability, SEO keyword density, conversion hooks, brand tone alignment.
+PRESERVE the key facts, claims, and voice of the original — every fact in the output must come from the original content or the product data.
+You MAY reorganise the layout (headings, paragraphs, lists) where it improves scannability and the quality standard below.
+IMPROVE: clarity, readability, formatting, SEO keyword coverage, conversion hooks, brand tone alignment.
 Do NOT invent claims not in the original or product data.`);
+
+  if (contentTypes.includes("description") && (product.descriptionHtml || product.description)) {
+    sections.push(QUALITY_STANDARD_SECTION);
+  }
 
   if (language !== "en") {
     sections.push(`=== LANGUAGE ===\nWrite ALL content in ${langName}.`);
@@ -150,7 +168,7 @@ Tags: ${product.tags?.join(", ") || "none"}`);
 
   const typeInstructions = [];
   if (contentTypes.includes("description") && existing.description) {
-    typeInstructions.push(`ENHANCE THIS DESCRIPTION (return improved HTML):
+    typeInstructions.push(`ENHANCE THIS DESCRIPTION (return improved, well-formatted HTML that meets every point of the QUALITY STANDARD above):
 <EXISTING_DESCRIPTION>
 ${existing.description.substring(0, 2000)}
 </EXISTING_DESCRIPTION>
@@ -624,6 +642,10 @@ A: Answer here.
 Q: Question here?
 A: Answer here.
 </FAQ>`);
+  }
+
+  if (contentTypes.includes("description")) {
+    sections.push(QUALITY_STANDARD_SECTION);
   }
 
   sections.push(`=== CONTENT TO GENERATE ===${typeInstructions.join("\n")}`);
