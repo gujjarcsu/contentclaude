@@ -1,5 +1,5 @@
 import prisma from "../db.server.js";
-import { generateProductContent } from "./ai.server.js";
+import { generateProductContent, enhanceExistingContent } from "./ai.server.js";
 import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
 import { tryConsumeGeneration } from "./plans.server.js";
@@ -28,6 +28,10 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     const productIds = JSON.parse(job.productIds);
     const contentTypes = job.contentTypes.split(",").filter(Boolean);
+    // "enhance" improves the product's existing live content (preserving structure
+    // and facts) instead of generating from scratch. Older jobs have no mode
+    // column value beyond the default, so anything but "enhance" means generate.
+    const isEnhance = job.mode === "enhance";
     const errorLog = [];
     const MAX_ERROR_LOG_ENTRIES = 200;
     let completedCount = 0;
@@ -120,25 +124,59 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           .map((id) => collectionVoiceMap[id])
           .find((cv) => cv && (cv.brandTone || cv.targetAudience || cv.keywords));
 
+        // In enhance mode a product with no live description has nothing to
+        // enhance for the "description" type. Drop it from this product's type
+        // list; if nothing remains, skip WITHOUT consuming a credit (generation
+        // never runs, so the merchant must not be charged).
+        let effectiveTypes = contentTypes;
+        if (isEnhance && !(product.descriptionHtml || product.description)) {
+          effectiveTypes = contentTypes.filter((t) => t !== "description");
+          if (effectiveTypes.length === 0) {
+            jobLogger.warn({ shop: job.shop, productId }, "Enhance skipped — product has no existing description");
+            if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
+              errorLog.push({ productId, error: "[NO CHARGE] No existing description to enhance" });
+            failedCount++;
+            pendingFailed++;
+            await flushCounters();
+            continue;
+          }
+        }
+
         // ── GENERATE FIRST — no credit consumed yet ──────────────────────
         let generated;
         try {
-          generated = await generateProductContent(
-            {
-              title: product.title,
-              productType: product.productType,
-              vendor: product.vendor,
-              description: product.description,
-              descriptionHtml: product.descriptionHtml,
-              imageUrl: product.featuredImage?.url || "",
-              images: (product.images?.edges || []).map((e) => e.node),
-              variants: product.variants.edges.map((e) => e.node),
-              tags: product.tags,
-            },
-            brandVoice,
-            contentTypes,
-            { recentTitles, collectionVoice }
-          );
+          generated = isEnhance
+            ? await enhanceExistingContent(
+                {
+                  title: product.title,
+                  productType: product.productType,
+                  description: product.description,
+                  descriptionHtml: product.descriptionHtml,
+                  seoTitle: product.seo?.title || "",
+                  seoDescription: product.seo?.description || "",
+                  images: (product.images?.edges || []).map((e) => e.node),
+                  tags: product.tags,
+                },
+                brandVoice,
+                effectiveTypes,
+                {}
+              )
+            : await generateProductContent(
+                {
+                  title: product.title,
+                  productType: product.productType,
+                  vendor: product.vendor,
+                  description: product.description,
+                  descriptionHtml: product.descriptionHtml,
+                  imageUrl: product.featuredImage?.url || "",
+                  images: (product.images?.edges || []).map((e) => e.node),
+                  variants: product.variants.edges.map((e) => e.node),
+                  tags: product.tags,
+                },
+                brandVoice,
+                effectiveTypes,
+                { recentTitles, collectionVoice }
+              );
         } catch (genErr) {
           // Circuit breaker open — pause the entire job for 65s then retry same product
           if (genErr.message?.includes("temporarily unavailable")) {

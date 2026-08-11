@@ -46,6 +46,7 @@ export const loader = async ({ request }) => {
       failedProducts: j.failedProducts,
       autoPublish: j.autoPublish,
       contentTypes: j.contentTypes,
+      mode: j.mode,
       errorLog: j.errorLog ? JSON.parse(j.errorLog) : [],
       startedAt: j.startedAt?.toISOString() ?? null,
       completedAt: j.completedAt?.toISOString() ?? null,
@@ -102,6 +103,7 @@ export const action = async ({ request }) => {
       totalProducts: retryIds.length,
       productIds: JSON.stringify(retryIds),
       contentTypes: job.contentTypes,
+      mode: job.mode,
       autoPublish: job.autoPublish,
     },
   });
@@ -311,7 +313,7 @@ export default function JobsPage() {
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Generating: {contentTypesList}
+                          {job.mode === "enhance" ? "Enhancing" : "Generating"}: {contentTypesList}
                         </Text>
                         <InlineStack gap="300">
                           {elapsedTime && (
@@ -398,7 +400,7 @@ export default function JobsPage() {
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          {contentTypesList}
+                          {job.mode === "enhance" ? "Enhance · " : ""}{contentTypesList}
                           {elapsedTime ? ` · ${elapsedTime}` : ""}
                         </Text>
                       </BlockStack>

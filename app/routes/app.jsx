@@ -2,7 +2,7 @@ import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher } from "r
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { Text, InlineStack } from "@shopify/polaris";
+import { Text, InlineStack, FooterHelp, Link } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { useEffect, useRef, useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -177,6 +177,11 @@ export default function App() {
         <JobProgressTicker navigate={navigate} />
         <AppRenderBoundary>
           <Outlet />
+          {/* Support & bug reporting — visible on every page of the app */}
+          <FooterHelp>
+            Questions, bugs, or suggestions?{" "}
+            <Link url="mailto:hello@navaal.ai">Contact us at hello@navaal.ai</Link>
+          </FooterHelp>
         </AppRenderBoundary>
       </PolarisProvider>
     </AppProvider>

@@ -31,6 +31,7 @@ vi.mock("../../app/db.server.js", () => ({
 
 vi.mock("../../app/utils/ai.server.js", () => ({
   generateProductContent: vi.fn(),
+  enhanceExistingContent: vi.fn(),
 }));
 
 vi.mock("../../app/utils/plans.server.js", () => ({
@@ -190,5 +191,124 @@ describe("fetchShopifyProduct retry logic", () => {
 
     // Credit was NOT consumed (tryConsumeGeneration NOT called) because Shopify fetch failed
     expect(tryConsumeGeneration).not.toHaveBeenCalled();
+  });
+});
+
+describe("enhance mode (mode: 'enhance')", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  function mockCommonPrisma(prisma, job) {
+    prisma.generationJob.findUnique.mockResolvedValue(job);
+    prisma.generationJob.update.mockResolvedValue({});
+    prisma.session.findFirst.mockResolvedValue({ shop: job.shop, accessToken: "tok" });
+    prisma.brandVoice.findUnique.mockResolvedValue({ shop: job.shop, storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.generatedContent.findMany.mockResolvedValue([]);
+    prisma.collectionVoice.findMany.mockResolvedValue([]);
+    prisma.generatedContent.upsert.mockResolvedValue({});
+  }
+
+  it("uses enhanceExistingContent (not generateProductContent) and saves drafts", async () => {
+    const productData = { id: "gid://shopify/Product/10", title: "Kettle", productType: "Kitchen", vendor: "Acme", description: "Old text", descriptionHtml: "<p>Old text</p>", seo: { title: "Old SEO", description: "Old meta" }, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
+
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent, enhanceExistingContent } = await import("../../app/utils/ai.server.js");
+
+    mockCommonPrisma(prisma, {
+      id: "jobE1",
+      shop: "test.myshopify.com",
+      status: "queued",
+      productIds: JSON.stringify(["gid://shopify/Product/10"]),
+      contentTypes: "description,metaTitle,metaDescription",
+      mode: "enhance",
+      autoPublish: false,
+      totalProducts: 1,
+    });
+    enhanceExistingContent.mockResolvedValue({ description: "<p>Better text</p>", metaTitle: "Better", metaDescription: "Better meta" });
+
+    const processPromise = processBulkJob("jobE1");
+    await vi.runAllTimersAsync();
+    await processPromise;
+
+    expect(enhanceExistingContent).toHaveBeenCalledTimes(1);
+    expect(generateProductContent).not.toHaveBeenCalled();
+    // The existing description/SEO fields flow into the enhance call
+    const [productArg, , typesArg] = enhanceExistingContent.mock.calls[0];
+    expect(productArg.descriptionHtml).toBe("<p>Old text</p>");
+    expect(productArg.seoTitle).toBe("Old SEO");
+    expect(typesArg).toEqual(["description", "metaTitle", "metaDescription"]);
+    // All three enhanced types saved as drafts
+    expect(prisma.generatedContent.upsert).toHaveBeenCalledTimes(3);
+    const statuses = prisma.generatedContent.upsert.mock.calls.map(([args]) => args.create.status);
+    expect(statuses.every((s) => s === "draft")).toBe(true);
+  });
+
+  it("skips a product with no existing description WITHOUT consuming a credit", async () => {
+    const productData = { id: "gid://shopify/Product/11", title: "Blank", productType: "", vendor: "", description: "", descriptionHtml: "", seo: {}, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
+
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { enhanceExistingContent } = await import("../../app/utils/ai.server.js");
+    const { tryConsumeGeneration } = await import("../../app/utils/plans.server.js");
+
+    mockCommonPrisma(prisma, {
+      id: "jobE2",
+      shop: "test.myshopify.com",
+      status: "queued",
+      productIds: JSON.stringify(["gid://shopify/Product/11"]),
+      contentTypes: "description",
+      mode: "enhance",
+      autoPublish: false,
+      totalProducts: 1,
+    });
+
+    const processPromise = processBulkJob("jobE2");
+    await vi.runAllTimersAsync();
+    await processPromise;
+
+    // No AI call, no credit consumed, product recorded as failed with a no-charge note
+    expect(enhanceExistingContent).not.toHaveBeenCalled();
+    expect(tryConsumeGeneration).not.toHaveBeenCalled();
+    expect(prisma.generatedContent.upsert).not.toHaveBeenCalled();
+    const updateCalls = prisma.generationJob.update.mock.calls;
+    const failUpdate = updateCalls.find(([args]) => args.data?.failedProducts);
+    expect(failUpdate).toBeTruthy();
+    const errorLogUpdate = updateCalls.find(([args]) => typeof args.data?.errorLog === "string");
+    expect(errorLogUpdate[0].data.errorLog).toContain("[NO CHARGE] No existing description to enhance");
+  });
+
+  it("still enhances meta when description is missing but meta types are selected", async () => {
+    const productData = { id: "gid://shopify/Product/12", title: "NoDesc", productType: "", vendor: "", description: "", descriptionHtml: "", seo: { title: "T", description: "D" }, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
+
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { enhanceExistingContent } = await import("../../app/utils/ai.server.js");
+
+    mockCommonPrisma(prisma, {
+      id: "jobE3",
+      shop: "test.myshopify.com",
+      status: "queued",
+      productIds: JSON.stringify(["gid://shopify/Product/12"]),
+      contentTypes: "description,metaTitle,metaDescription",
+      mode: "enhance",
+      autoPublish: false,
+      totalProducts: 1,
+    });
+    enhanceExistingContent.mockResolvedValue({ metaTitle: "Better T", metaDescription: "Better D" });
+
+    const processPromise = processBulkJob("jobE3");
+    await vi.runAllTimersAsync();
+    await processPromise;
+
+    // description dropped from the type list; meta types still enhanced
+    const [, , typesArg] = enhanceExistingContent.mock.calls[0];
+    expect(typesArg).toEqual(["metaTitle", "metaDescription"]);
+    expect(prisma.generatedContent.upsert).toHaveBeenCalledTimes(2);
   });
 });

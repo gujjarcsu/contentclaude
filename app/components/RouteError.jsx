@@ -37,6 +37,10 @@ export function RouteError() {
     <Page>
       <Banner tone={is404 ? "warning" : "critical"} title={title} action={action}>
         <Text as="p" variant="bodyMd">{message}</Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Still stuck? Email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> — include
+          what you were doing when this happened and we&apos;ll sort it out.
+        </Text>
       </Banner>
     </Page>
   );
@@ -74,6 +78,10 @@ export class AppRenderBoundary extends Component {
         >
           <Text as="p" variant="bodyMd">
             {this.state.error?.message ?? "An unexpected rendering error occurred."}
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            If this keeps happening, email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> and
+            we&apos;ll fix it.
           </Text>
         </Banner>
       </Page>

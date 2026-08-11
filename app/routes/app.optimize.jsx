@@ -68,23 +68,36 @@ export const action = async ({ request }) => {
     });
   }
 
-  const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-    (t) => formData.get(t) === "true"
-  );
+  // "generate" (default) fills products missing AI content; "enhance" improves
+  // the live content of products that already have a description. FAQ is a
+  // generate-only type — enhance mode preserves existing content and the
+  // enhance prompt doesn't support FAQ.
+  const mode = formData.get("mode") === "enhance" ? "enhance" : "generate";
+  const allowedTypes = mode === "enhance"
+    ? ["description", "metaTitle", "metaDescription"]
+    : ["description", "metaTitle", "metaDescription", "faq"];
+  const contentTypes = allowedTypes.filter((t) => formData.get(t) === "true");
   if (contentTypes.length === 0) return Response.json({ error: "Select at least one content type." });
   const autoPublish = formData.get("autoPublish") === "true";
 
   // Use $queryRaw for O(1) ID lookup — findMany would load all rows into memory
   // which is prohibitive at 100k+ products per merchant.
-  const generatedRows = await prisma.$queryRaw`
-    SELECT DISTINCT "productId" FROM "GeneratedContent"
-    WHERE shop = ${shop} AND "contentType" = 'description'
-  `;
-  const existingIds = new Set(generatedRows.map((r) => r.productId));
+  // Enhance mode doesn't exclude products with prior AI content (its whole point
+  // is re-optimising what's already live), so the lookup is generate-only.
+  let existingIds = new Set();
+  if (mode === "generate") {
+    const generatedRows = await prisma.$queryRaw`
+      SELECT DISTINCT "productId" FROM "GeneratedContent"
+      WHERE shop = ${shop} AND "contentType" = 'description'
+    `;
+    existingIds = new Set(generatedRows.map((r) => r.productId));
+  }
 
-  // Paginate all Shopify product IDs and filter to those missing content.
+  // Paginate all Shopify product IDs and filter to the mode's target set:
+  // generate → products missing AI content; enhance → products that already
+  // have a live description to improve.
   // Hard-limit to 80 pages (80 × 250 = 20,000 products max) to prevent runaway loops.
-  const missingIds = [];
+  const targetIds = [];
   let cursor = null;
   let hasNextPage = true;
   let pageCount = 0;
@@ -98,41 +111,50 @@ export const action = async ({ request }) => {
         `query($cursor: String) {
           products(first: 250, after: $cursor) {
             pageInfo { hasNextPage endCursor }
-            edges { node { id } }
+            edges { node { id description(truncateAt: 20) } }
           }
         }`,
         { variables: { cursor } }
       );
     } catch {
-      if (missingIds.length > 0) break; // partial list — proceed with what we have
+      if (targetIds.length > 0) break; // partial list — proceed with what we have
       return Response.json({ error: "Could not fetch your product list from Shopify. Please try again." }, { status: 503 });
     }
 
     const { data } = await resp.json();
     if (!data?.products) {
-      if (missingIds.length > 0) break;
+      if (targetIds.length > 0) break;
       return Response.json({ error: "Shopify returned an unexpected response. Please try again." }, { status: 503 });
     }
 
     const { edges, pageInfo } = data.products;
     for (const { node } of edges) {
-      if (!existingIds.has(node.id)) missingIds.push(node.id);
+      if (mode === "enhance") {
+        if (node.description && node.description.trim()) targetIds.push(node.id);
+      } else if (!existingIds.has(node.id)) {
+        targetIds.push(node.id);
+      }
     }
     hasNextPage = pageInfo.hasNextPage;
     cursor = pageInfo.endCursor;
   }
 
-  if (missingIds.length === 0) {
-    return Response.json({ error: "All products already have AI content — nothing to optimise." });
+  if (targetIds.length === 0) {
+    return Response.json({
+      error: mode === "enhance"
+        ? "No products with an existing description were found — use the optimise flow above to generate fresh content first."
+        : "All products already have AI content — nothing to optimise.",
+    });
   }
 
   const job = await prisma.generationJob.create({
     data: {
       shop,
       status: "queued",
-      totalProducts: missingIds.length,
-      productIds: JSON.stringify(missingIds),
+      totalProducts: targetIds.length,
+      productIds: JSON.stringify(targetIds),
       contentTypes: contentTypes.join(","),
+      mode,
       autoPublish,
     },
   });
@@ -162,6 +184,12 @@ export default function OptimizePage() {
   const [genFaq, setGenFaq] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Enhance panel (improve existing descriptions) — mirrors the generate panel
+  const [enhDesc, setEnhDesc] = useState(true);
+  const [enhMeta, setEnhMeta] = useState(true);
+  const [enhAutoPublish, setEnhAutoPublish] = useState(false);
+  // Which panel the auto-publish confirm modal belongs to
+  const [confirmMode, setConfirmMode] = useState("generate");
 
   const doSubmit = useCallback(() => {
     const fd = new FormData();
@@ -173,13 +201,33 @@ export default function OptimizePage() {
     submit(fd, { method: "POST" });
   }, [genDesc, genMeta, genFaq, autoPublish, submit]);
 
+  const doSubmitEnhance = useCallback(() => {
+    const fd = new FormData();
+    fd.append("mode", "enhance");
+    fd.append("description", enhDesc.toString());
+    fd.append("metaTitle", enhMeta.toString());
+    fd.append("metaDescription", enhMeta.toString());
+    fd.append("autoPublish", enhAutoPublish.toString());
+    submit(fd, { method: "POST" });
+  }, [enhDesc, enhMeta, enhAutoPublish, submit]);
+
   const handleOptimize = useCallback(() => {
     if (autoPublish) {
+      setConfirmMode("generate");
       setConfirmOpen(true);
     } else {
       doSubmit();
     }
   }, [autoPublish, doSubmit]);
+
+  const handleEnhance = useCallback(() => {
+    if (enhAutoPublish) {
+      setConfirmMode("enhance");
+      setConfirmOpen(true);
+    } else {
+      doSubmitEnhance();
+    }
+  }, [enhAutoPublish, doSubmitEnhance]);
 
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
@@ -198,7 +246,7 @@ export default function OptimizePage() {
   return (
     <Page
       title="One-Click Store Optimisation"
-      subtitle="Generate AI content for every product missing a description"
+      subtitle="Generate AI content for products missing a description — or improve the descriptions you already have"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
@@ -308,6 +356,47 @@ export default function OptimizePage() {
           </Card>
         )}
 
+        {/* Enhance existing panel — improves live descriptions instead of
+            generating from scratch. Hidden when there's nothing it could run on
+            or the quota banner above already explains why nothing can run. */}
+        {totalProducts > 0 && remaining > 0 && (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingLg">Improve Existing Descriptions</Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Already have descriptions? This enhances them in place — keeping your structure,
+                facts, and voice while improving clarity, formatting, SEO keywords, and readiness
+                for AI search (ChatGPT, Perplexity &amp; friends). Runs on every product that has a
+                description (up to {totalProducts}), including ones optimised before. Results are
+                saved as drafts for your review unless auto-publish is on.
+              </Text>
+
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" fontWeight="semibold">Content to enhance:</Text>
+                <InlineStack gap="500" wrap>
+                  <Checkbox label="Description" checked={enhDesc} onChange={setEnhDesc} />
+                  <Checkbox label="Meta Title & Description" checked={enhMeta} onChange={setEnhMeta} />
+                  <Checkbox
+                    label="Auto-publish (skip review)"
+                    checked={enhAutoPublish}
+                    onChange={setEnhAutoPublish}
+                    helpText="Publishes directly to Shopify"
+                  />
+                </InlineStack>
+              </BlockStack>
+
+              <Button
+                size="large"
+                onClick={handleEnhance}
+                loading={isSubmitting}
+                disabled={isSubmitting || (!enhDesc && !enhMeta)}
+              >
+                {isSubmitting ? "Starting job..." : "Enhance Existing Descriptions →"}
+              </Button>
+            </BlockStack>
+          </Card>
+        )}
+
         {draftCount > 0 && (
           <Banner tone="info" title={`${draftCount} draft${draftCount !== 1 ? "s" : ""} waiting for review`}>
             <Box paddingBlockStart="200">
@@ -324,7 +413,11 @@ export default function OptimizePage() {
         primaryAction={{
           content: "Yes, auto-publish",
           destructive: true,
-          onAction: () => { setConfirmOpen(false); doSubmit(); },
+          onAction: () => {
+            setConfirmOpen(false);
+            if (confirmMode === "enhance") doSubmitEnhance();
+            else doSubmit();
+          },
         }}
         secondaryActions={[{ content: "Cancel", onAction: () => setConfirmOpen(false) }]}
       >
@@ -332,14 +425,25 @@ export default function OptimizePage() {
           <TextContainer>
             <Banner tone="warning">
               <p>
-                <strong>This will replace existing product descriptions entirely.</strong>{" "}
-                Original content is saved automatically and can be restored from each product&apos;s History tab.
-                If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+                {confirmMode === "enhance" ? (
+                  <>
+                    <strong>This will replace existing product descriptions with the enhanced versions.</strong>{" "}
+                    The enhancement preserves your structure and facts, but the live HTML is still overwritten.
+                    Original content is saved automatically and can be restored from each product&apos;s History tab.
+                  </>
+                ) : (
+                  <>
+                    <strong>This will replace existing product descriptions entirely.</strong>{" "}
+                    Original content is saved automatically and can be restored from each product&apos;s History tab.
+                    If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+                  </>
+                )}
               </p>
             </Banner>
             <Text as="p">
               Auto-publish will overwrite the live product descriptions on your Shopify storefront
-              for all <strong>{canOptimize}</strong> products — without a review step.
+              for {confirmMode === "enhance" ? "up to" : "all"}{" "}
+              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products — without a review step.
             </Text>
             <Text as="p" tone="subdued">
               This cannot be undone from Navaal. You can revert individual products via
