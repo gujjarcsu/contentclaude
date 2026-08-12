@@ -1,4 +1,5 @@
-import { authenticate, BILLING_TEST } from "../shopify.server";
+import { authenticate } from "../shopify.server";
+import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server";
 
@@ -14,15 +15,16 @@ export const loader = async ({ request }) => {
   // would yank the embedded app to /auth/login. Swallow everything and return a
   // no-op; the Plans page's own loader handles real re-auth for the navigation.
   try {
-    const { billing, session } = await authenticate.admin(request);
+    const { billing, session, admin } = await authenticate.admin(request);
     const shop = session.shop;
+    const isTest = await resolveBillingTest(admin, shop);
     const before = await getOrCreatePlan(shop);
     // ALL six keys (monthly + annual). Passing only monthly keys made every
     // annual subscriber look unsubscribed, and this loader then wiped their
     // plan to Free on every Plans page load — while they were still billed.
     const { appSubscriptions } = await billing.check({
       plans: ALL_BILLING_PLAN_KEYS,
-      isTest: BILLING_TEST,
+      isTest,
     });
     await syncBillingToPlan(shop, appSubscriptions);
     const fresh = await getOrCreatePlan(shop);

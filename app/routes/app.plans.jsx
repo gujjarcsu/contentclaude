@@ -6,7 +6,8 @@ import {
   Box, ProgressBar, Badge, Divider, DataTable,
 } from "@shopify/polaris";
 import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
-import { authenticate, BILLING_TEST } from "../shopify.server";
+import { authenticate } from "../shopify.server";
+import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
 
@@ -42,7 +43,10 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { billing, session, admin } = await authenticate.admin(request);
+  // Dev stores (incl. the App Store review team's) can only approve TEST
+  // charges; real merchants get real charges. Resolved per shop.
+  const isTest = await resolveBillingTest(admin, session.shop);
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
@@ -58,7 +62,7 @@ export const action = async ({ request }) => {
     try {
       await billing.request({
         plan: planKey,
-        isTest: BILLING_TEST,
+        isTest,
         returnUrl: `${process.env.SHOPIFY_APP_URL}/app/plans`,
       });
     } catch (err) {
@@ -88,7 +92,7 @@ export const action = async ({ request }) => {
       // subscription name, so a shorter list can't find annual subscribers.
       const { appSubscriptions } = await billing.check({
         plans: ALL_BILLING_PLAN_KEYS,
-        isTest: BILLING_TEST,
+        isTest,
       });
       const activeSub = appSubscriptions.find((s) => s.status === "ACTIVE");
       if (!activeSub) {
@@ -100,7 +104,7 @@ export const action = async ({ request }) => {
           { status: 409 }
         );
       }
-      await billing.cancel({ subscriptionId: activeSub.id, isTest: BILLING_TEST, prorate: true });
+      await billing.cancel({ subscriptionId: activeSub.id, isTest, prorate: true });
     } catch (err) {
       if (err instanceof Response) throw err;
       return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });

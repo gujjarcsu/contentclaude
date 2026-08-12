@@ -54,7 +54,7 @@ export default defineConfig({
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1600, height: 1000 } },
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.js/,
+      testIgnore: [/auth\.setup\.js/, /responsive\.spec\.js/],
     },
     {
       name: "tablet-768",
