@@ -21,7 +21,7 @@ global.fetch = mockFetch;
 
 vi.mock("../../app/db.server.js", () => ({
   default: {
-    generationJob: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    generationJob: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })) },
     session: { findFirst: vi.fn() },
     brandVoice: { findUnique: vi.fn() },
     generatedContent: { findMany: vi.fn(), upsert: vi.fn() },
@@ -100,7 +100,7 @@ describe("fetchShopifyProduct retry logic", () => {
     const prisma = (await import("../../app/db.server.js")).default;
     const { generateProductContent } = await import("../../app/utils/ai.server.js");
 
-    prisma.generationJob.findUnique.mockResolvedValue({
+    prisma.generationJob.findUnique.mockResolvedValueOnce({
       id: "job1",
       shop: "test.myshopify.com",
       status: "queued",
@@ -109,6 +109,8 @@ describe("fetchShopifyProduct retry logic", () => {
       autoPublish: false,
       totalProducts: 1,
     });
+    // Per-iteration cancellation checks read status — report still-processing
+    prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
     prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
@@ -131,7 +133,7 @@ describe("fetchShopifyProduct retry logic", () => {
     const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
     const prisma = (await import("../../app/db.server.js")).default;
 
-    prisma.generationJob.findUnique.mockResolvedValue({
+    prisma.generationJob.findUnique.mockResolvedValueOnce({
       id: "job2",
       shop: "test.myshopify.com",
       status: "queued",
@@ -140,6 +142,8 @@ describe("fetchShopifyProduct retry logic", () => {
       autoPublish: false,
       totalProducts: 1,
     });
+    // Per-iteration cancellation checks read status — report still-processing
+    prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
     prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
@@ -169,7 +173,7 @@ describe("fetchShopifyProduct retry logic", () => {
 
     mockFetch.mockResolvedValue(make429Response("1"));
 
-    prisma.generationJob.findUnique.mockResolvedValue({
+    prisma.generationJob.findUnique.mockResolvedValueOnce({
       id: "job3",
       shop: "test3.myshopify.com",
       status: "queued",
@@ -178,6 +182,8 @@ describe("fetchShopifyProduct retry logic", () => {
       autoPublish: false,
       totalProducts: 1,
     });
+    // Per-iteration cancellation checks read status — report still-processing
+    prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test3.myshopify.com", accessToken: "tok" });
     prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test3.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
@@ -194,6 +200,63 @@ describe("fetchShopifyProduct retry logic", () => {
   });
 });
 
+describe("P1-1: job cancellation is honoured mid-run", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  it("aborts the loop, generates nothing, and never overwrites the cancelled status", async () => {
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent } = await import("../../app/utils/ai.server.js");
+
+    // Initial read: a queued 3-product job. Every subsequent status check:
+    // the merchant has cancelled (status "failed").
+    prisma.generationJob.findUnique
+      .mockResolvedValueOnce({
+        id: "jobC1",
+        shop: "test.myshopify.com",
+        status: "queued",
+        productIds: JSON.stringify([
+          "gid://shopify/Product/1",
+          "gid://shopify/Product/2",
+          "gid://shopify/Product/3",
+        ]),
+        contentTypes: "description",
+        autoPublish: false,
+        totalProducts: 3,
+      })
+      .mockResolvedValue({ status: "failed" });
+    prisma.generationJob.update.mockResolvedValue({});
+    prisma.generationJob.updateMany.mockResolvedValue({ count: 0 });
+    prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
+    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.generatedContent.findMany.mockResolvedValue([]);
+    prisma.collectionVoice.findMany.mockResolvedValue([]);
+
+    const processPromise = processBulkJob("jobC1");
+    await vi.runAllTimersAsync();
+    await processPromise;
+
+    // No product was fetched or generated after cancellation
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(generateProductContent).not.toHaveBeenCalled();
+    // The cancelled status was never overwritten to "complete" via update()
+    const completeOverwrite = prisma.generationJob.update.mock.calls.find(
+      ([args]) => args.data?.status === "complete"
+    );
+    expect(completeOverwrite).toBeUndefined();
+    // And the guarded updateMany only targets still-processing rows
+    const guardedCalls = prisma.generationJob.updateMany.mock.calls.filter(
+      ([args]) => args.data?.status === "complete"
+    );
+    for (const [args] of guardedCalls) {
+      expect(args.where.status).toBe("processing");
+    }
+  });
+});
+
 describe("enhance mode (mode: 'enhance')", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -201,7 +264,9 @@ describe("enhance mode (mode: 'enhance')", () => {
   });
 
   function mockCommonPrisma(prisma, job) {
-    prisma.generationJob.findUnique.mockResolvedValue(job);
+    // First read returns the job; per-iteration cancellation checks then see
+    // a still-processing status.
+    prisma.generationJob.findUnique.mockResolvedValueOnce(job).mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: job.shop, accessToken: "tok" });
     prisma.brandVoice.findUnique.mockResolvedValue({ shop: job.shop, storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });

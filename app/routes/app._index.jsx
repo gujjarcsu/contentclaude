@@ -210,6 +210,16 @@ export default function Dashboard() {
   } = useLoaderData();
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
+  // Banner dismissal must actually stick — keyed per job completion so a NEW
+  // completed job shows a fresh banner but a dismissed one stays dismissed.
+  const [jobBannerDismissed, setJobBannerDismissed] = useState(() => {
+    if (typeof window === "undefined" || !recentlyCompletedJob) return false;
+    try {
+      return sessionStorage.getItem(`navaal:jobBanner:${recentlyCompletedJob.completedAt}`) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const navigation = useNavigation();
   if (navigation.state === "loading") {
@@ -243,12 +253,17 @@ export default function Dashboard() {
       <BlockStack gap="600">
 
         {/* ── Job completion banner ──────────────────────────────────────── */}
-        {recentlyCompletedJob && activeJobCount === 0 && (
+        {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
           <Banner
             tone="success"
             title={`Bulk job complete — ${recentlyCompletedJob.completedProducts} product${recentlyCompletedJob.completedProducts !== 1 ? "s" : ""} generated`}
             action={{ content: "Review & Publish →", onAction: () => navigate("/app/review") }}
-            onDismiss={() => {}}
+            onDismiss={() => {
+              setJobBannerDismissed(true);
+              try {
+                sessionStorage.setItem(`navaal:jobBanner:${recentlyCompletedJob.completedAt}`, "1");
+              } catch { /* storage unavailable — dismiss still works for this view */ }
+            }}
           >
             <p>Your AI content is ready to review. Check drafts, make edits, and publish with one click.</p>
           </Banner>
@@ -320,13 +335,13 @@ export default function Dashboard() {
                 <OnboardingStep
                   number="2" title="Generate your first product description"
                   description="Pick any product and get an AI description, meta title, and FAQ in under 30 seconds."
-                  done={false} actionLabel="Choose a product"
+                  done={generatedCount + draftCount > 0} actionLabel="Choose a product"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
                   number="3" title="Review and publish"
                   description="Read the draft, make edits, and publish with one click to your Shopify store."
-                  done={false} actionLabel="View products"
+                  done={generatedCount > 0} actionLabel="View products"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
@@ -429,7 +444,13 @@ export default function Dashboard() {
 
               <BlockStack gap="200">
                 {recentActivity.map((item) => {
-                  const numId = item.productId.replace("gid://shopify/Product/", "");
+                  // Activity rows can be products OR collections (they share
+                  // the GeneratedContent table). A Collection GID sent to the
+                  // product route 404s — route by GID type instead.
+                  const isProduct = item.productId.startsWith("gid://shopify/Product/");
+                  const target = isProduct
+                    ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
+                    : "/app/collections";
                   const typeLabel = item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
                   return (
                     <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
@@ -437,10 +458,10 @@ export default function Dashboard() {
                         <BlockStack gap="050">
                           <Text as="p" variant="bodyMd" fontWeight="semibold">{item.productTitle}</Text>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {typeLabel} · {timeAgo(item.updatedAt)}
+                            {isProduct ? typeLabel : `Collection · ${typeLabel}`} · {timeAgo(item.updatedAt)}
                           </Text>
                         </BlockStack>
-                        <Button size="slim" onClick={() => navigate(`/app/products/${numId}`)}>
+                        <Button size="slim" onClick={() => navigate(target)}>
                           View
                         </Button>
                       </InlineStack>

@@ -137,6 +137,39 @@ export const action = async ({ request }) => {
       return Response.json({ error: "Title and content are required to publish." }, { status: 400 });
     }
 
+    // Publishing the same post twice must UPDATE the existing Shopify
+    // article, not create a duplicate. The saved post carries the article id
+    // from the first publish.
+    const existingPost = savedPostId
+      ? await prisma.blogPost.findFirst({ where: { id: savedPostId, shop }, select: { shopifyArticleId: true } })
+      : null;
+    if (existingPost?.shopifyArticleId) {
+      const { readMutationResult } = await import("../utils/adminGraphql.server.js");
+      const updateResult = await admin.graphql(
+        `mutation updateArticle($id: ID!, $article: ArticleUpdateInput!) {
+          articleUpdate(id: $id, article: $article) {
+            article { id handle }
+            userErrors { field message }
+          }
+        }`,
+        { variables: { id: existingPost.shopifyArticleId, article: { title, body: content } } }
+      );
+      const updated = await readMutationResult(updateResult, "articleUpdate");
+      if (!updated.ok) {
+        return Response.json({ error: `Could not update the published article: ${updated.errorMessages.join("; ")}` }, { status: 422 });
+      }
+      await prisma.blogPost.updateMany({
+        where: { id: savedPostId, shop },
+        data: { status: "published", title, content },
+      });
+      return Response.json({
+        success: true,
+        published: true,
+        updatedExisting: true,
+        handle: updated.payload?.article?.handle,
+      });
+    }
+
     // ArticleCreateInput requires a non-null author — use the merchant's brand/
     // store name when set, else a name derived from the shop. (Missing author was
     // causing a hard GraphQL error and a 500 on publish.)
@@ -150,6 +183,8 @@ export const action = async ({ request }) => {
     const { data: blogsData } = await blogsResponse.json();
     let blogId = blogsData?.blogs?.edges?.[0]?.node?.id;
 
+    const { readMutationResult: readResult } = await import("../utils/adminGraphql.server.js");
+
     if (!blogId) {
       const createBlogResult = await admin.graphql(
         `mutation createBlog($blog: BlogCreateInput!) {
@@ -157,12 +192,13 @@ export const action = async ({ request }) => {
         }`,
         { variables: { blog: { title: "News" } } }
       );
-      const { data: createData } = await createBlogResult.json();
-      blogId = createData?.blogCreate?.blog?.id;
-    }
-
-    if (!blogId) {
-      return Response.json({ error: "Could not find or create a blog to publish to." }, { status: 500 });
+      const created = await readResult(createBlogResult, "blogCreate");
+      blogId = created.payload?.blog?.id;
+      if (!blogId) {
+        // Surface the specific reason instead of a generic 500.
+        const reason = created.errorMessages.length > 0 ? ` (${created.errorMessages.join("; ")})` : "";
+        return Response.json({ error: `Could not find or create a blog to publish to${reason}.` }, { status: 500 });
+      }
     }
 
     const articleResult = await admin.graphql(
@@ -174,12 +210,12 @@ export const action = async ({ request }) => {
       }`,
       { variables: { article: { blogId, title, body: content, isPublished: true, author: { name: authorName } } } }
     );
-    const { data: articleData } = await articleResult.json();
-    const errors = articleData?.articleCreate?.userErrors ?? [];
-    if (errors.length > 0) {
-      return Response.json({ error: errors.map((e) => e.message).join("; ") }, { status: 422 });
+    const createdArticle = await readResult(articleResult, "articleCreate");
+    if (!createdArticle.ok) {
+      return Response.json({ error: createdArticle.errorMessages.join("; ") }, { status: 422 });
     }
 
+    const articleData = { articleCreate: createdArticle.payload };
     const shopifyArticleId = articleData?.articleCreate?.article?.id ?? null;
 
     // Update saved BlogPost record to "published" — scope to shop so one tenant
@@ -264,13 +300,18 @@ export default function BlogPage() {
   const [editedTitle, setEditedTitle] = useState(generated?.title || resumePost?.title || "");
   const [editedContent, setEditedContent] = useState(generated?.content || resumePost?.content || "");
 
-
-  if (generated?.title && editedTitle !== generated.title && !isGenerating) {
-    setEditedTitle(generated.title);
-  }
-  if (generated?.content && editedContent !== generated.content && !isGenerating) {
-    setEditedContent(generated.content);
-  }
+  // Adopt a NEW generation's title/content exactly once (keyed on the
+  // generated object's identity). The previous render-phase resets fired on
+  // every keystroke — the moment the merchant's edit differed from the AI
+  // output it was thrown away, making both fields effectively read-only.
+  const lastAdoptedGeneration = useRef(null);
+  useEffect(() => {
+    if (generated && generated !== lastAdoptedGeneration.current) {
+      lastAdoptedGeneration.current = generated;
+      if (generated.title) setEditedTitle(generated.title);
+      if (generated.content) setEditedContent(generated.content);
+    }
+  }, [generated]);
 
   const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
   const isOutOfUsage = usageRemaining === 0;

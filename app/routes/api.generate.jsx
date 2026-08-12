@@ -152,7 +152,12 @@ export const action = async ({ request }) => {
   });
 
   logger.info({ shop, jobId: job.id, authMode: AUTH_MODE }, "External generate job queued");
-  await enqueueGenerationJob(job.id);
+  try {
+    await enqueueGenerationJob(job.id);
+  } catch (err) {
+    logger.warn({ shop, jobId: job.id, err: err.message }, "External generate job rejected at enqueue");
+    return Response.json({ error: err.message?.startsWith("You already have jobs") ? err.message : "Could not enqueue the job." }, { status: 429 });
+  }
   return Response.json({ success: true, jobId: job.id }, { status: 202 });
 };
 

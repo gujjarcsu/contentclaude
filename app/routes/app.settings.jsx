@@ -229,7 +229,10 @@ export default function SettingsPage() {
           <input type="hidden" name="autopilotEnabled" value={autopilotEnabled.toString()} />
           <input type="hidden" name="autopilotAutoPublish" value={autopilotAutoPublish.toString()} />
           <input type="hidden" name="ap_description" value={apDesc.toString()} />
+          {/* The checkbox says "Meta Title & Description" — it must submit BOTH
+              fields, or Autopilot can never generate a meta description. */}
           <input type="hidden" name="ap_metaTitle" value={apMeta.toString()} />
+          <input type="hidden" name="ap_metaDescription" value={apMeta.toString()} />
           <input type="hidden" name="ap_faq" value={apFaq.toString()} />
 
           <Layout>
@@ -574,7 +577,10 @@ export default function SettingsPage() {
             <Form method="post">
               <input type="hidden" name="actionType" value="saveTemplate" />
               <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
+              {/* Same defect as Autopilot's: the "Meta Title & Description"
+                  checkbox must submit both fields. */}
               <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
+              <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
               <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
               <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
               <BlockStack gap="300">

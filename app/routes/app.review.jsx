@@ -23,6 +23,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildFaqSchemaMetafield } from "../utils/seo.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
+import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest";
 import { EmbedSetupCard } from "../components/EmbedSetupCard";
@@ -748,10 +749,12 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     onEdit(value);
   }, [onEdit]);
 
+  // decodeHtmlEntities: stored content (and stripped HTML) can carry entities
+  // ("Premium Skateboards &amp; Gear") which React renders literally.
   const preview =
     type === "description"
-      ? content.replace(/<[^>]+>/g, "").substring(0, 120) + "..."
-      : content.substring(0, 120) + (content.length > 120 ? "..." : "");
+      ? decodeHtmlEntities(content.replace(/<[^>]+>/g, "")).substring(0, 120) + "..."
+      : decodeHtmlEntities(content).substring(0, 120) + (content.length > 120 ? "..." : "");
 
   const charLimit = type === "metaTitle" ? 60 : type === "metaDescription" ? 155 : null;
   const charCount = editedValue.length;

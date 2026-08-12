@@ -83,10 +83,27 @@ export const action = async ({ request }) => {
     const collectionDescription = formData.get("collectionDescription") || "";
     const productsCount = formData.get("productsCount") || "";
 
-    const [{ generateCollectionDescription }, { getCache }] = await Promise.all([
+    const [{ generateCollectionDescription }, { getCache }, { tryConsumeGeneration }, { checkRateLimit }] = await Promise.all([
       import("../utils/ai.server.js"),
       import("../utils/cache.server.js"),
+      import("../utils/plans.server.js"),
+      import("../utils/rateLimit.server.js"),
     ]);
+
+    // Collection generation is a normal AI generation: same rate limit and
+    // monthly quota as products. It previously had NEITHER — unlimited free
+    // AI calls on any plan.
+    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+    if (!rl.allowed) {
+      return Response.json({ error: "You're generating too fast. Please wait a moment before trying again." });
+    }
+    const gate = await tryConsumeGeneration(shop, "description", collectionId);
+    if (!gate.allowed) {
+      return Response.json({
+        error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+        limitReached: true,
+      });
+    }
 
     const brandVoice = await getCache(
       `bv:${shop}`,
@@ -232,14 +249,30 @@ export default function CollectionsPage() {
       if (typeof window !== "undefined" && window.shopify?.toast) {
         if (fetcherData.published) {
           window.shopify.toast.show("Collection content published!", { duration: 4000 });
-        } else if (fetcherData.saved) {
-          window.shopify.toast.show("Collection voice saved!", { duration: 3000 });
         } else if (fetcherData.error) {
           window.shopify.toast.show(fetcherData.error, { duration: 5000, isError: true });
         }
       }
     }
   }, [fetcherData]);
+
+  // Voice saves go through voiceFetcher (not the main fetcher) and the action
+  // returns `savedVoice` — the old toast watched the wrong fetcher for a
+  // field (`saved`) that no action ever returned, so it never fired.
+  const prevVoiceData = useRef(null);
+  useEffect(() => {
+    const data = voiceFetcher.data;
+    if (data && data !== prevVoiceData.current) {
+      prevVoiceData.current = data;
+      if (typeof window !== "undefined" && window.shopify?.toast) {
+        if (data.savedVoice) {
+          window.shopify.toast.show("Collection voice saved!", { duration: 3000 });
+        } else if (data.error) {
+          window.shopify.toast.show(data.error, { duration: 5000, isError: true });
+        }
+      }
+    }
+  }, [voiceFetcher.data]);
 
   const handleGenerate = useCallback(
     (collection) => {

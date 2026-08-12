@@ -1463,14 +1463,15 @@ export default function ProductGeneratePage() {
                         {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
                       </Button>
                     ) : (
+                      // NOT disabled — a disabled Polaris button never fires
+                      // onClick, which made this upsell a dead control. It
+                      // looks locked but genuinely navigates to Plans.
                       <Button
                         size="large"
                         fullWidth
-                        disabled
-                        tone="critical"
                         onClick={() => navigate("/app/plans")}
                       >
-                        🔒 A/B Variants — Growth Plan
+                        🔒 A/B Variants — upgrade to Growth
                       </Button>
                     )}
 

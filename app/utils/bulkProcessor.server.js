@@ -106,6 +106,23 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     for (let i = 0; i < productIds.length; i++) {
       const productId = productIds[i];
+
+      // Honour cancellation: "Cancel job" flips the row out of "processing".
+      // Without this re-check the loop kept generating (and consuming credits)
+      // to the end and then overwrote the cancelled status with "complete".
+      const currentJob = await prisma.generationJob.findUnique({
+        where: { id: jobId },
+        select: { status: true },
+      });
+      if (currentJob?.status !== "processing") {
+        await flushCounters(true);
+        jobLogger.info(
+          { shop: job.shop, status: currentJob?.status, processed: completedCount + failedCount },
+          "Bulk job no longer processing (cancelled or superseded) — aborting loop"
+        );
+        return; // never touch the status the merchant set
+      }
+
       try {
         await keepTokenFresh(); // refresh the offline token before it lapses mid-run
         const product = await fetchShopifyProduct(session, productId);
@@ -292,10 +309,16 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     await flushCounters(true);
 
-    await prisma.generationJob.update({
-      where: { id: jobId },
+    // Guarded write: only a job still in "processing" may become "complete".
+    // A cancellation that raced the final product must never be overwritten.
+    const completed = await prisma.generationJob.updateMany({
+      where: { id: jobId, status: "processing" },
       data: { status: "complete", completedAt: new Date() },
     });
+    if (completed.count === 0) {
+      jobLogger.info({ shop: job.shop }, "Bulk job finished but status changed mid-run (cancelled) — leaving status as-is");
+      return;
+    }
     jobLogger.info(
       { shop: job.shop, completedProducts: completedCount, failedProducts: failedCount },
       "Bulk job complete"

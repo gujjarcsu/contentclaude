@@ -108,7 +108,13 @@ export const action = async ({ request }) => {
     },
   });
 
-  await enqueueGenerationJob(newJob.id);
+  try {
+    await enqueueGenerationJob(newJob.id);
+  } catch (err) {
+    return Response.json({
+      error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the retry job. Please try again.",
+    }, { status: 409 });
+  }
   return Response.json({ success: true, newJobId: newJob.id });
 };
 

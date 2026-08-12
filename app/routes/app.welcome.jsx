@@ -304,7 +304,13 @@ export const action = async ({ request }) => {
     const job = await prisma.generationJob.create({
       data: { shop, status: "queued", totalProducts: ids.length, productIds: JSON.stringify(ids), contentTypes: "description,metaTitle,metaDescription", autoPublish: false },
     });
-    await enqueueGenerationJob(job.id);
+    try {
+      await enqueueGenerationJob(job.id);
+    } catch (err) {
+      return Response.json({
+        error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the job. Please try again.",
+      });
+    }
     return redirect(`/app/jobs?${authParamString(request)}`);
   }
 
