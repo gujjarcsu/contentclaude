@@ -12,12 +12,18 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [brandVoice, templates] = await Promise.all([
+  const { getOrCreatePlan } = await import("../utils/plans.server.js");
+  const { getEntitlements } = await import("../utils/billing-plans.js");
+
+  const [brandVoice, templates, plan] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.contentTemplate.findMany({ where: { shop }, orderBy: { createdAt: "asc" } }),
+    getOrCreatePlan(shop),
   ]);
 
   return Response.json({
+    planName: plan.planName,
+    entitlements: getEntitlements(plan.planName),
     brandVoice: brandVoice || {
       storeName: "", brandTone: "professional", targetAudience: "",
       keyDifferentiators: "", avoidPhrases: "", sampleContent: "",
@@ -36,6 +42,19 @@ export const action = async ({ request }) => {
   const actionType = formData.get("actionType") || "saveBrandVoice";
 
   const { invalidateCache } = await import("../utils/cache.server.js");
+  const { checkEntitlement } = await import("../utils/plans.server.js");
+
+  // Content templates are sold as Starter+ on the pricing table — the gate
+  // must actually exist server-side (requirement 4.2.1: advertised == enforced).
+  if (actionType === "saveTemplate" || actionType === "deleteTemplate") {
+    const ent = await checkEntitlement(shop, "contentTemplates");
+    if (!ent.allowed) {
+      return Response.json({
+        error: `Content templates require the ${ent.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+        limitReached: true,
+      });
+    }
+  }
 
   if (actionType === "saveTemplate") {
     const name = (formData.get("tplName") || "").slice(0, 100).trim();
@@ -76,6 +95,19 @@ export const action = async ({ request }) => {
   const autopilotContentTypes = ["description", "metaTitle", "metaDescription", "faq"]
     .filter((t) => formData.get(`ap_${t}`) === "true")
     .join(",") || "description,metaTitle,metaDescription";
+
+  // Autopilot is Growth+ — refuse to persist an enabled state a free/starter
+  // plan can't use (the products/create webhook also enforces this, but the
+  // setting itself must not pretend it's on).
+  if (formData.get("autopilotEnabled") === "true") {
+    const apEnt = await checkEntitlement(shop, "autopilot");
+    if (!apEnt.allowed) {
+      return Response.json({
+        error: `Autopilot requires the ${apEnt.requiredPlan ?? "Growth"} plan. Your other settings were not saved — turn Autopilot off and save again, or upgrade.`,
+        limitReached: true,
+      });
+    }
+  }
 
   const data = {
     storeName:            (formData.get("storeName") || "").slice(0, 200),
@@ -128,7 +160,7 @@ const lengthOptions = [
 ];
 
 export default function SettingsPage() {
-  const { brandVoice, templates } = useLoaderData();
+  const { brandVoice, templates, entitlements } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -197,7 +229,10 @@ export default function SettingsPage() {
           <input type="hidden" name="autopilotEnabled" value={autopilotEnabled.toString()} />
           <input type="hidden" name="autopilotAutoPublish" value={autopilotAutoPublish.toString()} />
           <input type="hidden" name="ap_description" value={apDesc.toString()} />
+          {/* The checkbox says "Meta Title & Description" — it must submit BOTH
+              fields, or Autopilot can never generate a meta description. */}
           <input type="hidden" name="ap_metaTitle" value={apMeta.toString()} />
+          <input type="hidden" name="ap_metaDescription" value={apMeta.toString()} />
           <input type="hidden" name="ap_faq" value={apFaq.toString()} />
 
           <Layout>
@@ -463,10 +498,12 @@ export default function SettingsPage() {
                     </Text>
                     <Box padding="200" background="bg-surface-secondary" borderRadius="200">
                       <Text as="p" variant="bodySm">POST /api/generate</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">Header: X-ContentClaude-Token</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Headers: X-Shop-Domain · X-ContentClaude-Timestamp · X-ContentClaude-Signature (per-shop HMAC)
+                      </Text>
                     </Box>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Contact support to enable the API endpoint.
+                      Contact hello@navaal.ai for the signing guide.
                     </Text>
                   </BlockStack>
                 </Card>
@@ -486,7 +523,21 @@ export default function SettingsPage() {
           </InlineStack>
         </Card>
 
-        {/* Content Templates */}
+        {/* Content Templates — Starter+ (matches the pricing table) */}
+        {!entitlements?.contentTemplates ? (
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingLg">Content Templates</Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Save generation presets and apply them from any product page with one click.
+                Available on the Starter plan and above.
+              </Text>
+              <InlineStack>
+                <Button onClick={() => (window.location.href = "/app/plans")}>Upgrade to unlock →</Button>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        ) : (
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -528,7 +579,10 @@ export default function SettingsPage() {
             <Form method="post">
               <input type="hidden" name="actionType" value="saveTemplate" />
               <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
+              {/* Same defect as Autopilot's: the "Meta Title & Description"
+                  checkbox must submit both fields. */}
               <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
+              <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
               <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
               <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
               <BlockStack gap="300">
@@ -578,6 +632,7 @@ export default function SettingsPage() {
             </Form>
           </BlockStack>
         </Card>
+        )}
 
       </BlockStack>
     </Page>

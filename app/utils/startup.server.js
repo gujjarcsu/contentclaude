@@ -58,9 +58,13 @@ export function runStartupChecks() {
     warnings.push("SQLite detected in production — migrate to PostgreSQL for multi-tenant reliability");
   }
   if (!process.env.REDIS_URL && process.env.NODE_ENV === "production") {
-    warnings.push(
-      "REDIS_URL not set in production — bulk jobs run in-process. " +
-      "Concurrent jobs share the same process and will compete for Anthropic rate limits."
+    // FAIL LOUDLY: without Redis the queue silently degrades to in-process
+    // setTimeout — bulk jobs die on every deploy/restart and the merchant
+    // sees a permanently stuck job. A missing secret must stop the boat, not
+    // sail with a hole in it.
+    throw new Error(
+      "FATAL: REDIS_URL is not set in production — bulk jobs would not survive restarts. " +
+      "Set the REDIS_URL secret before deploying."
     );
   }
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
@@ -75,15 +79,21 @@ export function runStartupChecks() {
       logger.debug("SHOPIFY_APP_URL placeholder is OK in dev (CLI auto-updates via tunnel)");
     }
   }
+  // Exactly the scopes the code uses: write_products (products, media,
+  // product metafields via metafieldsSet) and write_content (blogs/articles).
+  // There is NO metaobject code in this app — do not add metaobject scopes.
   const envScopes = new Set((process.env.SCOPES || "").split(",").map((s) => s.trim()).filter(Boolean));
-  const requiredScopes = ["write_products", "write_content", "write_metaobjects"];
+  const requiredScopes = ["write_products", "write_content"];
   const missingScopes = requiredScopes.filter((s) => !envScopes.has(s));
   if (missingScopes.length > 0) {
-    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — blog/article/metafield writes will fail`);
+    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — product/blog writes will fail`);
   }
-  if (process.env.NODE_ENV === "production" && !process.env.CONTENTCLAUDE_API_TOKEN) {
-    warnings.push("CONTENTCLAUDE_API_TOKEN not set — /api/generate external endpoint will reject all requests");
+  const extraScopes = [...envScopes].filter((s) => !requiredScopes.includes(s));
+  if (extraScopes.length > 0) {
+    warnings.push(`SCOPES contains scopes this app never uses: ${extraScopes.join(", ")} — remove them (over-broad scopes are an App Store rejection risk, requirement 3.2)`);
   }
+  // /api/generate is HMAC-only (per-shop, keyed on the offline access token) —
+  // no global token to configure. CONTENTCLAUDE_API_TOKEN can be unset.
   if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
     warnings.push("SENTRY_DSN not set — runtime errors will not be captured by Sentry");
   }

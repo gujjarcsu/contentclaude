@@ -5,6 +5,7 @@ import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
 import { invalidateLlmsTxt } from "../utils/llms.server.js";
 import { getRedis } from "../utils/cache.server.js";
+import logger from "../utils/logger.server.js";
 
 export const action = async ({ request }) => {
   const { shop, payload } = await authenticate.webhook(request);
@@ -77,6 +78,12 @@ export const action = async ({ request }) => {
     },
   });
 
-  await enqueueGenerationJob(job.id);
+  try {
+    await enqueueGenerationJob(job.id);
+  } catch (err) {
+    // Concurrent-job cap: skip quietly with a 200 — a non-2xx would make
+    // Shopify retry the webhook and enqueue duplicates.
+    logger.warn({ shop, err: err.message }, "Autopilot job skipped at enqueue (concurrent cap)");
+  }
   return new Response("OK", { status: 200 });
 };

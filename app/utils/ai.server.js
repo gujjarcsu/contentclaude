@@ -1,6 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 import logger from "./logger.server.js";
 import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
+import { decodeHtmlEntities } from "./text.js";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -664,11 +665,15 @@ A: Answer here.
 }
 
 function parseGeneratedContent(rawText) {
+  // Plain-text fields must not carry HTML entities — the model often echoes
+  // escaped product data ("Kids &amp; Teens"), which then renders literally in
+  // the UI and double-escapes in Shopify SEO fields. Description stays as-is:
+  // it IS HTML, where entities are correct.
   return {
     description: extractTag(rawText, "DESCRIPTION"),
-    metaTitle: extractTag(rawText, "META_TITLE"),
-    metaDescription: extractTag(rawText, "META_DESCRIPTION"),
-    faq: extractTag(rawText, "FAQ"),
+    metaTitle: decodeHtmlEntities(extractTag(rawText, "META_TITLE")),
+    metaDescription: decodeHtmlEntities(extractTag(rawText, "META_DESCRIPTION")),
+    faq: decodeHtmlEntities(extractTag(rawText, "FAQ")),
   };
 }
 

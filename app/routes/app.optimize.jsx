@@ -159,7 +159,14 @@ export const action = async ({ request }) => {
     },
   });
 
-  await enqueueGenerationJob(job.id);
+  try {
+    await enqueueGenerationJob(job.id);
+  } catch (err) {
+    // Concurrent-job cap or enqueue failure — banner, not the error boundary.
+    return Response.json({
+      error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again.",
+    });
+  }
   return redirect("/app/jobs");
 };
 

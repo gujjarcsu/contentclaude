@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -207,7 +207,13 @@ export const action = async ({ request }) => {
         autoPublish,
       },
     });
-    await enqueueGenerationJob(job.id);
+    try {
+      await enqueueGenerationJob(job.id);
+    } catch (err) {
+      // Concurrent-job cap (or enqueue failure) — show a banner, not the
+      // full-page error boundary.
+      return { error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again." };
+    }
     return redirect("/app/jobs");
   }
 
@@ -230,7 +236,11 @@ export const action = async ({ request }) => {
       autoPublish,
     },
   });
-  await enqueueGenerationJob(job.id);
+  try {
+    await enqueueGenerationJob(job.id);
+  } catch (err) {
+    return { error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again." };
+  }
   return redirect("/app/jobs");
 };
 
@@ -275,6 +285,10 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
+  // Action failures (plan gates, invalid selection, Shopify fetch errors) MUST
+  // be visible — on success the action redirects to /app/jobs, so any object
+  // return here is an error the merchant needs to see.
+  const actionData = useActionData();
   const [, setSearchParams] = useSearchParams();
 
   const [searchValue, setSearchValue] = useState("");
@@ -306,12 +320,27 @@ export default function ProductsPage() {
     p.title.toLowerCase().includes(searchValue.toLowerCase())
   );
 
+  // Tab counts are scoped to the CURRENT page (the tabs filter only the
+  // visible 50-product page). Using store-wide counts here made labels like
+  // "Draft (120)" sit above an empty list — the store-wide totals live in the
+  // stat cards above instead.
+  const pageCounts = useMemo(() => {
+    let draft = 0, published = 0, none = 0;
+    for (const p of products) {
+      const s = contentMap[p.id]?.description?.status;
+      if (s === "published") published++;
+      else if (s === "draft") draft++;
+      else none++;
+    }
+    return { draft, published, none };
+  }, [products, contentMap]);
+
   const tabs = useMemo(() => [
-    { id: "all", content: `All (${totalStoreProducts})`, panelID: "all" },
-    { id: "needsContent", content: `Needs Content (${noContentProducts})`, panelID: "needsContent" },
-    { id: "draft", content: `Draft (${draftProducts})`, panelID: "draft" },
-    { id: "published", content: `Published (${publishedProducts})`, panelID: "published" },
-  ], [totalStoreProducts, noContentProducts, draftProducts, publishedProducts]);
+    { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
+    { id: "needsContent", content: `Needs Content (${pageCounts.none})`, panelID: "needsContent" },
+    { id: "draft", content: `Draft (${pageCounts.draft})`, panelID: "draft" },
+    { id: "published", content: `Published (${pageCounts.published})`, panelID: "published" },
+  ], [products.length, pageCounts]);
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
 
@@ -435,6 +464,16 @@ export default function ProductsPage() {
       ]}
     >
       <BlockStack gap="500">
+
+        {actionData?.error && (
+          <Banner
+            tone={actionData.limitReached ? "warning" : "critical"}
+            title={actionData.limitReached ? "Plan upgrade required" : "Could not start generation"}
+            action={actionData.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+          >
+            <p>{actionData.error}</p>
+          </Banner>
+        )}
 
         {/* Usage alert "" only when critical */}
         {isOutOfUsage && (

@@ -50,7 +50,7 @@ async function scanProducts(admin) {
         edges { node {
           id title description productType vendor tags
           seo { title description }
-          images(first: 3) { edges { node { altText } } }
+          media(first: 3) { edges { node { mediaContentType ... on MediaImage { image { altText } } } } }
           variants(first: 3) { edges { node { price } } }
         } }
       }
@@ -68,7 +68,9 @@ async function scanProducts(admin) {
     productType: node.productType || "",
     vendor: node.vendor || "",
     tags: node.tags || [],
-    images: (node.images?.edges ?? []).map((e) => e.node),
+    images: (node.media?.edges ?? [])
+      .filter((e) => e.node?.mediaContentType === "IMAGE")
+      .map((e) => ({ altText: e.node?.image?.altText || "" })),
     variants: (node.variants?.edges ?? []).map((e) => e.node),
   }));
 }
@@ -218,7 +220,8 @@ export const action = async ({ request }) => {
       prisma.brandVoice.findUnique({ where: { shop } }),
       admin.graphql(
         `query($id: ID!){ product(id:$id){ id title productType vendor description descriptionHtml
-          tags seo{title description} featuredImage{url} images(first:4){edges{node{url}}}
+          tags seo{title description} featuredMedia{preview{image{url}}}
+          media(first:4){edges{node{mediaContentType ... on MediaImage{image{url}}}}}
           variants(first:5){edges{node{title price}}} } }`,
         { variables: { id: productId } }
       ),
@@ -233,8 +236,10 @@ export const action = async ({ request }) => {
       vendor: node.vendor,
       description: node.description,
       descriptionHtml: node.descriptionHtml,
-      images: (node.images?.edges ?? []).map((e) => e.node),
-      imageUrl: node.featuredImage?.url || "",
+      images: (node.media?.edges ?? [])
+        .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
+        .map((e) => ({ url: e.node.image.url })),
+      imageUrl: node.featuredMedia?.preview?.image?.url || "",
       variants: (node.variants?.edges ?? []).map((e) => e.node),
       tags: node.tags || [],
       seoTitle: node.seo?.title || "",
@@ -304,7 +309,13 @@ export const action = async ({ request }) => {
     const job = await prisma.generationJob.create({
       data: { shop, status: "queued", totalProducts: ids.length, productIds: JSON.stringify(ids), contentTypes: "description,metaTitle,metaDescription", autoPublish: false },
     });
-    await enqueueGenerationJob(job.id);
+    try {
+      await enqueueGenerationJob(job.id);
+    } catch (err) {
+      return Response.json({
+        error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the job. Please try again.",
+      });
+    }
     return redirect(`/app/jobs?${authParamString(request)}`);
   }
 

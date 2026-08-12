@@ -21,8 +21,12 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { buildFaqSchemaMetafield } from "../utils/seo.server.js";
+import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
+import { readMutationResult } from "../utils/adminGraphql.server.js";
+import { decodeHtmlEntities } from "../utils/text.js";
+import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest";
+import { EmbedSetupCard } from "../components/EmbedSetupCard";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
 const PUBLISH_CONCURRENCY = 3;
@@ -34,20 +38,31 @@ const METAFIELDS_SET_MUTATION = `mutation setMetafields($metafields: [Metafields
 }`;
 
 // Write a product's FAQ JSON-LD metafield so the theme app embed emits FAQPage
-// schema on the storefront. Non-fatal: the content already published, and the
-// metafield is re-written on the next publish, so we never fail a batch over it.
-async function writeFaqMetafield(admin, metafieldInput) {
-  if (!metafieldInput) return;
+// schema on the storefront. Non-fatal for the batch (the content itself already
+// published, and the metafield is re-written on the next publish) — but the
+// failure must be OBSERVED: check top-level errors AND userErrors, log, and
+// return false so the caller can tell the merchant the schema didn't go live.
+async function writeFaqMetafield(admin, metafieldInput, { shop, productId } = {}) {
+  if (!metafieldInput) return true;
   try {
-    await admin.graphql(METAFIELDS_SET_MUTATION, { variables: { metafields: [metafieldInput] } });
-  } catch {
-    /* non-fatal */
+    const response = await admin.graphql(METAFIELDS_SET_MUTATION, { variables: { metafields: [metafieldInput] } });
+    const result = await readMutationResult(response, "metafieldsSet");
+    if (!result.ok) {
+      logger.warn({ shop, productId, errors: result.errorMessages }, "FAQ metafieldsSet failed during bulk review publish");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.warn({ shop, productId, err: err.message }, "FAQ metafieldsSet threw during bulk review publish");
+    return false;
   }
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
-  productUpdate(input: $input) {
+// productUpdate's `input` argument is deprecated in 2026-04 — use `product`
+// with ProductUpdateInput (same field shape: id, descriptionHtml, seo).
+const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($product: ProductUpdateInput!) {
+  productUpdate(product: $product) {
     product { id }
     userErrors { field message }
   }
@@ -58,7 +73,7 @@ const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
 async function publishProductWithRetry(admin, productId, input, attempt = 0) {
   let res;
   try {
-    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { input } });
+    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { product: input } });
   } catch (err) {
     if (attempt < PUBLISH_MAX_RETRIES) {
       await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** attempt);
@@ -85,16 +100,36 @@ async function publishProductWithRetry(admin, productId, input, attempt = 0) {
     return publishProductWithRetry(admin, productId, input, attempt + 1);
   }
 
+  // Non-throttle top-level errors (removed field, invalid id, access denied)
+  // MUST fail the publish — with data null the userErrors check below sees []
+  // and would otherwise report success for a write that never happened.
+  if (Array.isArray(json?.errors) && json.errors.length > 0) {
+    return { productId, ok: false, error: json.errors.map((e) => e.message).join("; ") };
+  }
+
   const userErrors = json?.data?.productUpdate?.userErrors ?? [];
   if (userErrors.length > 0) {
     return { productId, ok: false, error: userErrors.map((e) => e.message).join("; ") };
+  }
+  if (!json?.data?.productUpdate) {
+    return { productId, ok: false, error: "Shopify returned no result for this update." };
   }
   return { productId, ok: true };
 }
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 100;
+// Products per page (NOT content rows — a product can have up to 4 draft rows,
+// so paging by row split one product's content across pages and made the page
+// header disagree with the page size).
+const PAGE_SIZE = 50;
+
+// This queue publishes via productUpdate, so it must only ever contain
+// PRODUCT drafts. Collection drafts share the GeneratedContent table (their
+// productId column holds a Collection GID) and are reviewed/published on the
+// Collections page — sending one to productUpdate fails forever ("Invalid id")
+// and permanently jams the queue.
+const PRODUCT_GID_PREFIX = "gid://shopify/Product/";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -104,23 +139,37 @@ export const loader = async ({ request }) => {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const skip = (page - 1) * PAGE_SIZE;
 
-  const [drafts, totalDraftCount, growthState] = await Promise.all([
+  const draftWhere = { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
+
+  // Page by DISTINCT product: order rows by recency, derive the ordered
+  // distinct product list, slice the page, then fetch that page's full rows.
+  const [draftIdRows, growthState] = await Promise.all([
     prisma.generatedContent.findMany({
-      where: { shop, status: "draft" },
+      where: draftWhere,
+      select: { productId: true },
       orderBy: { updatedAt: "desc" },
-      take: PAGE_SIZE,
-      skip,
     }),
-    prisma.generatedContent.count({ where: { shop, status: "draft" } }),
-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true, embedConfirmedAt: true } }),
   ]);
   const reviewRequested = !!growthState?.reviewRequestedAt;
+  const embedConfirmed = !!growthState?.embedConfirmedAt;
+
+  const orderedProductIds = [...new Set(draftIdRows.map((r) => r.productId))];
+  const totalDraftCount = orderedProductIds.length;
+  const pageProductIds = orderedProductIds.slice(skip, skip + PAGE_SIZE);
+
+  const drafts = pageProductIds.length
+    ? await prisma.generatedContent.findMany({
+        where: { ...draftWhere, productId: { in: pageProductIds } },
+        orderBy: { updatedAt: "desc" },
+      })
+    : [];
 
   if (drafts.length === 0 && page === 1) {
-    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0, reviewRequested });
+    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0, reviewRequested, embedConfirmed, shopDomain: shop });
   }
 
-  // Group by productId
+  // Group by productId — preserve the recency order from pageProductIds
   const byProduct = {};
   for (const d of drafts) {
     if (!byProduct[d.productId]) {
@@ -133,8 +182,9 @@ export const loader = async ({ request }) => {
     byProduct[d.productId].content[d.contentType] = d.generatedContent;
   }
 
-  // Batch-fetch product info from Shopify (chunked at 200 per request)
-  const productIds = Object.keys(byProduct);
+  // Batch-fetch product info from Shopify (chunked at 200 per request).
+  // Iterate pageProductIds (not Object.keys) to keep recency order stable.
+  const productIds = pageProductIds.filter((pid) => byProduct[pid]);
   const shopifyData = await fetchProductsBatch(admin, productIds);
 
   // Merge Shopify data + quality scores
@@ -161,6 +211,8 @@ export const loader = async ({ request }) => {
     totalPages: Math.ceil(totalDraftCount / PAGE_SIZE),
     totalDraftCount,
     reviewRequested,
+    embedConfirmed,
+    shopDomain: shop,
   });
 };
 
@@ -186,13 +238,13 @@ async function fetchProductsBatch(admin, productIds) {
         { variables: { ids: batch } }
       );
     } catch (err) {
-      console.error(`fetchProductsBatch batch ${Math.floor(i / BATCH_SIZE) + 1} failed:`, err.message);
+      logger.error({ batch: Math.floor(i / BATCH_SIZE) + 1, err: err.message }, "fetchProductsBatch batch failed");
       continue;
     }
 
-    const { data } = await response.json();
-    if (data?.errors) {
-      console.error("Shopify nodes query error:", JSON.stringify(data.errors));
+    const { data, errors } = await response.json();
+    if (errors?.length) {
+      logger.error({ errors }, "Shopify nodes query returned errors");
       continue;
     }
 
@@ -229,6 +281,13 @@ export const action = async ({ request }) => {
     if (!Array.isArray(approved) || approved.length === 0) {
       return Response.json({ error: "No products approved for publishing." }, { status: 400 });
     }
+    // Defence in depth: this action publishes via productUpdate, so drop any
+    // non-Product GID (e.g. a Collection draft from a stale page) instead of
+    // sending it to a mutation that can only ever reject it.
+    approved = approved.filter((id) => typeof id === "string" && id.startsWith(PRODUCT_GID_PREFIX));
+    if (approved.length === 0) {
+      return Response.json({ error: "No publishable products in the selection." }, { status: 400 });
+    }
 
     // Fetch draft content for each approved product
     const draftRecords = await prisma.generatedContent.findMany({
@@ -236,15 +295,21 @@ export const action = async ({ request }) => {
     });
 
     const byProduct = {};
+    const titleByProduct = {};
     for (const r of draftRecords) {
       if (!byProduct[r.productId]) byProduct[r.productId] = {};
       byProduct[r.productId][r.contentType] = r.generatedContent;
+      if (r.productTitle) titleByProduct[r.productId] = r.productTitle;
     }
 
     let failed = 0;
     const errors = [];
     const successfulProductIds = [];
     const successfulEdits = {};
+
+    // Make sure the faq_schema metafield definition exists before the batch
+    // writes metafields (idempotent, cached 24h, non-fatal).
+    await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
 
     // Publish with bounded concurrency (3) so a large approval batch doesn't
     // hammer Shopify into throttling; each call retries on 429/THROTTLED.
@@ -266,20 +331,28 @@ export const action = async ({ request }) => {
           // FAQPage schema (the AI-search/GEO promise) — not just for single-product
           // publishes, but for this bulk review flow too.
           if (result.ok) {
-            await writeFaqMetafield(admin, buildFaqSchemaMetafield(productId, content.faq));
+            const faqOk = await writeFaqMetafield(admin, buildFaqSchemaMetafield(productId, content.faq), { shop, productId });
+            if (!faqOk) result.faqFailed = true;
           }
           return result;
         })
       )
     );
 
+    const faqFailedIds = [];
     for (const r of results) {
       if (r.ok) {
         successfulProductIds.push(r.productId);
+        if (r.faqFailed) faqFailedIds.push(r.productId);
         if (edits[r.productId]) successfulEdits[r.productId] = edits[r.productId];
       } else {
         failed++;
-        errors.push({ productId: r.productId, error: r.error });
+        // Show the merchant the product's name, never a raw GID.
+        errors.push({
+          productId: r.productId,
+          productTitle: titleByProduct[r.productId] || "Untitled product",
+          error: r.error,
+        });
       }
     }
 
@@ -290,6 +363,16 @@ export const action = async ({ request }) => {
           where: { shop, productId: { in: successfulProductIds }, status: "draft" },
           data: { status: "published" },
         });
+
+        // A product whose FAQ metafield write failed must NOT show "FAQ ✓" —
+        // downgrade just the FAQ row so the UI stays honest and the next
+        // publish retries the metafield.
+        if (faqFailedIds.length > 0) {
+          await tx.generatedContent.updateMany({
+            where: { shop, productId: { in: faqFailedIds }, contentType: "faq", status: "published" },
+            data: { status: "draft" },
+          });
+        }
 
         const editedProductIds = Object.keys(successfulEdits).filter((id) =>
           successfulProductIds.includes(id)
@@ -310,13 +393,29 @@ export const action = async ({ request }) => {
     }
 
     const published = successfulProductIds.length;
+    const faqWarning = faqFailedIds.length > 0
+      ? ` FAQ schema failed for ${faqFailedIds.length} product${faqFailedIds.length !== 1 ? "s" : ""} — it stays in drafts so you can retry.`
+      : "";
+
+    // If FAQ content just published but the theme app embed is still off, the
+    // JSON-LD won't reach the storefront — tell the merchant (5.1.3).
+    const publishedFaq = draftRecords.some(
+      (r) => r.contentType === "faq" && successfulProductIds.includes(r.productId) && !faqFailedIds.includes(r.productId)
+    );
+    let embedNotice = "";
+    if (publishedFaq) {
+      const gs = await prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } });
+      if (!gs?.embedConfirmedAt) {
+        embedNotice = " Note: your FAQ schema won't appear to search engines until you enable the \"AI-search FAQ schema\" app embed in your theme (see the setup card).";
+      }
+    }
 
     return Response.json({
       success: true,
       published,
       failed,
       errors,
-      message: `Published content for ${published} product${published !== 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}.`,
+      message: `Published content for ${published} product${published !== 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}.${faqWarning}${embedNotice}`,
     });
   }
 
@@ -342,7 +441,7 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products, page, totalPages, reviewRequested } = useLoaderData();
+  const { products, page, totalPages, reviewRequested, embedConfirmed, shopDomain } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   // Ask for an App Store review right after a bulk publish succeeds (once ever).
@@ -447,6 +546,7 @@ export default function ReviewPage() {
     >
       <BlockStack gap="500">
         <ReviewRequest active={askReview} />
+        <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
           Generated by premium AI in your brand voice. Review each draft, then publish — published
           content goes live in your store with AI-search (GEO) FAQ schema attached, so it can rank in
@@ -456,7 +556,7 @@ export default function ReviewPage() {
         {actionData?.success && actionData.errors?.length > 0 && (
           <Banner tone="warning" title="Published with some errors">
             {actionData.errors.map((e, i) => (
-              <p key={i}>Failed: {e.productId} — {e.error}</p>
+              <p key={i}>Failed: {e.productTitle || "Untitled product"} — {e.error}</p>
             ))}
           </Banner>
         )}
@@ -655,10 +755,12 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     onEdit(value);
   }, [onEdit]);
 
+  // decodeHtmlEntities: stored content (and stripped HTML) can carry entities
+  // ("Premium Skateboards &amp; Gear") which React renders literally.
   const preview =
     type === "description"
-      ? content.replace(/<[^>]+>/g, "").substring(0, 120) + "..."
-      : content.substring(0, 120) + (content.length > 120 ? "..." : "");
+      ? decodeHtmlEntities(content.replace(/<[^>]+>/g, "")).substring(0, 120) + "..."
+      : decodeHtmlEntities(content).substring(0, 120) + (content.length > 120 ? "..." : "");
 
   const charLimit = type === "metaTitle" ? 60 : type === "metaDescription" ? 155 : null;
   const charCount = editedValue.length;

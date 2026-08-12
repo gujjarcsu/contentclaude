@@ -20,21 +20,21 @@ describe("featureFlags", () => {
   });
 
   it("enables a flag when its env var is truthy", () => {
-    process.env.FEATURE_RESULTS_DASHBOARD = "on";
-    expect(isFeatureEnabled("resultsDashboard")).toBe(true);
-    process.env.FEATURE_RESULTS_DASHBOARD = "1";
-    expect(isFeatureEnabled("resultsDashboard")).toBe(true);
-    process.env.FEATURE_RESULTS_DASHBOARD = "false";
-    expect(isFeatureEnabled("resultsDashboard")).toBe(false);
+    process.env.FEATURE_MAGIC_MOMENT = "on";
+    expect(isFeatureEnabled("magicMoment")).toBe(true);
+    process.env.FEATURE_MAGIC_MOMENT = "1";
+    expect(isFeatureEnabled("magicMoment")).toBe(true);
+    process.env.FEATURE_MAGIC_MOMENT = "false";
+    expect(isFeatureEnabled("magicMoment")).toBe(false);
   });
 
   it("returns false for unknown flags", () => {
     expect(isFeatureEnabled("doesNotExist")).toBe(false);
   });
 
-  it("P1 flags exist and are off by default", () => {
-    for (const f of Object.values(FEATURE_FLAGS)) delete process.env[f.env];
-    expect(isFeatureEnabled("aiVisibilityTracker")).toBe(false);
-    expect(isFeatureEnabled("gscIntegration")).toBe(false);
+  // P2-5 guard: only flags with a real consumer may exist in the registry.
+  // Speculative flags for unbuilt features are an App Store review smell.
+  it("registry contains only flags that are actually consumed", () => {
+    expect(Object.keys(FEATURE_FLAGS).sort()).toEqual(["magicMoment"]);
   });
 });

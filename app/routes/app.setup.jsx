@@ -61,10 +61,14 @@ export const action = async ({ request }) => {
   if (step === 2) {
     const targetAudience = (formData.get("targetAudience") || "").slice(0, 500);
     const keyDifferentiators = (formData.get("keyDifferentiators") || "").slice(0, 500);
+    // Deep-linking ?step=2 can reach here before step 1 ever ran. The create
+    // branch must not produce a record with no storeName — the wizard's own
+    // milestone check (brandVoice.storeName) would treat it as unconfigured
+    // forever. Derive a sensible default from the shop domain.
     await prisma.brandVoice.upsert({
       where: { shop },
       update: { targetAudience, keyDifferentiators },
-      create: { shop, targetAudience, keyDifferentiators },
+      create: { shop, storeName: shop.replace(".myshopify.com", ""), targetAudience, keyDifferentiators },
     });
     return redirect("/app/setup?step=3");
   }
@@ -76,7 +80,7 @@ export const action = async ({ request }) => {
     await prisma.brandVoice.upsert({
       where: { shop },
       update: { targetKeywords, language },
-      create: { shop, targetKeywords, language },
+      create: { shop, storeName: shop.replace(".myshopify.com", ""), targetKeywords, language },
     });
     return redirect("/app/setup?step=4");
   }
@@ -87,7 +91,14 @@ export const action = async ({ request }) => {
   }
 
   if (step === 5) {
-    // Final step — mark setup complete and redirect to products
+    // Final step — record completion so the dashboard/onboarding state is
+    // real, then hand off to Products. (This was previously a comment that
+    // said "mark setup complete" while marking nothing.)
+    await prisma.growthState.upsert({
+      where: { shop },
+      update: { setupCompletedAt: new Date() },
+      create: { shop, setupCompletedAt: new Date() },
+    });
     return redirect("/app/products");
   }
 
@@ -155,7 +166,7 @@ export default function SetupPage() {
   return navigation.state === "loading" ? (
     <AppSkeleton title="Setup" sections={2} layout="full" />
   ) : (
-    <Page title="Welcome to Navaal" subtitle="Let's set up your brand voice in 4 quick steps">
+    <Page title="Welcome to Navaal" subtitle={`Let's set up your brand voice in ${TOTAL_STEPS} quick steps`}>
       <BlockStack gap="500">
         {/* Onboarding milestone progress */}
         {onboardingPct < 100 && (

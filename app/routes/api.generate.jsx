@@ -1,15 +1,15 @@
 // External trigger endpoint — POST /api/generate
-// Supports two auth modes (controlled by CONTENTCLAUDE_AUTH_MODE env var):
 //
-//   "hmac" (default in production):
-//     Caller sends X-Shop-Domain and X-ContentClaude-Signature headers.
-//     Signature = HMAC-SHA256(raw request body, shop's Shopify access token).
-//     This scopes every request to one shop and rotates automatically when
-//     Shopify rotates the shop's offline access token.
+// Auth: per-shop HMAC only.
+//   Caller sends X-Shop-Domain, X-ContentClaude-Timestamp and
+//   X-ContentClaude-Signature headers.
+//   Signature = HMAC-SHA256(`${timestamp}.${rawBody}`, shop's offline access token).
+//   This scopes every request to one shop and rotates automatically when
+//   Shopify rotates the shop's offline access token.
 //
-//   "token" (simple, for Shopify Flow / low-risk integrations):
-//     Caller sends X-ContentClaude-Token matching CONTENTCLAUDE_API_TOKEN.
-//     Single global secret — only use when HMAC is not feasible.
+// The former "token" mode (single global shared secret, no shop scoping) was
+// REMOVED: any holder of the one token could trigger paid generation jobs on
+// ANY installed shop. Do not reintroduce a global secret here.
 //
 // Usage from Shopify Flow:
 //   HTTP action → POST https://<your-app>/api/generate
@@ -22,18 +22,8 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { checkRateLimit } from "../utils/rateLimit.server.js";
 import logger from "../utils/logger.server";
 
-const AUTH_MODE = process.env.CONTENTCLAUDE_AUTH_MODE || "hmac";
-
 async function verifyRequest(request, rawBody) {
-  if (AUTH_MODE === "token") {
-    const token = request.headers.get("X-ContentClaude-Token");
-    const expected = process.env.CONTENTCLAUDE_API_TOKEN;
-    if (!expected || token !== expected) return { ok: false };
-    // Token mode has no shop-scope — the caller must provide it in the body
-    return { ok: true };
-  }
-
-  // HMAC mode: per-shop signature verification with replay prevention
+  // HMAC: per-shop signature verification with replay prevention
   const shopDomain = request.headers.get("X-Shop-Domain");
   const signature = request.headers.get("X-ContentClaude-Signature");
   const tsHeader = request.headers.get("X-ContentClaude-Timestamp");
@@ -151,8 +141,13 @@ export const action = async ({ request }) => {
     },
   });
 
-  logger.info({ shop, jobId: job.id, authMode: AUTH_MODE }, "External generate job queued");
-  await enqueueGenerationJob(job.id);
+  logger.info({ shop, jobId: job.id }, "External generate job queued");
+  try {
+    await enqueueGenerationJob(job.id);
+  } catch (err) {
+    logger.warn({ shop, jobId: job.id, err: err.message }, "External generate job rejected at enqueue");
+    return Response.json({ error: err.message?.startsWith("You already have jobs") ? err.message : "Could not enqueue the job." }, { status: 429 });
+  }
   return Response.json({ success: true, jobId: job.id }, { status: 202 });
 };
 

@@ -1,5 +1,5 @@
 import { authenticate, BILLING_TEST } from "../shopify.server";
-import { BILLING_PLANS } from "../utils/billing-plans.js";
+import { ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server";
 
 // Resource route (loader only — no UI). The Plans page calls this via useFetcher
@@ -17,8 +17,11 @@ export const loader = async ({ request }) => {
     const { billing, session } = await authenticate.admin(request);
     const shop = session.shop;
     const before = await getOrCreatePlan(shop);
+    // ALL six keys (monthly + annual). Passing only monthly keys made every
+    // annual subscriber look unsubscribed, and this loader then wiped their
+    // plan to Free on every Plans page load — while they were still billed.
     const { appSubscriptions } = await billing.check({
-      plans: Object.values(BILLING_PLANS).map((p) => p.key),
+      plans: ALL_BILLING_PLAN_KEYS,
       isTest: BILLING_TEST,
     });
     await syncBillingToPlan(shop, appSubscriptions);

@@ -78,6 +78,15 @@ export const BILLING_PLANS = {
   },
 };
 
+// Every subscription name this app can ever have created on Shopify —
+// monthly AND annual. billing.check() matches on EXACT subscription name, so
+// any call site that passes fewer keys will silently miss those subscribers
+// (an annual subscriber looked "unsubscribed" and was downgraded to Free
+// while still being billed). ALWAYS use this constant with billing.check.
+export const ALL_BILLING_PLAN_KEYS = Object.values(BILLING_PLANS)
+  .flatMap((p) => [p.key, p.annualKey])
+  .filter(Boolean);
+
 /** Returns the entitlements for a given planName string. */
 export function getEntitlements(planName) {
   if (planName === "free") return FREE_PLAN.entitlements;

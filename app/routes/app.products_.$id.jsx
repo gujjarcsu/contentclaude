@@ -34,6 +34,20 @@ import logger from "../utils/logger.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
+import { readMutationResult } from "../utils/adminGraphql.server.js";
+
+// How many product images alt-text generation covers in one run. Shopify's
+// media connection is paginated; anything beyond this is disclosed in the UI
+// rather than silently skipped (requirement 2.1.4 — data accuracy).
+const MAX_ALT_TEXT_IMAGES = 50;
+
+// Map a product's media connection to the image list the UI and alt-text
+// writes use. Only MediaImage nodes carry an image; ids are MediaImage GIDs.
+function mediaToImages(media) {
+  return (media?.edges || [])
+    .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
+    .map((e) => ({ id: e.node.id, url: e.node.image.url, altText: e.node.image.altText || "" }));
+}
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +56,9 @@ export async function loader({ request, params }) {
   const shop = session.shop;
   const productId = `gid://shopify/Product/${params.id}`;
 
+  // media (not the legacy images connection) — alt-text writes need MediaImage
+  // GIDs (gid://shopify/MediaImage/...), which productUpdateMedia accepts.
+  // Legacy ProductImage IDs are NOT valid for any 2026-04 media mutation.
   const response = await admin.graphql(
     `query getProduct($id: ID!) {
       product(id: $id) {
@@ -49,7 +66,10 @@ export async function loader({ request, params }) {
         description descriptionHtml
         seo { title description }
         featuredImage { url altText }
-        images(first: 10) { edges { node { id url altText } } }
+        media(first: ${MAX_ALT_TEXT_IMAGES}) {
+          pageInfo { hasNextPage }
+          edges { node { id mediaContentType ... on MediaImage { image { url altText } } } }
+        }
         variants(first: 10) { edges { node { title price sku } } }
         tags
       }
@@ -104,11 +124,8 @@ export async function loader({ request, params }) {
       seoDescription: product.seo?.description || "",
       imageUrl: product.featuredImage?.url || "",
       imageAlt: product.featuredImage?.altText || "",
-      images: product.images.edges.map((e) => ({
-        id: e.node.id,
-        url: e.node.url,
-        altText: e.node.altText || "",
-      })),
+      images: mediaToImages(product.media),
+      hasMoreImages: product.media?.pageInfo?.hasNextPage ?? false,
       variants: product.variants.edges.map((e) => ({
         title: e.node.title,
         price: e.node.price,
@@ -264,7 +281,10 @@ export async function action({ request, params }) {
           title productType vendor description descriptionHtml
           seo { title description }
           featuredImage { url }
-          images(first: 10) { edges { node { id url } } }
+          media(first: ${MAX_ALT_TEXT_IMAGES}) {
+            pageInfo { hasNextPage }
+            edges { node { id mediaContentType ... on MediaImage { image { url altText } } } }
+          }
           variants(first: 10) { edges { node { title price } } }
           tags
         }
@@ -273,6 +293,7 @@ export async function action({ request, params }) {
     );
     const { data: productData } = await productResponse.json();
     const product = productData.product;
+    const productImages = mediaToImages(product.media);
 
     const [brandVoice, recentContent] = await Promise.all([
       getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
@@ -286,6 +307,7 @@ export async function action({ request, params }) {
     const recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
 
     let generated = {};
+    let autoPublishFailed = false;
     if (contentTypes.length > 0) {
       generated = await generateProductContent(
         {
@@ -295,7 +317,7 @@ export async function action({ request, params }) {
           description: product.description,
           descriptionHtml: product.descriptionHtml,
           imageUrl: product.featuredImage?.url || "",
-          images: (product.images?.edges || []).map((e) => e.node),
+          images: productImages,
           variants: product.variants.edges.map((e) => e.node),
           tags: product.tags,
         },
@@ -329,7 +351,9 @@ export async function action({ request, params }) {
         })
       );
 
-      // Auto-publish: immediately push to Shopify
+      // Auto-publish: immediately push to Shopify. The result MUST be read —
+      // a failed productUpdate here previously went completely unchecked and
+      // the merchant was told "published" regardless.
       if (autoPublish) {
         const input = { id: productId };
         if (generated.description) input.descriptionHtml = generated.description;
@@ -339,69 +363,144 @@ export async function action({ request, params }) {
           if (generated.metaDescription) input.seo.description = generated.metaDescription;
         }
         if (Object.keys(input).length > 1) {
-          await admin.graphql(
-            `mutation updateProduct($input: ProductInput!) {
-              productUpdate(input: $input) {
+          const pubResponse = await admin.graphql(
+            `mutation updateProduct($product: ProductUpdateInput!) {
+              productUpdate(product: $product) {
                 product { id }
                 userErrors { field message }
               }
             }`,
-            { variables: { input } }
+            { variables: { product: input } }
           );
+          const pub = await readMutationResult(pubResponse, "productUpdate");
+          if (!pub.ok) {
+            logger.warn({ shop, productId, errors: pub.errorMessages }, "Auto-publish productUpdate failed — keeping content as draft");
+            // The rows were saved as "published" above; make the DB honest.
+            await prisma.generatedContent.updateMany({
+              where: { shop, productId, contentType: { in: typesToSave }, status: "published" },
+              data: { status: "draft" },
+            });
+            autoPublishFailed = true;
+          }
         }
       }
     }
 
     let altTextResults = [];
     if (doAltText) {
-      const images = product.images.edges.map((e) => e.node).filter((img) => img.url);
-      if (images.length > 0) {
-        for (const img of images) {
-          try {
-            const altText = await generateAltText(img.url, product.title);
-            const mutResult = await admin.graphql(
-              `mutation productImageUpdate($productId: ID!, $image: ImageInput!) {
-                productImageUpdate(productId: $productId, image: $image) {
-                  image { id altText }
-                  userErrors { field message }
-                }
-              }`,
-              { variables: { productId, image: { id: img.id, altText } } }
-            );
-            const { data: mutData } = await mutResult.json();
-            const errors = mutData?.productImageUpdate?.userErrors ?? [];
-            if (errors.length > 0) {
-              altTextResults.push({ imageId: img.id, url: img.url, altText, error: errors[0].message });
-            } else {
-              altTextResults.push({ imageId: img.id, url: img.url, altText });
+      // productImages are MediaImage nodes ({ id: MediaImage GID, url }).
+      // 1) Generate alt text per image (AI failures tracked per image).
+      // 2) Write ALL successful generations in ONE productUpdateMedia call.
+      //    (fileUpdate is Shopify's successor but requires the write_files
+      //    scope this app deliberately does not request; productUpdateMedia
+      //    is valid in 2026-04 and runs on write_products.)
+      const generatedAlts = [];
+      for (const img of productImages) {
+        try {
+          const altText = await generateAltText(img.url, product.title);
+          generatedAlts.push({ mediaId: img.id, url: img.url, altText });
+        } catch (err) {
+          logger.warn({ shop, productId, mediaId: img.id, err: err.message }, "Alt text generation failed for image");
+          altTextResults.push({ imageId: img.id, url: img.url, altText: "", error: "Couldn't generate alt text for this image. Please try again." });
+        }
+      }
+
+      if (generatedAlts.length > 0) {
+        let mutation;
+        try {
+          const mutResponse = await admin.graphql(
+            `mutation productUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+              productUpdateMedia(productId: $productId, media: $media) {
+                media { id alt }
+                mediaUserErrors { field message code }
+              }
+            }`,
+            {
+              variables: {
+                productId,
+                media: generatedAlts.map((g) => ({ id: g.mediaId, alt: g.altText })),
+              },
             }
-          } catch (err) {
-            altTextResults.push({ imageId: img.id, url: img.url, altText: "", error: err.message });
-          }
+          );
+          mutation = await readMutationResult(mutResponse, "productUpdateMedia", { userErrorKeys: ["mediaUserErrors"] });
+        } catch (err) {
+          mutation = { ok: false, userErrors: [], errorMessages: [err.message] };
         }
 
+        if (mutation.ok) {
+          altTextResults.push(...generatedAlts.map((g) => ({ imageId: g.mediaId, url: g.url, altText: g.altText })));
+        } else {
+          logger.error({ shop, productId, errors: mutation.errorMessages }, "productUpdateMedia failed — alt text NOT applied");
+          // mediaUserErrors reference items by index in their field path
+          // (["media", "0", ...]); map those to the specific image where
+          // possible, otherwise the whole batch failed.
+          const failedIndexes = new Set(
+            mutation.userErrors
+              .map((e) => (Array.isArray(e.field) && e.field[0] === "media" ? parseInt(e.field[1], 10) : NaN))
+              .filter((n) => !Number.isNaN(n))
+          );
+          const wholeBatchFailed = failedIndexes.size === 0;
+          generatedAlts.forEach((g, idx) => {
+            const failed = wholeBatchFailed || failedIndexes.has(idx);
+            altTextResults.push(
+              failed
+                ? { imageId: g.mediaId, url: g.url, altText: g.altText, error: "Shopify couldn't apply this alt text. Please try again." }
+                : { imageId: g.mediaId, url: g.url, altText: g.altText }
+            );
+          });
+        }
+      }
+
+      if (altTextResults.length > 0) {
+        const anyApplied = altTextResults.some((r) => !r.error);
         await prisma.generatedContent.upsert({
           where: { shop_productId_contentType: { shop, productId, contentType: "altText" } },
-          update: { generatedContent: JSON.stringify(altTextResults), status: "published", version: { increment: 1 } },
-          create: { shop, productId, productTitle: product.title, contentType: "altText", originalContent: "", generatedContent: JSON.stringify(altTextResults), status: "published" },
+          update: { generatedContent: JSON.stringify(altTextResults), status: anyApplied ? "published" : "draft", version: { increment: 1 } },
+          create: { shop, productId, productTitle: product.title, contentType: "altText", originalContent: "", generatedContent: JSON.stringify(altTextResults), status: anyApplied ? "published" : "draft" },
         });
       }
     }
 
+    const altTextApplied = altTextResults.filter((r) => !r.error).length;
+    const altTextFailed = altTextResults.length - altTextApplied;
+    const hasMoreImages = product.media?.pageInfo?.hasNextPage ?? false;
+
     const messageParts = [];
     if (contentTypes.length > 0) {
-      messageParts.push(
-        autoPublish
-          ? "Content generated and published to your store!"
-          : "Content generated — review below and publish when ready."
-      );
+      if (autoPublish && autoPublishFailed) {
+        messageParts.push("Content generated, but publishing to Shopify failed — it's saved as a draft. Please try publishing again.");
+      } else {
+        messageParts.push(
+          autoPublish
+            ? "Content generated and published to your store!"
+            : "Content generated — review below and publish when ready."
+        );
+      }
     }
     if (doAltText && altTextResults.length > 0) {
-      const succeeded = altTextResults.filter((r) => !r.error).length;
-      messageParts.push(`Alt text applied to ${succeeded} image${succeeded !== 1 ? "s" : ""}.`);
+      if (altTextFailed === 0) {
+        messageParts.push(`Alt text applied to all ${altTextApplied} image${altTextApplied !== 1 ? "s" : ""}.`);
+      } else if (altTextApplied > 0) {
+        messageParts.push(`Alt text applied to ${altTextApplied} of ${altTextResults.length} images — ${altTextFailed} failed.`);
+      } else {
+        messageParts.push("Alt text could not be applied to any image. Please try again.");
+      }
+      if (hasMoreImages) {
+        messageParts.push(`Note: this product has more than ${MAX_ALT_TEXT_IMAGES} images — only the first ${MAX_ALT_TEXT_IMAGES} were processed.`);
+      }
     }
 
-    return { success: true, generated, altTextResults, autoPublished: autoPublish, message: messageParts.join(" ") || "Done!" };
+    return {
+      success: true,
+      generated,
+      altTextResults,
+      altTextApplied,
+      altTextFailed,
+      altTextTruncated: doAltText && hasMoreImages,
+      autoPublished: autoPublish && !autoPublishFailed,
+      autoPublishFailed,
+      message: messageParts.join(" ") || "Done!",
+    };
   }
 
   // ── Publish (with optional edited content) ────────────────────────────────
@@ -419,20 +518,24 @@ export async function action({ request, params }) {
     }
 
     const mutationResult = await admin.graphql(
-      `mutation updateProduct($input: ProductInput!) {
-        productUpdate(input: $input) {
+      `mutation updateProduct($product: ProductUpdateInput!) {
+        productUpdate(product: $product) {
           product { id }
           userErrors { field message }
         }
       }`,
-      { variables: { input } }
+      { variables: { product: input } }
     );
 
-    const { data: mutationData } = await mutationResult.json();
-    const userErrors = mutationData?.productUpdate?.userErrors ?? [];
-    if (userErrors.length > 0) {
-      const msg = userErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ");
-      return { error: `Shopify rejected the update — ${msg}. Nothing was published.` };
+    const mutation = await readMutationResult(mutationResult, "productUpdate");
+    if (!mutation.ok) {
+      logger.error({ shop, productId, errors: mutation.errorMessages }, "Publish productUpdate failed");
+      // userErrors are merchant-fixable (bad values); top-level errors are not —
+      // show the specific reason only when it's actionable.
+      const msg = mutation.userErrors.length > 0
+        ? mutation.errorMessages.join("; ")
+        : "Shopify couldn't apply the update. Please try again in a moment.";
+      return { error: `Publishing failed — ${msg} Nothing was published.` };
     }
 
     // Persist edited content + mark as published. The form fields carry
@@ -458,9 +561,12 @@ export async function action({ request, params }) {
       where: { shop_productId_contentType: { shop, productId, contentType: "faq" } },
     });
     if (faqRecord?.generatedContent) {
-      const { faqToJsonLd } = await import("../utils/seo.server.js");
+      const { faqToJsonLd, ensureFaqMetafieldDefinition } = await import("../utils/seo.server.js");
       const jsonLd = faqToJsonLd(faqRecord.generatedContent);
       if (jsonLd) {
+        // Definition gives the metafield admin visibility + a type guarantee.
+        // Non-fatal, cached 24h per shop.
+        await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
         const faqMutationResult = await admin.graphql(
           `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
             metafieldsSet(metafields: $metafields) {
@@ -481,14 +587,24 @@ export async function action({ request, params }) {
           }
         );
         // metafieldsSet returns HTTP 200 even when Shopify rejects it — the
-        // rejection only shows up in userErrors. Without checking this, a
-        // failed write looks identical to a successful one and the merchant
-        // is told everything published when the FAQ schema silently didn't.
-        const { data: faqMutationData } = await faqMutationResult.json();
-        const faqUserErrors = faqMutationData?.metafieldsSet?.userErrors ?? [];
-        if (faqUserErrors.length > 0) {
-          faqWarning = faqUserErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ");
+        // failure can be in userErrors OR the top-level errors array. Both
+        // must fail the write, or the merchant is told everything published
+        // when the FAQ schema silently didn't.
+        const faqMutation = await readMutationResult(faqMutationResult, "metafieldsSet");
+        if (!faqMutation.ok) {
+          logger.warn({ shop, productId, errors: faqMutation.errorMessages }, "FAQ metafieldsSet failed on publish");
+          faqWarning = faqMutation.errorMessages.join("; ");
         }
+      }
+    }
+
+    // FAQ schema published while the theme app embed is off never reaches the
+    // storefront \u2014 say so instead of implying the outcome already happened.
+    let embedNotice = "";
+    if (faqRecord?.generatedContent && !faqWarning) {
+      const gs = await prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } });
+      if (!gs?.embedConfirmedAt) {
+        embedNotice = " Note: enable the \"AI-search FAQ schema\" app embed in your theme (see the Dashboard setup card) for the FAQ schema to appear to search engines.";
       }
     }
 
@@ -497,7 +613,7 @@ export async function action({ request, params }) {
       published: true,
       message: faqWarning
         ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
-        : "Content published to your Shopify store!",
+        : `Content published to your Shopify store!${embedNotice}`,
     };
   }
 
@@ -521,6 +637,14 @@ export async function action({ request, params }) {
 
   // ── Restore Version ───────────────────────────────────────────────────────
   if (actionType === "restoreVersion") {
+    // Version history & rollback is a Starter+ feature (pricing table row).
+    const vhEnt = await checkEntitlement(shop, "versionHistory");
+    if (!vhEnt.allowed) {
+      return {
+        error: `Version history requires the ${vhEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+        limitReached: true,
+      };
+    }
     const versionId = formData.get("versionId");
     // Scope the lookup to this shop + product in the WHERE clause so a guessed
     // versionId can never read another tenant's row (defence in depth).
@@ -658,6 +782,14 @@ export async function action({ request, params }) {
   }
 
   if (actionType === "saveTemplate") {
+    // Content templates are a Starter+ feature (pricing table row) — enforce.
+    const tplEnt = await checkEntitlement(shop, "contentTemplates");
+    if (!tplEnt.allowed) {
+      return {
+        error: `Content templates require the ${tplEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+        limitReached: true,
+      };
+    }
     const name = (formData.get("name") || "").slice(0, 100).trim() || `Template ${new Date().toLocaleDateString()}`;
     const contentTypes = (formData.get("contentTypes") || "description").slice(0, 200);
     const tplContentLength = (formData.get("contentLength") || "standard").slice(0, 50);
@@ -1108,7 +1240,7 @@ export default function ProductGeneratePage() {
                     helpText={
                       noImages
                         ? "No images on this product"
-                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}`
+                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}${product.hasMoreImages ? " (first 50)" : ""} — one generation covers all of them`
                     }
                   />
 
@@ -1125,7 +1257,7 @@ export default function ProductGeneratePage() {
                   </Button>
                   <Collapsible open={advancedOpen} id="advanced-options">
                     <BlockStack gap="300">
-                      {templates.length > 0 && (
+                      {entitlements?.contentTemplates && templates.length > 0 && (
                         <Select
                           label="Apply Template"
                           options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
@@ -1148,7 +1280,7 @@ export default function ProductGeneratePage() {
                         helpText="Overrides global keywords for this product"
                         autoComplete="off"
                       />
-                      {(genDescription || genMetaTitle || genMetaDescription || genFaq) && (
+                      {entitlements?.contentTemplates && (genDescription || genMetaTitle || genMetaDescription || genFaq) && (
                         <Button
                           variant="plain"
                           size="slim"
@@ -1334,14 +1466,15 @@ export default function ProductGeneratePage() {
                         {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
                       </Button>
                     ) : (
+                      // NOT disabled — a disabled Polaris button never fires
+                      // onClick, which made this upsell a dead control. It
+                      // looks locked but genuinely navigates to Plans.
                       <Button
                         size="large"
                         fullWidth
-                        disabled
-                        tone="critical"
                         onClick={() => navigate("/app/plans")}
                       >
-                        🔒 A/B Variants — Growth Plan
+                        🔒 A/B Variants — upgrade to Growth
                       </Button>
                     )}
 
@@ -1486,7 +1619,7 @@ export default function ProductGeneratePage() {
                       <OriginalContentSection original={existingContent.description.original} contentType="description" revertFetcher={revertFetcher} />
                     </>
                   )}
-                  {versionsByType.description?.length > 0 && (
+                  {entitlements?.versionHistory && versionsByType.description?.length > 0 && (
                     <VersionHistorySection versions={versionsByType.description} contentType="description" restoreFetcher={restoreFetcher} />
                   )}
                 </BlockStack>
@@ -1545,7 +1678,7 @@ export default function ProductGeneratePage() {
                         <OriginalContentSection original={existingContent.metaTitle.original} contentType="metaTitle" revertFetcher={revertFetcher} />
                       </>
                     )}
-                    {versionsByType.metaTitle?.length > 0 && (
+                    {entitlements?.versionHistory && versionsByType.metaTitle?.length > 0 && (
                       <VersionHistorySection versions={versionsByType.metaTitle} contentType="metaTitle" restoreFetcher={restoreFetcher} />
                     )}
                   </BlockStack>
@@ -1606,7 +1739,7 @@ export default function ProductGeneratePage() {
                         <OriginalContentSection original={existingContent.metaDescription.original} contentType="metaDescription" revertFetcher={revertFetcher} />
                       </>
                     )}
-                    {versionsByType.metaDescription?.length > 0 && (
+                    {entitlements?.versionHistory && versionsByType.metaDescription?.length > 0 && (
                       <VersionHistorySection versions={versionsByType.metaDescription} contentType="metaDescription" restoreFetcher={restoreFetcher} />
                     )}
                   </BlockStack>
@@ -1640,14 +1773,26 @@ export default function ProductGeneratePage() {
                 </Card>
               )}
 
-              {/* Image Alt Text */}
+              {/* Image Alt Text — the badge reflects the ACTUAL outcome:
+                  all applied / partially applied / failed. Never claim success
+                  for an operation that failed. */}
               {(altTextResults.length > 0 || genAltText) && (
                 <Card>
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">Image Alt Text</Text>
-                      <Badge tone="success">Applied to Shopify</Badge>
+                      {altTextResults.length > 0 && (() => {
+                        const applied = altTextResults.filter((r) => !r.error).length;
+                        if (applied === altTextResults.length) return <Badge tone="success">Applied to Shopify</Badge>;
+                        if (applied > 0) return <Badge tone="attention">{`Partially applied — ${applied} of ${altTextResults.length}`}</Badge>;
+                        return <Badge tone="critical">Not applied</Badge>;
+                      })()}
                     </InlineStack>
+                    {actionData?.altTextTruncated && (
+                      <Banner tone="info">
+                        <p>This product has more images than one run covers — the first {altTextResults.length} were processed. Run again after reviewing to cover the rest, or edit the remaining images in Shopify admin.</p>
+                      </Banner>
+                    )}
                     {isGenerating && genAltText && (
                       <InlineStack gap="200">
                         <Spinner size="small" />
@@ -1664,7 +1809,7 @@ export default function ProductGeneratePage() {
                               <Thumbnail source={result.url} alt="" size="small" />
                               <BlockStack gap="100">
                                 {result.error ? (
-                                  <Text as="p" variant="bodySm" tone="critical">Error: {result.error}</Text>
+                                  <Text as="p" variant="bodySm" tone="critical">{result.error}</Text>
                                 ) : (
                                   <>
                                     <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
@@ -1784,7 +1929,9 @@ export default function ProductGeneratePage() {
                         <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
                           {type === "description" ? "Description" : type === "metaTitle" ? "Meta Title" : type === "metaDescription" ? "Meta Description" : "FAQ"}
                         </Text>
-                        <VersionHistorySection versions={versionsByType[type]} contentType={type} restoreFetcher={restoreFetcher} />
+                        {entitlements?.versionHistory && (
+                          <VersionHistorySection versions={versionsByType[type]} contentType={type} restoreFetcher={restoreFetcher} />
+                        )}
                       </BlockStack>
                     ) : null
                   )}

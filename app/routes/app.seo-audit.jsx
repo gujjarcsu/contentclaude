@@ -37,9 +37,13 @@ export const loader = async ({ request }) => {
   const AUDIT_START = Date.now();
   const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit — leave headroom for DB + response
 
+  // Distinguish WHY the scan stopped early — a large store on a slow day must
+  // never see a partial audit presented as complete (requirement 2.1.4).
+  let stoppedByTimeout = false;
+
   while (hasNextPage && allEdges.length < MAX_AUDIT_PRODUCTS) {
     if (Date.now() - AUDIT_START > AUDIT_TIMEOUT_MS) {
-      hasNextPage = false;
+      stoppedByTimeout = true;
       break;
     }
     const response = await admin.graphql(
@@ -108,7 +112,20 @@ export const loader = async ({ request }) => {
   const missingAltText = products.filter((p) => p.checks.missingAltText).length;
   const staleCount = products.filter((p) => p.isStale).length;
 
-  return Response.json({ products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount });
+  // truncated: the scan did not cover the whole catalog — either the product
+  // cap was reached or the time budget ran out. hasMoreProducts is only known
+  // when the last page reported another page.
+  const truncatedReason = stoppedByTimeout && hasNextPage
+    ? "timeout"
+    : hasNextPage && allEdges.length >= MAX_AUDIT_PRODUCTS
+      ? "cap"
+      : null;
+
+  return Response.json({
+    products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount,
+    truncatedReason,
+    scannedCount: allEdges.length,
+  });
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -134,7 +151,7 @@ function CheckIcon({ pass }) {
 }
 
 export default function SeoAuditPage() {
-  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount } = useLoaderData();
+  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount, truncatedReason, scannedCount } = useLoaderData();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -161,7 +178,7 @@ export default function SeoAuditPage() {
   return (
     <Page
       title="SEO Audit"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${products.length >= 500 ? " · showing first 500" : ""}`}
+      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: "Fix All Missing Content",
@@ -178,6 +195,15 @@ export default function SeoAuditPage() {
     >
       <BlockStack gap="500">
         <GeoValueBanner variant="compact" />
+        {truncatedReason && (
+          <Banner tone="warning" title="This is a partial audit">
+            <p>
+              {truncatedReason === "timeout"
+                ? `The scan hit its time limit after ${scannedCount} products — your remaining products were NOT analysed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.`
+                : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analysed. Scores and counts below cover only the scanned portion.`}
+            </p>
+          </Banner>
+        )}
         {isLoading && (
           <Banner tone="info">
             <InlineStack gap="200" blockAlign="center">

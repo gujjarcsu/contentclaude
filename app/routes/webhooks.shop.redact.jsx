@@ -10,11 +10,13 @@ export const action = async ({ request }) => {
 
   await db.$transaction(async (tx) => {
     // Log the request first (inside the transaction so it's part of the atomic op)
+    // NON-PII digest only (shop_redact payloads carry no customer PII, but
+    // keep the same discipline as the customer handlers).
     await tx.gDPRRequest.create({
       data: {
         shop,
         requestType: "shop_redact",
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify({ shop_id: payload.shop_id, shop_domain: payload.shop_domain }),
       },
     });
 

@@ -11,16 +11,6 @@ export function ContentClaudeLogo({ size = "medium" }) {
   );
 }
 
-export function ContentClaudeFullLogo({ width = 300 }) {
-  return (
-    <img
-      src="/logos/contentclaude-logo-full.svg"
-      alt="Navaal"
-      style={{ width, height: "auto", maxWidth: "100%", display: "block" }}
-    />
-  );
-}
-
 export function ContentClaudeBrand() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
