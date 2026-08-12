@@ -498,10 +498,12 @@ export default function SettingsPage() {
                     </Text>
                     <Box padding="200" background="bg-surface-secondary" borderRadius="200">
                       <Text as="p" variant="bodySm">POST /api/generate</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">Header: X-ContentClaude-Token</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Headers: X-Shop-Domain · X-ContentClaude-Timestamp · X-ContentClaude-Signature (per-shop HMAC)
+                      </Text>
                     </Box>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Contact support to enable the API endpoint.
+                      Contact hello@navaal.ai for the signing guide.
                     </Text>
                   </BlockStack>
                 </Card>
