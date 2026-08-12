@@ -346,7 +346,7 @@ export default function Dashboard() {
                 />
                 <OnboardingStep
                   number="4" title="Enable the AI-search FAQ schema in your theme"
-                  description="One-time toggle in the theme editor — required for your FAQ content to appear to Google, ChatGPT, and Perplexity."
+                  description="One-time toggle in the theme editor — required for your FAQ content to reach the storefront and be readable by ChatGPT and Perplexity."
                   done={embedConfirmed} actionLabel="Open theme editor"
                   onAction={() => window.open(embedDeepLink(shopDomain), "_top")}
                 />

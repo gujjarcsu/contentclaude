@@ -1,0 +1,53 @@
+{%- comment -%}
+  Navaal — visible FAQ accordion (app block, merchant-placed).
+
+  Why this file exists: faq_schema.liquid emits the same FAQ content as
+  FAQPage JSON-LD into <head>, but JSON-LD alone is invisible to shoppers.
+  Google deprecated FAQ rich results in Search on 7 May 2026, and current
+  evidence is that AI answer engines mainly cite VISIBLE on-page content,
+  not hidden schema. This block renders the same
+  `product.metafields.contentclaude.faq_schema` data (namespace kept for
+  backwards compatibility — see shopify.extension.toml) as real, readable
+  page content so the structured data actually has something to back it up.
+
+  Merchant setup: Online Store > Themes > Customize > Product template >
+  Add block > "FAQ (Navaal)". Placed manually (not an app embed) since app
+  embeds can't be positioned within the page flow.
+{%- endcomment -%}
+{%- assign faq = product.metafields.contentclaude.faq_schema.value -%}
+{%- if faq.mainEntity and faq.mainEntity.size > 0 -%}
+  <div class="navaal-faq" {{ block.shopify_attributes }}>
+    <h2 class="navaal-faq__title">{{ block.settings.heading | default: "Frequently asked questions" }}</h2>
+    {%- for qa in faq.mainEntity -%}
+      <details class="navaal-faq__item"{% if forloop.first %} open{% endif %}>
+        <summary class="navaal-faq__question">{{ qa.name }}</summary>
+        <div class="navaal-faq__answer">{{ qa.acceptedAnswer.text }}</div>
+      </details>
+    {%- endfor -%}
+  </div>
+  <style>
+    .navaal-faq { margin: 2rem 0; max-width: 100%; }
+    .navaal-faq__title { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem; }
+    .navaal-faq__item { border-bottom: 1px solid rgba(0,0,0,0.1); padding: 0.85rem 0; }
+    .navaal-faq__item:first-child { border-top: 1px solid rgba(0,0,0,0.1); }
+    .navaal-faq__question { cursor: pointer; font-weight: 600; list-style: none; }
+    .navaal-faq__question::-webkit-details-marker { display: none; }
+    .navaal-faq__question::before { content: "+"; display: inline-block; width: 1em; }
+    .navaal-faq__item[open] .navaal-faq__question::before { content: "\2212"; }
+    .navaal-faq__answer { margin-top: 0.6rem; padding-left: 1em; color: rgba(0,0,0,0.75); line-height: 1.55; }
+  </style>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "FAQ (Navaal)",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Frequently asked questions"
+    }
+  ]
+}
+{% endschema %}

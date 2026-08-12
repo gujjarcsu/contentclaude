@@ -20,6 +20,12 @@ export function embedDeepLink(shopDomain) {
  * Until they confirm it's on, this card stays visible (App Store
  * requirement 5.1.3: apps must ship setup instructions and a deep link for
  * app embeds). It can only be dismissed by confirming the step is done.
+ *
+ * Copy note (Aug 2026): Google retired FAQ rich results from Search on
+ * 7 May 2026, so this no longer claims FAQ content "appears to Google" —
+ * that's inaccurate now. The honest claim is: AI answer engines can read
+ * the structured data, and (once the FAQ (Navaal) block is added to the
+ * product template) shoppers can read the FAQ as normal page content.
  */
 export function EmbedSetupCard({ shopDomain, confirmed }) {
   const fetcher = useFetcher();
@@ -36,9 +42,15 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
     <Banner tone="warning" title="One-time setup: turn on the AI-search FAQ schema">
       <BlockStack gap="300">
         <Text as="p" variant="bodyMd">
-          Your published FAQ content only appears to Google, ChatGPT, and Perplexity after you
-          enable the <strong>AI-search FAQ schema</strong> app embed in your theme. It&apos;s off by
-          default — publishing alone doesn&apos;t make it live.
+          Your published FAQ content only reaches the storefront after you enable the{" "}
+          <strong>AI-search FAQ schema</strong> app embed in your theme — it&apos;s off by default,
+          and publishing alone doesn&apos;t make it live. This step adds the structured data AI
+          answer engines like ChatGPT and Perplexity can read.
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          For FAQ content shoppers can actually see on the page (recommended — also add this),
+          add the <strong>FAQ (Navaal)</strong> block to your product template from the same
+          theme editor.
         </Text>
         <List type="number">
           <List.Item>Click the button below — it opens your theme editor with the embed pre-selected.</List.Item>

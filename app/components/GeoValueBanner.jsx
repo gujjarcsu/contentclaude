@@ -6,6 +6,16 @@ import { Sparkles, Search, Bot, FileCode2 } from "lucide-react";
  * Google search AND generative AI answer engines (GEO / AEO). Placed at strategic
  * points so merchants always understand what they're getting.
  *
+ * NOTE (Aug 2026): Google deprecated FAQ rich results from Search on
+ * May 7, 2026 (Rich Results Test dropped FAQPage validation in June 2026).
+ * FAQPage JSON-LD no longer earns any Google SERP treatment, and evidence
+ * that JSON-LD-only markup (with no matching visible content) meaningfully
+ * helps AI-answer-engine citation is thin. Copy here was rewritten to stop
+ * promising a Google rich-result benefit that no longer exists, and instead
+ * to reflect what the app actually does now: publish FAQs as real, visible
+ * page content (not just hidden schema) — see faq_visible.liquid, added
+ * alongside faq_schema.liquid so the JSON-LD has matching on-page content.
+ *
  * Props:
  *   variant   — "full" (hero card) | "compact" (slim strip). Default "full".
  *   onLearnMore — optional click handler for a "See how it works" button.
@@ -15,7 +25,7 @@ const ENGINES = "ChatGPT, Perplexity, Gemini & Google AI Overviews";
 
 const POINTS = [
   { icon: Bot, title: "Answer-first writing", desc: "Structured the way AI models quote and cite sources." },
-  { icon: FileCode2, title: "FAQPage schema (JSON-LD)", desc: "Structured FAQ markup machines read to quote you in AI answers." },
+  { icon: FileCode2, title: "Visible FAQ + schema markup", desc: "Real on-page FAQ content, backed by structured data — not markup alone." },
   { icon: Search, title: "llms.txt catalog feed", desc: "A clean map of your store so AI crawlers can discover every product." },
 ];
 
@@ -31,9 +41,9 @@ export function GeoValueBanner({ variant = "full", onLearnMore }) {
           <Sparkles aria-hidden="true" size={20} color="#8fd3ff" />
           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
             <Text as="p" variant="bodyMd" fontWeight="semibold">
-              <span style={{ color: "#ffffff" }}>Optimized for Google + AI search.</span>{" "}
+              <span style={{ color: "#ffffff" }}>Written for how people actually search now.</span>{" "}
               <span style={{ color: "rgba(255,255,255,0.82)" }}>
-                Answer-first copy, FAQPage schema, and an llms.txt feed — the formats Google and {ENGINES} read.
+                Answer-first copy, visible on-page FAQs, and an llms.txt feed — built for shoppers and {ENGINES}.
               </span>
             </Text>
           </div>
@@ -60,13 +70,14 @@ export function GeoValueBanner({ variant = "full", onLearnMore }) {
             </Text>
           </InlineStack>
           <Text as="h2" variant="headingLg">
-            <span style={{ color: "#ffffff" }}>Optimized for Google search — and AI answer engines</span>
+            <span style={{ color: "#ffffff" }}>Written the way people actually search now — Google and AI</span>
           </Text>
           <Text as="p" variant="bodyMd">
             <span style={{ color: "rgba(255,255,255,0.85)" }}>
-              Every description, blog, and meta tag is written <strong>answer-first</strong> and marked up with
-              FAQPage schema — the structured formats that Google and AI answer engines ({ENGINES}) read and quote
-              from. More and more shoppers now start their search there.
+              Every description, blog, and meta tag is written <strong>answer-first</strong> — clear and direct, the
+              way both classic search and AI answer engines ({ENGINES}) parse and quote content. FAQs are published
+              as real, visible page copy plus structured data — not hidden markup alone — so shoppers and AI
+              crawlers can both actually read them.
             </span>
           </Text>
         </BlockStack>
