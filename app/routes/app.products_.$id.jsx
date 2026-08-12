@@ -1984,6 +1984,23 @@ export default function ProductGeneratePage() {
                     </Button>
                   )}
                   <AltTextResultList results={altTextResults} />
+                  {/* What Shopify ACTUALLY holds right now — read live from the
+                      product's media on every page load. Lets a merchant (and
+                      the E2E ground-truth check) confirm the alt text really
+                      reached Shopify, independent of any generation result. */}
+                  {product.images.some((img) => img.altText) && (
+                    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                      <BlockStack gap="150">
+                        <Text as="p" variant="bodySm" fontWeight="semibold">Currently on Shopify</Text>
+                        {product.images.filter((img) => img.altText).map((img, i) => (
+                          <InlineStack key={img.id ?? i} gap="200" blockAlign="start" wrap={false}>
+                            <Thumbnail source={img.url} alt="" size="small" />
+                            <Text as="p" variant="bodySm" tone="subdued">{img.altText}</Text>
+                          </InlineStack>
+                        ))}
+                      </BlockStack>
+                    </Box>
+                  )}
                   {!altTextResults.length && !isGenerating && (
                     <Text as="p" variant="bodySm" tone="subdued">
                       Click Generate Alt Text to create accessibility descriptions for all product images.
