@@ -8,12 +8,10 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
 # correct, idempotent command — it applies additive changes (new indexes, columns)
 # with no data loss and is a no-op when the schema is already current.
 [deploy]
-  # ONE-TIME --accept-data-loss for the 2026-08-12 hardening release: it
-  # intentionally drops the never-written CategoryBenchmark table and 7 dead
-  # GrowthState columns (values verified as pure defaults and captured in the
-  # pre-deploy backup). REVERT this flag immediately after this deploy — it
-  # must never be the standing default.
-  release_command = "npx prisma db push --skip-generate --accept-data-loss"
+  # NOTE: never add --accept-data-loss here as a standing flag. It was used
+  # exactly once (2026-08-12 hardening release, dead-column drop, verified
+  # backup taken) and reverted in the same session.
+  release_command = "npx prisma db push --skip-generate"
 
 [env]
   NODE_ENV = "production"
