@@ -33,7 +33,7 @@ export function GeoValueBanner({ variant = "full", onLearnMore }) {
             <Text as="p" variant="bodyMd" fontWeight="semibold">
               <span style={{ color: "#ffffff" }}>Optimized for Google + AI search.</span>{" "}
               <span style={{ color: "rgba(255,255,255,0.82)" }}>
-                Written to rank on Google and get cited by {ENGINES}.
+                Answer-first copy, FAQPage schema, and an llms.txt feed — the formats Google and {ENGINES} read.
               </span>
             </Text>
           </div>
@@ -64,9 +64,9 @@ export function GeoValueBanner({ variant = "full", onLearnMore }) {
           </Text>
           <Text as="p" variant="bodyMd">
             <span style={{ color: "rgba(255,255,255,0.85)" }}>
-              Every description, blog, and meta tag is written <strong>answer-first</strong> and marked up with schema —
-              so your products can rank in Google <strong>and</strong> get cited by {ENGINES}. That's where more and
-              more shoppers now start.
+              Every description, blog, and meta tag is written <strong>answer-first</strong> and marked up with
+              FAQPage schema — the structured formats that Google and AI answer engines ({ENGINES}) read and quote
+              from. More and more shoppers now start their search there.
             </span>
           </Text>
         </BlockStack>

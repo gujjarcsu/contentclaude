@@ -501,7 +501,7 @@ export default function BlogPage() {
                     <Text as="p" variant="bodySm">• Add <strong>target keywords</strong> your customers actually search.</Text>
                     <Text as="p" variant="bodySm">• Use <strong>special instructions</strong> to mention promos, comparisons, or your angle.</Text>
                     <Text as="p" variant="bodySm">• <strong>Longer posts</strong> rank better for competitive topics.</Text>
-                    <Text as="p" variant="bodySm">• Turn on <strong>FAQ</strong> to get cited by ChatGPT &amp; Google AI.</Text>
+                    <Text as="p" variant="bodySm">• Turn on <strong>FAQ</strong> to add the Q&amp;A format AI answer engines quote from.</Text>
                   </BlockStack>
                 </BlockStack>
               </Box>

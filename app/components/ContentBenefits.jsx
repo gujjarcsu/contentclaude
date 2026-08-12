@@ -12,7 +12,7 @@ import { Check, Sparkles } from "lucide-react";
 const BENEFITS = [
   { b: "In your brand voice", d: "Trained on your tone, audience & differentiators — not generic AI filler." },
   { b: "Answer-first for AI search", d: "Structured so ChatGPT, Perplexity, Gemini & Google AI Overviews can quote your products." },
-  { b: "SEO-optimized", d: "Keyword-rich copy + meta tags built to rank on Google and win the click." },
+  { b: "SEO-optimized", d: "Keyword-rich copy + meta tags following Google's search guidelines." },
   { b: "FAQ schema (JSON-LD)", d: "Machine-readable structured data → citable by AI and eligible for Google rich results." },
   { b: "Discoverable by AI crawlers", d: "Your catalog is exposed via llms.txt so answer engines can find every product." },
 ];

@@ -35,6 +35,7 @@ import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
+import { normalizeAltTextResults } from "../utils/altText.js";
 
 // How many product images alt-text generation covers in one run. Shopify's
 // media connection is paginated; anything beyond this is disclosed in the UI
@@ -994,9 +995,12 @@ export default function ProductGeneratePage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedEdits]);
 
+  // Stored rows pass through normalizeAltTextResults: pre-fix rows are
+  // success-shaped but never wrote anything (dead mutation era) — they must
+  // render as "Not applied", never as the original false-success badge.
   const altTextResults = actionData?.altTextResults ?? (() => {
     const raw = existingContent.altText?.generated;
-    try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try { return normalizeAltTextResults(raw ? JSON.parse(raw) : []); } catch { return []; }
   })();
 
   // Toast on success

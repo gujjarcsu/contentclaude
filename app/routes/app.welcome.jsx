@@ -102,8 +102,8 @@ export const loader = async ({ request }) => {
     prisma.brandVoice.findUnique({ where: { shop } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
-    prisma.generatedContent.count({ where: { shop, status: "published" } }),
-    prisma.generatedContent.count({ where: { shop, status: "draft" } }),
+    prisma.generatedContent.count({ where: { shop, status: "published", productId: { startsWith: "gid://shopify/Product/" } } }),
+    prisma.generatedContent.count({ where: { shop, status: "draft", productId: { startsWith: "gid://shopify/Product/" } } }),
     // Mark the welcome as seen so it shows exactly once (the dashboard stops
     // redirecting here after this). Idempotent.
     prisma.growthState.upsert({

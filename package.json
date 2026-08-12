@@ -50,6 +50,7 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@resvg/resvg-js": "^2.6.2",
     "@shopify/api-codegen-preset": "^1.2.0",
     "@shopify/polaris-types": "1.0.1",

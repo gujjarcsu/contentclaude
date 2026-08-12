@@ -30,8 +30,8 @@ export const loader = async ({ request }) => {
       },
       300
     ),
-    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "published" } }),
-    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "draft" } }),
+    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "published", productId: { startsWith: "gid://shopify/Product/" } } }),
+    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "draft", productId: { startsWith: "gid://shopify/Product/" } } }),
     prisma.plan.findUnique({ where: { shop } }),
     prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
   ]);
@@ -373,7 +373,7 @@ export default function OptimizePage() {
               <Text as="p" variant="bodyMd" tone="subdued">
                 Already have descriptions? This takes each one and raises it to a world-class
                 standard — your facts, claims, and voice stay exactly as they are; the clarity,
-                formatting, and search performance get better. Runs on every product that has a
+                formatting, and search-readiness improve. Runs on every product that has a
                 description (up to {totalProducts}), including ones optimised before, and saves
                 the results as drafts for your review unless auto-publish is on. Every enhanced
                 description delivers:

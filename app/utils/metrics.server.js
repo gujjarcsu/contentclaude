@@ -19,12 +19,18 @@ export async function getContentMetrics(shop) {
   // counts per status in one round-trip — replacing the previous 4 separate
   // queries. Served by the (shop, status, productId) covering index, so the
   // COUNT(DISTINCT productId) is an index-only scan.
+  // PRODUCT rows only. GeneratedContent also stores collection content (its
+  // productId column holds a Collection GID); counting those here made the
+  // dashboard say "1 draft awaiting review" while the (correctly filtered)
+  // review queue showed nothing — a contradiction a reviewer sees in seconds.
   const rows = await prisma.$queryRaw`
     SELECT status,
            COUNT(DISTINCT "productId")::integer AS products,
            COUNT(*)::integer               AS pieces
     FROM "GeneratedContent"
-    WHERE shop = ${shop} AND status IN ('published', 'draft')
+    WHERE shop = ${shop}
+      AND status IN ('published', 'draft')
+      AND "productId" LIKE 'gid://shopify/Product/%'
     GROUP BY status
   `;
 
