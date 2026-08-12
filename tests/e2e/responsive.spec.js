@@ -37,10 +37,25 @@ test.describe("Accessibility smoke", () => {
   test("primary actions are keyboard reachable and labelled", async ({ page }) => {
     await gotoApp(page, "/products");
     const unlabelled = await appFrame(page).locator("body").evaluate((body) => {
+      const doc = body.ownerDocument;
+      // Proper accessible-name check: include the element's ASSOCIATED <label>
+      // (input.labels / label[for]) and aria-labelledby. Polaris checkboxes
+      // render a visually-hidden input labelled by a sibling <label> — they are
+      // accessible, and only a heuristic that ignores associated labels flags
+      // them.
+      const nameFromLabelledby = (el) => {
+        const ids = (el.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
+        return ids.map((id) => doc.getElementById(id)?.textContent?.trim() || "").join(" ").trim();
+      };
       const bad = [];
       body.querySelectorAll("button, a[href], input, select, textarea").forEach((el) => {
+        const associatedLabel = el.labels && el.labels.length
+          ? Array.from(el.labels).map((l) => l.textContent?.trim()).join(" ").trim()
+          : "";
         const label =
           el.getAttribute("aria-label") ||
+          nameFromLabelledby(el) ||
+          associatedLabel ||
           el.getAttribute("title") ||
           el.textContent?.trim() ||
           el.getAttribute("placeholder");

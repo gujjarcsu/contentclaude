@@ -101,16 +101,24 @@ describe("P0-8: Starter+ features are enforced server-side", () => {
     expect(body.limitReached).toBe(true);
   });
 
-  it("settings refuses to persist autopilotEnabled on a plan without autopilot", async () => {
+  it("settings saves other fields but forces autopilot OFF on a plan without it", async () => {
+    // Better behavior than reject-everything: enabling autopilot on a free
+    // plan must NOT lose the merchant's store name / tone. Persist the rest,
+    // force autopilot off, return a soft notice.
     await mockAdmin();
     const prisma = (await import("../../app/db.server")).default;
     const { action } = await import("../../app/routes/app.settings.jsx");
     const res = await action({
-      request: postRequest("https://app.test/app/settings", { actionType: "saveBrandVoice", autopilotEnabled: "true", storeName: "X" }),
+      request: postRequest("https://app.test/app/settings", { actionType: "saveBrandVoice", autopilotEnabled: "true", storeName: "Keep My Name" }),
     });
     const body = await res.json();
-    expect(body.limitReached).toBe(true);
-    expect(prisma.brandVoice.upsert).not.toHaveBeenCalled();
+    expect(body.success).toBe(true);
+    expect(body.autopilotBlocked).toBe(true);
+    // The save DID happen, with the store name preserved and autopilot forced off.
+    expect(prisma.brandVoice.upsert).toHaveBeenCalled();
+    const upsertArg = prisma.brandVoice.upsert.mock.calls[0][0];
+    expect(upsertArg.update.storeName).toBe("Keep My Name");
+    expect(upsertArg.update.autopilotEnabled).toBe(false);
   });
 });
 

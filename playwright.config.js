@@ -43,7 +43,13 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "setup", testMatch: /auth\.setup\.js/ },
+    {
+      name: "setup",
+      testMatch: /auth\.setup\.js/,
+      // The setup project CREATES the storage state — it must not try to load
+      // it (chicken-and-egg ENOENT on first run). Start from an empty state.
+      use: { storageState: { cookies: [], origins: [] } },
+    },
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1600, height: 1000 } },

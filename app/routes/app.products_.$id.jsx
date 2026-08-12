@@ -812,6 +812,45 @@ export async function action({ request, params }) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+// Single source of truth for the alt-text outcome badge — derived PURELY from
+// the per-image results so it can never claim success for a failed/legacy run.
+// Used by both alt-text render blocks so the two can't diverge again (they did:
+// a hardcoded "Applied to Shopify" survived on the Alt Text tab).
+function AltTextBadge({ results }) {
+  if (!results?.length) return null;
+  const applied = results.filter((r) => !r.error).length;
+  if (applied === results.length) return <Badge tone="success">Applied to Shopify</Badge>;
+  if (applied > 0) return <Badge tone="attention">{`Partially applied — ${applied} of ${results.length}`}</Badge>;
+  return <Badge tone="critical">Not applied</Badge>;
+}
+
+// Per-image results list — honest error rendering (no raw GraphQL, no "Error:"
+// prefix leaking technical strings to the merchant).
+function AltTextResultList({ results }) {
+  if (!results?.length) return null;
+  return (
+    <BlockStack gap="300">
+      {results.map((result, i) => (
+        <Box key={result.imageId ?? i} padding="200" background="bg-surface-secondary" borderRadius="200">
+          <InlineStack gap="300" blockAlign="start">
+            <Thumbnail source={result.url} alt="" size="small" />
+            <BlockStack gap="100">
+              {result.error ? (
+                <Text as="p" variant="bodySm" tone="critical">{result.error}</Text>
+              ) : (
+                <>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">{result.altText.length} characters</Text>
+                </>
+              )}
+            </BlockStack>
+          </InlineStack>
+        </Box>
+      ))}
+    </BlockStack>
+  );
+}
+
 function VersionHistorySection({ versions, restoreFetcher }) {
   const [open, setOpen] = useState(false);
   if (!versions || versions.length === 0) return null;
@@ -1785,12 +1824,7 @@ export default function ProductGeneratePage() {
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">Image Alt Text</Text>
-                      {altTextResults.length > 0 && (() => {
-                        const applied = altTextResults.filter((r) => !r.error).length;
-                        if (applied === altTextResults.length) return <Badge tone="success">Applied to Shopify</Badge>;
-                        if (applied > 0) return <Badge tone="attention">{`Partially applied — ${applied} of ${altTextResults.length}`}</Badge>;
-                        return <Badge tone="critical">Not applied</Badge>;
-                      })()}
+                      <AltTextBadge results={altTextResults} />
                     </InlineStack>
                     {actionData?.altTextTruncated && (
                       <Banner tone="info">
@@ -1805,27 +1839,7 @@ export default function ProductGeneratePage() {
                         </Text>
                       </InlineStack>
                     )}
-                    {altTextResults.length > 0 && (
-                      <BlockStack gap="300">
-                        {altTextResults.map((result, i) => (
-                          <Box key={result.imageId ?? i} padding="200" background="bg-surface-secondary" borderRadius="200">
-                            <InlineStack gap="300" blockAlign="start">
-                              <Thumbnail source={result.url} alt="" size="small" />
-                              <BlockStack gap="100">
-                                {result.error ? (
-                                  <Text as="p" variant="bodySm" tone="critical">{result.error}</Text>
-                                ) : (
-                                  <>
-                                    <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
-                                    <Text as="p" variant="bodySm" tone="subdued">{result.altText.length} characters</Text>
-                                  </>
-                                )}
-                              </BlockStack>
-                            </InlineStack>
-                          </Box>
-                        ))}
-                      </BlockStack>
-                    )}
+                    <AltTextResultList results={altTextResults} />
                     {!altTextResults.length && !isGenerating && (
                       <Text as="p" variant="bodySm" tone="subdued">
                         Check "Image Alt Text" and click Generate to create alt text for all images.
@@ -1952,7 +1966,7 @@ export default function ProductGeneratePage() {
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">Image Alt Text</Text>
-                    {altTextResults.length > 0 && <Badge tone="success">Applied to Shopify</Badge>}
+                    <AltTextBadge results={altTextResults} />
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     AI-generated accessibility descriptions applied directly to your product images.
@@ -1969,27 +1983,7 @@ export default function ProductGeneratePage() {
                       Generate Alt Text for {product.images.length} Image{product.images.length !== 1 ? "s" : ""}
                     </Button>
                   )}
-                  {altTextResults.length > 0 && (
-                    <BlockStack gap="300">
-                      {altTextResults.map((result, i) => (
-                        <Box key={result.imageId ?? i} padding="200" background="bg-surface-secondary" borderRadius="200">
-                          <InlineStack gap="300" blockAlign="start">
-                            <Thumbnail source={result.url} alt="" size="small" />
-                            <BlockStack gap="100">
-                              {result.error ? (
-                                <Text as="p" variant="bodySm" tone="critical">Error: {result.error}</Text>
-                              ) : (
-                                <>
-                                  <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
-                                  <Text as="p" variant="bodySm" tone="subdued">{result.altText.length} characters</Text>
-                                </>
-                              )}
-                            </BlockStack>
-                          </InlineStack>
-                        </Box>
-                      ))}
-                    </BlockStack>
-                  )}
+                  <AltTextResultList results={altTextResults} />
                   {!altTextResults.length && !isGenerating && (
                     <Text as="p" variant="bodySm" tone="subdued">
                       Click Generate Alt Text to create accessibility descriptions for all product images.

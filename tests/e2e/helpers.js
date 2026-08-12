@@ -34,32 +34,49 @@ export async function appText(page) {
 }
 
 /**
- * GROUND TRUTH: read a product's image alt text from the Shopify admin itself.
- * Never trust the app's own success message for this.
+ * GROUND TRUTH: read a product's media alt text from the Shopify admin itself.
+ * Uses the product's own media-detail page (…/products/<id>/media/<mediaId>),
+ * which has a single, reliably-labelled "Alt text" field — far more robust
+ * than clicking a thumbnail and scraping the first img[alt] on the page (that
+ * returned nav-icon alts like a 7-char string). Never trusts the app's claim.
  */
 export async function getShopifyImageAltText(page, productId) {
   await page.goto(`${ADMIN}/products/${productId}`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(3500);
 
-  const media = page.locator('[data-testid="media-thumbnail"], [aria-label*="media"] img, img[alt]').first();
-  await media.click({ timeout: 20_000 }).catch(() => {});
-  await page.waitForTimeout(3000);
+  // Open the first product MEDIA item specifically (scoped to the Media card),
+  // not any image on the page.
+  const mediaImg = page
+    .locator('[aria-label="Product media"] img, [aria-label="Media"] img, div:has(> [aria-label*="media" i]) img')
+    .first();
+  if (await mediaImg.count()) {
+    await mediaImg.click({ timeout: 15_000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+  }
 
-  // The alt-text editor exposes a labelled field; fall back to the img alt attr.
+  // The media-detail view exposes a single labelled "Alt text" field.
   const altField = page.getByLabel(/alt text/i).first();
   if (await altField.count()) {
     const v = await altField.inputValue().catch(() => null);
     if (v !== null) return v.trim();
   }
-  const attr = await page.locator("img[alt]").first().getAttribute("alt").catch(() => null);
-  return (attr || "").trim();
+  // Fallback: the media detail dialog's textbox.
+  const textbox = page.getByRole("textbox", { name: /alt text/i }).first();
+  if (await textbox.count()) {
+    const v = await textbox.inputValue().catch(() => null);
+    if (v !== null) return v.trim();
+  }
+  return "";
 }
 
 /** GROUND TRUTH: read the SEO title/description Shopify actually holds. */
 export async function getShopifySeo(page, productId) {
   await page.goto(`${ADMIN}/products/${productId}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(4000);
-  const body = await page.locator("main").innerText();
+  // The Shopify admin renders two <main> elements (app frame + page); scope to
+  // the page's own scrollable main to avoid a strict-mode violation.
+  const main = page.locator("#AppFrameMain");
+  const body = await main.innerText();
   const idx = body.indexOf("Search engine listing");
   return idx === -1 ? "" : body.slice(idx, idx + 700);
 }

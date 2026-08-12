@@ -96,16 +96,17 @@ export const action = async ({ request }) => {
     .filter((t) => formData.get(`ap_${t}`) === "true")
     .join(",") || "description,metaTitle,metaDescription";
 
-  // Autopilot is Growth+ — refuse to persist an enabled state a free/starter
-  // plan can't use (the products/create webhook also enforces this, but the
-  // setting itself must not pretend it's on).
-  if (formData.get("autopilotEnabled") === "true") {
+  // Autopilot is Growth+. If a free/starter plan tries to enable it, DON'T
+  // reject the whole save (that silently lost the merchant's store name, tone,
+  // etc. — a worse bug than the gate). Instead persist everything else, force
+  // autopilot off, and return a soft notice.
+  let autopilotEnabled = formData.get("autopilotEnabled") === "true";
+  let autopilotNotice = null;
+  if (autopilotEnabled) {
     const apEnt = await checkEntitlement(shop, "autopilot");
     if (!apEnt.allowed) {
-      return Response.json({
-        error: `Autopilot requires the ${apEnt.requiredPlan ?? "Growth"} plan. Your other settings were not saved — turn Autopilot off and save again, or upgrade.`,
-        limitReached: true,
-      });
+      autopilotEnabled = false;
+      autopilotNotice = `Your settings were saved, but Autopilot stays off — it requires the ${apEnt.requiredPlan ?? "Growth"} plan.`;
     }
   }
 
@@ -119,8 +120,8 @@ export const action = async ({ request }) => {
     additionalNotes:      (formData.get("additionalNotes") || "").slice(0, 500),
     targetKeywords:       (formData.get("targetKeywords") || "").slice(0, 500),
     language:             VALID_LANGUAGES.has(rawLang) ? rawLang : "en",
-    autopilotEnabled:     formData.get("autopilotEnabled") === "true",
-    autopilotAutoPublish: formData.get("autopilotAutoPublish") === "true",
+    autopilotEnabled,
+    autopilotAutoPublish: autopilotEnabled && formData.get("autopilotAutoPublish") === "true",
     autopilotContentTypes,
   };
 
@@ -129,7 +130,11 @@ export const action = async ({ request }) => {
   });
 
   await invalidateCache(`bv:${shop}`);
-  return Response.json({ success: true, message: "Settings saved!" });
+  return Response.json({
+    success: true,
+    message: autopilotNotice || "Settings saved!",
+    autopilotBlocked: !!autopilotNotice,
+  });
 };
 
 const TONE_CARDS = [

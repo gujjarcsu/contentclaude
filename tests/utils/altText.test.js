@@ -36,4 +36,18 @@ describe("defect A: legacy alt-text rows can never render success", () => {
     expect(normalizeAltTextResults(undefined)).toEqual([]);
     expect(normalizeAltTextResults("not-an-array")).toEqual([]);
   });
+
+  it("replaces raw GraphQL error strings stored in legacy rows (no technical leak)", () => {
+    // The legacy row that shipped to prod stored this verbatim in `error`.
+    const rawErrRow = { imageId: "gid://shopify/MediaImage/1", url: "u", altText: "", error: "Field 'productImageUpdate' doesn't exist on type 'Mutation'" };
+    const out = normalizeAltTextResults([rawErrRow]);
+    expect(out[0].error).toBe(LEGACY_ALT_ERROR);
+    expect(out[0].error).not.toMatch(/productImageUpdate|doesn't exist on type/);
+    expect(isLegacyAltTextEntry(rawErrRow)).toBe(true);
+  });
+
+  it("keeps a genuine, merchant-safe error message as-is", () => {
+    const safe = { imageId: "gid://shopify/MediaImage/2", url: "u", altText: "x", error: "Shopify couldn't apply this alt text. Please try again." };
+    expect(normalizeAltTextResults([safe])[0].error).toBe(safe.error);
+  });
 });
