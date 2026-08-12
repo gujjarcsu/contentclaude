@@ -32,7 +32,7 @@ export async function checkEntitlement(shop, feature) {
 }
 
 export async function getOrCreatePlan(shop) {
-  return getCache(`plan:${shop}`, async () => {
+  const plan = await getCache(`plan:${shop}`, async () => {
     const existing = await prisma.plan.findUnique({ where: { shop } });
     if (existing) return existing;
     return prisma.plan.create({
@@ -44,6 +44,21 @@ export async function getOrCreatePlan(shop) {
       },
     });
   }, 60); // 60-second TTL — plan changes only via billing webhooks which call syncBillingToPlan
+  // The Redis cache round-trips values through JSON, so Prisma DateTime fields
+  // come back as ISO STRINGS on cache hits — while cache misses return live
+  // Date objects. Every consumer must see the same shape, so rehydrate the
+  // date fields here. Without this, any shop with a paid subscription (the
+  // first non-null currentPeriodEnd this code ever saw in production) got a
+  // 500 on the Plans page on every cache-hit load: the loader calls
+  // plan.currentPeriodEnd.toISOString(), which does not exist on a string.
+  if (plan) {
+    for (const field of ["currentPeriodEnd", "createdAt", "updatedAt"]) {
+      if (plan[field] && !(plan[field] instanceof Date)) {
+        plan[field] = new Date(plan[field]);
+      }
+    }
+  }
+  return plan;
 }
 
 export async function getMonthlyUsageCount(shop) {
