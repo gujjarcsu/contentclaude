@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLoaderData, useNavigate, redirect, useNavigation } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { GeoValueBanner } from "../components/GeoValueBanner";
+import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, ProgressBar, Banner, Divider, Collapsible,
@@ -76,7 +77,8 @@ export const loader = async ({ request }) => {
       select: { completedProducts: true, completedAt: true },
     }),
     // First-run: has this shop already seen the welcome / magic-moment flow?
-    prisma.growthState.findUnique({ where: { shop }, select: { welcomeSeenAt: true } }),
+    // embedConfirmedAt drives the theme-embed setup card (requirement 5.1.3).
+    prisma.growthState.findUnique({ where: { shop }, select: { welcomeSeenAt: true, embedConfirmedAt: true } }),
   ]);
 
   // Use distinct-product counts so coverage can never exceed 100%
@@ -107,6 +109,8 @@ export const loader = async ({ request }) => {
   const storeName = brandVoice?.storeName || shop.split(".")[0];
 
   return Response.json({
+    shopDomain: shop,
+    embedConfirmed: !!growthState?.embedConfirmedAt,
     totalProducts,
     generatedCount,
     draftCount,
@@ -202,6 +206,7 @@ export default function Dashboard() {
     totalProducts, generatedCount, draftCount, activeJobCount,
     hasBrandVoice, isNewShop, plan, usageCount, recentActivity, storeName,
     blogsTotal, blogsPublished, blogsDraft, recentlyCompletedJob,
+    shopDomain, embedConfirmed,
   } = useLoaderData();
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -291,13 +296,16 @@ export default function Dashboard() {
         {/* ── Core value: what this app actually does (GEO / AI-search) ────── */}
         <GeoValueBanner onLearnMore={() => setHelpOpen(true)} />
 
+        {/* ── Theme embed setup (5.1.3) — persistent until confirmed done ── */}
+        <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
+
         {/* ── Onboarding checklist ───────────────────────────────────────── */}
         {isNewShop && (
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
                 <Sparkles aria-hidden="true" size={20} color="#2C6ECB" />
-                <Text as="h2" variant="headingLg">Get started in 3 steps</Text>
+                <Text as="h2" variant="headingLg">Get started in 4 steps</Text>
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
                 Complete these steps to generate content that converts.
@@ -320,6 +328,12 @@ export default function Dashboard() {
                   description="Read the draft, make edits, and publish with one click to your Shopify store."
                   done={false} actionLabel="View products"
                   onAction={() => navigate("/app/products")}
+                />
+                <OnboardingStep
+                  number="4" title="Enable the AI-search FAQ schema in your theme"
+                  description="One-time toggle in the theme editor — required for your FAQ content to appear to Google, ChatGPT, and Perplexity."
+                  done={embedConfirmed} actionLabel="Open theme editor"
+                  onAction={() => window.open(embedDeepLink(shopDomain), "_top")}
                 />
               </BlockStack>
             </BlockStack>

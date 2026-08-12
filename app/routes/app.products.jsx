@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -275,6 +275,10 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
+  // Action failures (plan gates, invalid selection, Shopify fetch errors) MUST
+  // be visible — on success the action redirects to /app/jobs, so any object
+  // return here is an error the merchant needs to see.
+  const actionData = useActionData();
   const [, setSearchParams] = useSearchParams();
 
   const [searchValue, setSearchValue] = useState("");
@@ -435,6 +439,16 @@ export default function ProductsPage() {
       ]}
     >
       <BlockStack gap="500">
+
+        {actionData?.error && (
+          <Banner
+            tone={actionData.limitReached ? "warning" : "critical"}
+            title={actionData.limitReached ? "Plan upgrade required" : "Could not start generation"}
+            action={actionData.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+          >
+            <p>{actionData.error}</p>
+          </Banner>
+        )}
 
         {/* Usage alert "" only when critical */}
         {isOutOfUsage && (

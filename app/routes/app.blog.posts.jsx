@@ -74,6 +74,7 @@ function PostCard({ post, onView }) {
       borderWidth="025"
       borderColor="border"
     >
+      <BlockStack gap="200">
       <InlineStack align="space-between" blockAlign="start" gap="400" wrap={false}>
         <InlineStack gap="300" blockAlign="start" wrap={false}>
           <Box
@@ -148,6 +149,10 @@ function PostCard({ post, onView }) {
           </fetcher.Form>
         </InlineStack>
       </InlineStack>
+      {fetcher.data?.error && (
+        <Text as="p" variant="bodySm" tone="critical">{fetcher.data.error}</Text>
+      )}
+      </BlockStack>
     </Box>
   );
 }

@@ -56,5 +56,8 @@ prefix = "apps"
 [auth]
 redirect_urls = ["https://app.navaal.ai/auth/callback"]
 
+# NEVER auto-rewrite production URLs from a dev tunnel — a single
+# `shopify app dev` run would repoint application_url/redirect_urls at a
+# temporary tunnel and break every production install.
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false

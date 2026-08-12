@@ -58,11 +58,30 @@ describe("P0-2: review queue excludes non-product drafts", () => {
     expect(JSON.stringify(where)).toContain(PRODUCT_GID_PREFIX);
   });
 
-  it("loader count uses the same Product-only filter so pagination agrees", async () => {
-    await runLoader();
-    expect(count).toHaveBeenCalled();
-    const where = count.mock.calls[0][0].where;
-    expect(JSON.stringify(where)).toContain(PRODUCT_GID_PREFIX);
+  it("pages by PRODUCT, not content row — one product's types never split across pages", async () => {
+    // 2 distinct products, one with 3 content rows: totalDraftCount must be 2
+    const idRows = [
+      { productId: "gid://shopify/Product/1" },
+      { productId: "gid://shopify/Product/1" },
+      { productId: "gid://shopify/Product/1" },
+      { productId: "gid://shopify/Product/2" },
+    ];
+    const fullRows = [
+      { productId: "gid://shopify/Product/1", productTitle: "A", contentType: "description", generatedContent: "<p>a</p>" },
+      { productId: "gid://shopify/Product/1", productTitle: "A", contentType: "metaTitle", generatedContent: "t" },
+      { productId: "gid://shopify/Product/1", productTitle: "A", contentType: "faq", generatedContent: "Q: q\nA: a" },
+      { productId: "gid://shopify/Product/2", productTitle: "B", contentType: "description", generatedContent: "<p>b</p>" },
+    ];
+    findMany.mockImplementation((args) => Promise.resolve(args?.select?.productId ? idRows : fullRows));
+
+    const res = await runLoader();
+    const body = await res.json();
+    expect(body.totalDraftCount).toBe(2); // distinct products, not 4 rows
+    expect(body.totalPages).toBe(1);
+    expect(body.products.length).toBe(2);
+    // Product 1 keeps all three content types together on one page
+    const p1 = body.products.find((p) => p.productId === "gid://shopify/Product/1");
+    expect(Object.keys(p1.content).sort()).toEqual(["description", "faq", "metaTitle"]);
   });
 
   it("publish action refuses to send a Collection GID to productUpdate", async () => {

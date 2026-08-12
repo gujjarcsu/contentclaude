@@ -7,7 +7,7 @@ import {
 } from "@shopify/polaris";
 import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
 import { authenticate, BILLING_TEST } from "../shopify.server";
-import { BILLING_PLANS, FREE_PLAN } from "../utils/billing-plans.js";
+import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
 
 export const loader = async ({ request }) => {
@@ -48,10 +48,7 @@ export const action = async ({ request }) => {
 
   if (actionType === "subscribe") {
     const planKey = formData.get("planKey");
-    const validKeys = Object.values(BILLING_PLANS)
-      .flatMap((p) => [p.key, p.annualKey])
-      .filter(Boolean);
-    if (!planKey || !validKeys.includes(planKey)) {
+    if (!planKey || !ALL_BILLING_PLAN_KEYS.includes(planKey)) {
       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
     }
     // billing.request() internally throws a redirect Response to Shopify's
@@ -87,21 +84,31 @@ export const action = async ({ request }) => {
 
   if (actionType === "cancel") {
     try {
+      // ALL six keys (monthly + annual) — billing.check matches on exact
+      // subscription name, so a shorter list can't find annual subscribers.
       const { appSubscriptions } = await billing.check({
-        plans: Object.values(BILLING_PLANS).map((p) => p.key),
+        plans: ALL_BILLING_PLAN_KEYS,
         isTest: BILLING_TEST,
       });
       const activeSub = appSubscriptions.find((s) => s.status === "ACTIVE");
-      if (activeSub) {
-        await billing.cancel({ subscriptionId: activeSub.id, isTest: BILLING_TEST, prorate: true });
+      if (!activeSub) {
+        // Fail LOUDLY. Returning {cancelled: true} here would tell the
+        // merchant they cancelled while Shopify keeps charging them — and
+        // syncBillingToPlan(shop, []) would wipe their paid plan locally.
+        return Response.json(
+          { error: "We couldn't find an active subscription to cancel. If you believe you have one, please contact support at hello@navaal.ai before assuming it's cancelled." },
+          { status: 409 }
+        );
       }
+      await billing.cancel({ subscriptionId: activeSub.id, isTest: BILLING_TEST, prorate: true });
     } catch (err) {
       if (err instanceof Response) throw err;
       return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });
     }
 
     // Immediately reflect cancelled state — don't wait for Shopify webhook delivery
-    // (webhook can take up to 5 minutes; merchant should lose access instantly)
+    // (webhook can take up to 5 minutes; merchant should lose access instantly).
+    // Only reached after billing.cancel genuinely succeeded above.
     await syncBillingToPlan(session.shop, []);
 
     return Response.json({ cancelled: true });

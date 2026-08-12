@@ -75,11 +75,18 @@ export function runStartupChecks() {
       logger.debug("SHOPIFY_APP_URL placeholder is OK in dev (CLI auto-updates via tunnel)");
     }
   }
+  // Exactly the scopes the code uses: write_products (products, media,
+  // product metafields via metafieldsSet) and write_content (blogs/articles).
+  // There is NO metaobject code in this app — do not add metaobject scopes.
   const envScopes = new Set((process.env.SCOPES || "").split(",").map((s) => s.trim()).filter(Boolean));
-  const requiredScopes = ["write_products", "write_content", "write_metaobjects"];
+  const requiredScopes = ["write_products", "write_content"];
   const missingScopes = requiredScopes.filter((s) => !envScopes.has(s));
   if (missingScopes.length > 0) {
-    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — blog/article/metafield writes will fail`);
+    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — product/blog writes will fail`);
+  }
+  const extraScopes = [...envScopes].filter((s) => !requiredScopes.includes(s));
+  if (extraScopes.length > 0) {
+    warnings.push(`SCOPES contains scopes this app never uses: ${extraScopes.join(", ")} — remove them (over-broad scopes are an App Store rejection risk, requirement 3.2)`);
   }
   if (process.env.NODE_ENV === "production" && !process.env.CONTENTCLAUDE_API_TOKEN) {
     warnings.push("CONTENTCLAUDE_API_TOKEN not set — /api/generate external endpoint will reject all requests");
