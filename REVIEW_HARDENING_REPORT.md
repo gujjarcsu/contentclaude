@@ -4,7 +4,7 @@
 **Date:** 2026-08-12
 **Gates at completion:** `npx vitest run` → **177 passed / 0 failed** · `npx eslint --ignore-path .gitignore .` → **0 errors, 0 warnings** · `npm run typecheck` → **clean** · `npm run build` → **clean**
 
-Baseline was 168 tests. Net +20 new regression tests were added covering the fixed paths; 18 tests belonging to *deleted dead modules* (benchmark, reviewPrompt, removed feature flags) were removed together with their modules — hence 177. Every remaining test passes.
+Baseline was 168 tests. Reconciled at deploy time against `git show` counts: **+22** tests in new files (altText 3, review.queue 3, billing.annual 5, entitlement.gates 5, text 6) **+1** in bulkProcessor (cancel), **−14** removed with deleted dead modules (benchmark 7, reviewPrompt 7), featureFlags rewritten 4→4. 168 + 22 + 1 − 14 = **177**, matching the verbose run (22 files). Every remaining test passes. *(An earlier draft of this paragraph said "+20 new, −18 removed" — both terms were wrong; the total was right.)*
 
 > ⛔ Per the brief, **nothing was deployed** and no production environment variables were touched. The deploy + post-deploy manual verification protocol is the human's step (see §5 and §6).
 
