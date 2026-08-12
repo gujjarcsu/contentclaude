@@ -364,13 +364,13 @@ export async function action({ request, params }) {
         }
         if (Object.keys(input).length > 1) {
           const pubResponse = await admin.graphql(
-            `mutation updateProduct($input: ProductInput!) {
-              productUpdate(input: $input) {
+            `mutation updateProduct($product: ProductUpdateInput!) {
+              productUpdate(product: $product) {
                 product { id }
                 userErrors { field message }
               }
             }`,
-            { variables: { input } }
+            { variables: { product: input } }
           );
           const pub = await readMutationResult(pubResponse, "productUpdate");
           if (!pub.ok) {
@@ -518,13 +518,13 @@ export async function action({ request, params }) {
     }
 
     const mutationResult = await admin.graphql(
-      `mutation updateProduct($input: ProductInput!) {
-        productUpdate(input: $input) {
+      `mutation updateProduct($product: ProductUpdateInput!) {
+        productUpdate(product: $product) {
           product { id }
           userErrors { field message }
         }
       }`,
-      { variables: { input } }
+      { variables: { product: input } }
     );
 
     const mutation = await readMutationResult(mutationResult, "productUpdate");
@@ -561,9 +561,12 @@ export async function action({ request, params }) {
       where: { shop_productId_contentType: { shop, productId, contentType: "faq" } },
     });
     if (faqRecord?.generatedContent) {
-      const { faqToJsonLd } = await import("../utils/seo.server.js");
+      const { faqToJsonLd, ensureFaqMetafieldDefinition } = await import("../utils/seo.server.js");
       const jsonLd = faqToJsonLd(faqRecord.generatedContent);
       if (jsonLd) {
+        // Definition gives the metafield admin visibility + a type guarantee.
+        // Non-fatal, cached 24h per shop.
+        await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
         const faqMutationResult = await admin.graphql(
           `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
             metafieldsSet(metafields: $metafields) {

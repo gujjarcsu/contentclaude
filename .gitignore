@@ -32,3 +32,5 @@ database.sqlite
 # Generated React Router typegen + dev logs
 .react-router/
 dev-server.log
+
+PRELAUNCH_CLAUDE_CODE_PROMPT.md

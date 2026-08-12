@@ -21,7 +21,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { buildFaqSchemaMetafield } from "../utils/seo.server.js";
+import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
 import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
@@ -59,8 +59,10 @@ async function writeFaqMetafield(admin, metafieldInput, { shop, productId } = {}
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
-  productUpdate(input: $input) {
+// productUpdate's `input` argument is deprecated in 2026-04 — use `product`
+// with ProductUpdateInput (same field shape: id, descriptionHtml, seo).
+const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($product: ProductUpdateInput!) {
+  productUpdate(product: $product) {
     product { id }
     userErrors { field message }
   }
@@ -71,7 +73,7 @@ const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($input: ProductInput!) {
 async function publishProductWithRetry(admin, productId, input, attempt = 0) {
   let res;
   try {
-    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { input } });
+    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { product: input } });
   } catch (err) {
     if (attempt < PUBLISH_MAX_RETRIES) {
       await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** attempt);
@@ -304,6 +306,10 @@ export const action = async ({ request }) => {
     const errors = [];
     const successfulProductIds = [];
     const successfulEdits = {};
+
+    // Make sure the faq_schema metafield definition exists before the batch
+    // writes metafields (idempotent, cached 24h, non-fatal).
+    await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
 
     // Publish with bounded concurrency (3) so a large approval batch doesn't
     // hammer Shopify into throttling; each call retries on 429/THROTTLED.

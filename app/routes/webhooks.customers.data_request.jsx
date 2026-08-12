@@ -8,12 +8,23 @@ import db from "../db.server";
 export const action = async ({ request }) => {
   const { payload, shop } = await authenticate.webhook(request);
 
+  // Store a NON-PII digest only — the raw payload carries customer email and
+  // phone, which this app must never persist.
   await db.gDPRRequest.create({
     data: {
       shop,
       requestType: "customer_data_request",
-      payload: JSON.stringify(payload),
+      payload: JSON.stringify({
+        shop_id: payload.shop_id,
+        customer_id: payload.customer?.id,
+        orders_requested: payload.orders_requested?.length ?? 0,
+      }),
     },
+  });
+
+  // Retention: audit rows older than 2 years have served their purpose.
+  await db.gDPRRequest.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - 2 * 365 * 24 * 3600 * 1000) } },
   });
 
   // ContentClaude does not store any customer-identifiable information.

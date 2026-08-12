@@ -5,7 +5,7 @@ import { captureException } from "./errorMonitoring.server.js";
 import { tryConsumeGeneration } from "./plans.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
-import { buildFaqSchemaMetafield } from "./seo.server.js";
+import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "./seo.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // Configurable via BULK_THROTTLE_MS env var.
 // Default 2000ms: safe for claude-sonnet-4-6 with 3 concurrent workers.
@@ -97,6 +97,19 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
       return;
     }
 
+    // Auto-publish jobs write FAQ metafields — make sure the definition exists
+    // once per job (idempotent, cached, non-fatal on failure).
+    if (job.autoPublish) {
+      await ensureFaqMetafieldDefinition(job.shop, async (query, variables) => {
+        const res = await fetch(`https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": session.accessToken },
+          body: JSON.stringify({ query, variables }),
+        });
+        return res.json();
+      });
+    }
+
     // Build a map of collectionId -> voice override for O(1) lookup
     const collectionVoiceMap = {};
     for (const cv of collectionVoices) {
@@ -162,6 +175,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         // ── GENERATE FIRST — no credit consumed yet ──────────────────────
         let generated;
         try {
+          const productImages = (product.media?.edges || [])
+            .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
+            .map((e) => ({ url: e.node.image.url, altText: e.node.image.altText || "" }));
           generated = isEnhance
             ? await enhanceExistingContent(
                 {
@@ -171,7 +187,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                   descriptionHtml: product.descriptionHtml,
                   seoTitle: product.seo?.title || "",
                   seoDescription: product.seo?.description || "",
-                  images: (product.images?.edges || []).map((e) => e.node),
+                  images: productImages,
                   tags: product.tags,
                 },
                 brandVoice,
@@ -185,8 +201,8 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                   vendor: product.vendor,
                   description: product.description,
                   descriptionHtml: product.descriptionHtml,
-                  imageUrl: product.featuredImage?.url || "",
-                  images: (product.images?.edges || []).map((e) => e.node),
+                  imageUrl: product.featuredMedia?.preview?.image?.url || "",
+                  images: productImages,
                   variants: product.variants.edges.map((e) => e.node),
                   tags: product.tags,
                 },
@@ -352,12 +368,14 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
           "X-Shopify-Access-Token": session.accessToken,
         },
         body: JSON.stringify({
+          // media/featuredMedia (Product.images/featuredImage are deprecated
+          // in 2026-04). Only MediaImage nodes carry an image.
           query: `query getProduct($id: ID!) {
             product(id: $id) {
               id title productType vendor description descriptionHtml
               seo { title description }
-              featuredImage { url }
-              images(first: 4) { edges { node { url } } }
+              featuredMedia { preview { image { url } } }
+              media(first: 4) { edges { node { id mediaContentType ... on MediaImage { image { url altText } } } } }
               variants(first: 10) { edges { node { title price } } }
               tags
               collections(first: 5) { edges { node { id } } }
@@ -470,13 +488,14 @@ async function publishToShopify(session, productId, input, attempt = 0) {
           "X-Shopify-Access-Token": session.accessToken,
         },
         body: JSON.stringify({
-          query: `mutation updateProduct($input: ProductInput!) {
-            productUpdate(input: $input) {
+          // `input` arg is deprecated in 2026-04 — `product` takes the same shape
+          query: `mutation updateProduct($product: ProductUpdateInput!) {
+            productUpdate(product: $product) {
               product { id }
               userErrors { field message }
             }
           }`,
-          variables: { input },
+          variables: { product: input },
         }),
       }
     );

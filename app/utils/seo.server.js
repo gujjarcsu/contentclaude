@@ -54,6 +54,68 @@ export function buildFaqSchemaMetafield(productId, faqContent) {
   };
 }
 
+// Ensure a metafield DEFINITION exists for contentclaude/faq_schema (P2-2).
+// Without one the metafield is unstructured: invisible in the admin UI, no
+// type guarantee, and any other app can overwrite the key. Idempotent and
+// cached per shop for 24h; failures are non-fatal (the metafieldsSet write
+// works either way) but logged.
+//
+// execGraphql: async (query, variables) => parsed JSON body — an adapter so
+// both the admin client (routes) and the raw-fetch path (bulkProcessor) can
+// share this.
+export async function ensureFaqMetafieldDefinition(shop, execGraphql) {
+  const { getCache } = await import("./cache.server.js");
+  const { default: logger } = await import("./logger.server.js");
+  try {
+    return await getCache(
+      `faqdef:${shop}`,
+      async () => {
+        const found = await execGraphql(
+          `query findFaqDefinition {
+            metafieldDefinitions(first: 1, ownerType: PRODUCT, namespace: "contentclaude", key: "faq_schema") {
+              edges { node { id } }
+            }
+          }`
+        );
+        if (found?.data?.metafieldDefinitions?.edges?.length > 0) return true;
+
+        const created = await execGraphql(
+          `mutation createFaqDefinition($definition: MetafieldDefinitionInput!) {
+            metafieldDefinitionCreate(definition: $definition) {
+              createdDefinition { id }
+              userErrors { field message code }
+            }
+          }`,
+          {
+            definition: {
+              name: "AI-search FAQ schema (JSON-LD)",
+              namespace: "contentclaude",
+              key: "faq_schema",
+              type: "json",
+              ownerType: "PRODUCT",
+              description:
+                "FAQPage structured data written by Navaal when FAQ content is published. Rendered on product pages by the Navaal theme app embed so search engines and AI assistants can read the Q&A.",
+              pin: true,
+            },
+          }
+        );
+        const errors = created?.data?.metafieldDefinitionCreate?.userErrors ?? [];
+        // TAKEN = a definition already exists (race with another request) — fine.
+        const fatal = errors.filter((e) => e.code !== "TAKEN");
+        if (fatal.length > 0) {
+          logger.warn({ shop, errors: fatal }, "Could not create faq_schema metafield definition");
+          return false;
+        }
+        return true;
+      },
+      24 * 3600
+    );
+  } catch (err) {
+    logger.warn({ shop, err: err.message }, "ensureFaqMetafieldDefinition failed");
+    return false;
+  }
+}
+
 /**
  * Calculate SEO completeness score (0-100) for a Shopify product object.
  * product shape: { description, seoTitle, seoDescription, images: [{ altText }] }
