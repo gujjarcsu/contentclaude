@@ -39,3 +39,4 @@ tests/e2e/.auth/
 playwright-report/
 test-results/
 navaal-e2e/
+billing-proof/
