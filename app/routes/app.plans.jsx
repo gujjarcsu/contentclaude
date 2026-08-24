@@ -29,6 +29,15 @@ export const loader = async ({ request }) => {
 
   const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
+  // Notice from the billing return callback (see routes/billing.callback.jsx):
+  // upgraded=1 on a successful approval, declined=1 when the charge was
+  // declined/expired, billing_error=1 if the callback couldn't read state.
+  const url = new URL(request.url);
+  const billingNotice =
+    url.searchParams.get("upgraded") ? "upgraded" :
+    url.searchParams.get("declined") ? "declined" :
+    url.searchParams.get("billing_error") ? "error" : null;
+
   return {
     plan: {
       planName: plan.planName,
@@ -39,6 +48,7 @@ export const loader = async ({ request }) => {
     },
     usageCount,
     currentMonth,
+    billingNotice,
   };
 };
 
@@ -63,7 +73,13 @@ export const action = async ({ request }) => {
       await billing.request({
         plan: planKey,
         isTest,
-        returnUrl: `${process.env.SHOPIFY_APP_URL}/app/plans`,
+        // Return to a PUBLIC backend callback (no session cookie needed), NOT
+        // straight to /app/plans. After approval Shopify does a top-level
+        // redirect here with no embedded context; /app/plans would fail auth
+        // and dump the merchant on /auth/login (App Store 1.2.2 rejection).
+        // The callback records the plan via the shop's offline token, then
+        // 302s back INTO the embedded admin. Shopify appends &charge_id=…
+        returnUrl: `${process.env.SHOPIFY_APP_URL}/billing/callback?shop=${encodeURIComponent(session.shop)}`,
       });
     } catch (err) {
       // On success, billing.request THROWS a 401 Response whose
@@ -422,7 +438,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
 }
 
 export default function PlansPage() {
-  const { plan, usageCount, currentMonth } = useLoaderData();
+  const { plan, usageCount, currentMonth, billingNotice } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -481,6 +497,22 @@ export default function PlansPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
+
+        {billingNotice === "upgraded" && plan.planName !== "free" && (
+          <Banner tone="success" title={`You're on the ${PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} plan`}>
+            <p>Your subscription is active. Your new monthly generation limit is live.</p>
+          </Banner>
+        )}
+        {billingNotice === "declined" && (
+          <Banner tone="warning" title="Charge not approved">
+            <p>The subscription charge was declined or wasn&apos;t completed, so you&apos;re still on your current plan. You can try upgrading again anytime.</p>
+          </Banner>
+        )}
+        {billingNotice === "error" && (
+          <Banner tone="warning" title="We couldn't confirm the change just now">
+            <p>Your plan will update automatically within a few moments if the charge went through. Refresh this page shortly, or contact hello@navaal.ai if it doesn&apos;t.</p>
+          </Banner>
+        )}
 
         {actionData?.cancelled && (
           <Banner tone="info" title="Subscription cancelled">
