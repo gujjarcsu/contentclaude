@@ -240,7 +240,12 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
     }
   }
 
-  // No active paid subscription → downgrade to free
+  // No active paid subscription → downgrade to free.
+  // RECONCILE_DIAG: log EVERY downgrade with the evidence it was based on.
+  import("./logger.server.js").then((m) => m.default.warn(
+    { shop, subCount: (appSubscriptions ?? []).length, subs: (appSubscriptions ?? []).map((s) => ({ name: s.name, status: s.status, test: s.test })) },
+    "SYNC_DIAG downgrading to FREE (no ACTIVE sub in the given list)"
+  )).catch(() => {});
   await prisma.plan.upsert({
     where: { shop },
     update: {

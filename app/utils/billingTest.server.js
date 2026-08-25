@@ -31,10 +31,20 @@ export async function resolveBillingTest(admin, shop, force = BILLING_TEST) {
       }`
     );
     const body = await res.json();
+    // RECONCILE_DIAG: prove whether the partnerDevelopment lookup succeeds and
+    // what isTest we resolve. A failure here fail-closes to false, which makes
+    // billing.check(isTest:false) miss a TEST subscription -> false downgrade.
+    _diagLog("info", { shop, status: res.status, partnerDevelopment: body?.data?.shop?.plan?.partnerDevelopment, hasErrors: !!body?.errors }, "RESOLVE_BILLING_TEST_DIAG query result");
     isDevStore = Boolean(body?.data?.shop?.plan?.partnerDevelopment);
-  } catch {
+  } catch (err) {
+    _diagLog("error", { shop, err: err?.message }, "RESOLVE_BILLING_TEST_DIAG query THREW -> isTest=false (fail-closed)");
     isDevStore = false;
   }
   devStoreCache.set(shop, isDevStore);
   return isDevStore;
+}
+
+// Lazy logger import to avoid a static server-only dependency in this small util.
+function _diagLog(level, obj, msg) {
+  import("./logger.server.js").then((m) => m.default[level](obj, msg)).catch(() => {});
 }
