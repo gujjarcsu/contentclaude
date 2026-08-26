@@ -1,0 +1,31 @@
+// Quick visual check that the cursor overlay + caption render on the Plans page.
+import { chromium } from "@playwright/test";
+const STORE = "contentpilot-dev2", APP = "navaal-seo-geo-content";
+const appFrame = (p) => p.frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]').first();
+const CURSOR = () => {
+  if (window.__vcursor) return; window.__vcursor = true;
+  const install = () => { if (!document.body) return;
+    const dot = document.createElement("div");
+    Object.assign(dot.style,{position:"fixed",width:"24px",height:"24px",borderRadius:"50%",background:"rgba(255,32,86,0.45)",border:"2.5px solid #fff",boxShadow:"0 0 8px rgba(0,0,0,.55)",zIndex:2147483647,pointerEvents:"none",transform:"translate(-50%,-50%)",left:"-100px",top:"-100px"});
+    document.body.appendChild(dot);
+    const move=(e)=>{dot.style.left=e.clientX+"px";dot.style.top=e.clientY+"px";};
+    window.addEventListener("pointermove",move,true); window.addEventListener("mousemove",move,true);
+  };
+  if (document.body) install(); else document.addEventListener("DOMContentLoaded", install);
+};
+const b = await chromium.launch({ headless:false, channel:"chrome", ignoreDefaultArgs:["--enable-automation"], args:["--disable-blink-features=AutomationControlled"] });
+const c = await b.newContext({ storageState:"tests/e2e/.auth/shopify.json", viewport:{width:1440,height:900} });
+await c.addInitScript(CURSOR);
+const p = await c.newPage();
+await p.goto(`https://admin.shopify.com/store/${STORE}/apps/${APP}/app/plans`, { waitUntil:"domcontentloaded" });
+await appFrame(p).locator("body").waitFor({ state:"visible", timeout:60000 }).catch(()=>{});
+await p.waitForTimeout(5000);
+await p.evaluate(() => { const el=document.createElement("div"); el.id="__vcaption";
+  Object.assign(el.style,{position:"fixed",left:0,right:0,top:0,zIndex:2147483646,pointerEvents:"none",font:"600 18px/1.4 -apple-system,Segoe UI,Roboto,sans-serif",color:"#fff",background:"linear-gradient(180deg, rgba(20,20,30,.92), rgba(20,20,30,.75))",padding:"12px 20px",textAlign:"center"});
+  el.textContent="Overlay check — visible cursor + caption"; document.documentElement.appendChild(el); });
+const btn = appFrame(p).getByRole("button").first();
+await btn.hover().catch(()=>{});
+await p.waitForTimeout(1200);
+await p.screenshot({ path:"billing-review-proof/overlay-check.png" });
+console.log("saved billing-review-proof/overlay-check.png");
+await c.close(); await b.close(); process.exit(0);
