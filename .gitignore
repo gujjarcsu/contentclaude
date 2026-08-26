@@ -40,3 +40,6 @@ playwright-report/
 test-results/
 navaal-e2e/
 billing-proof/
+billing-persist/
+billing-cancel-upgrade/
+reconcile-probe/

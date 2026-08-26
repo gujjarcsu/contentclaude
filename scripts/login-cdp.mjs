@@ -61,11 +61,22 @@ console.log("=".repeat(64) + "\n");
 
 const deadline = Date.now() + 10 * 60 * 1000;
 let ok = false;
+let stableCount = 0;
 while (Date.now() < deadline) {
-  const page = context.pages().find((p) => p.url().includes("admin.shopify.com") && !p.url().includes("/login"));
+  // Any admin.shopify.com page that is NOT the login/account-chooser flow means
+  // the user is authenticated. Require it to persist across 2 polls (~5s) so we
+  // don't snapshot mid-redirect. This is far more lenient than matching a
+  // specific nav element (which varies across admin surfaces).
+  const page = context.pages().find(
+    (p) => /admin\.shopify\.com\/store\//.test(p.url())
+      && !/\/login|accounts\.shopify\.com|\/oauth\//.test(p.url())
+  );
   if (page) {
-    const nav = await page.locator('[data-portal-id], nav, #AppFrameNav, [aria-label="Primary"]').first().isVisible().catch(() => false);
-    if (nav) { ok = true; break; }
+    stableCount++;
+    console.log(`  authenticated admin page detected (${stableCount}/2): ${page.url()}`);
+    if (stableCount >= 2) { ok = true; break; }
+  } else {
+    stableCount = 0;
   }
   await new Promise((s) => setTimeout(s, 2500));
 }
