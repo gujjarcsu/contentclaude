@@ -36,6 +36,20 @@ export const loader = async ({ request }) => {
       { shop, isTest, beforePlan, subCount: subs.length, subs: subs.map((s) => ({ name: s.name, status: s.status, test: s.test })) },
       "RECONCILE_DIAG billing.check returned"
     );
+    // RECONCILE_DIAG (temporary, read-only): re-run billing.check with the
+    // OPPOSITE isTest to prove the isTest filter is the downgrade lever — a
+    // test:true sub is invisible to billing.check({isTest:false}) and vice
+    // versa. Result is logged ONLY; it never touches syncBillingToPlan.
+    try {
+      const probe = await billing.check({ plans: ALL_BILLING_PLAN_KEYS, isTest: !isTest });
+      const psubs = probe.appSubscriptions ?? [];
+      logger.info(
+        { shop, probedIsTest: !isTest, subCount: psubs.length, subs: psubs.map((s) => ({ name: s.name, status: s.status, test: s.test })) },
+        "RECONCILE_DIAG billing.check OPPOSITE-isTest probe"
+      );
+    } catch (e) {
+      logger.info({ shop, probedIsTest: !isTest, err: e?.message }, "RECONCILE_DIAG opposite-isTest probe threw");
+    }
     await syncBillingToPlan(shop, appSubscriptions);
     const fresh = await getOrCreatePlan(shop);
     if (fresh.planName !== beforePlan) {
