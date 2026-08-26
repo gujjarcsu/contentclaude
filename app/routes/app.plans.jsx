@@ -8,6 +8,7 @@ import {
 import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
+import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
 
@@ -54,9 +55,6 @@ export const loader = async ({ request }) => {
 
 export const action = async ({ request }) => {
   const { billing, session, admin } = await authenticate.admin(request);
-  // Dev stores (incl. the App Store review team's) can only approve TEST
-  // charges; real merchants get real charges. Resolved per shop.
-  const isTest = await resolveBillingTest(admin, session.shop);
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
@@ -65,6 +63,11 @@ export const action = async ({ request }) => {
     if (!planKey || !ALL_BILLING_PLAN_KEYS.includes(planKey)) {
       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
     }
+    // Dev stores (incl. the App Store review team's) can only approve TEST
+    // charges; real merchants get real charges. Resolved per shop — only the
+    // subscribe path needs it (test-vs-real must be decided before the sub
+    // exists); cancel reads the sub's real test flag instead.
+    const isTest = await resolveBillingTest(admin, session.shop);
     // billing.request() internally throws a redirect Response to Shopify's
     // approval screen. Any non-redirect throw (Shopify userErrors, network
     // failures, bad returnUrl) must be caught and returned as a user-facing
@@ -104,13 +107,18 @@ export const action = async ({ request }) => {
 
   if (actionType === "cancel") {
     try {
-      // ALL six keys (monthly + annual) — billing.check matches on exact
-      // subscription name, so a shorter list can't find annual subscribers.
-      const { appSubscriptions } = await billing.check({
-        plans: ALL_BILLING_PLAN_KEYS,
-        isTest,
-      });
-      const activeSub = appSubscriptions.find((s) => s.status === "ACTIVE");
+      // Test-agnostic lookup (App Store 1.2.3): billing.check({ isTest }) hides
+      // subscriptions whose test flag doesn't match isTest, so a dev store's
+      // test:true sub could look absent and produce a false "nothing to cancel".
+      // getActiveSubscriptions returns every active sub regardless of test flag.
+      const { ok, subs } = await getActiveSubscriptions(admin.graphql);
+      if (!ok) {
+        return Response.json(
+          { error: "We couldn't reach Shopify to confirm your subscription. Please try again in a moment, or contact support at hello@navaal.ai." },
+          { status: 503 }
+        );
+      }
+      const activeSub = subs.find((s) => s.status === "ACTIVE");
       if (!activeSub) {
         // Fail LOUDLY. Returning {cancelled: true} here would tell the
         // merchant they cancelled while Shopify keeps charging them — and
@@ -120,7 +128,9 @@ export const action = async ({ request }) => {
           { status: 409 }
         );
       }
-      await billing.cancel({ subscriptionId: activeSub.id, isTest, prorate: true });
+      // Cancel with the sub's ACTUAL test flag, not a re-resolved isTest —
+      // avoids any request/check divergence hiding the sub from the cancel.
+      await billing.cancel({ subscriptionId: activeSub.id, isTest: activeSub.test, prorate: true });
     } catch (err) {
       if (err instanceof Response) throw err;
       return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });

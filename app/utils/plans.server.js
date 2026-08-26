@@ -240,12 +240,16 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
     }
   }
 
-  // No active paid subscription → downgrade to free.
-  // RECONCILE_DIAG: log EVERY downgrade with the evidence it was based on.
-  import("./logger.server.js").then((m) => m.default.warn(
+  // No active paid subscription in the given list → downgrade to free.
+  // AUDIT: every downgrade is logged with the evidence it was based on. Callers
+  // MUST only pass an authoritative list here (App Store 1.2.3): the reconcile
+  // passes the test-agnostic active-subscriptions result and only when the
+  // lookup succeeded; the cancel action passes [] only after billing.cancel
+  // genuinely succeeded; the webhook writes Free directly on CANCELLED/EXPIRED.
+  logger.warn(
     { shop, subCount: (appSubscriptions ?? []).length, subs: (appSubscriptions ?? []).map((s) => ({ name: s.name, status: s.status, test: s.test })) },
-    "SYNC_DIAG downgrading to FREE (no ACTIVE sub in the given list)"
-  )).catch(() => {});
+    "billing: downgrading plan to Free (no ACTIVE subscription in authoritative list)"
+  );
   await prisma.plan.upsert({
     where: { shop },
     update: {

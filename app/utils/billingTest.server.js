@@ -15,10 +15,14 @@ import { BILLING_TEST } from "../shopify.server";
 // recoverable).
 const devStoreCache = new Map();
 
+// Used ONLY by the subscribe path (billing.request), where test-vs-real must be
+// decided before any subscription exists. The check/cancel/reconcile paths do
+// NOT use this — they read the subscription's real test flag from Shopify via
+// getActiveSubscriptions (App Store 1.2.3), so a wrong isTest can never hide a
+// live subscription there.
 export async function resolveBillingTest(admin, shop, force = BILLING_TEST) {
   if (force) return true;
   if (devStoreCache.has(shop)) return devStoreCache.get(shop);
-  let isDevStore = false;
   try {
     const res = await admin.graphql(
       `#graphql
@@ -31,20 +35,20 @@ export async function resolveBillingTest(admin, shop, force = BILLING_TEST) {
       }`
     );
     const body = await res.json();
-    // RECONCILE_DIAG: prove whether the partnerDevelopment lookup succeeds and
-    // what isTest we resolve. A failure here fail-closes to false, which makes
-    // billing.check(isTest:false) miss a TEST subscription -> false downgrade.
-    _diagLog("info", { shop, status: res.status, partnerDevelopment: body?.data?.shop?.plan?.partnerDevelopment, hasErrors: !!body?.errors }, "RESOLVE_BILLING_TEST_DIAG query result");
-    isDevStore = Boolean(body?.data?.shop?.plan?.partnerDevelopment);
-  } catch (err) {
-    _diagLog("error", { shop, err: err?.message }, "RESOLVE_BILLING_TEST_DIAG query THREW -> isTest=false (fail-closed)");
-    isDevStore = false;
+    // Only a clean response is authoritative. On GraphQL errors treat it as a
+    // failed lookup (fail closed, but do NOT cache — see below).
+    if (body?.errors) throw new Error("partnerDevelopment lookup returned errors");
+    const isDevStore = Boolean(body?.data?.shop?.plan?.partnerDevelopment);
+    // Cache ONLY successful lookups. Caching a fail-closed false used to poison
+    // this per-machine cache for the process lifetime after a single transient
+    // failure, so every later subscribe on that machine charged a dev store for
+    // real. A non-cached failure simply retries on the next call.
+    devStoreCache.set(shop, isDevStore);
+    return isDevStore;
+  } catch {
+    // Fail closed to a REAL charge (never cached): a merchant wrongly given a
+    // test subscription is silent revenue loss, while a dev store wrongly
+    // offered a real charge simply cannot approve it (visible, recoverable).
+    return false;
   }
-  devStoreCache.set(shop, isDevStore);
-  return isDevStore;
-}
-
-// Lazy logger import to avoid a static server-only dependency in this small util.
-function _diagLog(level, obj, msg) {
-  import("./logger.server.js").then((m) => m.default[level](obj, msg)).catch(() => {});
 }

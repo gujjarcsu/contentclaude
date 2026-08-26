@@ -1,71 +1,63 @@
 import { authenticate } from "../shopify.server";
-import { resolveBillingTest } from "../utils/billingTest.server.js";
-import { ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
+import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server";
 import logger from "../utils/logger.server.js";
 
 // Resource route (loader only — no UI). The Plans page calls this via useFetcher
-// AFTER first paint. billing.check() is a Shopify API round-trip; doing it here
-// instead of in the Plans loader guarantees it can NEVER hold the Plans response
-// open (a streamed deferred promise was being buffered by the edge proxy, so the
-// page still blocked the full ~40s until billing.check resolved). Returns { changed }
-// so the page revalidates only if Shopify reports a plan the webhook missed.
+// AFTER first paint. Reconciling here instead of in the Plans loader guarantees
+// it can NEVER hold the Plans response open. Returns { changed } so the page
+// revalidates only if Shopify reports a plan the webhook missed.
+//
+// App Store 1.2.3 fix: this used to call `billing.check({ isTest })`, which
+// FILTERS by the subscription's test flag. A dev/review store's sub is
+// test:true, so when isTest resolved false the check returned a
+// successful-but-EMPTY result and this reconcile downgraded the plan to Free on
+// reload. It now uses a test-AGNOSTIC lookup (getActiveSubscriptions) and
+// downgrades ONLY on an authoritative answer showing zero active subscriptions.
+// On ANY error/ambiguity it keeps the current plan — a downgrade requires
+// positive proof, never absence of proof.
 export const loader = async ({ request }) => {
   // authenticate.admin is inside the try on purpose: it throws a REDIRECT on an
   // auth miss, and this loader is a background fetcher.load — a followed redirect
   // would yank the embedded app to /auth/login. Swallow everything and return a
   // no-op; the Plans page's own loader handles real re-auth for the navigation.
-  // RECONCILE_DIAG: pure instrumentation to prove the 1.2.3 downgrade path.
-  // Control flow is UNCHANGED — only logging added. Remove after root cause.
-  let shop = "unknown", isTest = null, beforePlan = null;
+  let shop = "unknown";
+  let beforePlan = null;
   try {
-    const { billing, session, admin } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     shop = session.shop;
-    isTest = await resolveBillingTest(admin, shop);
     const before = await getOrCreatePlan(shop);
     beforePlan = before.planName;
-    // ALL six keys (monthly + annual). Passing only monthly keys made every
-    // annual subscriber look unsubscribed, and this loader then wiped their
-    // plan to Free on every Plans page load — while they were still billed.
-    const { appSubscriptions } = await billing.check({
-      plans: ALL_BILLING_PLAN_KEYS,
-      isTest,
-    });
-    const subs = appSubscriptions ?? [];
-    logger.info(
-      { shop, isTest, beforePlan, subCount: subs.length, subs: subs.map((s) => ({ name: s.name, status: s.status, test: s.test })) },
-      "RECONCILE_DIAG billing.check returned"
-    );
-    // RECONCILE_DIAG (temporary, read-only): re-run billing.check with the
-    // OPPOSITE isTest to prove the isTest filter is the downgrade lever — a
-    // test:true sub is invisible to billing.check({isTest:false}) and vice
-    // versa. Result is logged ONLY; it never touches syncBillingToPlan.
-    try {
-      const probe = await billing.check({ plans: ALL_BILLING_PLAN_KEYS, isTest: !isTest });
-      const psubs = probe.appSubscriptions ?? [];
-      logger.info(
-        { shop, probedIsTest: !isTest, subCount: psubs.length, subs: psubs.map((s) => ({ name: s.name, status: s.status, test: s.test })) },
-        "RECONCILE_DIAG billing.check OPPOSITE-isTest probe"
-      );
-    } catch (e) {
-      logger.info({ shop, probedIsTest: !isTest, err: e?.message }, "RECONCILE_DIAG opposite-isTest probe threw");
-    }
-    await syncBillingToPlan(shop, appSubscriptions);
-    const fresh = await getOrCreatePlan(shop);
-    if (fresh.planName !== beforePlan) {
+
+    // Test-agnostic: returns EVERY active subscription (test or real). ok:false
+    // means the lookup was not authoritative — keep state, never downgrade.
+    const { ok, subs, reason } = await getActiveSubscriptions(admin.graphql);
+    if (!ok) {
       logger.warn(
-        { shop, isTest, from: beforePlan, to: fresh.planName, subCount: subs.length },
-        "RECONCILE_DIAG PLAN CHANGED by reconcile"
+        { shop, beforePlan, reason },
+        "reconcile: active-subscription lookup not authoritative — kept current plan (no downgrade)"
+      );
+      return Response.json({ changed: false });
+    }
+
+    // Authoritative answer. syncBillingToPlan promotes to the ACTIVE sub's plan,
+    // or downgrades to Free ONLY because we positively confirmed zero active subs.
+    await syncBillingToPlan(shop, subs);
+    const fresh = await getOrCreatePlan(shop);
+    const changed = fresh.planName !== beforePlan;
+    if (changed) {
+      logger.info(
+        { shop, from: beforePlan, to: fresh.planName, subCount: subs.length },
+        "reconcile: plan reconciled from Shopify active subscriptions"
       );
     }
-    return Response.json({ changed: fresh.planName !== beforePlan });
+    return Response.json({ changed });
   } catch (err) {
-    // Previously swallowed silently. Log it — a throw here means we KEPT state
-    // (no downgrade), so if a store still reverts, the cause is a successful
-    // empty billing.check above, not this catch.
+    // A throw here means we KEPT state (no downgrade). Log it so a genuine
+    // reconcile failure is visible rather than silently swallowed.
     logger.error(
-      { shop, isTest, beforePlan, err: err?.message, stack: err?.stack?.split("\n").slice(0, 4) },
-      "RECONCILE_DIAG threw — kept state (no downgrade)"
+      { shop, beforePlan, err: err?.message },
+      "reconcile: threw — kept current plan (no downgrade)"
     );
     return Response.json({ changed: false });
   }

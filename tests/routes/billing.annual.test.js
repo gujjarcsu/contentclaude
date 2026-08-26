@@ -1,12 +1,21 @@
 /**
- * P0-3 regression tests — annual subscribers must never be downgraded to Free,
- * and cancel must never claim success without actually cancelling.
+ * Billing regression tests — a live subscription (annual OR a dev-store
+ * test:true charge) must never be downgraded to Free, and cancel must never
+ * claim success without actually cancelling.
  *
- * Root cause: billing.check({ plans }) matches on EXACT subscription name.
- * Both call sites passed only the 3 monthly keys, so "Starter Annual" /
- * "Growth Annual" / "Professional Annual" never matched -> appSubscriptions
- * [] -> syncBillingToPlan(shop, []) -> plan dropped to free while the
- * merchant is billed up to $799.90/year.
+ * History:
+ *  - P0-3 (annual): billing.check({ plans }) matched on EXACT subscription name
+ *    and both sites passed only the 3 monthly keys, so annual subs weren't found
+ *    -> plan dropped to free while the merchant was billed.
+ *  - 1.2.3 (App Store): billing.check({ isTest }) FILTERS by the sub's test flag.
+ *    A dev/review store's sub is test:true, so billing.check({ isTest:false })
+ *    returned empty and the reconcile downgraded to Free on reload.
+ *
+ * The fix for both: the check/downgrade paths no longer use billing.check at
+ * all. They query currentAppInstallation.activeSubscriptions directly
+ * (getActiveSubscriptions), which returns EVERY active subscription regardless
+ * of name or test flag — annual and test subs alike — and downgrade only on an
+ * authoritative response showing zero active subs.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -34,35 +43,81 @@ const ALL_SIX_KEYS = [
   "Starter Annual", "Growth Annual", "Professional Annual",
 ];
 
-describe("P0-3: annual billing keys", () => {
+// Build an admin.graphql mock that answers the activeSubscriptions query with
+// the given subscription list (and answers any other query — e.g. the
+// partnerDevelopment lookup — with an empty-but-valid shape).
+const adminWithSubs = (subs) => ({
+  graphql: vi.fn(async (query) => ({
+    json: async () =>
+      /activeSubscriptions/.test(query)
+        ? { data: { currentAppInstallation: { activeSubscriptions: subs } } }
+        : { data: { shop: { plan: { partnerDevelopment: true } } } },
+  })),
+});
+
+describe("billing downgrade safety (annual + 1.2.3 test-flag)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("plans-reconcile checks ALL six plan keys (monthly + annual)", async () => {
+  it("reconcile promotes an ACTIVE annual subscription (found regardless of key)", async () => {
     const { authenticate } = await import("../../app/shopify.server");
-    const check = vi.fn(async () => ({ appSubscriptions: [] }));
     authenticate.admin.mockResolvedValue({
-      billing: { check },
       session: { shop: "test.myshopify.com" },
+      admin: adminWithSubs([
+        { id: "gid://shopify/AppSubscription/1", name: "Growth Annual", status: "ACTIVE", test: false, currentPeriodEnd: "2027-01-01T00:00:00Z" },
+      ]),
     });
     const { loader } = await import("../../app/routes/app.plans-reconcile.jsx");
     await loader({ request: new Request("https://app.test/app/plans-reconcile") });
 
-    expect(check).toHaveBeenCalled();
-    const plansArg = check.mock.calls[0][0].plans;
-    for (const key of ALL_SIX_KEYS) {
-      expect(plansArg).toContain(key);
-    }
+    // Synced with the annual sub present — never an empty list (which would downgrade).
+    expect(syncBillingToPlan).toHaveBeenCalledTimes(1);
+    const [, subsArg] = syncBillingToPlan.mock.calls[0];
+    expect(subsArg).toHaveLength(1);
+    expect(subsArg[0].name).toBe("Growth Annual");
   });
 
-  it("cancel checks ALL six plan keys so an annual subscription can be found", async () => {
+  it("reconcile does NOT hide a dev-store test:true subscription (1.2.3 root cause)", async () => {
     const { authenticate } = await import("../../app/shopify.server");
-    const check = vi.fn(async () => ({
-      appSubscriptions: [{ id: "gid://shopify/AppSubscription/1", name: "Growth Annual", status: "ACTIVE" }],
-    }));
+    authenticate.admin.mockResolvedValue({
+      session: { shop: "test.myshopify.com" },
+      admin: adminWithSubs([
+        { id: "gid://shopify/AppSubscription/9", name: "Professional Plan", status: "ACTIVE", test: true, currentPeriodEnd: "2027-01-01T00:00:00Z" },
+      ]),
+    });
+    const { loader } = await import("../../app/routes/app.plans-reconcile.jsx");
+    await loader({ request: new Request("https://app.test/app/plans-reconcile") });
+
+    // The test:true sub is passed through — NOT dropped to [] (which reverted to Free).
+    expect(syncBillingToPlan).toHaveBeenCalledTimes(1);
+    const [, subsArg] = syncBillingToPlan.mock.calls[0];
+    expect(subsArg.find((s) => s.status === "ACTIVE")?.test).toBe(true);
+  });
+
+  it("reconcile does NOT downgrade when the lookup is not authoritative (GraphQL errors)", async () => {
+    const { authenticate } = await import("../../app/shopify.server");
+    authenticate.admin.mockResolvedValue({
+      session: { shop: "test.myshopify.com" },
+      admin: {
+        graphql: vi.fn(async () => ({ json: async () => ({ errors: [{ message: "Throttled" }] }) })),
+      },
+    });
+    const { loader } = await import("../../app/routes/app.plans-reconcile.jsx");
+    const res = await loader({ request: new Request("https://app.test/app/plans-reconcile") });
+
+    // Keep state — syncBillingToPlan must NOT be called on an ambiguous answer.
+    expect(syncBillingToPlan).not.toHaveBeenCalled();
+    expect((await res.json()).changed).toBe(false);
+  });
+
+  it("cancel finds an annual subscription (test-agnostic) and genuinely cancels it", async () => {
+    const { authenticate } = await import("../../app/shopify.server");
     const cancel = vi.fn(async () => ({}));
     authenticate.admin.mockResolvedValue({
-      billing: { check, cancel },
+      billing: { cancel },
       session: { shop: "test.myshopify.com" },
+      admin: adminWithSubs([
+        { id: "gid://shopify/AppSubscription/1", name: "Growth Annual", status: "ACTIVE", test: false },
+      ]),
     });
 
     const fd = new FormData();
@@ -70,21 +125,19 @@ describe("P0-3: annual billing keys", () => {
     const { action } = await import("../../app/routes/app.plans.jsx");
     await action({ request: new Request("https://app.test/app/plans", { method: "POST", body: fd }) });
 
-    const plansArg = check.mock.calls[0][0].plans;
-    for (const key of ALL_SIX_KEYS) {
-      expect(plansArg).toContain(key);
-    }
-    // The annual subscription was found and genuinely cancelled
-    expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ subscriptionId: "gid://shopify/AppSubscription/1" }));
+    // Cancelled by id, using the sub's own test flag (not a re-resolved isTest).
+    expect(cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: "gid://shopify/AppSubscription/1", isTest: false })
+    );
   });
 
-  it("cancel with NO matching subscription fails loudly and does NOT downgrade the plan", async () => {
+  it("cancel with NO active subscription fails loudly and does NOT downgrade the plan", async () => {
     const { authenticate } = await import("../../app/shopify.server");
-    const check = vi.fn(async () => ({ appSubscriptions: [] }));
     const cancel = vi.fn(async () => ({}));
     authenticate.admin.mockResolvedValue({
-      billing: { check, cancel },
+      billing: { cancel },
       session: { shop: "test.myshopify.com" },
+      admin: adminWithSubs([]),
     });
 
     const fd = new FormData();
@@ -101,17 +154,20 @@ describe("P0-3: annual billing keys", () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
-  // Source guard: neither billing call site may ever revert to the
-  // monthly-only expression. This is intentionally a source-level test — the
-  // bug shipped because the two sites drifted from the one correct expression.
-  it("source guard: both billing.check sites use the shared ALL_BILLING_PLAN_KEYS constant", () => {
+  // Source guard: the check/downgrade sites must stay test-agnostic. The 1.2.3
+  // bug shipped because they used billing.check({ isTest }); lock that out.
+  it("source guard: reconcile and cancel use getActiveSubscriptions, never billing.check", () => {
     const reconcileSrc = readFileSync(join(repoRoot, "app/routes/app.plans-reconcile.jsx"), "utf8");
     const plansSrc = readFileSync(join(repoRoot, "app/routes/app.plans.jsx"), "utf8");
-    expect(reconcileSrc).toContain("ALL_BILLING_PLAN_KEYS");
-    expect(plansSrc).toContain("ALL_BILLING_PLAN_KEYS");
-    const monthlyOnly = /billing\.check\(\{\s*\n?\s*plans:\s*Object\.values\(BILLING_PLANS\)\.map\(\(?p\)?\s*=>\s*p\.key\)/;
-    expect(monthlyOnly.test(reconcileSrc)).toBe(false);
-    expect(monthlyOnly.test(plansSrc)).toBe(false);
+    // Both check/downgrade sites go through the shared test-agnostic helper.
+    expect(reconcileSrc).toContain("getActiveSubscriptions");
+    expect(plansSrc).toContain("getActiveSubscriptions");
+    // The reconcile must never CALL billing.check again (that reintroduces
+    // 1.2.3). Match actual invocations (`await billing.check(`), not the
+    // explanatory comments that mention the old API by name.
+    expect(/await\s+billing\.check\s*\(/.test(reconcileSrc)).toBe(false);
+    // The cancel path must not gate on billing.check either.
+    expect(/await\s+billing\.check\s*\(/.test(plansSrc)).toBe(false);
   });
 
   it("ALL_BILLING_PLAN_KEYS exports exactly the 6 real subscription names", async () => {
