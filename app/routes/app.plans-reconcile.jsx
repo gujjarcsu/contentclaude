@@ -31,7 +31,15 @@ export const loader = async ({ request }) => {
 
     // Test-agnostic: returns EVERY active subscription (test or real). ok:false
     // means the lookup was not authoritative — keep state, never downgrade.
-    const { ok, subs, reason } = await getActiveSubscriptions(admin.graphql);
+    let lookup = await getActiveSubscriptions(admin.graphql);
+    // TEMPORARY (App Store 1.2.3 acceptance test #4): when DIAG_FORCE_UNAUTH=1,
+    // simulate a total loss of Shopify access to prove live that an
+    // unauthoritative answer keeps the current plan instead of downgrading.
+    // Removed immediately after the live test; off unless the secret is set.
+    if (process.env.DIAG_FORCE_UNAUTH === "1") {
+      lookup = { ok: false, subs: [], reason: "forced_unauth_diag" };
+    }
+    const { ok, subs, reason } = lookup;
     if (!ok) {
       logger.warn(
         { shop, beforePlan, reason },
