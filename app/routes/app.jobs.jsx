@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator, useFetcher, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
 import {
   Page,
   Card,
@@ -22,6 +22,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { ReviewRequest } from "../components/ReviewRequest";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -178,7 +179,7 @@ export default function JobsPage() {
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
 
   // Hooks must all be called before any conditional return
   const hasActiveJobs = jobs.some((j) => j.status === "queued" || j.status === "processing");
@@ -240,7 +241,7 @@ export default function JobsPage() {
   const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "failed");
 
   // Skeleton while navigating to this page — no blank flash
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return (
       <SkeletonPage title="Bulk Generation Jobs" primaryAction>
         <BlockStack gap="400">

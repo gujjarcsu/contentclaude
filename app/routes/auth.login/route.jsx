@@ -1,35 +1,31 @@
+import { redirect } from "react-router";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import { useActionData, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
+import { isEmbeddedRequest, embeddedAppParams } from "../../utils/embedded.server.js";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
-  // If the app is embedded (Shopify always passes `host`), decode the shop
-  // from the host param and redirect to OAuth automatically — the merchant
-  // should never have to type their shop domain when coming from Shopify admin.
-  const host = url.searchParams.get("host");
-  if (host && !url.searchParams.get("shop")) {
-    try {
-      const decoded = atob(host.replace(/-/g, "+").replace(/_/g, "/"));
-      // decoded = "{shop}/admin"
-      const shop = decoded.split("/")[0];
-      if (shop && shop.includes(".myshopify.com")) {
-        const next = new URL(request.url);
-        next.searchParams.set("shop", shop);
-        const errors = loginErrorMessage(await login(new Request(next.toString(), request)));
-        if (!errors.shop) return { errors };
-      }
-    } catch {
-      // ignore decode errors — fall through to manual form
-    }
+  // App Store rejection 2.1.1: the login form must be UNREACHABLE from inside
+  // the admin. Any embedded/admin request (host or embedded=1) is sent back into
+  // the app — `/app` re-authenticates silently via token exchange / the App
+  // Bridge bounce, so the merchant lands on the dashboard, never on this form.
+  // (The previous host-recovery here called login(), which THROWS an OAuth
+  // redirect, then swallowed that throw in a try/catch and fell through to the
+  // form — so recovery never happened. Redirecting to /app avoids that entirely
+  // and keeps the merchant embedded instead of doing a top-level OAuth.)
+  if (isEmbeddedRequest(request)) {
+    const params = embeddedAppParams(url);
+    throw redirect(`/app?${params.toString()}`);
   }
 
-  // Only call login() when there's a shop param to process — the Shopify
-  // library calls request.formData() internally, which Node 24+ rejects on
-  // plain GET requests that have no form body.
+  // Outside the admin. Only call login() when there's a shop param to process —
+  // the Shopify library calls request.formData() internally, which Node 24+
+  // rejects on plain GET requests that have no form body. login() may THROW an
+  // OAuth redirect for a valid shop; let it propagate (do not catch it).
   const shopParam = url.searchParams.get("shop");
   const errors = shopParam ? loginErrorMessage(await login(request)) : {};
   return { errors };

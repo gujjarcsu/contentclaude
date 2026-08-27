@@ -25,6 +25,7 @@ import prisma from "../db.server";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 import { GeoValueBanner } from "../components/GeoValueBanner";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -252,6 +253,7 @@ export default function BlogPage() {
   const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
 
   const isGenerating = navigation.state === "submitting" && navigation.formData?.get("actionType") === "generate";
@@ -323,7 +325,7 @@ export default function BlogPage() {
   ];
 
 
-  return navigation.state === "loading" ? (
+  return loadingThisRoute ? (
     <AppSkeleton title="Blog Generator" sections={2} layout="twoThird" />
   ) : (
     <Page

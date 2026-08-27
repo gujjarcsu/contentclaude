@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher, useNavigate, useRevalidator, useNavigation } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -36,6 +36,7 @@ import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
 import { normalizeAltTextResults } from "../utils/altText.js";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // How many product images alt-text generation covers in one run. Shopify's
 // media connection is paginated; anything beyond this is disclosed in the UI
@@ -1145,7 +1146,7 @@ export default function ProductGeneratePage() {
   ];
 
   // Auto-switch to Content tab when generation completes
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const prevGeneratingRef = useRef(false);
 
   useEffect(() => {
@@ -1178,7 +1179,7 @@ export default function ProductGeneratePage() {
   ];
 
 
-  return navigation.state === "loading" ? (
+  return loadingThisRoute ? (
     <AppSkeleton title="Product" sections={3} layout="full" />
   ) : (
     <Page

@@ -30,7 +30,17 @@ export function RouteError() {
   const action = is404
     ? { content: "← Back to Products", onAction: () => navigate("/app/products") }
     : is401
-    ? { content: "Re-authenticate", onAction: () => { window.location.href = "/auth/login"; } }
+    ? {
+        // 2.1.1: never send an embedded merchant to the /auth/login form (a
+        // dead-end inside the admin). Re-enter the app at /app with the current
+        // embedded params — the app re-authenticates silently via token
+        // exchange / the App Bridge bounce.
+        content: "Re-authenticate",
+        onAction: () => {
+          const search = typeof window !== "undefined" ? window.location.search : "";
+          if (typeof window !== "undefined") window.location.href = `/app${search}`;
+        },
+      }
     : { content: "← Back to Dashboard", onAction: () => navigate("/app") };
 
   return (

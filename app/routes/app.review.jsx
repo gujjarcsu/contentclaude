@@ -27,6 +27,7 @@ import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest";
 import { EmbedSetupCard } from "../components/EmbedSetupCard";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
 const PUBLISH_CONCURRENCY = 3;
@@ -444,6 +445,7 @@ export default function ReviewPage() {
   const { products, page, totalPages, reviewRequested, embedConfirmed, shopDomain } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   // Ask for an App Store review right after a bulk publish succeeds (once ever).
   const askReview = !reviewRequested && !!actionData?.success && (actionData?.published ?? 0) >= 1;
   const navigate = useNavigate();
@@ -536,7 +538,7 @@ export default function ReviewPage() {
   }
 
 
-  return navigation.state === "loading" ? (
+  return loadingThisRoute ? (
     <AppSkeleton title="Review & Publish" sections={2} layout="full" />
   ) : (
     <Page

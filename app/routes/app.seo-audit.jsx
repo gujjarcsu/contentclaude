@@ -18,6 +18,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -154,10 +155,11 @@ export default function SeoAuditPage() {
   const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount, truncatedReason, scannedCount } = useLoaderData();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading" || revalidator.state === "loading";
 
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="SEO Audit" sections={2} layout="full" />;
   }
 

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -22,6 +22,7 @@ import {
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ const TONE_OPTIONS = [
 export default function CollectionsPage() {
   const { collections, statusMap, voiceMap } = useLoaderData();
   const navigate = useNavigate();
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const fetcher = useFetcher();
   const voiceFetcher = useFetcher();
   const [expandedId, setExpandedId] = useState(null);
@@ -335,7 +336,7 @@ export default function CollectionsPage() {
 
   // Instant feedback during client-side navigation into this route — prevents
   // the blank-pane stall while the loader fetches collections from Shopify.
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="Collections" sections={3} layout="full" />;
   }
 

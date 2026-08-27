@@ -7,6 +7,7 @@ import {
 import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -168,6 +169,7 @@ export default function SettingsPage() {
   const { brandVoice, templates, entitlements } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
@@ -214,7 +216,7 @@ export default function SettingsPage() {
   }, [actionData]);
 
   // Instant feedback while navigating into Settings — single page-level skeleton.
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="Settings" sections={3} layout="twoThird" />;
   }
 

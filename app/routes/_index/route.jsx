@@ -1,16 +1,26 @@
 import { redirect } from "react-router";
-import { login } from "../../shopify.server";
+import { embeddedAppParams, isEmbeddedRequest } from "../../utils/embedded.server.js";
 
+// App root. This route must NEVER dead-end a merchant on the login form when the
+// request comes from inside the Shopify admin (App Store rejection 2.1.1).
+//
+// The admin loads the app home (`application_url` = "/") when the merchant
+// clicks the app name / "Dashboard" home nav, and it sends the embedded `host`
+// param but NOT always `shop`. The old code checked only `shop`, so a
+// host-without-shop load fell through to `redirect("/auth/login")` (dropping
+// every param) and rendered the "Shop domain" form inside the admin. Now: any
+// request carrying `shop` OR `host` OR `embedded=1` is sent into `/app` with the
+// shop derived from `host` when needed, so the embedded token-exchange auth runs
+// and the merchant lands on the dashboard. The login form is reserved strictly
+// for a true top-level visit from OUTSIDE the admin (no shop, no host).
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
-  if (url.searchParams.get("shop")) {
-    throw redirect(`/app?${url.searchParams.toString()}`);
+  if (isEmbeddedRequest(request) || url.searchParams.get("shop")) {
+    const params = embeddedAppParams(url);
+    throw redirect(`/app?${params.toString()}`);
   }
 
-  if (login) {
-    throw redirect("/auth/login");
-  }
-
-  throw redirect("/app");
+  // Genuinely external, contextless visit — the only case that may see the form.
+  throw redirect("/auth/login");
 };

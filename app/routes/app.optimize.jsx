@@ -11,6 +11,7 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,7 @@ export default function OptimizePage() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const actionData = useActionData();
   const isSubmitting = navigation.state === "submitting";
 
@@ -239,7 +241,7 @@ export default function OptimizePage() {
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
 
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return (
       <SkeletonPage title="Optimise Store" primaryAction>
         <BlockStack gap="400">

@@ -1,4 +1,4 @@
-import { useLoaderData, useActionData, useNavigate, useSubmit, redirect, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useNavigate, useSubmit, redirect, useSearchParams } from "react-router";
 import {
   Page,
   Layout,
@@ -33,6 +33,7 @@ import { getEntitlements } from "../utils/billing-plans.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { UpgradePrompt } from "../components/UpgradePrompt";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const PAGE_SIZE = 50;
 
@@ -284,7 +285,7 @@ export default function ProductsPage() {
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   // Action failures (plan gates, invalid selection, Shopify fetch errors) MUST
   // be visible — on success the action redirects to /app/jobs, so any object
   // return here is an error the merchant needs to see.
@@ -435,7 +436,7 @@ export default function ProductsPage() {
     submit(buildBulkFormData("generateAll", null), { method: "POST" });
   }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit]);
 
-  if (navigation.state === "loading") return <ProductListSkeleton />;
+  if (loadingThisRoute) return <ProductListSkeleton />;
 
   return (
     <Page

@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigation, useNavigate } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 import {
   Page, Card, Text, BlockStack, InlineStack, Box, ProgressBar, Badge, Button, EmptyState, Divider,
 } from "@shopify/polaris";
@@ -40,10 +41,10 @@ function StatCard({ value, label, sub, tone }) {
 
 export default function ResultsPage() {
   const data = useLoaderData();
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
 
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="Your Results" sections={3} layout="full" />;
   }
 

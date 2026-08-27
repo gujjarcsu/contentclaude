@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, useSearchParams, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -115,7 +116,7 @@ export default function AnalyticsPage() {
   } = useLoaderData();
   const navigate = useNavigate();
 
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const [, setSearchParams] = useSearchParams();
 
 
@@ -133,7 +134,7 @@ export default function AnalyticsPage() {
   ]);
 
 
-  return navigation.state === "loading" ? (
+  return loadingThisRoute ? (
     <AppSkeleton title="Analytics" sections={3} layout="full" />
   ) : (
     <Page

@@ -12,7 +12,7 @@
 // and the after-content come from the merchant's own catalog + a real generation.
 
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
-import { useLoaderData, useFetcher, useNavigate, useNavigation, useRevalidator, Await, redirect } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useRevalidator, Await, redirect } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, Badge,
@@ -27,6 +27,7 @@ import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { GeoValueBanner } from "../components/GeoValueBanner";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const SCAN_LIMIT = 30;
 
@@ -378,10 +379,10 @@ function ScanError() {
 
 export default function WelcomePage() {
   const data = useLoaderData();
-  const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
 
   // Full-page skeleton during a client navigation into the route.
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="Welcome to Navaal" sections={3} layout="full" />;
   }
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useLoaderData, useNavigate, redirect, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, redirect } from "react-router";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { GeoValueBanner } from "../components/GeoValueBanner";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard";
@@ -221,8 +222,8 @@ export default function Dashboard() {
     }
   });
 
-  const navigation = useNavigation();
-  if (navigation.state === "loading") {
+  const loadingThisRoute = useRouteLoading();
+  if (loadingThisRoute) {
     return <AppSkeleton title="Dashboard" sections={3} layout="full" />;
   }
 

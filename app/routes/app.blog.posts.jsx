@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
@@ -7,6 +7,7 @@ import {
 import { BookOpen, PenLine, Globe, Clock, FileText, Trash2 } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -163,8 +164,8 @@ export default function BlogPosts() {
 
   const published = posts.filter((p) => p.status === "published");
 
-  const navigation = useNavigation();
-  if (navigation.state === "loading") {
+  const loadingThisRoute = useRouteLoading();
+  if (loadingThisRoute) {
     return <AppSkeleton title="Blog Posts" sections={2} layout="twoThird" />;
   }
   const drafts = posts.filter((p) => p.status === "draft");

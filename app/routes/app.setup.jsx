@@ -7,6 +7,7 @@ import {
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const TOTAL_STEPS = 5;
 
@@ -110,6 +111,7 @@ export const action = async ({ request }) => {
 export default function SetupPage() {
   const { brandVoice, step, milestones, onboardingPct } = useLoaderData();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
 
@@ -163,7 +165,7 @@ export default function SetupPage() {
   ];
 
 
-  return navigation.state === "loading" ? (
+  return loadingThisRoute ? (
     <AppSkeleton title="Setup" sections={2} layout="full" />
   ) : (
     <Page title="Welcome to Navaal" subtitle={`Let's set up your brand voice in ${TOTAL_STEPS} quick steps`}>

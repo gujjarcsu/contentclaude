@@ -11,6 +11,7 @@ import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
+import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -451,6 +452,7 @@ export default function PlansPage() {
   const { plan, usageCount, currentMonth, billingNotice } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+  const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const reconcileFetcher = useFetcher();
@@ -489,7 +491,7 @@ export default function PlansPage() {
 
   const isSubmitting = navigation.state === "submitting";
 
-  if (navigation.state === "loading") {
+  if (loadingThisRoute) {
     return <AppSkeleton title="Plans & Billing" sections={3} layout="full" />;
   }
   const submittingPlan = navigation.formData?.get("planKey");
