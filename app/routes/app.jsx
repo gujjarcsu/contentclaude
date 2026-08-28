@@ -1,4 +1,4 @@
-import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher, useLocation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
@@ -10,10 +10,47 @@ import { ContentClaudeBrand } from "../components/ContentClaudeBrand";
 import { AppRenderBoundary } from "../components/RouteError";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const host = new URL(request.url).searchParams.get("host") || "";
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", host, shopDomain: session.shop };
 };
+
+// Keep the embedded context (host/shop/embedded) STICKY in the browser URL.
+//
+// App Store rejection 2.1.1 (#4) root cause: a client-side navigation (nav-menu
+// click) lands on a bare path like /app/products with NO host query param. A
+// later reload or document load of that URL then reaches the Shopify library
+// with no host, and validateShopAndHostParams throws redirect("/auth/login") —
+// the "Shop domain" login form inside the admin. We capture the embedded params
+// on first load and re-append them (via history.replaceState, no navigation) on
+// every route change, so every URL always carries host/shop and a reload can
+// re-authenticate silently instead of dead-ending on the form.
+function useStickyEmbeddedParams(host, shopDomain) {
+  const location = useLocation();
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const h = sp.get("host") || sessionStorage.getItem("navaal:host") || host;
+      const s = sp.get("shop") || sessionStorage.getItem("navaal:shop") || shopDomain;
+      if (h) sessionStorage.setItem("navaal:host", h);
+      if (s) sessionStorage.setItem("navaal:shop", s);
+      if (h && !sp.get("host")) {
+        sp.set("host", h);
+        if (s && !sp.get("shop")) sp.set("shop", s);
+        sp.set("embedded", "1");
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}?${sp.toString()}${window.location.hash || ""}`
+        );
+      }
+    } catch {
+      /* sessionStorage / history unavailable — best-effort only */
+    }
+  }, [location.pathname, location.search, host, shopDomain]);
+}
 
 const MESSAGES = [
   "✨ AI is crafting your product content…",
@@ -150,8 +187,9 @@ function JobProgressTicker({ navigate }) {
 }
 
 export default function App() {
-  const { apiKey } = useLoaderData();
+  const { apiKey, host, shopDomain } = useLoaderData();
   const navigate = useNavigate();
+  useStickyEmbeddedParams(host, shopDomain);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
