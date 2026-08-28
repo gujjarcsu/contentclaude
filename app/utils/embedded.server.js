@@ -107,20 +107,17 @@ export function renderReembedPage(request, targetPath = "/app") {
   if (shop && !shop.includes(".")) shop = `${shop}.myshopify.com`;
   const validShop = shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop) ? shop.toLowerCase() : null;
 
-  let dest;
-  if (validShop) {
-    // Fully-qualified ADMIN url. No host required, no relative-path resolution,
-    // so App Bridge can never 404 on it — Shopify re-enters the app embedded
-    // with fresh params. This is the case that guarantees no dead-end.
-    const storeHandle = validShop.replace(/\.myshopify\.com$/i, "");
-    dest = `https://admin.shopify.com/store/${storeHandle}/apps/${APP_HANDLE}${target}`;
-  } else {
-    // No shop identity at all — last resort: navigate to the absolute app URL
-    // and let App Bridge / token exchange sort it out.
-    const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-    const base = `${appUrl}${target}`;
-    dest = params.toString() ? `${base}?${params.toString()}` : base;
-  }
+  // Server-resolved fully-qualified ADMIN url when the shop is known (host or
+  // the persisted cookie). No host required, no relative-path resolution, so App
+  // Bridge can never 404 on it — Shopify re-enters the app embedded with fresh
+  // params. When the shop is NOT known server-side, the page reads it from App
+  // Bridge client-side (App Bridge knows the shop from the parent admin even
+  // without host in the URL) and builds the same admin url — so there is no
+  // context a document load can arrive in that dead-ends.
+  const storeHandle = validShop ? validShop.replace(/\.myshopify\.com$/i, "") : "";
+  const adminDest = validShop ? `https://admin.shopify.com/store/${storeHandle}/apps/${APP_HANDLE}${target}` : "";
+  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+  const appFallback = params.toString() ? `${appUrl}${target}?${params.toString()}` : `${appUrl}${target}`;
 
   // Must allow admin.shopify.com to frame this recovery page.
   const ancestors = validShop
@@ -135,7 +132,27 @@ export function renderReembedPage(request, targetPath = "/app") {
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <script data-api-key="${apiKey}" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 </head><body>
-<script>window.open(${JSON.stringify(dest)}, "_top");</script>
+<script>
+(function(){
+  var adminDest = ${JSON.stringify(adminDest)};
+  var handle = ${JSON.stringify(APP_HANDLE)};
+  var target = ${JSON.stringify(target)};
+  var appFallback = ${JSON.stringify(appFallback)};
+  function fromShop(shop){ return shop ? "https://admin.shopify.com/store/" + String(shop).replace(".myshopify.com","") + "/apps/" + handle + target : null; }
+  function go(dest){ if(dest){ try { window.open(dest, "_top"); } catch(e){} } }
+  // Known server-side → go immediately to the fully-qualified admin url.
+  if (adminDest) { go(adminDest); return; }
+  // Otherwise wait briefly for App Bridge to expose the shop, then build the
+  // admin url from it. Last resort after ~6s: the absolute app url.
+  var n = 0;
+  var iv = setInterval(function(){
+    var shop = null;
+    try { shop = window.shopify && window.shopify.config && window.shopify.config.shop; } catch(e){}
+    if (shop) { clearInterval(iv); go(fromShop(shop)); }
+    else if (n++ > 60) { clearInterval(iv); go(appFallback); }
+  }, 100);
+})();
+</script>
 </body></html>`;
   return new Response(html, { headers });
 }

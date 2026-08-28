@@ -22,12 +22,13 @@ async function trace(label, url, headers) {
   }
   const form = /Shop domain|name="shop"|>Log in<|heading="Log in"/i.test(body);
   const reembed = /app-bridge\.js/.test(body) && /window\.open/.test(body);
+  const openTarget = (body.match(/adminDest\s*=\s*"([^"]*)"/) || [])[1] || (body.match(/https?:\/\/[^"'\s]+/) || [])[0] || "(client-derived from App Bridge)";
   const framable = /frame-ancestors[^;]*admin\.shopify\.com/i.test(csp);
   console.log(`\n### ${label}`);
   console.log(`   chain: ${chain.join("  |  ")}`);
   console.log(`   final status: ${status}`);
   console.log(`   FORM: ${form ? "YES" : "no"}   RE-EMBED(App Bridge): ${reembed ? "YES" : "no"}   admin-framable: ${framable ? "yes" : "NO"}`);
-  if (reembed) console.log(`   CSP: ${csp}`);
+  if (reembed) console.log(`   → window.open: ${openTarget}`);
   return { form, reembed, status, framable };
 }
 

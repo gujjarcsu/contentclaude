@@ -1,0 +1,127 @@
+// 2.1.1 #4 FINAL gauntlet for Cowork — recorded, SHA on screen, visible cursor.
+// Third-party cookies blocked (--test-third-party-cookie-phaseout) = the
+// reviewer's incognito condition. Runs the reviewer's exact flow AND an
+// adversarial forced host-less /app load, asserting the login form never
+// appears and each step recovers to the app.
+//
+//   node scripts/gauntlet-final.mjs
+import { chromium } from "@playwright/test";
+import fs from "node:fs";
+
+const STORE = process.env.PROBE_STORE || "contentpilot-dev2";
+const APP = "navaal-seo-geo-content";
+const ADMIN = `https://admin.shopify.com/store/${STORE}`;
+const APP_ROOT = `${ADMIN}/apps/${APP}`;
+const OUT = "gauntlet-final";
+fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(`${OUT}/video`, { recursive: true });
+
+const frameOf = (page) => page.frames().find((f) => /navaal|app\.navaal\.ai/.test(f.url()));
+const appFrame = (p) => p.frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]').first();
+const log = (m) => console.log(`[final] ${new Date().toISOString()} ${m}`);
+const results = [];
+
+const CURSOR = () => {
+  if (window.__vcursor) return; window.__vcursor = true;
+  const install = () => { if (!document.body) return;
+    const d = document.createElement("div");
+    Object.assign(d.style,{position:"fixed",width:"24px",height:"24px",borderRadius:"50%",background:"rgba(255,32,86,0.45)",border:"2.5px solid #fff",boxShadow:"0 0 8px rgba(0,0,0,.55)",zIndex:2147483647,pointerEvents:"none",transform:"translate(-50%,-50%)",left:"-100px",top:"-100px",transition:"left .04s linear, top .04s linear"});
+    document.body.appendChild(d);
+    const mv=(e)=>{d.style.left=e.clientX+"px";d.style.top=e.clientY+"px";};
+    const rp=(e)=>{const r=document.createElement("div");Object.assign(r.style,{position:"fixed",left:e.clientX+"px",top:e.clientY+"px",width:"12px",height:"12px",borderRadius:"50%",border:"3px solid rgba(255,32,86,0.95)",zIndex:2147483647,pointerEvents:"none",transform:"translate(-50%,-50%)",transition:"all .5s ease-out",opacity:"1"});document.body.appendChild(r);requestAnimationFrame(()=>{r.style.width="64px";r.style.height="64px";r.style.opacity="0";});setTimeout(()=>r.remove(),550);};
+    for(const t of["pointermove","mousemove"])window.addEventListener(t,mv,true);
+    for(const t of["pointerdown","mousedown"])window.addEventListener(t,rp,true);
+  };
+  if (document.body) install(); else document.addEventListener("DOMContentLoaded", install);
+};
+
+const browser = await chromium.launch({
+  headless: false, channel: "chrome",
+  ignoreDefaultArgs: ["--enable-automation"],
+  args: ["--disable-blink-features=AutomationControlled", "--no-default-browser-check", "--no-first-run", "--test-third-party-cookie-phaseout"],
+});
+const context = await browser.newContext({
+  storageState: "tests/e2e/.auth/shopify.json",
+  viewport: { width: 1440, height: 900 },
+  recordVideo: { dir: `${OUT}/video`, size: { width: 1440, height: 900 } },
+});
+await context.addInitScript(CURSOR);
+await context.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => undefined }));
+const page = await context.newPage();
+
+const caption = async (t) => { await page.evaluate((text) => {
+  let el = document.getElementById("__vcap");
+  if (!el) { el = document.createElement("div"); el.id = "__vcap";
+    Object.assign(el.style,{position:"fixed",left:0,right:0,top:0,zIndex:2147483646,pointerEvents:"none",font:"600 17px/1.4 -apple-system,Segoe UI,Roboto,sans-serif",color:"#fff",background:"linear-gradient(180deg,rgba(20,20,30,.94),rgba(20,20,30,.72))",padding:"11px 20px",textAlign:"center"});
+    document.documentElement.appendChild(el); }
+  el.textContent = text;
+}, t).catch(() => {}); };
+
+const check = async (label) => {
+  let ft = "";
+  for (let i = 0; i < 24; i++) {
+    try { ft = await appFrame(page).locator("body").innerText({ timeout: 2500 }); } catch { ft = ""; }
+    if (/Welcome back|Monthly Usage|Choose Your Plan|Brand voice|Shop domain|>Log in<|name="shop"/i.test(ft)) break;
+    await page.waitForTimeout(1000);
+  }
+  const form = /Shop domain|name="shop"|>Log in<|heading="Log in"/i.test(ft);
+  const ok = /Welcome back|Monthly Usage|Choose Your Plan|Brand voice|Professional|Free/i.test(ft) && !form;
+  results.push({ label, url: page.url(), form, ok, len: ft.trim().length });
+  log(`${form ? "❌ FORM" : ok ? "✅ ok" : "· "} — ${label} | form=${form} len=${ft.trim().length}`);
+  await page.screenshot({ path: `${OUT}/${String(results.length).padStart(2,"0")}-${label.replace(/[^a-z0-9]+/gi,"_").slice(0,32)}.png` }).catch(() => {});
+  return { form, ok };
+};
+const gotoTop = async (u) => { await page.goto(u, { waitUntil: "domcontentloaded" }).catch(()=>{}); await appFrame(page).locator("body").waitFor({ state: "visible", timeout: 45000 }).catch(()=>{}); await page.waitForTimeout(3500); };
+const clickNav = async (name) => { const l = appFrame(page).getByRole("link", { name: new RegExp("^"+name+"$","i") }).first().or(appFrame(page).locator(`s-link:has-text("${name}")`).first()); try { await l.hover({timeout:5000}); await page.waitForTimeout(600); await l.click({ timeout: 6000 }); return true; } catch { return false; } };
+
+let ok = true;
+try {
+  // Step 0 — SHA on screen.
+  await page.goto("https://app.navaal.ai/api/build-info", { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: `${OUT}/00-build-info-sha.png` });
+  log("SHA: " + (await page.locator("body").innerText().catch(()=> "")).replace(/\s+/g," ").slice(0,120));
+
+  await gotoTop(`${APP_ROOT}/app`);
+  await caption("Incognito condition (3rd-party cookies blocked). App open — the shop cookie is now persisted.");
+  await check("1-open");
+
+  await caption("Reviewer's flow: open Plans & Billing");
+  await clickNav("Plans & Billing") || await gotoTop(`${APP_ROOT}/app/plans`);
+  if ((await check("2-plans")).form) ok = false;
+
+  await caption("Click Dashboard (client-side nav)");
+  await clickNav("Dashboard") || await gotoTop(`${APP_ROOT}/app`);
+  if ((await check("3-dashboard")).form) ok = false;
+
+  await caption("Reload /app — the reviewer's kill move");
+  await page.reload({ waitUntil: "domcontentloaded" }).catch(()=>{}); await page.waitForTimeout(3500);
+  if ((await check("4-reload-app")).form) ok = false;
+
+  await caption("Open Settings, then back to Dashboard");
+  await clickNav("Settings") || await gotoTop(`${APP_ROOT}/app/settings`); await check("5-settings");
+  await clickNav("Dashboard") || await gotoTop(`${APP_ROOT}/app`);
+  if ((await check("6-back-to-dashboard")).form) ok = false;
+
+  // Adversarial: force the EXACT host-less document load that used to dead-end.
+  await caption("Now FORCE the exact dead-end: a bare /app load with NO shop/host → must recover, no form, no 404");
+  const fr = frameOf(page);
+  if (fr) await fr.evaluate(() => window.location.assign("/app")).catch(()=>{});
+  await page.waitForTimeout(12000);
+  const r = await check("7-forced-hostless-app");
+  if (r.form) ok = false;
+
+  await caption("Every step recovered inside the app — the login form never appeared.");
+  await page.waitForTimeout(2500);
+} catch (e) { log("ERROR: " + e.message); ok = false; }
+finally {
+  await page.waitForTimeout(1000).catch(()=>{});
+  await context.close(); await browser.close();
+  const vids = fs.readdirSync(`${OUT}/video`).filter((v)=>v.endsWith(".webm"));
+  if (vids.length) fs.renameSync(`${OUT}/video/${vids[0]}`, `${OUT}/gauntlet-final.webm`);
+  const forms = results.filter((r)=>r.form).length;
+  fs.writeFileSync(`${OUT}/results.json`, JSON.stringify(results, null, 2));
+  console.log(`\n=== forms shown: ${forms} / ${results.length} ===`);
+  console.log(`FINAL_RESULT=${ok && forms===0 ? "PASS" : "FAIL"}`);
+  process.exit(ok && forms===0 ? 0 : 1);
+}

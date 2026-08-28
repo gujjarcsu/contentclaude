@@ -55,9 +55,9 @@ const check = async (label, { coldPath = false } = {}) => {
   // On a forced cold-path load the iframe fully reloads (App Bridge recovery),
   // so poll for real content before asserting.
   let frameText = "";
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 28; i++) {
     try { frameText = await appFrame(page).locator("body").innerText({ timeout: 2500 }); } catch { frameText = ""; }
-    if (frameText.trim().length > 40 || /Shop domain|>Log in<|name="shop"/i.test(frameText)) break;
+    if (/Welcome back|Monthly Usage|Total Products|Choose Your Plan|Brand voice|Shop domain|>Log in<|name="shop"/i.test(frameText)) break;
     await page.waitForTimeout(1000);
   }
   const top = await page.content().catch(() => "");
@@ -96,7 +96,7 @@ try {
     const fr = frameOf(page);
     if (fr) { await fr.evaluate((p) => window.location.assign(p), path).catch(() => {}); }
     else { await page.goto(`${APP_ROOT}${path}`, { waitUntil: "domcontentloaded" }); }
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(10000); // let the multi-hop App Bridge recovery run
     const rec = await check(`cold-${label}`, { coldPath: true });
     if (rec.form) ok = false;
   }
