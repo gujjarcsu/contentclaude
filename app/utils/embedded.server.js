@@ -55,3 +55,58 @@ export function embeddedAppParams(url) {
   }
   return params;
 }
+
+/**
+ * Render an App Bridge "re-embed" page — the correct silent recovery for a
+ * session-less document request that reached a login-form route from INSIDE the
+ * admin (rejection #4).
+ *
+ * Why not a server redirect to /app? When a bare navigation drops `shop`/`host`
+ * (e.g. an App-Bridge-missed <s-link> click in a cookie-blocked context), the
+ * Shopify library's validateShopAndHostParams throws redirect("/auth/login").
+ * Redirecting that back to /app server-side just LOOPS, because /app is missing
+ * the same params. Instead we load App Bridge in the iframe — it re-establishes
+ * the embedded context by talking to the parent admin (even when the URL lost
+ * shop/host) — then navigate to /app, where token exchange authenticates
+ * silently. This mirrors the library's own renderAppBridge recovery. A blocking
+ * (non-async) App Bridge script guarantees window.open is overridden before the
+ * navigation runs, so it stays embedded instead of breaking out of the admin.
+ *
+ * @param {Request} request
+ * @param {(headers: Headers, isEmbedded: boolean, shop: string|null) => void} [addDocumentResponseHeaders]
+ *   shopify.addDocumentResponseHeaders — sets the frame-ancestors CSP so Shopify
+ *   can embed this page. Optional; a safe fallback CSP is used if absent.
+ * @param {string} [targetPath]
+ */
+export function renderReembedPage(request, addDocumentResponseHeaders, targetPath = "/app") {
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const url = new URL(request.url);
+  const params = new URLSearchParams();
+  for (const k of ["host", "shop", "embedded", "id_token", "locale"]) {
+    const v = url.searchParams.get(k);
+    if (v) params.set(k, v);
+  }
+  const shop = params.get("shop") || shopFromHost(params.get("host"));
+  if (shop && !params.get("shop")) params.set("shop", shop);
+  const dest = params.toString() ? `${targetPath}?${params.toString()}` : targetPath;
+
+  const headers = new Headers({ "content-type": "text/html;charset=utf-8", "cache-control": "no-store" });
+  let cspSet = false;
+  try {
+    if (typeof addDocumentResponseHeaders === "function") {
+      addDocumentResponseHeaders(headers, true, shop || null);
+      cspSet = true;
+    }
+  } catch { /* fall through to manual CSP */ }
+  if (!cspSet) {
+    const ancestors = shop ? `https://${shop} https://admin.shopify.com` : "https://admin.shopify.com https://*.myshopify.com";
+    headers.set("Content-Security-Policy", `frame-ancestors ${ancestors};`);
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<script data-api-key="${apiKey}" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+</head><body>
+<script>window.open(${JSON.stringify(dest)}, "_top");</script>
+</body></html>`;
+  return new Response(html, { headers });
+}

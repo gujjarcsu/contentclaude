@@ -1,5 +1,6 @@
 import { redirect } from "react-router";
-import { embeddedAppParams, isEmbeddedRequest } from "../../utils/embedded.server.js";
+import { embeddedAppParams, isEmbeddedRequest, renderReembedPage } from "../../utils/embedded.server.js";
+import { addDocumentResponseHeaders } from "../../shopify.server";
 
 // App root. This route must NEVER dead-end a merchant on the login form when the
 // request comes from inside the Shopify admin (App Store rejection 2.1.1).
@@ -15,10 +16,20 @@ import { embeddedAppParams, isEmbeddedRequest } from "../../utils/embedded.serve
 // for a true top-level visit from OUTSIDE the admin (no shop, no host).
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
+  const hasContext = url.searchParams.get("shop") || url.searchParams.get("host");
 
-  if (isEmbeddedRequest(request) || url.searchParams.get("shop")) {
+  // With shop/host we can hand /app the context directly (the common admin
+  // home-nav load). Preserve every param + derive shop from host.
+  if (hasContext) {
     const params = embeddedAppParams(url);
     throw redirect(`/app?${params.toString()}`);
+  }
+
+  // Embedded (iframe) but the URL dropped shop AND host — a server redirect to
+  // /app would loop. Re-embed via App Bridge instead (restores context from the
+  // parent admin), then land on /app. Never the form.
+  if (isEmbeddedRequest(request)) {
+    return renderReembedPage(request, addDocumentResponseHeaders, "/app");
   }
 
   // Genuinely external, contextless visit — the only case that may see the form.

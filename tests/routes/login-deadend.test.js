@@ -12,6 +12,9 @@ import { readFileSync } from "node:fs";
 vi.mock("../../app/shopify.server", () => ({
   login: vi.fn(async () => ({})),
   authenticate: { admin: vi.fn() },
+  addDocumentResponseHeaders: (headers, _embedded, shop) => {
+    headers.set("Content-Security-Policy", `frame-ancestors https://${shop || "admin.shopify.com"};`);
+  },
   BILLING_TEST: false,
   apiVersion: "2026-04",
 }));
@@ -20,16 +23,24 @@ const b64url = (s) =>
   Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const HOST = b64url("contentpilot-dev2.myshopify.com/admin");
 
-// Loaders signal a redirect by THROWING a Response; capture it uniformly.
+// A loader may THROW a redirect Response, RETURN a Response (the App Bridge
+// re-embed page), or RETURN data (the form). Capture all three uniformly.
 async function run(loader, url, headers) {
+  const done = async (res, threw) => {
+    if (res instanceof Response) {
+      const body = await res.text().catch(() => "");
+      return { threw, isResponse: true, status: res.status, location: res.headers.get("location"), body };
+    }
+    return { threw, isResponse: false, data: res };
+  };
   try {
-    const res = await loader({ request: new Request(url, headers ? { headers } : undefined) });
-    return { threw: false, data: res };
+    return await done(await loader({ request: new Request(url, headers ? { headers } : undefined) }), false);
   } catch (e) {
-    if (e instanceof Response) return { threw: true, status: e.status, location: e.headers.get("location") };
+    if (e instanceof Response) return done(e, true);
     throw e;
   }
 }
+const isReembed = (r) => r.isResponse && r.status === 200 && /app-bridge\.js/.test(r.body) && /\/app/.test(r.body);
 
 describe("2.1.1 in-admin login dead-end", () => {
   it("_index: embedded (host, NO shop) → /app with shop derived from host, never /auth/login", async () => {
@@ -54,20 +65,24 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(r.location).toContain("shop=demo.myshopify.com");
   });
 
-  it("auth.login: embedded (host) → redirects to /app, NEVER renders the form", async () => {
-    const { loader } = await import("../../app/routes/auth.login/route.jsx");
-    const r = await run(loader, `https://app.test/auth/login?host=${HOST}&embedded=1`);
-    expect(r.threw).toBe(true);
-    expect(r.status).toBe(302);
-    expect(r.location).toMatch(/^\/app\?/);
-    expect(r.location).toContain("shop=contentpilot-dev2.myshopify.com");
+  it("_index: iframe load with NO shop AND NO host → App Bridge re-embed (no loop, no form)", async () => {
+    const { loader } = await import("../../app/routes/_index/route.jsx");
+    const r = await run(loader, "https://app.test/", { "sec-fetch-dest": "iframe" });
+    expect(isReembed(r)).toBe(true);
   });
 
-  it("auth.login: iframe document load with no params → /app, not the form", async () => {
+  it("auth.login: embedded (host) → App Bridge re-embed page to /app, NEVER the form", async () => {
+    const { loader } = await import("../../app/routes/auth.login/route.jsx");
+    const r = await run(loader, `https://app.test/auth/login?host=${HOST}&embedded=1`);
+    expect(isReembed(r)).toBe(true);
+    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
+  });
+
+  it("auth.login: iframe document load with NO params (validateShopAndHostParams dead-end) → re-embed, not the form", async () => {
     const { loader } = await import("../../app/routes/auth.login/route.jsx");
     const r = await run(loader, "https://app.test/auth/login", { "sec-fetch-dest": "iframe" });
-    expect(r.threw).toBe(true);
-    expect(r.location).toMatch(/^\/app/);
+    expect(isReembed(r)).toBe(true);
+    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
   });
 
   it("auth.login: genuine external visit (no embedded context) still renders the form", async () => {
