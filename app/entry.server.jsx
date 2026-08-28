@@ -4,6 +4,7 @@ import { ServerRouter } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+import { shopFromHost } from "./utils/embedded.server.js";
 // Run startup tasks (stuck-job recovery + BullMQ worker) once at boot.
 import "./utils/startup.server.js";
 import logger from "./utils/logger.server.js";
@@ -17,6 +18,26 @@ export default async function handleRequest(
   reactRouterContext,
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+
+  // Persist the shop as a PARTITIONED cookie on every document response that
+  // carries the embedded context (host/shop). CHIPS partitioned cookies survive
+  // incognito's third-party-cookie block, so a LATER host-less document load can
+  // still be recovered by the /reembed backstop → fully-qualified admin URL (no
+  // host, no 404). This is the reliable server-side version of the persistence
+  // (a client document.cookie write was being rejected). See 2.1.1 #4.
+  try {
+    const u = new URL(request.url);
+    const shop = u.searchParams.get("shop") || shopFromHost(u.searchParams.get("host"));
+    if (shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {
+      responseHeaders.append(
+        "Set-Cookie",
+        `navaal_shop=${shop.toLowerCase()}; Path=/; Max-Age=2592000; Secure; SameSite=None; Partitioned`
+      );
+    }
+  } catch {
+    /* best-effort */
+  }
+
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
 

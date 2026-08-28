@@ -36,16 +36,9 @@ function useStickyEmbeddedParams(host, shopDomain) {
       const s = sp.get("shop") || sessionStorage.getItem("navaal:shop") || shopDomain;
       if (h) sessionStorage.setItem("navaal:host", h);
       if (s) sessionStorage.setItem("navaal:shop", s);
-      // Persist the shop as a PARTITIONED cookie so the server-side re-embed
-      // backstop can identify the store even on a truly host-less request in
-      // incognito (CHIPS partitioned cookies survive third-party-cookie blocking).
-      // Then it can top-level redirect to the fully-qualified admin URL — no host,
-      // no 404 (2.1.1 #4).
-      if (s) {
-        try {
-          document.cookie = `navaal_shop=${encodeURIComponent(s)}; Path=/; Max-Age=2592000; Secure; SameSite=None; Partitioned`;
-        } catch { /* cookie blocked — sticky params still cover the normal path */ }
-      }
+      // (The navaal_shop persistence cookie is set SERVER-SIDE in entry.server.jsx
+      // with the Partitioned attribute — a client document.cookie write was
+      // rejected by the browser in the embedded third-party context.)
       if (h && !sp.get("host")) {
         sp.set("host", h);
         if (s && !sp.get("shop")) sp.set("shop", s);
