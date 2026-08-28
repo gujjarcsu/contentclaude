@@ -1,9 +1,10 @@
+import { redirect } from "react-router";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import { useActionData, useLoaderData } from "react-router";
-import { login, addDocumentResponseHeaders } from "../../shopify.server";
+import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
-import { isEmbeddedRequest, renderReembedPage } from "../../utils/embedded.server.js";
+import { isEmbeddedRequest } from "../../utils/embedded.server.js";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
@@ -18,7 +19,7 @@ export const loader = async ({ request }) => {
   // when the URL dropped shop/host) and navigates to /app, where token exchange
   // authenticates silently. The form is reserved for a true top-level visit.
   if (isEmbeddedRequest(request)) {
-    return renderReembedPage(request, addDocumentResponseHeaders, "/app");
+    throw redirect(`/reembed${url.search}`);
   }
 
   // Outside the admin. Only call login() when there's a shop param to process —

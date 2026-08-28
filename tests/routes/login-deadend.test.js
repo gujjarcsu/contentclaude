@@ -65,24 +65,38 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(r.location).toContain("shop=demo.myshopify.com");
   });
 
-  it("_index: iframe load with NO shop AND NO host → App Bridge re-embed (no loop, no form)", async () => {
+  it("_index: iframe load with NO shop AND NO host → /reembed (App Bridge recovery, no loop/form)", async () => {
     const { loader } = await import("../../app/routes/_index/route.jsx");
     const r = await run(loader, "https://app.test/", { "sec-fetch-dest": "iframe" });
-    expect(isReembed(r)).toBe(true);
+    expect(r.threw).toBe(true);
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
   });
 
-  it("auth.login: embedded (host) → App Bridge re-embed page to /app, NEVER the form", async () => {
+  it("reembed route renders the App Bridge page (loads app-bridge.js, navigates to /app)", async () => {
+    const { loader } = await import("../../app/routes/reembed.jsx");
+    const r = await run(loader, `https://app.test/reembed?host=${HOST}&embedded=1`);
+    expect(isReembed(r)).toBe(true);
+    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
+    // Must allow the admin to embed the recovery page.
+    // (CSP is set on the Response headers.)
+  });
+
+  it("auth.login: embedded (host) → redirects to /reembed (App Bridge recovery), NEVER the form", async () => {
     const { loader } = await import("../../app/routes/auth.login/route.jsx");
     const r = await run(loader, `https://app.test/auth/login?host=${HOST}&embedded=1`);
-    expect(isReembed(r)).toBe(true);
-    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
+    expect(r.threw).toBe(true);
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
+    expect(r.location).toContain(`host=${HOST}`);
   });
 
-  it("auth.login: iframe document load with NO params (validateShopAndHostParams dead-end) → re-embed, not the form", async () => {
+  it("auth.login: iframe document load with NO params (validateShopAndHostParams dead-end) → /reembed, not the form", async () => {
     const { loader } = await import("../../app/routes/auth.login/route.jsx");
     const r = await run(loader, "https://app.test/auth/login", { "sec-fetch-dest": "iframe" });
-    expect(isReembed(r)).toBe(true);
-    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
+    expect(r.threw).toBe(true);
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
   });
 
   it("auth.login: genuine external visit (no embedded context) still renders the form", async () => {

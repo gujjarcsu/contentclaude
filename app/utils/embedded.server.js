@@ -72,13 +72,14 @@ export function embeddedAppParams(url) {
  * (non-async) App Bridge script guarantees window.open is overridden before the
  * navigation runs, so it stays embedded instead of breaking out of the admin.
  *
+ * A raw Response is returned (never rendered through a React component), so it
+ * MUST set its own frame-ancestors CSP — the global entry.server header only
+ * applies to rendered document responses.
+ *
  * @param {Request} request
- * @param {(headers: Headers, isEmbedded: boolean, shop: string|null) => void} [addDocumentResponseHeaders]
- *   shopify.addDocumentResponseHeaders — sets the frame-ancestors CSP so Shopify
- *   can embed this page. Optional; a safe fallback CSP is used if absent.
  * @param {string} [targetPath]
  */
-export function renderReembedPage(request, addDocumentResponseHeaders, targetPath = "/app") {
+export function renderReembedPage(request, targetPath = "/app") {
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const url = new URL(request.url);
   const params = new URLSearchParams();
@@ -88,20 +89,20 @@ export function renderReembedPage(request, addDocumentResponseHeaders, targetPat
   }
   const shop = params.get("shop") || shopFromHost(params.get("host"));
   if (shop && !params.get("shop")) params.set("shop", shop);
-  const dest = params.toString() ? `${targetPath}?${params.toString()}` : targetPath;
+  // `target` lets a route say where to land (defaults to targetPath / /app).
+  const target = url.searchParams.get("target") || targetPath;
+  const dest = params.toString() ? `${target}?${params.toString()}` : target;
 
-  const headers = new Headers({ "content-type": "text/html;charset=utf-8", "cache-control": "no-store" });
-  let cspSet = false;
-  try {
-    if (typeof addDocumentResponseHeaders === "function") {
-      addDocumentResponseHeaders(headers, true, shop || null);
-      cspSet = true;
-    }
-  } catch { /* fall through to manual CSP */ }
-  if (!cspSet) {
-    const ancestors = shop ? `https://${shop} https://admin.shopify.com` : "https://admin.shopify.com https://*.myshopify.com";
-    headers.set("Content-Security-Policy", `frame-ancestors ${ancestors};`);
-  }
+  // Must include admin.shopify.com so Shopify can embed this recovery page; add
+  // the specific shop when known, and *.myshopify.com as a safe fallback.
+  const ancestors = shop
+    ? `https://${shop} https://admin.shopify.com`
+    : "https://admin.shopify.com https://*.myshopify.com";
+  const headers = new Headers({
+    "content-type": "text/html;charset=utf-8",
+    "cache-control": "no-store",
+    "content-security-policy": `frame-ancestors ${ancestors};`,
+  });
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <script data-api-key="${apiKey}" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>

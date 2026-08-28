@@ -1,6 +1,5 @@
 import { redirect } from "react-router";
-import { embeddedAppParams, isEmbeddedRequest, renderReembedPage } from "../../utils/embedded.server.js";
-import { addDocumentResponseHeaders } from "../../shopify.server";
+import { embeddedAppParams, isEmbeddedRequest } from "../../utils/embedded.server.js";
 
 // App root. This route must NEVER dead-end a merchant on the login form when the
 // request comes from inside the Shopify admin (App Store rejection 2.1.1).
@@ -29,7 +28,7 @@ export const loader = async ({ request }) => {
   // /app would loop. Re-embed via App Bridge instead (restores context from the
   // parent admin), then land on /app. Never the form.
   if (isEmbeddedRequest(request)) {
-    return renderReembedPage(request, addDocumentResponseHeaders, "/app");
+    throw redirect(`/reembed${url.search}`);
   }
 
   // Genuinely external, contextless visit — the only case that may see the form.
