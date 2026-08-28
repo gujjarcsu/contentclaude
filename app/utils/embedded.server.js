@@ -91,7 +91,12 @@ export function renderReembedPage(request, targetPath = "/app") {
   if (shop && !params.get("shop")) params.set("shop", shop);
   // `target` lets a route say where to land (defaults to targetPath / /app).
   const target = url.searchParams.get("target") || targetPath;
-  const dest = params.toString() ? `${target}?${params.toString()}` : target;
+  // MUST be an ABSOLUTE app URL. App Bridge resolves a relative path against the
+  // admin origin (admin.shopify.com) → a 404; an absolute app URL is recognized
+  // as an app navigation and stays embedded. Mirrors the library's renderAppBridge.
+  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+  const base = `${appUrl}${target}`;
+  const dest = params.toString() ? `${base}?${params.toString()}` : base;
 
   // Must include admin.shopify.com so Shopify can embed this recovery page; add
   // the specific shop when known, and *.myshopify.com as a safe fallback.
