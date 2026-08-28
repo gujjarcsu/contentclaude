@@ -25,8 +25,6 @@ export default async function handleRequest(
   // still be recovered by the /reembed backstop → fully-qualified admin URL (no
   // host, no 404). This is the reliable server-side version of the persistence
   // (a client document.cookie write was being rejected). See 2.1.1 #4.
-  let emittedSetCookie = false;
-  let diagShop = null;
   try {
     const u = new URL(request.url);
     const shop = u.searchParams.get("shop") || shopFromHost(u.searchParams.get("host"));
@@ -35,28 +33,9 @@ export default async function handleRequest(
         "Set-Cookie",
         `navaal_shop=${shop.toLowerCase()}; Path=/; Max-Age=2592000; Secure; SameSite=None; Partitioned`
       );
-      emittedSetCookie = true;
-      diagShop = shop.toLowerCase();
     }
   } catch {
     /* best-effort */
-  }
-
-  // COOKIE_DIAG (temporary): prove server-side whether the partitioned navaal_shop
-  // cookie round-trips in genuine incognito — the incoming Cookie header is the
-  // source of truth (Playwright's ctx.cookies()/document.cookie hide CHIPS
-  // cookies). Logs shop domain only, no other cookie values. Remove after proof.
-  try {
-    const p = new URL(request.url).pathname;
-    if (/^\/(app|auth|reembed)(\/|$)/.test(p) || p === "/") {
-      const incomingHasNavaalShop = /(?:^|;\s*)navaal_shop=/.test(request.headers.get("cookie") || "");
-      logger.info(
-        { path: p, status: responseStatusCode, incomingNavaalShopCookie: incomingHasNavaalShop, emittedSetCookie, shop: diagShop },
-        "COOKIE_DIAG rendered-document response"
-      );
-    }
-  } catch {
-    /* ignore */
   }
 
   const userAgent = request.headers.get("user-agent");
