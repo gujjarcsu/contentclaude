@@ -79,6 +79,15 @@ export function embeddedAppParams(url) {
  * @param {Request} request
  * @param {string} [targetPath]
  */
+// The app's handle in the admin URL (…/apps/<handle>). Stable; from shopify.app.toml.
+const APP_HANDLE = process.env.SHOPIFY_APP_HANDLE || "navaal-seo-geo-content";
+
+function cookieValue(request, name) {
+  const c = request.headers.get("cookie") || "";
+  const m = c.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 export function renderReembedPage(request, targetPath = "/app") {
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const url = new URL(request.url);
@@ -87,21 +96,35 @@ export function renderReembedPage(request, targetPath = "/app") {
     const v = url.searchParams.get(k);
     if (v) params.set(k, v);
   }
-  const shop = params.get("shop") || shopFromHost(params.get("host"));
-  if (shop && !params.get("shop")) params.set("shop", shop);
-  // `target` lets a route say where to land (defaults to targetPath / /app).
   const target = url.searchParams.get("target") || targetPath;
-  // MUST be an ABSOLUTE app URL. App Bridge resolves a relative path against the
-  // admin origin (admin.shopify.com) → a 404; an absolute app URL is recognized
-  // as an app navigation and stays embedded. Mirrors the library's renderAppBridge.
-  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-  const base = `${appUrl}${target}`;
-  const dest = params.toString() ? `${base}?${params.toString()}` : base;
 
-  // Must include admin.shopify.com so Shopify can embed this recovery page; add
-  // the specific shop when known, and *.myshopify.com as a safe fallback.
-  const ancestors = shop
-    ? `https://${shop} https://admin.shopify.com`
+  // Resolve the shop from the strongest signal available:
+  //   host param  →  shop param  →  the persisted partitioned cookie.
+  // The cookie (set on every authenticated load, Partitioned so it survives
+  // incognito's third-party-cookie block) means even a TRULY host-less request
+  // still knows its store — no App Bridge guessing, no 404 (2.1.1 #4 backstop).
+  let shop = params.get("shop") || shopFromHost(params.get("host")) || cookieValue(request, "navaal_shop");
+  if (shop && !shop.includes(".")) shop = `${shop}.myshopify.com`;
+  const validShop = shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop) ? shop.toLowerCase() : null;
+
+  let dest;
+  if (validShop) {
+    // Fully-qualified ADMIN url. No host required, no relative-path resolution,
+    // so App Bridge can never 404 on it — Shopify re-enters the app embedded
+    // with fresh params. This is the case that guarantees no dead-end.
+    const storeHandle = validShop.replace(/\.myshopify\.com$/i, "");
+    dest = `https://admin.shopify.com/store/${storeHandle}/apps/${APP_HANDLE}${target}`;
+  } else {
+    // No shop identity at all — last resort: navigate to the absolute app URL
+    // and let App Bridge / token exchange sort it out.
+    const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+    const base = `${appUrl}${target}`;
+    dest = params.toString() ? `${base}?${params.toString()}` : base;
+  }
+
+  // Must allow admin.shopify.com to frame this recovery page.
+  const ancestors = validShop
+    ? `https://${validShop} https://admin.shopify.com`
     : "https://admin.shopify.com https://*.myshopify.com";
   const headers = new Headers({
     "content-type": "text/html;charset=utf-8",

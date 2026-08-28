@@ -73,13 +73,20 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(r.location).toMatch(/^\/reembed/);
   });
 
-  it("reembed route renders the App Bridge page (loads app-bridge.js, navigates to /app)", async () => {
+  it("reembed route (host present) → App Bridge redirect to the fully-qualified ADMIN url", async () => {
     const { loader } = await import("../../app/routes/reembed.jsx");
     const r = await run(loader, `https://app.test/reembed?host=${HOST}&embedded=1`);
     expect(isReembed(r)).toBe(true);
     expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
-    // Must allow the admin to embed the recovery page.
-    // (CSP is set on the Response headers.)
+    expect(r.body).toContain("admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app");
+  });
+
+  it("reembed route with NO host/shop but a persisted navaal_shop cookie → admin url (host-less backstop)", async () => {
+    const { loader } = await import("../../app/routes/reembed.jsx");
+    const r = await run(loader, "https://app.test/reembed", { cookie: "navaal_shop=demo.myshopify.com" });
+    expect(isReembed(r)).toBe(true);
+    expect(r.body).toContain("admin.shopify.com/store/demo/apps/navaal-seo-geo-content/app");
+    expect(r.body).not.toMatch(/Shop domain|name="shop"/i);
   });
 
   it("auth.login: embedded (host) → redirects to /reembed (App Bridge recovery), NEVER the form", async () => {
