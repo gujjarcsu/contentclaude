@@ -38,6 +38,11 @@ export function isEmbeddedRequest(request) {
   if (url.searchParams.get("host")) return true;
   const dest = request.headers.get("sec-fetch-dest");
   if (dest === "iframe" || dest === "frame") return true;
+  // A navigation that originated inside the admin (referer on admin.shopify.com)
+  // is embedded even when the params/sec-fetch signals are absent — never show
+  // it the login form (App Store 2.1.1: the app-title/home nav case).
+  const referer = request.headers.get("referer") || "";
+  if (/^https:\/\/admin\.shopify\.com\//i.test(referer)) return true;
   return false;
 }
 

@@ -1,18 +1,13 @@
 import { redirect } from "react-router";
-import { embeddedAppParams, isEmbeddedRequest } from "../../utils/embedded.server.js";
+import { embeddedAppParams } from "../../utils/embedded.server.js";
 
-// App root. This route must NEVER dead-end a merchant on the login form when the
-// request comes from inside the Shopify admin (App Store rejection 2.1.1).
-//
-// The admin loads the app home (`application_url` = "/") when the merchant
-// clicks the app name / "Dashboard" home nav, and it sends the embedded `host`
-// param but NOT always `shop`. The old code checked only `shop`, so a
-// host-without-shop load fell through to `redirect("/auth/login")` (dropping
-// every param) and rendered the "Shop domain" form inside the admin. Now: any
-// request carrying `shop` OR `host` OR `embedded=1` is sent into `/app` with the
-// shop derived from `host` when needed, so the embedded token-exchange auth runs
-// and the merchant lands on the dashboard. The login form is reserved strictly
-// for a true top-level visit from OUTSIDE the admin (no shop, no host).
+// App root. The admin loads this (`application_url` = "/") when the merchant
+// clicks the app NAME/title in the sidebar (Shopify points the app home at "/").
+// A human never types "/", so this route must NEVER render the login form
+// (App Store rejection 2.1.1). With `shop`/`host` we hand /app the context
+// directly; otherwise we serve the App Bridge re-embed page, which restores the
+// shop and lands the merchant on /app. The login form lives only at the auth
+// login path, for someone typing our URL directly.
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const hasContext = url.searchParams.get("shop") || url.searchParams.get("host");
@@ -24,13 +19,12 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${params.toString()}`);
   }
 
-  // Embedded (iframe) but the URL dropped shop AND host — a server redirect to
-  // /app would loop. Re-embed via App Bridge instead (restores context from the
-  // parent admin), then land on /app. Never the form.
-  if (isEmbeddedRequest(request)) {
-    throw redirect(`/reembed${url.search}`);
-  }
-
-  // Genuinely external, contextless visit — the only case that may see the form.
-  throw redirect("/auth/login");
+  // No shop/host. The app root "/" is ONLY ever loaded from inside the admin
+  // (it's the app's home target — e.g. the app name/title in the sidebar, which
+  // Shopify points at "/"). A human never types "/". So a bare "/" must NEVER
+  // reach the login form — serve the App Bridge re-embed page regardless of
+  // whether `embedded=1` is present. /reembed restores the shop (from the
+  // partitioned cookie / App Bridge) and lands the merchant on /app. The login
+  // form is reserved for /auth/login typed directly. (App Store 2.1.1.)
+  throw redirect(`/reembed${url.search}`);
 };

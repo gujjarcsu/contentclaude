@@ -201,6 +201,11 @@ export default function App() {
           <div slot="logo" style={{ padding: "8px 16px" }}>
             <ContentClaudeBrand />
           </div>
+          {/* rel="home" fixes the app TITLE/name in the admin sidebar: without a
+              home link Shopify points the app name at "/", and _index used to send
+              a bare "/" to the login form (App Store 2.1.1). This routes the title
+              click to /app — the path the Dashboard link already proves works. */}
+          <s-link href="/app" rel="home">Home</s-link>
           <s-link href="/app">Dashboard</s-link>
           <s-link href="/app/products">Products</s-link>
           <s-link href="/app/optimize">Optimise Store</s-link>

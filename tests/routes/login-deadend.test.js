@@ -52,10 +52,13 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(r.location).not.toContain("/auth/login");
   });
 
-  it("_index: no shop + no host (external visit) → /auth/login", async () => {
+  it("_index: bare / (no shop/host) → /reembed, NEVER /auth/login (app-title/home nav case)", async () => {
     const { loader } = await import("../../app/routes/_index/route.jsx");
     const r = await run(loader, "https://app.test/");
-    expect(r.location).toBe("/auth/login");
+    expect(r.threw).toBe(true);
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
+    expect(r.location).not.toContain("/auth/login");
   });
 
   it("_index: shop present → /app", async () => {
@@ -106,7 +109,15 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(r.location).toMatch(/^\/reembed/);
   });
 
-  it("auth.login: genuine external visit (no embedded context) still renders the form", async () => {
+  it("auth.login: admin.shopify.com referer (no params) → /reembed, not the form", async () => {
+    const { loader } = await import("../../app/routes/auth.login/route.jsx");
+    const r = await run(loader, "https://app.test/auth/login", { referer: "https://admin.shopify.com/store/demo/apps/navaal-seo-geo-content" });
+    expect(r.threw).toBe(true);
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
+  });
+
+  it("auth.login: genuine external visit (no embedded context, no admin referer) still renders the form", async () => {
     const { loader } = await import("../../app/routes/auth.login/route.jsx");
     const r = await run(loader, "https://app.test/auth/login");
     // No redirect thrown → the loader returns data for the form (external only).
@@ -122,18 +133,27 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(shopFromHost(null)).toBeNull();
   });
 
-  it("isEmbeddedRequest detects host, embedded=1, and iframe dest", async () => {
+  it("isEmbeddedRequest detects host, embedded=1, iframe dest, and admin.shopify.com referer", async () => {
     const { isEmbeddedRequest } = await import("../../app/utils/embedded.server.js");
     expect(isEmbeddedRequest(new Request("https://a.test/?host=x"))).toBe(true);
     expect(isEmbeddedRequest(new Request("https://a.test/?embedded=1"))).toBe(true);
     expect(isEmbeddedRequest(new Request("https://a.test/", { headers: { "sec-fetch-dest": "iframe" } }))).toBe(true);
+    expect(isEmbeddedRequest(new Request("https://a.test/", { headers: { referer: "https://admin.shopify.com/store/x/apps/y" } }))).toBe(true);
     expect(isEmbeddedRequest(new Request("https://a.test/"))).toBe(false);
+  });
+
+  it("app.jsx s-app-nav has a rel=\"home\" link to /app (fixes the app-title/home target)", () => {
+    const src = readFileSync("app/routes/app.jsx", "utf8");
+    expect(/<s-link\s+href="\/app"\s+rel="home">/.test(src)).toBe(true);
   });
 
   // Source guard: neither entry point may render the form without first gating
   // on the embedded check (this is exactly what regressed in 2.1.1).
-  it("source guard: _index and auth.login gate the form behind isEmbeddedRequest", () => {
-    expect(readFileSync("app/routes/_index/route.jsx", "utf8")).toContain("isEmbeddedRequest");
+  it("source guard: _index never redirects to /auth/login; auth.login gates the form behind isEmbeddedRequest", () => {
+    const idx = readFileSync("app/routes/_index/route.jsx", "utf8");
+    // _index must never route to the login form — a bare "/" is always in-admin.
+    expect(idx).not.toContain('"/auth/login"');
+    expect(idx).toContain("/reembed");
     expect(readFileSync("app/routes/auth.login/route.jsx", "utf8")).toContain("isEmbeddedRequest");
   });
 });
