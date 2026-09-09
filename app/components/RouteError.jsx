@@ -5,7 +5,7 @@ import { Page, Banner, Text } from "@shopify/polaris";
 /**
  * Data-layer error boundary (React Router loaders/actions throwing).
  * Usage at bottom of any route file:
- *   export { RouteError as ErrorBoundary } from "../components/RouteError";
+ *   export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";
  */
 export function RouteError() {
   const error = useRouteError();

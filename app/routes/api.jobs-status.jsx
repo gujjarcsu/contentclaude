@@ -1,7 +1,7 @@
 // Lightweight endpoint polled by the layout to show live job progress
 // without forcing a full layout reload.
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 
 // Benign empty payload — shape-compatible with the ticker, shows no jobs.
 const EMPTY = { count: 0, totalProducts: 0, completedProducts: 0, pct: 0, jobs: [] };

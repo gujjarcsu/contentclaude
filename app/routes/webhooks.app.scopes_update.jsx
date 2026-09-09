@@ -6,8 +6,8 @@
 // export route members — a stray helper export passes tests but breaks the
 // client build in CI.
 import { verifyShopifyWebhook, releaseWebhookDelivery, scopesFromPayload } from "../utils/webhookAuth.server.js";
-import db from "../db.server";
-import logger from "../utils/logger.server";
+import db from "../db.server.js";
+import logger from "../utils/logger.server.js";
 
 export const action = async ({ request }) => {
   const { payload, topic, shop, webhookId, duplicate } = await verifyShopifyWebhook(request);

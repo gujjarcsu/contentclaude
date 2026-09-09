@@ -4,9 +4,9 @@ import {
   Page, Card, Text, BlockStack, InlineStack, Box, ProgressBar, Badge, Button, EmptyState, Divider,
 } from "@shopify/polaris";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner";
-import { authenticate } from "../shopify.server";
-import { getCache } from "../utils/cache.server";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
+import { authenticate } from "../shopify.server.js";
+import { getCache } from "../utils/cache.server.js";
 import { computeStoreResults } from "../utils/results.server.js";
 
 export const loader = async ({ request }) => {
@@ -178,4 +178,4 @@ export default function ResultsPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

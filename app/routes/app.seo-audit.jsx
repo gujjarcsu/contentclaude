@@ -1,6 +1,6 @@
 import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import {
   Page,
   Layout,
@@ -16,8 +16,8 @@ import {
   Banner,
   Spinner,
 } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -285,4 +285,4 @@ export default function SeoAuditPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

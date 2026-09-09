@@ -5,9 +5,9 @@ import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import { Text, InlineStack, FooterHelp, Link } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { useEffect, useRef, useState } from "react";
-import { authenticate } from "../shopify.server";
-import { ContentClaudeBrand } from "../components/ContentClaudeBrand";
-import { AppRenderBoundary } from "../components/RouteError";
+import { authenticate } from "../shopify.server.js";
+import { ContentClaudeBrand } from "../components/ContentClaudeBrand.jsx";
+import { AppRenderBoundary } from "../components/RouteError.jsx";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);

@@ -18,15 +18,15 @@ import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, Badge,
   Banner, Divider, Spinner, Layout, SkeletonBodyText, SkeletonDisplayText,
 } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { isFeatureEnabled } from "../utils/featureFlags.server.js";
 import logger from "../utils/logger.server.js";
 import { calculateSeoScore } from "../utils/seo.server.js";
 import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, remainingGenerations, sliceToQuota, withGenerationCredit } from "../utils/plans.server.js";
-import { GeoValueBanner } from "../components/GeoValueBanner";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const SCAN_LIMIT = 30;
@@ -589,4 +589,4 @@ function MagicMomentBody({ scan, loader }) {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

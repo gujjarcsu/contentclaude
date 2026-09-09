@@ -2,8 +2,8 @@ import { redirect } from "react-router";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import { useActionData, useLoaderData } from "react-router";
-import { login } from "../../shopify.server";
-import { loginErrorMessage } from "./error.server";
+import { login } from "../../shopify.server.js";
+import { loginErrorMessage } from "./error.server.jsx";
 import { isEmbeddedRequest } from "../../utils/embedded.server.js";
 
 export const loader = async ({ request }) => {

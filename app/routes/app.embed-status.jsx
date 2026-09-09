@@ -1,5 +1,5 @@
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 
 // Resource route: persists whether the merchant has confirmed the
 // "AI-search FAQ schema" theme app embed is enabled. Posted to by

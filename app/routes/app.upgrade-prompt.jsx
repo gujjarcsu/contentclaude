@@ -1,5 +1,5 @@
 import { redirect } from "react-router";
-import { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server.js";
 import { markPromptEvent } from "../utils/upgradePrompts.server.js";
 
 // Resource route (action only) — the client confirms upgrade-prompt exposures

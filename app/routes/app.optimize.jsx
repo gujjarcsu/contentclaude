@@ -5,9 +5,9 @@ import {
   SkeletonPage, SkeletonBodyText, SkeletonDisplayText, List,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
-import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
+import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
@@ -507,4 +507,4 @@ export default function OptimizePage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

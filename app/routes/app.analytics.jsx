@@ -15,11 +15,11 @@ import {
   Select,
 } from "@shopify/polaris";
 import { useCallback } from "react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
-import { getOrCreatePlan } from "../utils/plans.server";
-import { getContentMetrics, coveragePct as calcCoveragePct } from "../utils/metrics.server";
-import { getCache } from "../utils/cache.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
+import { getOrCreatePlan } from "../utils/plans.server.js";
+import { getContentMetrics, coveragePct as calcCoveragePct } from "../utils/metrics.server.js";
+import { getCache } from "../utils/cache.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
@@ -258,4 +258,4 @@ export default function AnalyticsPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

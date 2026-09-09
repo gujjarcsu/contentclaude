@@ -1,4 +1,4 @@
-import { BILLING_TEST } from "../shopify.server";
+import { BILLING_TEST } from "../shopify.server.js";
 
 // Per-shop billing test mode.
 //

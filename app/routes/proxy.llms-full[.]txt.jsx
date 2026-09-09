@@ -1,8 +1,8 @@
 // App Proxy route → served at the storefront as /apps/navaal/llms-full.txt
 // Expanded variant of llms.txt with per-product attributes. See proxy.llms[.]txt.jsx.
-import { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server.js";
 import { renderLlmsTxt, llmsTxtUpgradeNotice } from "../utils/llms.server.js";
-import logger from "../utils/logger.server";
+import logger from "../utils/logger.server.js";
 
 export const loader = async ({ request }) => {
   const shopParam = new URL(request.url).searchParams.get("shop") || undefined;

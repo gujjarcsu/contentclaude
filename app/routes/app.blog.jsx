@@ -20,11 +20,11 @@ import {
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
 import { BookOpen, FileText, CheckCircle2, Lightbulb } from "lucide-react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
-import { UpgradePrompt } from "../components/UpgradePrompt";
-import { GeoValueBanner } from "../components/GeoValueBanner";
+import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -743,4 +743,4 @@ export default function BlogPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

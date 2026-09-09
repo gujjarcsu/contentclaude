@@ -5,8 +5,8 @@ import {
   TextField, Select, Button, Banner, Box, Checkbox, Divider, Badge,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -629,4 +629,4 @@ export default function SettingsPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

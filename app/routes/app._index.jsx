@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useLoaderData, useNavigate, redirect } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner";
-import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
+import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack,
   Button, Box, Badge, ProgressBar, Banner, Divider, Collapsible,
@@ -12,11 +12,11 @@ import {
   Package, CheckCircle, Clock, Zap, TrendingUp,
   BarChart2, BookOpen, Search, ArrowRight, Sparkles,
 } from "lucide-react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
-import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server";
-import { getCache } from "../utils/cache.server";
-import { getContentMetrics } from "../utils/metrics.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
+import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { getCache } from "../utils/cache.server.js";
+import { getContentMetrics } from "../utils/metrics.server.js";
 import { BILLING_PLANS } from "../utils/billing-plans.js";
 import { isFeatureEnabled } from "../utils/featureFlags.server.js";
 
@@ -606,4 +606,4 @@ export default function Dashboard() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

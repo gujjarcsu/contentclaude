@@ -1,11 +1,11 @@
 import { redirect } from "react-router";
-import { apiVersion } from "../shopify.server";
+import { apiVersion } from "../shopify.server.js";
 import { getFreshOfflineSession } from "../utils/offlineToken.server.js";
-import { syncBillingToPlan } from "../utils/plans.server";
+import { syncBillingToPlan } from "../utils/plans.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { verifyShopCallback } from "../utils/signedUrl.server.js";
 import { invalidateCache } from "../utils/cache.server.js";
-import logger from "../utils/logger.server";
+import logger from "../utils/logger.server.js";
 
 // ─── Billing return callback (PUBLIC — no session cookie required) ──────────────
 //

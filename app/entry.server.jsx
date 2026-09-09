@@ -3,7 +3,7 @@ import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import { isbot } from "isbot";
-import { addDocumentResponseHeaders } from "./shopify.server";
+import { addDocumentResponseHeaders } from "./shopify.server.js";
 import { shopFromHost } from "./utils/embedded.server.js";
 // Run startup tasks (stuck-job recovery + BullMQ worker) once at boot.
 import "./utils/startup.server.js";

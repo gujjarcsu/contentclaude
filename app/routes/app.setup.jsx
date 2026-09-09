@@ -5,8 +5,8 @@ import {
   Button, TextField, Select, ProgressBar, Badge, Box, Banner,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const TOTAL_STEPS = 5;
@@ -395,4 +395,4 @@ export default function SetupPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

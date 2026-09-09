@@ -5,8 +5,8 @@ import {
   Button, Box, Badge, EmptyState, Divider,
 } from "@shopify/polaris";
 import { BookOpen, PenLine, Globe, Clock, FileText, Trash2 } from "lucide-react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -300,4 +300,4 @@ export default function BlogPosts() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

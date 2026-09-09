@@ -7,8 +7,8 @@
 // not enqueue a second autopilot job. (The DB pending-job check below remains a
 // second guard when Redis is unavailable.)
 import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
-import prisma from "../db.server";
-import { enqueueGenerationJob } from "../queues/generationQueue.server";
+import prisma from "../db.server.js";
+import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
 import { invalidateLlmsTxt } from "../utils/llms.server.js";

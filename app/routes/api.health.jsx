@@ -23,9 +23,9 @@
  * internals — those stay in the logger.
  */
 
-import prisma from "../db.server";
-import { getCache } from "../utils/cache.server";
-import logger from "../utils/logger.server";
+import prisma from "../db.server.js";
+import { getCache } from "../utils/cache.server.js";
+import logger from "../utils/logger.server.js";
 
 /** Answer even when a dependency will not: reject rather than hang. */
 function withTimeout(promise, ms, label) {

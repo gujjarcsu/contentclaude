@@ -3,8 +3,8 @@
 // expired; authenticate.webhook() refreshes that token first and 500s, which
 // is the same retry-storm trap fixed for app/uninstalled in 08690b9.
 import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
-import prisma from "../db.server";
-import { FREE_PLAN, getPlanByKey, markTrialUsed, invalidatePlanCaches } from "../utils/plans.server";
+import prisma from "../db.server.js";
+import { FREE_PLAN, getPlanByKey, markTrialUsed, invalidatePlanCaches } from "../utils/plans.server.js";
 import { getActiveSubscriptionsForShop } from "../utils/activeSubscriptions.server.js";
 import logger from "../utils/logger.server.js";
 

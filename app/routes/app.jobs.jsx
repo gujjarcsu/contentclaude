@@ -18,10 +18,10 @@ import {
 } from "@shopify/polaris";
 import { useEffect, useRef } from "react";
 import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
-import { enqueueGenerationJob } from "../queues/generationQueue.server";
-import { ReviewRequest } from "../components/ReviewRequest";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
+import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
+import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -562,4 +562,4 @@ export default function JobsPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

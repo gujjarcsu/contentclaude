@@ -1,7 +1,7 @@
 // Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js for
 // why the library authenticator cannot be used on lifecycle/GDPR webhooks.
 import { verifyShopifyWebhook, releaseWebhookDelivery } from "../utils/webhookAuth.server.js";
-import db from "../db.server";
+import db from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { pruneGdprAuditTrail } from "../utils/gdpr.server.js";
 

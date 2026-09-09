@@ -11,7 +11,8 @@
  * thinks it is web never drains the queue at all. These lock the decision.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const ORIGINAL = { ...process.env };
 
@@ -163,5 +164,38 @@ describe("the image is current and does not run as root (item 3)", () => {
     const ignore = readFileSync(".dockerignore", "utf8");
     expect(ignore).toMatch(/^tests$/m);
     expect(ignore).toMatch(/\*\.md/);
+  });
+});
+
+describe("the worker can actually be imported by plain Node (regression guard)", () => {
+  // The first deploy of the split failed exactly here, in production:
+  //   Cannot find module '/app/app/db.server' imported from /app/app/shopify.server.js
+  // Vite resolves extensionless relative imports; Node ESM does not. The web
+  // process never noticed because it only ever runs the bundle. `node worker.js`
+  // imports the source directly, so every relative import on that path has to
+  // carry its extension — and the cheapest way to keep that true is to require
+  // it everywhere.
+  const walk = (dir) => {
+    const out = [];
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) out.push(...walk(full));
+      else if (/\.(js|jsx)$/.test(e.name)) out.push(full);
+    }
+    return out;
+  };
+
+  it("no relative import in app/ or worker.js omits its file extension", () => {
+    const offenders = [];
+    for (const file of [...walk("app"), "worker.js"]) {
+      const src = readFileSync(file, "utf8");
+      for (const m of src.matchAll(/from\s+"(\.{1,2}\/[^"]*)"/g)) {
+        const spec = m[1];
+        if (spec.includes("?")) continue; // e.g. ./mobile.css?url — a Vite asset
+        if (/\.(js|jsx|json|css)$/.test(spec)) continue;
+        offenders.push(`${file} -> ${spec}`);
+      }
+    }
+    expect(offenders.join(" | "), "extensionless relative imports break node worker.js").toBe("");
   });
 });

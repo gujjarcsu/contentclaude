@@ -1,6 +1,6 @@
-import { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
-import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server";
+import { getOrCreatePlan, syncBillingToPlan } from "../utils/plans.server.js";
 import logger from "../utils/logger.server.js";
 
 // Resource route (loader only — no UI). The Plans page calls this via useFetcher

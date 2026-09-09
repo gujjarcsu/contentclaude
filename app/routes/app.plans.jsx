@@ -6,11 +6,11 @@ import {
   Box, ProgressBar, Badge, Divider, DataTable,
 } from "@shopify/polaris";
 import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
-import { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server.js";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
-import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, hasUsedTrial } from "../utils/plans.server";
+import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, hasUsedTrial } from "../utils/plans.server.js";
 import { signShopCallback } from "../utils/signedUrl.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -696,4 +696,4 @@ export default function PlansPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

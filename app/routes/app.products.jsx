@@ -26,13 +26,13 @@ import {
 } from "@shopify/polaris";
 import { useState, useCallback, useMemo } from "react";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
-import { enqueueGenerationJob } from "../queues/generationQueue.server";
-import { UpgradePrompt } from "../components/UpgradePrompt";
+import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
+import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const PAGE_SIZE = 50;
@@ -802,4 +802,4 @@ export default function ProductsPage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

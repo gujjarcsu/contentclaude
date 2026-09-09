@@ -4,9 +4,9 @@
 //
 // Reachable only via Shopify's signed App Proxy; authenticate.public.appProxy
 // verifies the signature and resolves the shop.
-import { authenticate } from "../shopify.server";
+import { authenticate } from "../shopify.server.js";
 import { renderLlmsTxt, llmsTxtUpgradeNotice } from "../utils/llms.server.js";
-import logger from "../utils/logger.server";
+import logger from "../utils/logger.server.js";
 
 export const loader = async ({ request }) => {
   const shopParam = new URL(request.url).searchParams.get("shop") || undefined;

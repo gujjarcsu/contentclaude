@@ -24,12 +24,12 @@ import {
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
-import { UpgradePrompt } from "../components/UpgradePrompt";
-import { GeoValueBanner } from "../components/GeoValueBanner";
-import { ContentBenefits } from "../components/ContentBenefits";
-import { ReviewRequest } from "../components/ReviewRequest";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
+import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
+import { ContentBenefits } from "../components/ContentBenefits.jsx";
+import { ReviewRequest } from "../components/ReviewRequest.jsx";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
@@ -2144,4 +2144,4 @@ export default function ProductGeneratePage() {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

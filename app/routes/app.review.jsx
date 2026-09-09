@@ -19,14 +19,14 @@ import {
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect, useRef } from "react";
 import pLimit from "p-limit";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
 import { readMutationResult, publishProductWithRetry } from "../utils/adminGraphql.server.js";
 import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
-import { ReviewRequest } from "../components/ReviewRequest";
-import { EmbedSetupCard } from "../components/EmbedSetupCard";
+import { ReviewRequest } from "../components/ReviewRequest.jsx";
+import { EmbedSetupCard } from "../components/EmbedSetupCard.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
@@ -737,4 +737,4 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
   );
 }
 
-export { RouteError as ErrorBoundary } from "../components/RouteError";
+export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";

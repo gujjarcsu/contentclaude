@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+# Phase 1 item 4 — a push to `main` IS a deploy, and a deploy must never be
+# cancelled halfway: the release command may already have applied a migration,
+# or machines may be mid-rollout. Redundant *pull request* runs are still
+# cancelled, because those only cost CI minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -33,9 +37,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Phase 1 item 4 — BLOCKING. This was continue-on-error, which means it
+      # reported and nobody had to care. It sits at zero errors as of Phase 1, so
+      # the only thing it can catch from here is a regression about to ship.
       - name: Type check
         run: npm run typecheck
-        continue-on-error: true  # JS project — TS errors are warnings for now
 
       - name: Unit tests
         run: npm test
@@ -58,15 +64,19 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci
+      # Deliberately informative, not blocking: a transitive advisory with no fix
+      # available must not stop a security fix of our own from shipping.
       - name: Audit for high/critical vulnerabilities
         run: npm audit --audit-level=high
-        continue-on-error: true  # Inform but don't block merges for now
+        continue-on-error: true
 
   deploy:
     name: Deploy to Fly.io
     runs-on: ubuntu-latest
     needs: [test, security]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Deploys QUEUE; they never cancel each other. cancel-in-progress defaults to
+    # false and is left that way deliberately.
     concurrency: deploy-group
     steps:
       - uses: actions/checkout@v4
@@ -75,3 +85,76 @@ jobs:
         run: flyctl deploy --remote-only --app contentclaude --build-arg GIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  # Phase 1 item 4 — a green deploy is not a working app. This asks production
+  # the questions that would have caught every deploy-shaped failure this app has
+  # had, and fails loudly when an answer is wrong.
+  smoke:
+    name: Post-deploy smoke
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: The new build is the one answering
+        run: |
+          set -euo pipefail
+          expected="${{ github.sha }}"
+          echo "expecting sha=$expected"
+          for i in $(seq 1 30); do
+            actual=$(curl -fsS --max-time 10 https://app.navaal.ai/api/build-info | jq -r .sha || echo "")
+            if [ "$actual" = "$expected" ]; then
+              echo "build-info reports the deployed sha after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "attempt $i: got '${actual:-<none>}'"
+            sleep 10
+          done
+          echo "::error::/api/build-info never reported $expected — the deploy did not take effect"
+          exit 1
+
+      - name: Deep health is reachable and not in error
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS --max-time 20 "https://app.navaal.ai/api/health?deep=1")
+          echo "$body" | jq .
+          status=$(echo "$body" | jq -r .status)
+          # "degraded" is a warning, not a failed deploy: Redis or the AI breaker
+          # can be unhappy for reasons this release did not cause, and both
+          # recover on their own. "error" means the app cannot do its job.
+          if [ "$status" = "error" ]; then
+            echo "::error::deep health reports status=error"
+            exit 1
+          fi
+          # A dead worker after a deploy IS this release's problem.
+          worker=$(echo "$body" | jq -r '.checks.queue.workerRunning')
+          if [ "$worker" != "true" ]; then
+            echo "::error::the BullMQ worker is not running after this deploy"
+            exit 1
+          fi
+          echo "status=$status workerRunning=$worker"
+
+      - name: The app root still bounces into the admin
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://app.navaal.ai/)
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 10 https://app.navaal.ai/)
+          echo "GET / -> $code $loc"
+          # Guardrail G2, and the fix for one of the four App Store rejections.
+          [ "$code" = "302" ] || { echo "::error::GET / returned $code, expected 302"; exit 1; }
+          case "$loc" in *"/reembed"*) ;; *) echo "::error::GET / redirected to $loc, expected /reembed"; exit 1;; esac
+
+      - name: /app is served by this build rather than crashing
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -I https://app.navaal.ai/app)
+          echo "HEAD /app -> $code"
+          # An UNAUTHENTICATED bare request to /app is answered by the Shopify
+          # library, which returns 410 Gone when there is no shop, no host, no
+          # session and no admin referer. That is expected, and it is not a dead
+          # end for any real user: merchants arrive through admin.shopify.com,
+          # which the G1 gauntlet exercises end to end. What this step catches is
+          # a 5xx — a build that boots but cannot serve its own main route.
+          case "$code" in
+            2*|3*|401|410) echo "ok" ;;
+            *) echo "::error::HEAD /app returned $code"; exit 1 ;;
+          esac

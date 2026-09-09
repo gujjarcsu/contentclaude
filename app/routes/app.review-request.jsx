@@ -4,9 +4,9 @@
 // (first successful publish). We set reviewRequestedAt on ANY outcome (success or
 // decline) so we never ask the same shop twice, and log the outcome code so we
 // can measure ask→review conversion later.
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
-import logger from "../utils/logger.server";
+import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
+import logger from "../utils/logger.server.js";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
