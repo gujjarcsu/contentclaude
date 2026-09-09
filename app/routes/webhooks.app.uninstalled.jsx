@@ -10,8 +10,9 @@ import { markShopUninstalled } from "../utils/installTracking.server.js";
 // for hours. A delivery TRIGGERED before the shop's latest reinstall describes
 // an uninstall that has already been processed (or superseded): acting on it
 // would wipe the reinstalled shop's sessions, plan and drafts. Such deliveries
-// are acknowledged and ignored.
-export async function isStaleUninstallDelivery(shop, triggeredAt) {
+// are acknowledged and ignored. (Module-private: a route file may only export
+// route members — a stray export breaks the client build.)
+async function isStaleUninstallDelivery(shop, triggeredAt) {
   const t = triggeredAt ? new Date(triggeredAt) : null;
   if (!t || !Number.isFinite(t.getTime()) || !db.shop?.findUnique) return false;
   try {
