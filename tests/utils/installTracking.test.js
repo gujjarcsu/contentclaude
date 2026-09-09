@@ -17,7 +17,7 @@ const { db, log } = vi.hoisted(() => {
   const fn = () => vi.fn();
   return {
     db: {
-      shop: { findUnique: fn(), create: fn(), update: fn(), updateMany: fn() },
+      shop: { findUnique: fn(), upsert: fn(), update: fn(), updateMany: fn() },
       plan: { findUnique: fn() },
       growthState: { findUnique: fn() },
       brandVoice: { findUnique: fn() },
@@ -54,7 +54,7 @@ beforeEach(() => {
   db.growthState.findUnique.mockResolvedValue(null);
   db.brandVoice.findUnique.mockResolvedValue(null);
   db.shop.findUnique.mockResolvedValue(null);
-  db.shop.create.mockImplementation(async ({ data }) => ({ id: "s1", installCount: 1, ...data }));
+  db.shop.upsert.mockImplementation(async ({ create }) => ({ id: "s1", installCount: 1, ...create }));
   db.shop.updateMany.mockResolvedValue({ count: 1 });
 });
 
@@ -108,8 +108,8 @@ describe("classifyInstallSource", () => {
 describe("trackShopAuth — fresh install", () => {
   it("creates the shop record with App Store attribution + referer on the first authenticated request", async () => {
     const row = await trackShopAuth(req(INSTALL_URL, { referer: "https://admin.shopify.com/" }), SHOP);
-    expect(db.shop.create).toHaveBeenCalledTimes(1);
-    const { data } = db.shop.create.mock.calls[0][0];
+    expect(db.shop.upsert).toHaveBeenCalledTimes(1);
+    const { create: data } = db.shop.upsert.mock.calls[0][0];
     expect(data).toMatchObject({
       shop: SHOP,
       installSource: "app_store:search",
@@ -126,19 +126,19 @@ describe("trackShopAuth — fresh install", () => {
 
   it("attributes an install to our own link when the navaal_ref cookie reaches the install request", async () => {
     await trackShopAuth(req(BARE_URL, { cookie: "navaal_ref=bilby-search" }), SHOP);
-    expect(db.shop.create.mock.calls[0][0].data).toMatchObject({ installSource: "ref:bilby-search", installRef: "bilby-search" });
+    expect(db.shop.upsert.mock.calls[0][0].create).toMatchObject({ installSource: "ref:bilby-search", installRef: "bilby-search" });
   });
 
   it("records unknown (not a guess) when the install request carries no attribution", async () => {
     await trackShopAuth(req(BARE_URL), SHOP);
-    expect(db.shop.create.mock.calls[0][0].data).toMatchObject({ installSource: "unknown", surfaceType: null, installRef: null });
+    expect(db.shop.upsert.mock.calls[0][0].create).toMatchObject({ installSource: "unknown", surfaceType: null, installRef: null });
   });
 
   it("a shop installed BEFORE tracking is backfilled as pre_tracking with installedAt = earliest activity, ignoring request params", async () => {
     db.plan.findUnique.mockResolvedValue({ createdAt: DAYS(3) });
     db.brandVoice.findUnique.mockResolvedValue({ createdAt: DAYS(10) });
     await trackShopAuth(req(INSTALL_URL), SHOP);
-    const { data } = db.shop.create.mock.calls[0][0];
+    const { create: data } = db.shop.upsert.mock.calls[0][0];
     expect(data.installSource).toBe("pre_tracking");
     expect(Math.abs(data.installedAt.getTime() - DAYS(10).getTime())).toBeLessThan(2_000);
     expect(data.surfaceType).toBeUndefined();
@@ -148,11 +148,11 @@ describe("trackShopAuth — fresh install", () => {
   it("a Plan created seconds ago by a parallel loader does NOT make a new install look pre-tracking", async () => {
     db.plan.findUnique.mockResolvedValue({ createdAt: MIN(1) });
     await trackShopAuth(req(INSTALL_URL), SHOP);
-    expect(db.shop.create.mock.calls[0][0].data.installSource).toBe("app_store:search");
+    expect(db.shop.upsert.mock.calls[0][0].create.installSource).toBe("app_store:search");
   });
 
   it("tolerates the create race between the two parallel document loaders (P2002)", async () => {
-    db.shop.create.mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "P2002" }));
+    db.shop.upsert.mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "P2002" }));
     db.shop.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ shop: SHOP, installSource: "app_store:search" });
     const row = await trackShopAuth(req(INSTALL_URL), SHOP);
     expect(row.installSource).toBe("app_store:search");

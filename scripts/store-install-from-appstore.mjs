@@ -23,7 +23,7 @@ const browser = await chromium.launch({
 });
 const context = await browser.newContext({ storageState: "tests/e2e/.auth/shopify.json", viewport: { width: 1440, height: 900 } });
 await context.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => undefined }));
-const page = await context.newPage();
+let page = await context.newPage();
 const navs = [];
 page.on("framenavigated", (f) => {
   const u = f.url();
@@ -57,12 +57,27 @@ try {
   await shot("listing");
   log("listing url: " + page.url());
 
-  // 3. Install from the listing
+  // 3. Install from the listing. Dismiss the cookie banner first; the Install
+  // link may open a NEW TAB — follow it if so.
+  await page.getByRole("button", { name: /accept cookies/i }).first().click({ timeout: 3000 }).catch(() => {});
+  const newPagePromise = context.waitForEvent("page", { timeout: 10000 }).catch(() => null);
   await clickFirst([
     page.getByRole("link", { name: /^install$/i }).first(),
     page.getByRole("button", { name: /^install$/i }).first(),
     page.locator('a[href*="/install"]').first(),
   ], "Install (listing)");
+  const newPage = await newPagePromise;
+  if (newPage) {
+    log("install opened a new tab — following it");
+    page = newPage;
+    page.on("framenavigated", (f) => {
+      const u = f.url();
+      if (!u || u === "about:blank") return;
+      navs.push({ t: new Date().toISOString(), frame: f === page.mainFrame() ? "top" : "iframe", url: u });
+      if (/surface_|app.navaal.ai/.test(u)) log(`${f === page.mainFrame() ? "TOP" : "IFRAME"} → ${u.slice(0, 300)}`);
+    });
+    await page.waitForLoadState("domcontentloaded").catch(() => {});
+  }
   await page.waitForTimeout(5000);
   await shot("after-install-click");
   log("url: " + page.url());

@@ -1,11 +1,13 @@
-import { authenticate } from "../shopify.server";
+// Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js for
+// why the library authenticator cannot be used on lifecycle/GDPR webhooks.
+import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import db from "../db.server";
 
 // GDPR: Triggered 48 hours after a merchant deletes a customer, requesting
 // that all data for that customer be erased.
 // ContentClaude stores NO customer PII — nothing to redact. Log for audit.
 export const action = async ({ request }) => {
-  const { payload, shop } = await authenticate.webhook(request);
+  const { payload, shop } = await verifyShopifyWebhook(request);
 
   // Store a NON-PII digest only. Shopify's payload includes customer email
   // and phone — persisting it verbatim would make this handler the one place

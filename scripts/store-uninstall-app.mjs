@@ -22,6 +22,13 @@ await context.addInitScript(() => Object.defineProperty(navigator, "webdriver", 
 const page = await context.newPage();
 let step = 0;
 const shot = async (name) => { step++; await page.screenshot({ path: `${OUT}/uninstall-${String(step).padStart(2, "0")}-${name}.png` }).catch(() => {}); };
+const tryClick = async (locators, label, opts = {}) => {
+  for (const l of locators) {
+    try { await l.first().click({ timeout: 4000, ...opts }); log(`clicked: ${label}`); return true; } catch { /* next */ }
+  }
+  log(`could not click: ${label}`);
+  return false;
+};
 
 let ok = false;
 try {
@@ -36,16 +43,43 @@ try {
   await page.waitForTimeout(2000);
   await shot("confirm-modal");
 
-  // Confirm dialog: a second "Uninstall" button (optionally with a reason select).
-  const dialog = page.getByRole("dialog").first();
-  const confirm = dialog.getByRole("button", { name: /^uninstall/i }).first();
+  // The confirm dialog needs a reason before "Uninstall" enables. The picker is
+  // a Polaris popover activator: button[aria-label="Select all that apply"]
+  // [aria-haspopup=listbox] that opens a listbox of options. (Probed with
+  // scripts/_probe-uninstall-modal.mjs — the modal is .Polaris-Modal-Dialog.)
+  const modal = page.locator(".Polaris-Modal-Dialog").first();
+  const activator = page.locator('button[aria-label="Select all that apply"]').first();
+  await activator.waitFor({ state: "visible", timeout: 15000 });
+  await activator.click();
+  await page.waitForTimeout(1200);
+  await shot("reason-open");
+  const picked = await tryClick([
+    page.locator("[role=listbox] [role=option]"),
+    page.locator("[role=listbox] li"),
+    page.getByRole("option"),
+    page.getByRole("checkbox"),
+  ], "first reason option");
+  await page.waitForTimeout(800);
+  await shot("reason-picked");
+  // Close the popover with an outside click INSIDE the modal (its title) —
+  // Escape closes the whole modal, and the activator toggle re-opened it.
+  if (picked) { await modal.locator(".Polaris-Modal-Header, h2").first().click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(800); }
+
+  const confirm = modal.getByRole("button", { name: /^uninstall$/i }).first();
   await confirm.waitFor({ state: "visible", timeout: 15000 });
-  await confirm.click();
+  for (let i = 0; i < 10 && (await confirm.isDisabled().catch(() => true)); i++) await page.waitForTimeout(500);
+  log("confirm enabled: " + !(await confirm.isDisabled().catch(() => true)));
+  await shot("before-confirm");
+  if (await page.locator("[role=listbox]").first().isVisible().catch(() => false)) {
+    log("popover still open — dispatching click directly to the confirm button");
+    await confirm.dispatchEvent("click");
+  } else {
+    await confirm.click({ timeout: 10000 });
+  }
   await page.waitForTimeout(6000);
   await shot("after-uninstall");
   log("url after: " + page.url());
 
-  // Verify: the app page should now 404 / show "not installed" or the apps list no longer has it.
   await page.goto(`https://admin.shopify.com/store/${STORE}/settings/apps`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(5000);
   await shot("apps-list");
@@ -53,7 +87,7 @@ try {
   ok = !/Navaal/i.test(text);
   log(ok ? "app no longer listed — uninstalled" : "app still listed?");
 } catch (e) {
-  log("ERROR " + e.message);
+  log("ERROR " + e.message.split("\n")[0]);
   await shot("error");
 } finally {
   await context.close(); await browser.close();

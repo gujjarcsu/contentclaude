@@ -25,11 +25,13 @@ const { db, tx, webhook } = vi.hoisted(() => {
 });
 vi.mock("../../app/db.server.js", () => ({ default: db }));
 vi.mock("../../app/shopify.server", () => ({
-  authenticate: { webhook, admin: vi.fn() },
+  authenticate: { admin: vi.fn() },
   addDocumentResponseHeaders: () => {},
   BILLING_TEST: false,
   apiVersion: "2026-04",
 }));
+// Lifecycle/GDPR routes verify the webhook HMAC directly (no token refresh).
+vi.mock("../../app/utils/webhookAuth.server.js", () => ({ verifyShopifyWebhook: webhook }));
 vi.mock("../../app/utils/logger.server.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 const SHOP = "fresh-store.myshopify.com";

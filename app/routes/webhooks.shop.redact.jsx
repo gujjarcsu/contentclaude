@@ -1,4 +1,6 @@
-import { authenticate } from "../shopify.server";
+// Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js for
+// why the library authenticator cannot be used on lifecycle/GDPR webhooks.
+import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import db from "../db.server";
 import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 import { redactShopRecord } from "../utils/installTracking.server.js";
@@ -7,7 +9,7 @@ import { redactShopRecord } from "../utils/installTracking.server.js";
 // full data deletion. All shop data must be permanently removed.
 // Uses a single transaction so it either fully completes or fully rolls back.
 export const action = async ({ request }) => {
-  const { payload, shop } = await authenticate.webhook(request);
+  const { payload, shop } = await verifyShopifyWebhook(request);
 
   await db.$transaction(async (tx) => {
     // Log the request first (inside the transaction so it's part of the atomic op)

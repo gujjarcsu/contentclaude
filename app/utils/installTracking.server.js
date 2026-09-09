@@ -188,7 +188,10 @@ async function createShopRow(shop, sig) {
     ? { shop, installedAt: earliest, installSource: "pre_tracking" }
     : { shop, installedAt: now, installSource: classifyInstallSource(sig), ...attributionFields(sig) };
   try {
-    const row = await prisma.shop.create({ data });
+    // upsert with an empty update = atomic INSERT ... ON CONFLICT DO NOTHING-style
+    // create on the unique shop column, so the two parallel document loaders
+    // cannot race into a unique-violation error line.
+    const row = await prisma.shop.upsert({ where: { shop }, create: data, update: {} });
     logger.info(
       {
         shop,

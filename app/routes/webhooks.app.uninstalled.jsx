@@ -1,11 +1,13 @@
-import { authenticate } from "../shopify.server";
+// Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js for
+// why the library authenticator cannot be used on lifecycle/GDPR webhooks.
+import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import db from "../db.server";
 import logger from "../utils/logger.server";
 import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 import { markShopUninstalled } from "../utils/installTracking.server.js";
 
 export const action = async ({ request }) => {
-  const { shop, topic, triggeredAt } = await authenticate.webhook(request);
+  const { shop, topic, triggeredAt } = await verifyShopifyWebhook(request);
 
   logger.info({ shop, topic }, "Webhook received: app/uninstalled");
 
