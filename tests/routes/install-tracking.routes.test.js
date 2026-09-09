@@ -19,7 +19,7 @@ const { db, tx, webhook } = vi.hoisted(() => {
   });
   const tx = {};
   for (const m of ["generatedContent", "contentVersion", "contentTemplate", "collectionVoice", "brandVoice", "blogPost", "generationJob", "usageRecord", "plan", "growthState", "reviewRequestAttempt", "upgradePrompt", "session", "gDPRRequest", "shop"]) tx[m] = model();
-  const db = { $transaction: vi.fn(async (fn) => fn(tx)), shop: { updateMany: vi.fn(async () => ({ count: 1 })) } };
+  const db = { $transaction: vi.fn(async (fn) => fn(tx)), shop: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(async () => null) } };
   const webhook = vi.fn();
   return { db, tx, webhook };
 });
@@ -101,6 +101,29 @@ describe("app/uninstalled", () => {
     expect(where).toMatchObject({ shop: SHOP, uninstalledAt: null });
     expect(where.OR[1].reinstalledAt.lt).toEqual(new Date(triggeredAt));
     expect(data.uninstalledAt).toEqual(new Date(triggeredAt));
+  });
+});
+
+describe("app/uninstalled — stale delivery guard", () => {
+  it("ignores a delivery triggered BEFORE the latest reinstall: nothing deleted, nothing stamped, still 200", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-09T04:02:10.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: new Date("2026-09-09T04:18:23.000Z") });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    const res = await action({ request: new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" }) });
+    expect(res.status).toBe(200);
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.shop.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("processes a delivery triggered AFTER the latest reinstall", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-09T05:00:00.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: new Date("2026-09-09T04:18:23.000Z") });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    await action({ request: new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" }) });
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(db.shop.updateMany).toHaveBeenCalledTimes(1);
   });
 });
 
