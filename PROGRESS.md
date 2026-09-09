@@ -60,3 +60,77 @@ Release plan from the brief: **1–2 today → 3–5 → 6–7 → 8–9 → 10.
 ## Verification log
 
 - 2026-09-09 — build b96b9e2 then 08690b9 on Fly (`/api/build-info`). Unit suite 256/256, lint clean, build clean. Adversarial review before merge: 3 lenses × 2 skeptics per finding (23 agents), 10 findings confirmed and fixed. Live proofs as tabled above.
+
+---
+
+# PHASE 0 — STOP THE BLEEDING (docs/WORLD-CLASS-BRIEF.md)
+
+Executed in the six groups the brief specifies, one deploy per group, a test per numbered item.
+Every entry says plainly whether it is **LIVE-verified** or **code-only**.
+
+## Group 0.A — Compliance & data (items 1-3)
+
+**Item 1 — the mandatory GDPR webhooks 500 on every delivery.**
+Confirmed by reading the schema against the code: `GDPRRequest` has `processedAt` and no
+`createdAt`, and both customer handlers pruned their retention window with
+`deleteMany({ where: { createdAt: ... } })`. Prisma raises `Unknown argument createdAt` — and it
+raised it *after* the audit row was inserted, so every `customers/redact` and
+`customers/data_request` delivery answered 500, Shopify retried for hours, and every retry left
+another duplicate audit row. This is a mandatory-webhook failure on any periodic compliance audit.
+Fixed by moving retention into one shared, correctly-named helper,
+`pruneGdprAuditTrail` (`app/utils/gdpr.server.js`), which filters on `processedAt` and can never
+throw: by the time it runs the request is already recorded, and a prune failure must not turn a
+delivered request back into a retry.
+
+**Item 2 — webhook headers were trusted unsigned.**
+The HMAC covers the request BODY only; `shop`, `topic` and `triggered-at` arrive as unsigned
+headers, and `app/uninstalled` deletes every row belonging to the *header* shop. Three defences
+added to `verifyShopifyWebhook`:
+- whenever the signed payload names a shop (`myshopify_domain` / `shop_domain`) it must equal the
+  header, so a genuine body of ours replayed under another merchant's domain is a 401 (topics whose
+  payload carries no shop field — `products/create`, `scopes_update`, `app_subscriptions/update` —
+  are unaffected);
+- a delivery whose `triggered-at` is older than `MAX_WEBHOOK_AGE_MS` (24 h), or implausibly far in
+  the future, is rejected, closing the replay window;
+- `x-shopify-webhook-id` is claimed once in Redis (`SET NX EX`, 48 h) and the context reports
+  `duplicate`, so a redelivery short-circuits. A handler that then fails calls
+  `releaseWebhookDelivery` so Shopify's genuine retry is still allowed to run — the claim never
+  swallows work that did not happen.
+All seven webhook routes now use this one verifier: `products/create`, `app/scopes_update` and
+`app_subscriptions/update` were moved off `authenticate.webhook`, which refreshes the shop's
+offline token before returning and therefore 500s for any shop whose token has expired — the exact
+retry-storm fixed for `app/uninstalled` in 08690b9. `products/create` kept its own Redis dedup; it
+now shares the verifier's.
+
+**Trade-off, stated rather than hidden:** the 24 h replay window is shorter than Shopify's ~48 h
+retry schedule. A genuine retry inside 24 h is never refused, but if the app were unreachable for
+more than a day, a compliance retry arriving after that would be rejected rather than processed.
+The alternative — no replay window — leaves `app/uninstalled` replayable indefinitely against any
+shop. The window is a single named constant if that judgement is ever revisited.
+
+**Item 3 — `app/scopes_update` 500s on a payload shape.**
+`payload.current.toString()` throws a TypeError when `current` is absent → 500 → retries. Parsing
+moved to the pure `scopesFromPayload`, which accepts the documented array, tolerates the
+comma-string variant, and returns null when there is nothing to write (the route then answers 200
+and writes nothing). The route also no longer depends on the library's `session`: without that
+context there is no single session id, so it writes `session.updateMany({ where: { shop } })`,
+which is what "this shop's granted scopes changed" actually means. The helper lives in
+`app/utils/webhookAuth.server.js`, not the route — a route file may only export route members.
+
+**Tests (all new, 50 assertions across two files):**
+- `tests/routes/webhooks.compliance.test.js` — delivers a REAL correctly-signed body through the
+  REAL verifier with only the database mocked. Per the brief: valid HMAC → **200 and exactly one
+  audit row**. Also locks that the prune filter is `processedAt` and not `createdAt`; that a prune
+  failure still returns 200 with the row intact (the old failure mode, made unrepeatable); that the
+  stored digest contains no customer email or phone; that a forged HMAC is 401 and writes nothing;
+  that a redelivery writes no second row; and that a failed write hands the delivery id back.
+  For item 3: array, comma-string, empty and missing `current` — 200 in every case.
+- `tests/utils/webhookAuth.test.js` — extended to cover the shop/payload mismatch, the replay
+  window (older, future, just-inside, missing, unparseable), the dedup claim/release including
+  Redis-down behaviour, and a source guard that all **seven** routes use the verifier and none
+  imports the library authenticator. The guard strips comments first, so a route may still explain
+  in prose why it avoids `authenticate.webhook`.
+
+**Pre-deploy gate:** unit suite 332 passed / 5 failed — the 5 are `tests/routes/no-dark-patterns.test.js`,
+which is untracked, targets Phase 3 work not yet done, and fails against `main` exactly as the brief
+records; it is not committed, so CI does not see it. Lint clean. Typecheck **0 errors**. Build clean.

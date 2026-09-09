@@ -1,27 +1,23 @@
-import { authenticate } from "../shopify.server";
+// Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js.
+// Autopilot needs no access token at this point (the worker loads its own), and
+// authenticate.webhook() refreshes the shop's offline token first, so a shop
+// whose token has expired got a bare 500 and an endless Shopify retry loop.
+// Delivery-ID idempotency now lives in the shared verifier — Shopify redelivers
+// on timeout/retry with the same X-Shopify-Webhook-Id, and a redelivery must
+// not enqueue a second autopilot job. (The DB pending-job check below remains a
+// second guard when Redis is unavailable.)
+import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
 import { invalidateLlmsTxt } from "../utils/llms.server.js";
-import { getRedis } from "../utils/cache.server.js";
 import logger from "../utils/logger.server.js";
 
 export const action = async ({ request }) => {
-  const { shop, payload } = await authenticate.webhook(request);
+  const { shop, payload, duplicate } = await verifyShopifyWebhook(request);
 
-  // Delivery-ID idempotency: Shopify redelivers webhooks on timeout/retry, often
-  // with the same X-Shopify-Webhook-Id. Claim it once in Redis (24h) so a redelivery
-  // short-circuits before doing any work. (The DB pending-job check below remains a
-  // second guard when Redis is unavailable.)
-  const deliveryId = request.headers.get("X-Shopify-Webhook-Id");
-  if (deliveryId) {
-    const redis = await getRedis();
-    if (redis) {
-      const claim = await redis.set(`whdedup:${shop}:${deliveryId}`, "1", "EX", 86400, "NX");
-      if (!claim) return new Response("Duplicate", { status: 200 });
-    }
-  }
+  if (duplicate) return new Response("Duplicate", { status: 200 });
 
   // Catalog changed → the cached llms.txt is now stale; drop it so the next
   // crawler/agent hit regenerates a current index.

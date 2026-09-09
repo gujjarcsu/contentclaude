@@ -24,9 +24,13 @@ async function isStaleUninstallDelivery(shop, triggeredAt) {
 }
 
 export const action = async ({ request }) => {
-  const { shop, topic, triggeredAt } = await verifyShopifyWebhook(request);
+  const { shop, topic, triggeredAt, duplicate } = await verifyShopifyWebhook(request);
 
   logger.info({ shop, topic, triggeredAt }, "Webhook received: app/uninstalled");
+
+  // Same delivery id seen already — the work below has been done (or is being
+  // done) by the request that claimed it.
+  if (duplicate) return new Response("Duplicate", { status: 200 });
 
   if (await isStaleUninstallDelivery(shop, triggeredAt)) {
     logger.warn({ shop, triggeredAt, event: "uninstall_delivery_stale" }, "Stale app/uninstalled delivery (triggered before the latest reinstall) — ignored");

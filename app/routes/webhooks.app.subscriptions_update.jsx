@@ -1,14 +1,20 @@
-import { authenticate } from "../shopify.server";
+// Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js.
+// Billing state must keep arriving even when the shop's offline token has
+// expired; authenticate.webhook() refreshes that token first and 500s, which
+// is the same retry-storm trap fixed for app/uninstalled in 08690b9.
+import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import prisma from "../db.server";
 import { FREE_PLAN, getPlanByKey } from "../utils/plans.server";
 import { invalidateCache } from "../utils/cache.server.js";
 
 export const action = async ({ request }) => {
-  const { topic, shop, payload } = await authenticate.webhook(request);
+  const { topic, shop, payload, duplicate } = await verifyShopifyWebhook(request);
 
   if (topic !== "APP_SUBSCRIPTIONS_UPDATE") {
     return new Response("Unhandled topic", { status: 422 });
   }
+
+  if (duplicate) return new Response("Duplicate", { status: 200 });
 
   const sub = payload?.app_subscription;
   if (!sub) return new Response("No subscription in payload", { status: 422 });
