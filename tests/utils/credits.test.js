@@ -97,33 +97,45 @@ describe("item 4 — a bulk job is sliced to the quota at creation", () => {
   });
 });
 
-describe("item 4 — every bulk entry point slices before it enqueues (source guard)", () => {
+/**
+ * Phase 1 item 10 — what used to be here read the three bulk entry points and
+ * asserted their TEXT contained `remainingGenerations(`, `sliceToQuota(` and
+ * `quotaSkipped`. That passes on code that makes the call and throws the result
+ * away, and fails on a rename that changes nothing.
+ *
+ * Two of the three now have real action tests that drive the arithmetic:
+ * tests/routes/optimize.quota.test.js and tests/routes/products.generate.test.js
+ * assert the exact count taken, the count skipped, and that a spent quota
+ * enqueues nothing at all.
+ *
+ * What is left below is the one thing an action test cannot see, plus one guard
+ * that is still a source guard and is labelled as such.
+ */
+describe("item 4 — the balance is checked before the money is spent", () => {
   const code = (f) =>
     readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^[ \t]*\/\/.*$/gm, "");
 
-  for (const f of [
-    "app/routes/app.optimize.jsx",
-    "app/routes/app.products.jsx",
-    "app/routes/app.welcome.jsx",
-  ]) {
-    it(`${f} asks how many credits are left and slices to them`, () => {
-      const src = code(f);
-      expect(src).toMatch(/remainingGenerations\(/);
-      expect(src).toMatch(/sliceToQuota\(/);
-      // and records what it left out
-      expect(src).toMatch(/quotaSkipped/);
-    });
-  }
-
   it("the bulk processor checks the remaining count before calling the model", () => {
+    // Order, not presence. After the model call the money is already spent.
     const src = code("app/utils/bulkProcessor.server.js");
     const check = src.indexOf("remainingGenerations(");
     const generate = src.indexOf("await generateProductContent(");
     expect(check).toBeGreaterThan(-1);
     expect(generate).toBeGreaterThan(-1);
     expect(check).toBeLessThan(generate);
+  });
+
+  it("the welcome flow still slices — stated plainly as a source guard", () => {
+    // This one IS text matching, and is left that way on purpose. The welcome
+    // route sits behind FEATURE_MAGIC_MOMENT and Phase 3 retires it, so a full
+    // action test would be written in order to be deleted. Losing the slice here
+    // would let a first-run flow spend past a merchant's limit, and a weak check
+    // beats none.
+    const src = code("app/routes/app.welcome.jsx");
+    expect(src).toMatch(/sliceToQuota\(/);
+    expect(src).toMatch(/quotaSkipped/);
   });
 });
 

@@ -1245,3 +1245,75 @@ The items 5-7 push went red on `growthFoundation.test.js`, unrelated to the chan
 every use, so the same expression built as an input and as an expectation could differ by a millisecond.
 It is now one clock pinned at import. Re-running until green would have left a test that fails roughly
 one run in a few hundred, forever.
+
+## Item 10 — Tests that matter
+
+**What was wrong.** Coverage `include` was `app/utils/**` only. Every route was unmeasured, and routes
+are where the merchant-visible decisions live: what a first-run shop sees, how many products an action
+takes when quota is short, whether a paying shop is shown Free. The number looked healthy because it was
+measuring the half of the code that was easy to test.
+
+Worse, several of the tests that did exist were **regex over source**. They read a route file and asserted
+its text contained `sliceToQuota(`. That passes on code that makes the call and throws the result away,
+and it fails on a rename that changes nothing. It is a test of spelling.
+
+**Coverage now includes `app/routes/**` and `app/queues/**`.** Only `startup.server.js` is excluded, and
+for a stated reason: it is boot sequencing, exercised by the process-role tests and the deep health check.
+
+### The new route tests
+
+| File | Route | What it holds |
+|---|---|---|
+| `tests/routes/firstRun.test.js` | `app._index` | Where a brand-new shop lands, both feature-flag states, and that `welcomeSeenAt` makes the welcome screen one-shot. Plus that every auth parameter survives the redirect — a redirect that drops `host` or `id_token` reads to a merchant as being logged out. |
+| `tests/routes/optimize.quota.test.js` | `app.optimize` | The number this action picks **is the bill.** Exactly `min(work, remaining)` taken, in order; the remainder recorded as `quotaSkipped`; an unknown remaining count treated as **zero, never as unlimited**; a spent quota enqueuing nothing. |
+| `tests/routes/products.generate.test.js` | `app.products` | Generate All bounded by quota rather than catalogue; an empty selection running **nothing** rather than falling back to everything; a mid-pagination Shopify failure running what did arrive. |
+| `tests/routes/review.publish.test.js` | `app.review` | The THROTTLED path. A throttled product is counted failed, **named** to the merchant, and left as a draft — never marked published. A product whose FAQ metafield failed has just its FAQ row downgraded, so the UI cannot claim FAQ is live when it is not. |
+| `tests/routes/jobs.cancel.test.js` | `app.jobs` | Cancel, the state machine around it, and the tenancy boundary all three job actions share. One comparison — `job.shop !== shop` — is the whole thing standing between two merchants. |
+| `tests/routes/autopilot.bound.test.js` | `webhooks.products.create` | The only path where a generation is spent with nobody clicking anything. Exactly one product per webhook, seven distinct reasons to skip, and **every one of them a 200** — a non-2xx makes Shopify retry, and a retried autopilot webhook is a retry storm. |
+| `tests/routes/jobsStatus.test.js` | `api.jobs-status` | That an auth failure is answered with an empty payload rather than a redirect. `authenticate.admin` throws a redirect to the login form, and this endpoint is polled in the background — following that redirect would yank a merchant out of the app mid-sentence. |
+| `tests/routes/reviewRequest.test.js` | `app.review-request` | One review ask, ever. A second call must perform **no write at all** — an upsert with the same value would move the timestamp forward and reset the rule every time. |
+
+`/` and `/auth/login` re-embed were already covered behaviourally in `login-deadend.test.js`, and
+`subscriptions_update` ordering in `billing.correctness.test.js` (Phase 0 item 8a).
+
+### The regex-over-source tests, replaced
+
+- **`login-deadend.test.js`** — the two `readFileSync` guards are gone. In their place: a sweep that
+  drives **both** public entry points against **six** embedded signals — `host`, `embedded=1`,
+  `sec-fetch-dest: iframe`, `sec-fetch-dest: frame`, an `admin.shopify.com` referer, and host+shop — and
+  asserts none of the twelve combinations produces form data. That is App Store rejection 2.1.1 as an
+  executable statement. The other half is asserted too: a genuine external visit **must still get the
+  form**, so the guard cannot have been implemented by deleting it.
+- The `rel="home"` markup check became a routing test. The attribute is belt and braces; what actually
+  fixed the dead-end is that a bare `/` now re-embeds, so the test proves **both** candidate targets are
+  safe rather than checking for an attribute.
+- **`credits.test.js`** — the three text guards over the bulk entry points are replaced by the real
+  action tests above. Two things survive, and the file says which is which: the bulk processor's
+  **ordering** check (the quota must be read *before* the model call, because after it the money is
+  spent), which no action test can see, and one remaining source guard on the welcome flow, **labelled as
+  a source guard** with the reason — that route is behind a flag and Phase 3 retires it, so a full action
+  test would be written in order to be deleted.
+- `tests/routes/no-dark-patterns.test.js` is Phase 3's, is gitignored, and fails against `main` by
+  design. It is untouched here.
+
+### The Playwright suite is now a documented manual gate
+
+`tests/e2e/README.md` states what it is and is not: not run by CI and it must not be, because it drives a
+real admin with a real session and it **writes** — it generates content, publishes to a live storefront,
+and changes plans. It exists to assert ground truth **in the Shopify admin**, not what the app's own UI
+claims, because the worst bug in this app's history was a UI reporting success while writing nothing.
+
+**And the store is now enforced, not just documented.** `playwright.config.js` defaulted to
+`contentpilot-dev2` and would have run against any handle in `SHOP_HANDLE`. It now defaults to
+`navaal-qa-fresh` and **refuses to start** against a store that is not on the allow-list:
+
+```
+Error: Refusing to run the e2e suite against "some-merchant". It is not one of the known
+test stores (navaal-qa-fresh, contentpilot-dev2), and this suite writes to whatever store
+it is pointed at. If you really mean it, set E2E_ALLOW_UNLISTED_STORE=1.
+```
+
+Verified by running it. A mistyped handle would otherwise have been editing somebody's live catalogue.
+
+**Totals:** 55 tracked test files, **663 assertions passing**, lint and typecheck clean, build clean.
+The one failing file is Phase 3's, gitignored, and absent from CI's checkout.

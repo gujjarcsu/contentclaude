@@ -7,7 +7,6 @@
  * These tests lock every server entry point that could render it.
  */
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
 
 vi.mock("../../app/shopify.server", () => ({
   login: vi.fn(async () => ({})),
@@ -142,18 +141,82 @@ describe("2.1.1 in-admin login dead-end", () => {
     expect(isEmbeddedRequest(new Request("https://a.test/"))).toBe(false);
   });
 
-  it("app.jsx s-app-nav has a rel=\"home\" link to /app (fixes the app-title/home target)", () => {
-    const src = readFileSync("app/routes/app.jsx", "utf8");
-    expect(/<s-link\s+href="\/app"\s+rel="home">/.test(src)).toBe(true);
+  // ── Replacing two source-regex guards with behaviour (Phase 1 item 10) ──
+  //
+  // These used to be `readFileSync` + a regex over the route source: one
+  // checked app.jsx contained `rel="home"`, the other that _index did not
+  // contain the string "/auth/login". Both would pass on code that had been
+  // refactored into something equivalent-looking and broken, and both would
+  // fail on a harmless reformat. What follows drives the loaders instead.
+
+  it("the admin sidebar's app title cannot dead-end, wherever Shopify points it", async () => {
+    // `rel="home"` in app.jsx points the app title at /app. The old test read
+    // the source for that attribute — but the attribute is belt and braces. The
+    // failure it was added for is Shopify pointing the title at a bare "/", and
+    // what actually fixed that is the routing below: "/" now re-embeds. So the
+    // property worth holding is that BOTH candidate targets are safe.
+    const { loader: indexLoader } = await import("../../app/routes/_index/route.jsx");
+    const { loader: reembedLoader } = await import("../../app/routes/reembed.jsx");
+
+    // Target 1: a bare "/" — where Shopify points the title with no home link.
+    const root = await run(indexLoader, "https://app.test/");
+    expect(root.status).toBe(302);
+    expect(root.location).toMatch(/^\/reembed/);
+
+    // Target 2: the re-embed page it lands on resolves into the admin at /app.
+    const page = await run(reembedLoader, `https://app.test/reembed?host=${HOST}`);
+    expect(isReembed(page)).toBe(true);
+    expect(page.body).toContain("/apps/navaal-seo-geo-content/app");
+    expect(page.body).not.toMatch(/Shop domain|name="shop"/i);
   });
 
-  // Source guard: neither entry point may render the form without first gating
-  // on the embedded check (this is exactly what regressed in 2.1.1).
-  it("source guard: _index never redirects to /auth/login; auth.login gates the form behind isEmbeddedRequest", () => {
-    const idx = readFileSync("app/routes/_index/route.jsx", "utf8");
-    // _index must never route to the login form — a bare "/" is always in-admin.
-    expect(idx).not.toContain('"/auth/login"');
-    expect(idx).toContain("/reembed");
-    expect(readFileSync("app/routes/auth.login/route.jsx", "utf8")).toContain("isEmbeddedRequest");
+  it("no entry point produces a login form for ANY embedded signal", async () => {
+    // The 2.1.1 rejection in one assertion. Every way Shopify can tell us the
+    // request came from inside the admin, against both public entry points.
+    const { loader: indexLoader } = await import("../../app/routes/_index/route.jsx");
+    const { loader: loginLoader } = await import("../../app/routes/auth.login/route.jsx");
+
+    const embeddedSignals = [
+      { label: "host param", url: `https://app.test/?host=${HOST}` },
+      { label: "embedded=1", url: "https://app.test/?embedded=1" },
+      { label: "iframe dest", url: "https://app.test/", headers: { "sec-fetch-dest": "iframe" } },
+      { label: "frame dest", url: "https://app.test/", headers: { "sec-fetch-dest": "frame" } },
+      {
+        label: "admin referer",
+        url: "https://app.test/",
+        headers: { referer: "https://admin.shopify.com/store/x/apps/y" },
+      },
+      { label: "host and shop", url: `https://app.test/?host=${HOST}&shop=x.myshopify.com` },
+    ];
+
+    for (const { label, url, headers } of embeddedSignals) {
+      for (const [name, loader] of [["_index", indexLoader], ["auth.login", loginLoader]]) {
+        const r = await run(loader, url, headers);
+        // Never data (the form is rendered from returned data), always a
+        // redirect into the app or the re-embed page.
+        expect(r.isResponse, `${name} answered ${label} with form data`).toBe(true);
+        expect(r.status, `${name} / ${label}`).toBe(302);
+        expect(r.location, `${name} / ${label}`).toMatch(/^\/(app|reembed)/);
+        expect(r.location, `${name} / ${label}`).not.toMatch(/auth\/login/);
+      }
+    }
+  });
+
+  it("a bare / is treated as in-admin even with no signal at all", async () => {
+    // There is no legitimate way to reach this app's root outside the admin, so
+    // the absence of every signal still must not produce a form.
+    const { loader } = await import("../../app/routes/_index/route.jsx");
+    const r = await run(loader, "https://app.test/");
+    expect(r.status).toBe(302);
+    expect(r.location).toMatch(/^\/reembed/);
+  });
+
+  it("a genuine external visit to /auth/login still gets the form", async () => {
+    // The other half: the guard must not have been implemented by removing the
+    // form altogether. A merchant arriving from outside Shopify needs it.
+    const { loader } = await import("../../app/routes/auth.login/route.jsx");
+    const r = await run(loader, "https://app.test/auth/login");
+    expect(r.isResponse).toBe(false);
+    expect(r.data).toHaveProperty("errors");
   });
 });

@@ -11,7 +11,24 @@ import { defineConfig, devices } from "@playwright/test";
  * Auth: one manual login, persisted to storageState. No credentials in code.
  */
 
-const STORE = process.env.SHOP_HANDLE || "contentpilot-dev2";
+// Phase 1 item 10 — this suite drives a REAL Shopify admin with a real saved
+// session, and it writes: it generates content, publishes it to a storefront and
+// changes plans. Pointed at a merchant's store it would edit that merchant's
+// products. So the target is an allow-list of stores we own, and the default is
+// the dedicated QA store rather than whichever handle happened to be in the file.
+//
+// To run against something else, name it AND say so:
+//   SHOP_HANDLE=some-store E2E_ALLOW_UNLISTED_STORE=1 npx playwright test
+const TEST_STORES = ["navaal-qa-fresh", "contentpilot-dev2"];
+const STORE = process.env.SHOP_HANDLE || "navaal-qa-fresh";
+
+if (!TEST_STORES.includes(STORE) && process.env.E2E_ALLOW_UNLISTED_STORE !== "1") {
+  throw new Error(
+    `Refusing to run the e2e suite against "${STORE}". It is not one of the known test stores ` +
+      `(${TEST_STORES.join(", ")}), and this suite writes to whatever store it is pointed at. ` +
+      `If you really mean it, set E2E_ALLOW_UNLISTED_STORE=1.`,
+  );
+}
 
 export default defineConfig({
   testDir: "./tests/e2e",
