@@ -847,3 +847,41 @@ required survives.
 `connection_limit` from 1 to 5. That is the only Phase 0 finding still visibly wrong in production — the
 startup warning is in the logs on every boot — and it needs a human because the new value contains the
 database password.
+
+### Item 25 is LIVE-verified after all
+
+The ledger row for item 25 says "code-only". That was true when written and is not any more. Sentry's
+eager initialisation is visible in the production logs on every machine boot, and the release tag is
+populated, which is what makes an error traceable to the deploy that caused it:
+
+```
+$ fly logs -a contentclaude
+
+app[8e647ef7354428] syd  {"level":30,"service":"contentclaude","env":"production",
+  "release":"fd81c433f5fba5681a07f1ebdd517afcde4a14e9",
+  "msg":"Sentry error monitoring initialised"}
+
+app[861032ae672158] syd  {"level":30,"service":"contentclaude","env":"production",
+  "release":"fd81c433f5fba5681a07f1ebdd517afcde4a14e9",
+  "msg":"Sentry error monitoring initialised"}
+```
+
+Both halves of item 25 are therefore proven in production: the SDK initialises at boot rather than on a
+first manual capture, on every machine, tagged with the running build; and the owner's alert rule
+delivered a test email. **Item 25: LIVE-verified.**
+
+What is still only asserted by tests for item 25 is that a thrown loader error reaches Sentry through the
+new `handleError`. Proving that means deliberately breaking a route in production, so it stays a test.
+
+The same log excerpt carries the other standing fact, on every boot, from both machines:
+
+```
+⚠️ STARTUP: DATABASE_URL sets connection_limit=1. One connection serialises the web process behind
+every worker transaction and causes pool timeouts under modest load — raise it to 5 on the pooled
+endpoint.
+```
+
+That is HUMAN-NEEDED #4, and it is the last Phase 0 finding still visibly wrong in production.
+
+**Deploy `c65ba8f` is live and healthy**: `/api/build-info` matches `main`, and `/api/health?deep=1`
+reports `status: ok` with `workerRunning: true`, no failed or stranded jobs, and the AI breaker closed.
