@@ -167,6 +167,16 @@ export const startupPromise = (async () => {
   if (_initialized) return;
   _initialized = true;
 
+  // Phase 0 item 25 — before anything else, so the very first error of the
+  // process is reported and the global handlers are live.
+  try {
+    const { initErrorMonitoring, installProcessErrorHandlers } = await import("./errorMonitoring.server.js");
+    installProcessErrorHandlers();
+    await initErrorMonitoring();
+  } catch (err) {
+    logger.error({ err }, "Could not initialise error monitoring");
+  }
+
   runStartupChecks();
 
   try {

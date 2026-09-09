@@ -143,7 +143,11 @@ export async function loader({ request, params }) {
     existingContent: existingContent.reduce((acc, item) => {
       acc[item.contentType] = {
         generated: item.generatedContent,
-        original: item.originalContent,
+        // Phase 0 item 22 — `original` is the product's pre-AI description,
+        // copied from Shopify when the first draft was written, and the
+        // "ORIGINAL (before AI)" panel renders it with dangerouslySetInnerHTML.
+        // Same allowlist as everything else that reaches that API.
+        original: item.contentType === "description" ? sanitizeHtml(item.originalContent || "") : item.originalContent,
         status: item.status,
         version: item.version,
         id: item.id,

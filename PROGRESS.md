@@ -619,3 +619,76 @@ is covered by per-path assertions plus a sweep asserting every route that calls 
 **Pre-deploy gate:** unit suite **453 passed**, 5 failed — the same untracked
 `tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean **from a
 cleared cache**. Typecheck **0 errors**. Build clean.
+
+### Group 0.E — LIVE verification (deployed SHA 7687368)
+
+`/api/build-info` = `7687368435a25f26928314b2f57178dbfbc017f9` = `main` HEAD (**G5 pass**).
+**G2**: both redirects `302 -> /reembed`. `/api/health` returns `{"status":"ok"}`.
+
+Items 23 and 24 are **code-only**. Verifying them live means driving Anthropic into a 429 or pulling its
+connection mid-request against the owner's production API key, and the observable difference — a request
+that now fails in ~10 s instead of holding for two minutes — is a timing property, not a state you can
+read back. Both are pinned by unit assertions on the exact mechanisms, including one that asserts
+`parseFloat` on the header yields `2026` so the original defect cannot quietly return.
+
+---
+
+## Group 0.F — Observability (items 25-26)
+
+**Item 25 — Sentry was effectively unwired.** Three separate reasons almost nothing ever reached it:
+- `captureException` was called in exactly **two** places in the entire app, both inside
+  `bulkProcessor`. Every error thrown by a loader, an action, or during rendering — which is nearly all
+  of them — went to the console and nowhere else.
+- `Sentry.init` was **lazy**, run on the first `captureException`. The global handlers Sentry installs at
+  init were therefore never active until something had already been reported by hand, which is precisely
+  backwards: those handlers exist to catch what nothing reports by hand.
+- `process.on("unhandledRejection")` was never registered at all, so a rejected promise nobody awaited
+  vanished.
+
+Now: `initErrorMonitoring()` runs eagerly at boot from `startup.server.js`, before the startup checks, so
+the first error of a process is reportable; `installProcessErrorHandlers()` registers both
+`unhandledRejection` and `uncaughtException`; and `entry.server.jsx` exports `handleError`, which React
+Router calls for every loader/action/render error. A client that navigated away (`request.signal.aborted`)
+is not reported — that is not an error worth paging anyone about — and the reported path is
+`url.pathname` only, never the query string, which can carry a session token. Reports carry
+`release: GIT_SHA`, so an error can be traced to the deploy that introduced it.
+
+**The alert rule itself is HUMAN-NEEDED #5** — it lives in the Sentry dashboard, behind a login. Written
+up with the exact click path and a one-line command to prove it fires. Without it, errors are captured
+but nobody is told, which is only half the point.
+
+**Item 26 — the health check could not see the product.** `/api/health` returned `ok` when:
+Redis was dead (the cache silently falls back to an in-process Map, so nothing failed); the BullMQ worker
+was not running at all (so every merchant's bulk job sat queued forever); and the AI circuit breaker was
+open (so no shop could generate anything). An uptime monitor pointed at it would have reported 100%
+availability through all three. It also had no timeouts, so a hung database made the health check itself
+hang — the one endpoint that must always answer.
+
+`?deep=1` now reports, with the shallow check left cheap and unchanged for Fly's own 30-second probe:
+
+| Check | Source | Effect |
+|---|---|---|
+| database | `SELECT 1`, 2 s timeout | failure → **503** |
+| redis | cache ping, 1 s timeout | failure → degraded (200) |
+| queue + worker | `getQueueHealth()` — `Queue.getJobCounts` and `worker.isRunning()` | dead worker in production → **503** |
+| jobs | failed in the last 10 min; stranded in `processing` | stranded → **503**; failed only → degraded |
+| aiCircuitBreaker | `getCircuitBreakerState()` | open → degraded (it closes itself after a minute) |
+| build | `GIT_SHA` | which release answered |
+
+Three states rather than two: `ok` (200), `degraded` (200, a monitor should warn), `error` (503, the app
+cannot do its job). A dead worker and stranded jobs are 503 because the app's central promise — bulk
+generation — is not being kept, even though every page still loads. Redis and an open breaker are
+degraded because the app still serves and both recover on their own. Every probe is individually
+wrapped, so one failing probe reports itself rather than taking the endpoint down.
+
+**Tests — 14 new assertions in `tests/routes/health.deep.test.js`:** the shallow check stays minimal, does
+not probe the queue, and 503s on a dead database without echoing the connection string; the deep check
+reports every field; a dead worker and stranded jobs each produce 503; Redis down, an open breaker, and
+recent failures each produce degraded-but-200; and a probe that throws is reported as unavailable rather
+than failing the endpoint. Item 25 is covered by guards that init is eager and called from startup, that
+both process handlers are registered, that `handleError` is exported and reports via `captureException`
+while ignoring aborted requests and never logging the query string, and that reports carry the release.
+
+**Pre-deploy gate:** unit suite **467 passed**, 5 failed — the same untracked
+`tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean **from a
+cleared cache**. Typecheck **0 errors**. Build clean.

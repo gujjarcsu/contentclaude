@@ -8,6 +8,7 @@ import { shopFromHost } from "./utils/embedded.server.js";
 // Run startup tasks (stuck-job recovery + BullMQ worker) once at boot.
 import "./utils/startup.server.js";
 import logger from "./utils/logger.server.js";
+import { captureException } from "./utils/errorMonitoring.server.js";
 
 export const streamTimeout = 15_000; // 15 seconds — accommodates slow DB queries under load
 
@@ -72,4 +73,28 @@ export default async function handleRequest(
     // React has enough time to flush down the rejected boundary contents
     setTimeout(abort, streamTimeout + 1000);
   });
+}
+
+/**
+ * Phase 0 item 25 — React Router calls this for every error thrown by a loader,
+ * an action, or during rendering. Without it those errors only reached the
+ * console: the app had `captureException` in exactly two places, so almost
+ * nothing was ever reported. A client disconnect (request.signal aborted) is
+ * not an error worth paging anyone about.
+ */
+export function handleError(error, { request }) {
+  if (request?.signal?.aborted) return;
+  const url = (() => {
+    try {
+      const u = new URL(request.url);
+      return u.pathname; // never the query string — it can carry a session token
+    } catch {
+      return "unknown";
+    }
+  })();
+  captureException(error instanceof Error ? error : new Error(String(error)), {
+    source: "handleError",
+    method: request?.method,
+    path: url,
+  }).catch(() => {});
 }

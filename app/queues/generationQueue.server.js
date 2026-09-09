@@ -211,6 +211,35 @@ export async function enqueueGenerationJob(jobId) {
   }), 0);
 }
 
+
+/**
+ * Phase 0 item 26 — what /api/health?deep=1 needs to know about the queue.
+ *
+ * "The web server answers" is not the same as "bulk jobs are running". Without
+ * this, a dead worker looked perfectly healthy from outside: the health check
+ * said ok while every merchant's job sat queued forever.
+ *
+ * Never throws — an unreachable Redis is an answer, not an exception.
+ */
+export async function getQueueHealth({ timeoutMs = 2_000 } = {}) {
+  if (!redisConnection) {
+    return { configured: false, workerRunning: false, counts: null, error: "REDIS_URL not set" };
+  }
+  const workerRunning = !!_worker && typeof _worker.isRunning === "function" ? _worker.isRunning() : !!_worker;
+  const queue = getQueue();
+  if (!queue) return { configured: true, workerRunning, counts: null, error: "queue unavailable" };
+
+  try {
+    const counts = await Promise.race([
+      queue.getJobCounts("wait", "active", "delayed", "failed", "completed"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
+    ]);
+    return { configured: true, workerRunning, counts, error: null };
+  } catch (err) {
+    return { configured: true, workerRunning, counts: null, error: err.message };
+  }
+}
+
 /**
  * Graceful shutdown — call on SIGTERM.
  * force=false: waits for active jobs to finish (up to lockDuration).

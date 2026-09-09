@@ -201,9 +201,12 @@ describe("item 22 — the rest of the hardening", () => {
     expect(code("app/utils/ai.server.js")).toMatch(/allowProtocolRelative:\s*false/);
   });
 
-  it("the product preview is sanitised on the server before it is rendered as HTML", () => {
+  it("every stored-HTML preview is sanitised on the server before it is rendered", () => {
     const src = code("app/routes/app.products_.$id.jsx");
+    // The "CURRENT" panel — whatever is on the product in Shopify right now.
     expect(src).toMatch(/descriptionHtml: sanitizeHtml\(/);
+    // The "ORIGINAL (before AI)" panel — the pre-AI copy we stored.
+    expect(src).toMatch(/sanitizeHtml\(item\.originalContent/);
   });
 
   it("build-info no longer publishes the Node version", () => {

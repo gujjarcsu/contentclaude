@@ -51,6 +51,30 @@ Things only a human with the right logins can do. Each item says what, why, and 
 - **When the worker moves to its own process (Phase 1 item 2), give the worker `connection_limit=3` and
   leave the web process on 5.**
 
+### 5. Create the Sentry alert rule — Phase 0 item 25
+- **What is already done in code:** Sentry now initialises eagerly at boot (it used to wait for the first
+  manual `captureException`, of which there were exactly two in the whole app), `handleError` is exported
+  from `app/entry.server.jsx` so every loader, action and render error is reported, and
+  `unhandledRejection` / `uncaughtException` handlers are registered at startup. Reports are tagged with
+  the running build (`release: GIT_SHA`), so you can tell which deploy an error belongs to.
+- **Why the agent cannot finish it:** an alert rule is created in the Sentry dashboard, behind a login the
+  agent does not have. Without the rule, errors are captured but nobody is told.
+- **Exact steps:** Sentry → the project whose DSN is in `SENTRY_DSN` → **Alerts** → **Create Alert** →
+  **Issues** →
+  - *When*: `A new issue is created`
+  - *If*: (leave empty — every new issue matters at this volume)
+  - *Then*: `Send a notification to` → Email → `hello@navaal.ai`
+  - Rule name: `New issue → email`
+  - Environment: `production`
+- **Verify it:** trigger one deliberately and confirm the email arrives.
+  ```
+  fly ssh console -a contentclaude -C "node -e \"process.emit('unhandledRejection', new Error('Sentry alert rule test'))\""
+  ```
+  The error should appear in Sentry within a minute, tagged with the current release, and the email should
+  follow. Delete the issue afterwards so the alert history stays meaningful.
+- **While you are there:** set a second rule for `An issue changes state from resolved to unresolved`,
+  which is how a regression announces itself.
+
 ## Standing notes
 - Every push to `main` deploys to Fly via `.github/workflows/ci.yml`; do not run `fly deploy` locally alongside a push.
 - The saved admin session used by the proof harnesses lives in `tests/e2e/.auth/shopify.json` (created with `node scripts/login-cdp.mjs`). When it expires, re-run that script and log in yourself; no credentials are ever typed by the agent.
