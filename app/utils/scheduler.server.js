@@ -26,10 +26,25 @@ import { getRedis } from "./cache.server.js";
 import { runNightlyBackup } from "./backup.server.js";
 
 const HEALTH_INTERVAL_MS = 5 * 60 * 1000;
-const HEALTH_URL = `${(process.env.SHOPIFY_APP_URL || "https://app.navaal.ai").replace(/\/$/, "")}/api/health?deep=1`;
+const BASE_URL = (process.env.SHOPIFY_APP_URL || "https://app.navaal.ai").replace(/\/$/, "");
+const HEALTH_URL = `${BASE_URL}/api/health?deep=1`;
+/** The embedded admin shell. /api/health can be perfectly healthy while this 500s. */
+const APP_URL = `${BASE_URL}/app`;
 
 /** Do not send the same alarm every five minutes for hours. */
 const REALERT_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * How long `degraded` may persist before it is treated as an outage.
+ *
+ * A brief degrade is self-healing and must not page: Redis blips, and the AI
+ * circuit breaker closes itself after a minute. But the four questions the
+ * brief asks include "Anthropic is down for an hour", and an hour of every
+ * generation failing is an outage no matter what the status word says. Three
+ * consecutive probes — fifteen minutes — is well past self-healing and well
+ * short of a merchant's whole afternoon.
+ */
+const DEGRADED_PROBES_BEFORE_ALERT = 3;
 /** Digest bookkeeping lives in Redis so a worker restart cannot double-send. */
 const DIGEST_KEY = "ops:digest:lastSentDay";
 const DIGEST_HOUR_SYDNEY = 7;
@@ -43,6 +58,10 @@ let _digestTimer = null;
 // a genuinely broken system is the correct behaviour, not a bug.
 let _lastAlertAt = 0;
 let _lastStatus = "ok";
+let _degradedStreak = 0;
+let _degradedAlerted = false;
+let _lastShellAlertAt = 0;
+let _shellBroken = false;
 
 /** The current hour and calendar day in Sydney, whatever the machine's clock is set to. */
 export function sydneyParts(now = new Date()) {
@@ -83,6 +102,59 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
   const bad = httpCode !== 200 || status === "error";
   let alerted = false;
 
+  // ── Degraded that will not go away ──────────────────────────────────────
+  //
+  // `degraded` is deliberately not an alert on its own: Redis blips and the AI
+  // circuit breaker closes itself. But it must not be a state the app can sit
+  // in all afternoon while nobody is told. Three consecutive probes is fifteen
+  // minutes, which is past self-healing.
+  if (!bad && status === "degraded") {
+    _degradedStreak += 1;
+    if (_degradedStreak >= DEGRADED_PROBES_BEFORE_ALERT && !_degradedAlerted) {
+      _degradedAlerted = true;
+      alerted = true;
+      const minutes = Math.round((DEGRADED_PROBES_BEFORE_ALERT * HEALTH_INTERVAL_MS) / 60000);
+      await sendOperatorEmail({
+        subject: `Navaal has been DEGRADED for ${minutes} minutes`,
+        text: [
+          `Production is still answering, but something has been wrong for ${minutes} minutes`,
+          "and has not recovered on its own. Merchants are probably affected even",
+          "though every page still loads.",
+          "",
+          `URL:    ${HEALTH_URL}`,
+          `status: ${status}`,
+          "",
+          "Response:",
+          body.slice(0, 2000),
+          "",
+          "The usual causes, in order of likelihood:",
+          "  aiCircuitBreaker.open  — the AI provider is failing. No shop can",
+          "                           generate anything. Check status.anthropic.com",
+          "                           and ANTHROPIC_API_KEY.",
+          "  redis: degraded        — the queue has fallen back to inline work.",
+          "  jobs.failedLast10Min   — generations are failing for some other reason.",
+          "",
+          "Runbook: docs/RUNBOOK.md — match the symptom to the section.",
+        ].join("\n"),
+      });
+      logger.error({ status, streak: _degradedStreak, event: "health_watch_degraded" }, "Sustained degradation");
+    }
+  } else if (!bad) {
+    if (_degradedAlerted) {
+      await sendOperatorEmail({
+        subject: "Navaal is back to normal — the degraded state cleared",
+        text: `Production has recovered on its own.\n\nstatus: ${status}\nURL: ${HEALTH_URL}`,
+      });
+      logger.info({ event: "health_watch_degraded_recovered" }, "Degradation cleared");
+    }
+    _degradedStreak = 0;
+    _degradedAlerted = false;
+  } else {
+    // A hard failure supersedes the degraded tracking.
+    _degradedStreak = 0;
+    _degradedAlerted = false;
+  }
+
   if (bad) {
     const recovered = _lastStatus === "ok";
     const stale = now - _lastAlertAt > REALERT_AFTER_MS;
@@ -121,7 +193,7 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
     _lastStatus = "ok";
   }
 
-  return { ok: !bad, status, alerted };
+  return { ok: !bad, status, alerted, degradedStreak: _degradedStreak };
 }
 
 /**
@@ -180,12 +252,93 @@ export async function maybeRunBackup({ now = new Date(), run = runNightlyBackup 
   return { ran: true, ...result };
 }
 
+/**
+ * Is the embedded admin still serving? — the fourth question the brief asks.
+ *
+ * `/api/health` can be entirely green while `/app` returns a 500. The health
+ * endpoint touches the database, Redis, the queue and the breaker; it does not
+ * render a single route. A bad deploy that breaks the layout loader, a missing
+ * import, a component that throws on render — all of those leave health saying
+ * "ok" while every merchant sees an error page.
+ *
+ * CI's smoke job catches this on the deploy that caused it. This catches it at
+ * any other time: a Shopify API change, an expired credential, a route that
+ * only fails under a real session.
+ *
+ * `/app` is an embedded route, so an unauthenticated probe legitimately gets a
+ * redirect to authenticate — 200, 302 and 401 are all healthy answers. **5xx is
+ * not.** That is the whole test: the server can still produce this route.
+ */
+export async function checkAppShellOnce({ fetchImpl = fetch, now = Date.now() } = {}) {
+  let httpCode = 0;
+  let detail = "";
+
+  try {
+    const res = await fetchImpl(APP_URL, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: AbortSignal.timeout(20_000),
+    });
+    httpCode = res.status;
+  } catch (err) {
+    detail = err.message;
+  }
+
+  // No answer at all is already covered by the health probe, which runs against
+  // the same host — reporting it twice would be two emails for one outage.
+  const broken = httpCode >= 500;
+  let alerted = false;
+
+  if (broken) {
+    const stale = now - _lastShellAlertAt > REALERT_AFTER_MS;
+    if (!_shellBroken || stale) {
+      _lastShellAlertAt = now;
+      alerted = true;
+      await sendOperatorEmail({
+        subject: `Navaal's admin is broken — /app returned ${httpCode}`,
+        text: [
+          "The health check is passing, but the embedded admin itself will not render.",
+          "Every merchant opening the app is seeing an error page right now.",
+          "",
+          `URL:  ${APP_URL}`,
+          `HTTP: ${httpCode}`,
+          "",
+          "This is almost always the last deploy. Check what shipped:",
+          "  curl -s https://app.navaal.ai/api/build-info",
+          "and roll back if it does not match a release you trust:",
+          "  fly releases -a contentclaude",
+          "  fly releases rollback -a contentclaude",
+          "",
+          "Read prisma/migrations/README.md FIRST if the release ran a migration —",
+          "rolling back the image does not roll back the schema.",
+        ].join("\n"),
+      });
+      logger.error({ httpCode, event: "app_shell_broken" }, "The admin shell is returning 5xx");
+    }
+    _shellBroken = true;
+  } else {
+    if (_shellBroken) {
+      await sendOperatorEmail({
+        subject: "Navaal's admin is serving again",
+        text: `/app is answering ${httpCode} again.\n\nURL: ${APP_URL}`,
+      });
+      logger.info({ httpCode, event: "app_shell_recovered" }, "The admin shell recovered");
+    }
+    _shellBroken = false;
+  }
+
+  return { ok: !broken, httpCode, alerted, detail };
+}
+
 /** Start the loops. Idempotent; worker-only (the caller enforces that). */
 export function startScheduler() {
   if (_healthTimer) return;
 
   _healthTimer = setInterval(() => {
     checkHealthOnce().catch((err) => logger.error({ err }, "health watch threw"));
+    // Separate probe, separate failure: a green health check says nothing about
+    // whether the admin actually renders.
+    checkAppShellOnce().catch((err) => logger.error({ err }, "app shell watch threw"));
   }, HEALTH_INTERVAL_MS);
   _healthTimer.unref?.();
 
@@ -198,7 +351,13 @@ export function startScheduler() {
   _digestTimer.unref?.();
 
   logger.info(
-    { healthEveryMs: HEALTH_INTERVAL_MS, digestHourSydney: DIGEST_HOUR_SYDNEY, healthUrl: HEALTH_URL },
+    {
+      healthEveryMs: HEALTH_INTERVAL_MS,
+      digestHourSydney: DIGEST_HOUR_SYDNEY,
+      healthUrl: HEALTH_URL,
+      appUrl: APP_URL,
+      degradedProbesBeforeAlert: DEGRADED_PROBES_BEFORE_ALERT,
+    },
     "Operator scheduler started",
   );
 }

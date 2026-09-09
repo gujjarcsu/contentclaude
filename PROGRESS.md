@@ -1317,3 +1317,118 @@ Verified by running it. A mistyped handle would otherwise have been editing some
 
 **Totals:** 55 tracked test files, **663 assertions passing**, lint and typecheck clean, build clean.
 The one failing file is Phase 3's, gitignored, and absent from CI's checkout.
+
+---
+
+# The four questions — "what does the owner see when X breaks?"
+
+The brief asks these to be answered **after** the work, with "alert", "log line" or "nothing", and
+requires all four to read **alert**.
+
+Answered honestly first, they did not. Two read "log line", and that is what the last commit of Phase 1
+fixed. Both fixes are code with tests, not a change to the wording of the answer.
+
+| # | What breaks | Answer | How |
+|---|---|---|---|
+| 1 | **Anthropic is down for an hour** | **alert** | Sustained-degradation alert, ~15 min |
+| 2 | **Redis is down** | **alert** | 503 within 5 min, plus the external monitor |
+| 3 | **Neon is down** | **alert** | 503 within 5 min — the 2026-09-09 incident |
+| 4 | **A deploy breaks `/app`** | **alert** | CI smoke fails, and `/app` is probed every 5 min |
+
+## 1. Anthropic is down for an hour → **alert**
+
+**What happens.** The circuit breaker opens after repeated failures, so generations fail fast instead of
+burning quota on calls that cannot succeed. `/api/health?deep=1` reports `aiCircuitBreaker.open: true`,
+which is `degraded` and **200**, not a 503 — the app still serves every page, and merchants can still
+read, edit and publish existing content.
+
+**This was the honest answer, and it was "log line".** `degraded` deliberately does not page: the breaker
+closes itself after a minute, and paging on a one-minute self-healing state teaches an owner to ignore
+their alerts. But that reasoning does not survive the word "hour". Sixty minutes of no shop being able to
+generate anything is an outage, whatever the status field says.
+
+**What was changed.** The five-minute probe now counts consecutive degraded answers. Three in a row —
+fifteen minutes — sends `Navaal has been DEGRADED for 15 minutes`, naming the three usual causes in order
+of likelihood, with `aiCircuitBreaker.open` first and `status.anthropic.com` in the body. It sends once,
+not every five minutes, and sends again when it clears. A single degraded probe between healthy ones
+resets the count, so the self-healing case is still silent.
+
+**Timing:** first email at **15 minutes**. Within the hour, one email and one recovery email.
+
+## 2. Redis is down → **alert**
+
+**What happens.** The cache falls back to in-process memory, so pages keep serving. The queue falls back
+to inline processing. But the worker heartbeat lives **in Redis**, so `/api/health?deep=1` cannot read it
+and reports `workerRunning: false` — and in production a dead worker is `healthy = false`, a **503**.
+
+That is the correct severity. A merchant can still browse, but no bulk job will run, and bulk generation
+is what they are paying for.
+
+**Timing:** the in-app probe emails within **five minutes**. The external uptime monitor
+(HUMAN-NEEDED item 3), pointed at the deep check, catches it in **two minutes** — two consecutive
+60-second failures.
+
+## 3. Neon is down → **alert**
+
+**This is the 2026-09-09 incident, and it is the acceptance test for the whole of item 5.**
+
+On that day a `fly secrets set` from Windows `cmd.exe` corrupted `DATABASE_URL`, both machines restarted
+onto it, and `/api/health` returned 503 with `database: "error"` for roughly twenty minutes. **Nothing
+alerted.** The endpoint was working perfectly the entire time. Nothing was calling it.
+
+**What happens now.** The five-minute probe gets the 503, and emails
+`Navaal is DOWN — /api/health?deep=1 returned 503`. The body carries the response, points at the runbook,
+and says in as many words: *if a secret was just changed, assume it is corrupted and re-import it from a
+file.* That sentence is there because it is the thing that would have ended that incident in two minutes
+instead of twenty.
+
+The first assertion in `tests/utils/alerting.test.js` is that exact shape — a 503 with
+`database: "error"` producing an email that mentions the runbook and a just-changed secret.
+
+**Timing:** within **five minutes** from the app, **two minutes** from the external monitor. Against
+twenty minutes and nothing.
+
+**The honest limit:** the five-minute probe runs *inside* the same infrastructure. If Fly itself is gone,
+so is the thing that would tell you. Only the external monitor survives that, and it needs an account —
+which is exactly why it is HUMAN-NEEDED item 3 and not a nice-to-have.
+
+## 4. A deploy breaks `/app` → **alert**
+
+**Two independent mechanisms, because they catch it at different times.**
+
+**At deploy time:** CI's `smoke` job runs after every deploy and fails loudly on four things — the served
+SHA not matching the pushed commit, deep health being `error`, `workerRunning` not being true, `GET /`
+not redirecting to `/reembed`, and `HEAD /app` returning 5xx. A red workflow emails the person who
+pushed.
+
+**At any other time:** this was the second honest "log line". `/api/health` touches the database, Redis,
+the queue and the breaker. **It does not render a single route.** A layout loader that throws, a missing
+import, a component that fails on render — all of those leave health saying `ok` while every merchant
+sees an error page. And a break that arrives later, from a Shopify API change or an expired credential
+rather than a deploy, has no smoke job to catch it at all.
+
+**What was changed.** The five-minute cycle now probes `/app` as well, as a separate check with its own
+alert. 200, 302 and 401 are all healthy — it is an embedded route and an unauthenticated probe is
+*meant* to be redirected. Only **5xx** is a fault, and it emails
+`Navaal's admin is broken — /app returned 500`, telling the reader to check `/api/build-info`, roll back
+with `fly releases rollback`, and **read the migration notes first, because rolling back the image does
+not roll back the schema**.
+
+It stays deliberately quiet when the host does not answer at all: the health probe already covers a dead
+host and runs against the same machine. Two emails for one outage trains an owner to ignore both.
+
+**Timing:** immediately at deploy from CI; within **five minutes** otherwise.
+
+---
+
+## What still depends on a human
+
+Three of these four answers are produced by a checker that lives **inside the thing it is checking**. It
+cannot report that Fly is gone, that DNS is broken, or that the certificate expired. The external uptime
+monitor is the only check that survives the app being completely absent, and it needs an account someone
+has to create — HUMAN-NEEDED item 3.
+
+And every one of these emails goes nowhere without `RESEND_API_KEY` — HUMAN-NEEDED item 4. Until that
+exists, each alert is logged at **error** level with its full body, so it reaches Sentry and `fly logs`
+and can be found. That is a real degradation and it is stated rather than papered over: the alert exists,
+it is correct, and it is not yet arriving in an inbox.

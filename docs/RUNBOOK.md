@@ -224,8 +224,16 @@ Fly proxy and a web machine exactly as a merchant does.
 
 - **On 503 or no answer it emails**, once on the way into trouble, then at most hourly, then once more
   when it recovers.
-- **`degraded` does not alert.** Redis briefly away and an open AI circuit breaker are states the app is
-  built to ride out. Paging on them teaches you to ignore the alerts.
+- **`degraded` does not alert straight away** — Redis briefly away and an open AI circuit breaker are
+  states the app rides out, and paging on them teaches you to ignore the alerts. **But degraded that has
+  not cleared after three consecutive probes (fifteen minutes) does alert**, with the subject
+  `Navaal has been DEGRADED for 15 minutes`. Fifteen minutes is well past self-healing: an hour of the AI
+  provider being down is an outage no matter which word the status field uses.
+- **`/app` is probed separately, and a 5xx from it alerts on its own.** `/api/health` touches the
+  database, Redis, the queue and the breaker — it renders no route, so it stays green while a broken
+  deploy shows every merchant an error page. 200, 302 and 401 from `/app` are all healthy: it is an
+  embedded route and an unauthenticated probe is meant to be redirected. Only 5xx is a fault. The email
+  says to check `/api/build-info` and roll back, and it says to read the migration notes first.
 - **With no `RESEND_API_KEY` nothing is silently dropped.** The alert is logged at **error** level with
   the full body and `event: "operator_alert_undeliverable"`, so it still reaches Sentry and `fly logs`.
   Check there before concluding nothing fired.

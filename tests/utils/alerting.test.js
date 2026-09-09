@@ -27,7 +27,7 @@ vi.mock("../../app/utils/notify.server.js", () => ({
   }),
 }));
 
-const { checkHealthOnce, maybeSendDigest, maybeRunBackup, sydneyParts } = await import(
+const { checkHealthOnce, checkAppShellOnce, maybeSendDigest, maybeRunBackup, sydneyParts } = await import(
   "../../app/utils/scheduler.server.js"
 );
 const { buildDailyDigest } = await import("../../app/utils/digest.server.js");
@@ -229,5 +229,163 @@ describe("item 7 — the nightly backup", () => {
     // 17:00 UTC is 03:00 the next day in Sydney.
     const go = await maybeRunBackup({ now: new Date("2026-09-08T17:00:00Z"), run: async () => ({ ok: true }) });
     expect(go.ran).toBe(true);
+  });
+});
+
+/**
+ * Phase 1 item 5, the four questions the brief asks — "what does the owner see
+ * when X breaks?" All four must read "alert". Two of them did not, and this is
+ * the code that fixed that.
+ *
+ *   Anthropic down for an hour  →  the breaker opens, health says `degraded`,
+ *                                  and degraded deliberately does not page. So
+ *                                  an hour of every generation failing produced
+ *                                  a log line. Now: sustained degradation is an
+ *                                  outage and alerts.
+ *   A deploy breaks /app        →  /api/health touches the database, Redis, the
+ *                                  queue and the breaker. It renders no route,
+ *                                  so it stays green while every merchant sees
+ *                                  an error page. Now: /app is probed too.
+ */
+/**
+ * The scheduler keeps its alert state in module scope — deliberately, because a
+ * worker restart re-alerting once on a genuinely broken system is correct
+ * behaviour. That state therefore leaks between tests in this file. Rather than
+ * adding a reset hatch to production code for the benefit of a test, drive it
+ * back to healthy through its own public surface.
+ */
+async function settle(now) {
+  await checkHealthOnce({ fetchImpl: vi.fn(async () => res(200, { status: "ok" })), now });
+  await checkAppShellOnce({ fetchImpl: vi.fn(async () => ({ status: 200 })), now });
+  emails.length = 0;
+}
+
+describe("item 5 — degraded that will not clear is an outage", () => {
+  const degraded = (checks = { aiCircuitBreaker: { open: true } }) =>
+    vi.fn(async () => res(200, { status: "degraded", checks }));
+
+  beforeEach(() => settle(199_000_000));
+
+  it("says nothing for the first two probes — a blip is not an outage", async () => {
+    const fetchImpl = degraded();
+    const t = 200_000_000;
+    await checkHealthOnce({ fetchImpl, now: t });
+    await checkHealthOnce({ fetchImpl, now: t + 5 * 60_000 });
+    expect(emails).toHaveLength(0);
+  });
+
+  it("alerts on the third, and names the AI provider as the likely cause", async () => {
+    const fetchImpl = degraded();
+    const t = 210_000_000;
+    await checkHealthOnce({ fetchImpl, now: t });
+    await checkHealthOnce({ fetchImpl, now: t + 5 * 60_000 });
+    const out = await checkHealthOnce({ fetchImpl, now: t + 10 * 60_000 });
+
+    expect(out.alerted).toBe(true);
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toMatch(/DEGRADED for 15 minutes/);
+    expect(emails[0].text).toMatch(/aiCircuitBreaker/);
+    expect(emails[0].text).toMatch(/status\.anthropic\.com/);
+    expect(emails[0].text).toMatch(/RUNBOOK/);
+  });
+
+  it("does not repeat itself for the rest of the hour", async () => {
+    const fetchImpl = degraded();
+    const t = 220_000_000;
+    for (let i = 0; i < 8; i++) await checkHealthOnce({ fetchImpl, now: t + i * 5 * 60_000 });
+    expect(emails).toHaveLength(1);
+  });
+
+  it("a single degraded probe between healthy ones resets the count", async () => {
+    // The self-healing case: Redis blips once and recovers. Nothing should be
+    // sent, and the streak must not accumulate across unrelated blips.
+    const good = vi.fn(async () => res(200, { status: "ok" }));
+    const t = 230_000_000;
+    await checkHealthOnce({ fetchImpl: degraded(), now: t });
+    await checkHealthOnce({ fetchImpl: good, now: t + 5 * 60_000 });
+    await checkHealthOnce({ fetchImpl: degraded(), now: t + 10 * 60_000 });
+    await checkHealthOnce({ fetchImpl: good, now: t + 15 * 60_000 });
+    await checkHealthOnce({ fetchImpl: degraded(), now: t + 20 * 60_000 });
+    expect(emails).toHaveLength(0);
+  });
+
+  it("says so when the degradation clears", async () => {
+    const t = 240_000_000;
+    for (let i = 0; i < 3; i++) await checkHealthOnce({ fetchImpl: degraded(), now: t + i * 5 * 60_000 });
+    emails.length = 0;
+
+    await checkHealthOnce({ fetchImpl: vi.fn(async () => res(200, { status: "ok" })), now: t + 20 * 60_000 });
+
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toMatch(/back to normal/i);
+  });
+
+  it("a hard failure alerts immediately and does not wait for a streak", async () => {
+    const t = 250_000_000;
+    const out = await checkHealthOnce({
+      fetchImpl: vi.fn(async () => res(503, { status: "error", checks: { database: "error" } })),
+      now: t,
+    });
+    expect(out.alerted).toBe(true);
+    expect(emails[0].subject).toMatch(/DOWN/);
+  });
+});
+
+describe("item 5 — a deploy that breaks the admin", () => {
+  const shell = (status) => vi.fn(async () => ({ status }));
+
+  beforeEach(() => settle(299_000_000));
+
+  it("alerts when /app returns 500 even though health is green", async () => {
+    const out = await checkAppShellOnce({ fetchImpl: shell(500), now: 300_000_000 });
+
+    expect(out.ok).toBe(false);
+    expect(out.alerted).toBe(true);
+    expect(emails[0].subject).toMatch(/admin is broken/i);
+    expect(emails[0].subject).toMatch(/500/);
+    // It has to be actionable: the cause is almost always the last deploy.
+    expect(emails[0].text).toMatch(/build-info/);
+    expect(emails[0].text).toMatch(/fly releases rollback/);
+    // And it must not send someone rolling back over a migration.
+    expect(emails[0].text).toMatch(/does not roll back the schema/);
+  });
+
+  it("treats a redirect to authenticate as healthy — /app is an embedded route", async () => {
+    for (const code of [200, 302, 401]) {
+      emails.length = 0;
+      const out = await checkAppShellOnce({ fetchImpl: shell(code), now: 310_000_000 });
+      expect(out.ok, `HTTP ${code} should be healthy`).toBe(true);
+      expect(emails).toHaveLength(0);
+    }
+  });
+
+  it("stays quiet when the host does not answer at all", async () => {
+    // The health probe already covers a dead host, and it runs against the same
+    // machine. Two emails for one outage trains the owner to ignore both.
+    const out = await checkAppShellOnce({
+      fetchImpl: vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      }),
+      now: 320_000_000,
+    });
+    expect(out.ok).toBe(true);
+    expect(emails).toHaveLength(0);
+  });
+
+  it("does not repeat the alarm every five minutes", async () => {
+    const t = 330_000_000;
+    await checkAppShellOnce({ fetchImpl: shell(502), now: t });
+    await checkAppShellOnce({ fetchImpl: shell(502), now: t + 5 * 60_000 });
+    await checkAppShellOnce({ fetchImpl: shell(502), now: t + 10 * 60_000 });
+    expect(emails).toHaveLength(1);
+  });
+
+  it("says so when the admin serves again", async () => {
+    const t = 340_000_000;
+    await checkAppShellOnce({ fetchImpl: shell(500), now: t });
+    emails.length = 0;
+    await checkAppShellOnce({ fetchImpl: shell(302), now: t + 5 * 60_000 });
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toMatch(/serving again/i);
   });
 });
