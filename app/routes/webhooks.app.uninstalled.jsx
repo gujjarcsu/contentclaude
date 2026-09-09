@@ -34,7 +34,10 @@ export const action = async ({ request }) => {
   if (duplicate) return new Response("Duplicate", { status: 200 });
 
   if (await isStaleUninstallDelivery(shop, triggeredAt)) {
-    logger.warn({ shop, triggeredAt, event: "uninstall_delivery_stale" }, "Stale app/uninstalled delivery (triggered before the latest reinstall) — ignored");
+    logger.warn(
+      { shop, triggeredAt, event: "uninstall_delivery_stale" },
+      "Stale app/uninstalled delivery (triggered before the latest reinstall) — ignored",
+    );
     return new Response();
   }
 
@@ -54,21 +57,30 @@ export const action = async ({ request }) => {
       data: {
         status: "failed",
         completedAt: new Date(),
-        errorLog: JSON.stringify([{ productId: "N/A", error: "The app was uninstalled while this job was running." }]),
+        errorLog: JSON.stringify([
+          { productId: "N/A", error: "The app was uninstalled while this job was running." },
+        ]),
       },
     });
-    if (count > 0) logger.info({ shop, count, event: "jobs_cancelled_on_uninstall" }, "Cancelled in-flight jobs on uninstall");
+    if (count > 0)
+      logger.info(
+        { shop, count, event: "jobs_cancelled_on_uninstall" },
+        "Cancelled in-flight jobs on uninstall",
+      );
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "Could not cancel in-flight jobs on uninstall (non-fatal)");
   }
 
   try {
-    await db.$transaction(async (tx) => {
-      // Batched deletion so large tenants stay within the transaction timeout.
-      for (const model of GDPR_SHOP_MODELS) {
-        await chunkDelete(tx, model, { shop });
-      }
-    }, { timeout: 60_000 });
+    await db.$transaction(
+      async (tx) => {
+        // Batched deletion so large tenants stay within the transaction timeout.
+        for (const model of GDPR_SHOP_MODELS) {
+          await chunkDelete(tx, model, { shop });
+        }
+      },
+      { timeout: 60_000 },
+    );
     logger.info({ shop }, "All shop data deleted after uninstall");
   } catch (err) {
     // Log but don't fail — Shopify expects a 200 regardless.

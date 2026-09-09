@@ -1,8 +1,18 @@
 import { useLoaderData, useNavigation, useNavigate, redirect, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Card, Text, BlockStack, InlineStack,
-  Button, TextField, Select, ProgressBar, Badge, Box, Banner,
+  Page,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  TextField,
+  Select,
+  ProgressBar,
+  Badge,
+  Box,
+  Banner,
 } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server.js";
@@ -26,14 +36,20 @@ export const loader = async ({ request }) => {
   ]);
 
   const milestones = {
-    brandVoice: !!(brandVoice?.storeName),
+    brandVoice: !!brandVoice?.storeName,
     firstGenerated: !!firstGenerated,
     firstPublished: !!firstPublished,
   };
   const milestonesCompleted = Object.values(milestones).filter(Boolean).length;
   const onboardingPct = Math.round((milestonesCompleted / 3) * 100);
 
-  return Response.json({ brandVoice, step: Math.min(Math.max(step, 1), TOTAL_STEPS), shopName: "", milestones, onboardingPct });
+  return Response.json({
+    brandVoice,
+    step: Math.min(Math.max(step, 1), TOTAL_STEPS),
+    shopName: "",
+    milestones,
+    onboardingPct,
+  });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -44,8 +60,18 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const step = parseInt(formData.get("step") || "1", 10);
 
-  const VALID_TONES = new Set(["professional","friendly","premium","bold","scientific","warm","minimalist","playful","custom"]);
-  const VALID_LANGUAGES = new Set(["en","es","fr","de","it","pt","ja","zh","ko","ar","hi","nl"]);
+  const VALID_TONES = new Set([
+    "professional",
+    "friendly",
+    "premium",
+    "bold",
+    "scientific",
+    "warm",
+    "minimalist",
+    "playful",
+    "custom",
+  ]);
+  const VALID_LANGUAGES = new Set(["en", "es", "fr", "de", "it", "pt", "ja", "zh", "ko", "ar", "hi", "nl"]);
 
   if (step === 1) {
     const storeName = (formData.get("storeName") || "").slice(0, 200);
@@ -129,7 +155,6 @@ export default function SetupPage() {
   const [targetKeywords, setTargetKeywords] = useState(brandVoice?.targetKeywords || "");
   const [language, setLanguage] = useState(brandVoice?.language || "en");
 
-
   const toneOptions = [
     { label: "Professional & Trustworthy", value: "professional" },
     { label: "Friendly & Conversational", value: "friendly" },
@@ -164,7 +189,6 @@ export default function SetupPage() {
     "You're all set!",
   ];
 
-
   return loadingThisRoute ? (
     <AppSkeleton title="Setup" sections={2} layout="full" />
   ) : (
@@ -175,8 +199,12 @@ export default function SetupPage() {
           <Card>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">Onboarding Progress</Text>
-                <Badge tone={onboardingPct === 100 ? "success" : "attention"}>{onboardingPct}% complete</Badge>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  Onboarding Progress
+                </Text>
+                <Badge tone={onboardingPct === 100 ? "success" : "attention"}>
+                  {onboardingPct}% complete
+                </Badge>
               </InlineStack>
               <ProgressBar progress={onboardingPct} tone={onboardingPct === 100 ? "success" : "highlight"} />
               <BlockStack gap="100">
@@ -201,7 +229,9 @@ export default function SetupPage() {
               <Text as="p" variant="bodyMd" fontWeight="semibold">
                 Step {step} of {TOTAL_STEPS}: {stepTitles[step - 1]}
               </Text>
-              <Badge tone={step === TOTAL_STEPS ? "success" : "info"}>{step}/{TOTAL_STEPS}</Badge>
+              <Badge tone={step === TOTAL_STEPS ? "success" : "info"}>
+                {step}/{TOTAL_STEPS}
+              </Badge>
             </InlineStack>
             <ProgressBar progress={progress} tone={step === TOTAL_STEPS ? "success" : "highlight"} />
           </BlockStack>
@@ -214,7 +244,9 @@ export default function SetupPage() {
           {step === 1 && (
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingLg">What's your brand?</Text>
+                <Text as="h2" variant="headingLg">
+                  What's your brand?
+                </Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   This tells Navaal who it's writing for. You can always update these later in Settings.
                 </Text>
@@ -246,7 +278,9 @@ export default function SetupPage() {
           {step === 2 && (
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingLg">Who are your customers?</Text>
+                <Text as="h2" variant="headingLg">
+                  Who are your customers?
+                </Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   The more specific you are, the better the AI can write for your audience.
                 </Text>
@@ -272,7 +306,9 @@ export default function SetupPage() {
                 />
                 <InlineStack gap="300">
                   <Button onClick={() => navigate("/app/setup?step=1")}>← Back</Button>
-                  <Button variant="primary" submit loading={isSaving}>Continue →</Button>
+                  <Button variant="primary" submit loading={isSaving}>
+                    Continue →
+                  </Button>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -282,7 +318,9 @@ export default function SetupPage() {
           {step === 3 && (
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingLg">SEO keywords & language</Text>
+                <Text as="h2" variant="headingLg">
+                  SEO keywords & language
+                </Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   These are applied to every product by default. You can override per-product too.
                 </Text>
@@ -305,7 +343,9 @@ export default function SetupPage() {
                 />
                 <InlineStack gap="300">
                   <Button onClick={() => navigate("/app/setup?step=2")}>← Back</Button>
-                  <Button variant="primary" submit loading={isSaving}>Continue →</Button>
+                  <Button variant="primary" submit loading={isSaving}>
+                    Continue →
+                  </Button>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -316,37 +356,59 @@ export default function SetupPage() {
             <Card>
               <BlockStack gap="500">
                 <BlockStack gap="200">
-                  <Text as="h2" variant="headingLg">Here's what Navaal generates for you</Text>
+                  <Text as="h2" variant="headingLg">
+                    Here's what Navaal generates for you
+                  </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Based on your brand voice settings, Navaal produces content like this example — customised to your products, audience, and tone.
+                    Based on your brand voice settings, Navaal produces content like this example — customised
+                    to your products, audience, and tone.
                   </Text>
                 </BlockStack>
 
                 <Box padding="400" background="bg-surface-secondary" borderRadius="300">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">EXAMPLE PRODUCT DESCRIPTION</Text>
+                      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                        EXAMPLE PRODUCT DESCRIPTION
+                      </Text>
                     </InlineStack>
-                    <Text as="h3" variant="headingMd">Premium Whey Protein Isolate 1kg</Text>
-                    <Text as="p" variant="bodyMd">
-                      Built for athletes who train hard and recover harder. Our Premium Whey Protein Isolate delivers <strong>27g of ultra-filtered protein</strong> per serve — with less than 1g of fat and virtually no lactose, so your body gets exactly what it needs, nothing it doesn't.
+                    <Text as="h3" variant="headingMd">
+                      Premium Whey Protein Isolate 1kg
                     </Text>
                     <Text as="p" variant="bodyMd">
-                      Cold-processed at low temperatures to preserve the full amino acid spectrum, this isolate mixes instantly with no clumping, no chalky aftertaste — just clean, fast-absorbing protein that works as hard as you do.
+                      Built for athletes who train hard and recover harder. Our Premium Whey Protein Isolate
+                      delivers <strong>27g of ultra-filtered protein</strong> per serve — with less than 1g of
+                      fat and virtually no lactose, so your body gets exactly what it needs, nothing it
+                      doesn't.
+                    </Text>
+                    <Text as="p" variant="bodyMd">
+                      Cold-processed at low temperatures to preserve the full amino acid spectrum, this
+                      isolate mixes instantly with no clumping, no chalky aftertaste — just clean,
+                      fast-absorbing protein that works as hard as you do.
                     </Text>
                     <Box padding="200" background="bg-surface" borderRadius="200">
-                      <Text as="p" variant="bodySm" fontWeight="semibold">Meta Title:</Text>
-                      <Text as="p" variant="bodySm">Premium Whey Protein Isolate | Fast Absorption</Text>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Meta Title:
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        Premium Whey Protein Isolate | Fast Absorption
+                      </Text>
                     </Box>
                     <Box padding="200" background="bg-surface" borderRadius="200">
-                      <Text as="p" variant="bodySm" fontWeight="semibold">Meta Description:</Text>
-                      <Text as="p" variant="bodySm">Cold-processed whey isolate with 27g protein, &lt;1g fat. No fillers. Pure performance nutrition for serious athletes.</Text>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Meta Description:
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        Cold-processed whey isolate with 27g protein, &lt;1g fat. No fillers. Pure performance
+                        nutrition for serious athletes.
+                      </Text>
                     </Box>
                   </BlockStack>
                 </Box>
 
                 <Banner tone="info">
-                  Your actual content will be tailored to YOUR products, brand tone, and target audience — not a generic template.
+                  Your actual content will be tailored to YOUR products, brand tone, and target audience — not
+                  a generic template.
                 </Banner>
 
                 <InlineStack gap="300">
@@ -364,13 +426,17 @@ export default function SetupPage() {
             <Card>
               <BlockStack gap="400" inlineAlign="center">
                 <Box paddingBlockStart="400">
-                  <Text as="h2" variant="headingXl" alignment="center">You're ready to go!</Text>
+                  <Text as="h2" variant="headingXl" alignment="center">
+                    You're ready to go!
+                  </Text>
                 </Box>
                 <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
                   Your brand voice is set up. Navaal will now write all content in your exact voice.
                 </Text>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" alignment="center">What's next:</Text>
+                  <Text as="p" variant="bodySm" alignment="center">
+                    What's next:
+                  </Text>
                   <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                     → Pick a product and generate your first description
                   </Text>
@@ -382,9 +448,7 @@ export default function SetupPage() {
                   <Button variant="primary" size="large" submit loading={isSaving}>
                     Go to Products →
                   </Button>
-                  <Button onClick={() => navigate("/app/optimize")}>
-                    Optimise Entire Store
-                  </Button>
+                  <Button onClick={() => navigate("/app/optimize")}>Optimise Entire Store</Button>
                 </InlineStack>
               </BlockStack>
             </Card>

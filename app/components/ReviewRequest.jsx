@@ -29,7 +29,7 @@ export function ReviewRequest({ active }) {
         const bridge = typeof window !== "undefined" ? window.shopify : undefined;
         if (bridge?.reviews?.request) {
           const result = await bridge.reviews.request();
-          code = result?.success ? "success" : (result?.code || "declined");
+          code = result?.success ? "success" : result?.code || "declined";
         }
       } catch {
         code = "error";

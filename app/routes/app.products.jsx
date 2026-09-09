@@ -1,4 +1,11 @@
-import { useLoaderData, useActionData, useNavigate, useSubmit, redirect, useSearchParams } from "react-router";
+import {
+  useLoaderData,
+  useActionData,
+  useNavigate,
+  useSubmit,
+  redirect,
+  useSearchParams,
+} from "react-router";
 import {
   Page,
   Layout,
@@ -23,12 +30,19 @@ import {
   SkeletonDisplayText,
   SkeletonThumbnail,
   ProgressBar,
+  Icon,
 } from "@shopify/polaris";
 import { useState, useCallback, useMemo } from "react";
-import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { CheckCircleIcon, ClockIcon, AlertCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
-import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
+import {
+  getOrCreatePlan,
+  getMonthlyUsageCount,
+  checkEntitlement,
+  remainingGenerations,
+  sliceToQuota,
+} from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
@@ -98,7 +112,6 @@ export const loader = async ({ request }) => {
   const productCountData = await productCountResp.json();
   const totalStoreProducts = productCountData.data?.productsCount?.count ?? products.length;
 
-
   // Content status only for the products visible on THIS page — a bounded query
   // (≤ PAGE_SIZE rows) instead of loading every GeneratedContent row for the shop.
   // This is the fix for the unbounded findMany that did not scale past ~10k products.
@@ -152,7 +165,7 @@ export const action = async ({ request }) => {
   const actionType = formData.get("actionType") || "generateSelected";
 
   const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-    (t) => formData.get(`bulk_${t}`) === "true"
+    (t) => formData.get(`bulk_${t}`) === "true",
   );
   if (contentTypes.length === 0) return { error: "Select at least one content type." };
   const autoPublish = formData.get("bulk_autoPublish") === "true";
@@ -184,7 +197,7 @@ export const action = async ({ request }) => {
               edges { node { id } }
             }
           }`,
-          { variables: { cursor } }
+          { variables: { cursor } },
         );
       } catch {
         if (allIds.length > 0) break;
@@ -206,7 +219,10 @@ export const action = async ({ request }) => {
     const remainingAll = await remainingGenerations(shop);
     const { targetIds: runAllIds, quotaSkipped: skippedAll } = sliceToQuota(allIds, remainingAll);
     if (runAllIds.length === 0) {
-      return { error: "You have no generations left this month, so there is nothing to run.", limitReached: true };
+      return {
+        error: "You have no generations left this month, so there is nothing to run.",
+        limitReached: true,
+      };
     }
 
     const job = await prisma.generationJob.create({
@@ -225,7 +241,11 @@ export const action = async ({ request }) => {
     } catch (err) {
       // Concurrent-job cap (or enqueue failure) — show a banner, not the
       // full-page error boundary.
-      return { error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again." };
+      return {
+        error: err.message?.startsWith("You already have jobs")
+          ? err.message
+          : "Could not start the bulk job. Please try again.",
+      };
     }
     return redirect("/app/jobs");
   }
@@ -243,7 +263,10 @@ export const action = async ({ request }) => {
   const remainingSel = await remainingGenerations(shop);
   const { targetIds: runSelIds, quotaSkipped: skippedSel } = sliceToQuota(selectedIds, remainingSel);
   if (runSelIds.length === 0) {
-    return { error: "You have no generations left this month, so there is nothing to run.", limitReached: true };
+    return {
+      error: "You have no generations left this month, so there is nothing to run.",
+      limitReached: true,
+    };
   }
 
   const job = await prisma.generationJob.create({
@@ -260,7 +283,11 @@ export const action = async ({ request }) => {
   try {
     await enqueueGenerationJob(job.id);
   } catch (err) {
-    return { error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again." };
+    return {
+      error: err.message?.startsWith("You already have jobs")
+        ? err.message
+        : "Could not start the bulk job. Please try again.",
+    };
   }
   return redirect("/app/jobs");
 };
@@ -299,9 +326,19 @@ function ProductListSkeleton() {
 
 export default function ProductsPage() {
   const {
-    products, contentMap, pageInfo, statusFilter,
-    totalStoreProducts, publishedProducts, draftProducts, noContentProducts,
-    usageCount, usageRemaining, monthlyLimit, planName, entitlements,
+    products,
+    contentMap,
+    pageInfo,
+    statusFilter,
+    totalStoreProducts,
+    publishedProducts,
+    draftProducts,
+    noContentProducts,
+    usageCount,
+    usageRemaining,
+    monthlyLimit,
+    planName,
+    entitlements,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -338,7 +375,7 @@ export default function ProductsPage() {
   });
 
   const filteredProducts = tabFilteredProducts.filter((p) =>
-    p.title.toLowerCase().includes(searchValue.toLowerCase())
+    p.title.toLowerCase().includes(searchValue.toLowerCase()),
   );
 
   // Tab counts are scoped to the CURRENT page (the tabs filter only the
@@ -346,7 +383,9 @@ export default function ProductsPage() {
   // "Draft (120)" sit above an empty list — the store-wide totals live in the
   // stat cards above instead.
   const pageCounts = useMemo(() => {
-    let draft = 0, published = 0, none = 0;
+    let draft = 0,
+      published = 0,
+      none = 0;
     for (const p of products) {
       const s = contentMap[p.id]?.description?.status;
       if (s === "published") published++;
@@ -356,12 +395,15 @@ export default function ProductsPage() {
     return { draft, published, none };
   }, [products, contentMap]);
 
-  const tabs = useMemo(() => [
-    { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
-    { id: "needsContent", content: `Needs Content (${pageCounts.none})`, panelID: "needsContent" },
-    { id: "draft", content: `Draft (${pageCounts.draft})`, panelID: "draft" },
-    { id: "published", content: `Published (${pageCounts.published})`, panelID: "published" },
-  ], [products.length, pageCounts]);
+  const tabs = useMemo(
+    () => [
+      { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
+      { id: "needsContent", content: `Needs Content (${pageCounts.none})`, panelID: "needsContent" },
+      { id: "draft", content: `Draft (${pageCounts.draft})`, panelID: "draft" },
+      { id: "published", content: `Published (${pageCounts.published})`, panelID: "published" },
+    ],
+    [products.length, pageCounts],
+  );
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
 
@@ -371,7 +413,7 @@ export default function ProductsPage() {
       setSearchParams({ status: tabId });
       setSelectedItems([]);
     },
-    [tabs, setSearchParams]
+    [tabs, setSearchParams],
   );
 
   function getStatusBadge(productId) {
@@ -400,21 +442,27 @@ export default function ProductsPage() {
           if (s === "published") {
             return (
               <Box key={key} padding="100" background="bg-surface-success" borderRadius="100">
-                <Text as="span" variant="bodySm" tone="success">{label} ✓</Text>
+                <Text as="span" variant="bodySm" tone="success">
+                  {label} ✓
+                </Text>
               </Box>
             );
           }
           if (s === "draft") {
             return (
               <Box key={key} padding="100" background="bg-surface-info" borderRadius="100">
-                <Text as="span" variant="bodySm" tone="info">{label} · draft</Text>
+                <Text as="span" variant="bodySm" tone="info">
+                  {label} · draft
+                </Text>
               </Box>
             );
           }
           // rejected, or no content generated → muted, never a checkmark
           return (
             <Box key={key} padding="100" background="bg-surface-secondary" borderRadius="100">
-              <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {label}
+              </Text>
             </Box>
           );
         })}
@@ -434,7 +482,7 @@ export default function ProductsPage() {
       fd.append("bulk_autoPublish", bulkAutoPublish.toString());
       return fd;
     },
-    [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish]
+    [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish],
   );
 
   const handleBulkGenerate = useCallback(() => {
@@ -481,8 +529,7 @@ export default function ProductsPage() {
         noContentProducts > 0
           ? {
               content: `Optimize store (${noContentProducts})`,
-              onAction: () =>
-                entitlements?.bulkJobs ? setGenerateAllModal(true) : navigate("/app/plans"),
+              onAction: () => (entitlements?.bulkJobs ? setGenerateAllModal(true) : navigate("/app/plans")),
             }
           : undefined
       }
@@ -497,12 +544,15 @@ export default function ProductsPage() {
       ]}
     >
       <BlockStack gap="500">
-
         {actionData?.error && (
           <Banner
             tone={actionData.limitReached ? "warning" : "critical"}
             title={actionData.limitReached ? "Plan upgrade required" : "Could not start generation"}
-            action={actionData.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+            action={
+              actionData.limitReached
+                ? { content: "View Plans", onAction: () => navigate("/app/plans") }
+                : undefined
+            }
           >
             <p>{actionData.error}</p>
           </Banner>
@@ -511,9 +561,14 @@ export default function ProductsPage() {
         {/* Usage alert "" only when critical */}
         {isOutOfUsage && (
           <Banner tone="critical" title="Monthly generation limit reached">
-            <p>You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your store.</p>
+            <p>
+              You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your
+              store.
+            </p>
             <Box paddingBlockStart="200">
-              <Button variant="plain" onClick={() => navigate("/app/plans")}>View Plans & Upgrade →</Button>
+              <Button variant="plain" onClick={() => navigate("/app/plans")}>
+                View plans
+              </Button>
             </Box>
           </Banner>
         )}
@@ -522,7 +577,7 @@ export default function ProductsPage() {
             tone="warning"
             title={`Only ${usageRemaining} generation${usageRemaining !== 1 ? "s" : ""} left this month`}
             message={`You've used ${usageCount} of ${monthlyLimit}. Upgrade now to keep generating without interruption.`}
-            ctaLabel="Upgrade plan →"
+            ctaLabel="Upgrade plan"
             onUpgrade={() => navigate("/app/plans")}
           />
         )}
@@ -533,10 +588,14 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <CheckCircle2 aria-hidden="true" size={20} color="#00A047" />
-                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">{publishedProducts}</Text>
+                  <Icon source={CheckCircleIcon} tone="success" />
+                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">
+                    {publishedProducts}
+                  </Text>
                 </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">AI Content Published</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  AI Content Published
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -544,10 +603,14 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <Clock aria-hidden="true" size={20} color="#1656AC" />
-                  <Text as="p" variant="headingXl" fontWeight="bold">{draftProducts}</Text>
+                  <Icon source={ClockIcon} tone="info" />
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {draftProducts}
+                  </Text>
                 </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">Drafts to Review</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Drafts to Review
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -555,12 +618,19 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <AlertCircle aria-hidden="true" size={20} color={noContentProducts > 0 ? "#E51C00" : "#8C9196"} />
-                  <Text as="p" variant="headingXl" fontWeight="bold" tone={noContentProducts > 0 ? "critical" : undefined}>
+                  <Icon source={AlertCircleIcon} tone={noContentProducts > 0 ? "critical" : "subdued"} />
+                  <Text
+                    as="p"
+                    variant="headingXl"
+                    fontWeight="bold"
+                    tone={noContentProducts > 0 ? "critical" : undefined}
+                  >
                     {noContentProducts}
                   </Text>
                 </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">Need Content</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Need Content
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -571,7 +641,9 @@ export default function ProductsPage() {
           <Card>
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="p" variant="bodySm" fontWeight="semibold">Monthly Generations</Text>
+                <Text as="p" variant="bodySm" fontWeight="semibold">
+                  Monthly Generations
+                </Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">
                     {usageCount} / {monthlyLimit} used
@@ -583,11 +655,7 @@ export default function ProductsPage() {
                   )}
                 </InlineStack>
               </InlineStack>
-              <ProgressBar
-                progress={usagePct}
-                tone={usagePct >= 90 ? "critical" : "success"}
-                size="small"
-              />
+              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />
             </BlockStack>
           </Card>
         )}
@@ -614,29 +682,55 @@ export default function ProductsPage() {
                 />
               ) : (
                 <>
-                  {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
+                  {bulkError && (
+                    <Banner tone="critical">
+                      <p>{bulkError}</p>
+                    </Banner>
+                  )}
 
                   <Banner tone="warning">
                     <p>
-                      <strong>This will replace existing product descriptions entirely.</strong>{" "}
-                      Original content is saved automatically and can be restored from each product&apos;s History tab.
-                      If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+                      <strong>This will replace existing product descriptions entirely.</strong>
+                      {""}
+                      Original content is saved automatically and can be restored from each product&apos;s
+                      History tab. If a product has custom HTML, embedded videos, or widgets in its
+                      description, they will be removed.
                     </p>
                   </Banner>
 
                   {/* BlockStack + minHeight 44px = Apple/Google touch-target minimum */}
                   <BlockStack gap="200">
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} helpText="Full product description" />
+                      <Checkbox
+                        label="Description"
+                        checked={bulkDesc}
+                        onChange={setBulkDesc}
+                        helpText="Full product description"
+                      />
                     </Box>
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} helpText="SEO meta tags" />
+                      <Checkbox
+                        label="Meta Title & Description"
+                        checked={bulkMeta}
+                        onChange={setBulkMeta}
+                        helpText="SEO meta tags"
+                      />
                     </Box>
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} helpText="Q&A pairs" />
+                      <Checkbox
+                        label="FAQ Content"
+                        checked={bulkFaq}
+                        onChange={setBulkFaq}
+                        helpText="Q&A pairs"
+                      />
                     </Box>
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox label="Auto-publish" checked={bulkAutoPublish} onChange={setBulkAutoPublish} helpText="Push directly to Shopify - skips review queue" />
+                      <Checkbox
+                        label="Auto-publish"
+                        checked={bulkAutoPublish}
+                        onChange={setBulkAutoPublish}
+                        helpText="Push directly to Shopify - skips review queue"
+                      />
                     </Box>
                   </BlockStack>
 
@@ -716,11 +810,17 @@ export default function ProductsPage() {
                 >
                   <InlineStack align="space-between" blockAlign="center">
                     <BlockStack gap="100">
-                      <Text as="h3" variant="bodyMd" fontWeight="bold">{title}</Text>
+                      <Text as="h3" variant="bodyMd" fontWeight="bold">
+                        {title}
+                      </Text>
                       <InlineStack gap="200">
-                        <Text as="span" variant="bodySm" tone="subdued">${price}</Text>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          ${price}
+                        </Text>
                         {productType && (
-                          <Text as="span" variant="bodySm" tone="subdued">· {productType}</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            · {productType}
+                          </Text>
                         )}
                       </InlineStack>
                       {getContentTypePills(id)}
@@ -738,9 +838,7 @@ export default function ProductsPage() {
             emptyState={
               <EmptyState
                 heading={
-                  statusFilter === "all"
-                    ? "Your store is all set!"
-                    : `No ${statusFilter} products found`
+                  statusFilter === "all" ? "Your store is all set!" : `No ${statusFilter} products found`
                 }
                 image="/empty-products.svg"
                 action={
@@ -766,7 +864,7 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter })
                   }
                 >
-                   Previous
+                  Previous
                 </Button>
                 <Text as="p" variant="bodySm" tone="subdued">
                   Showing {filteredProducts.length} products
@@ -777,7 +875,7 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter })
                   }
                 >
-                  Next →
+                  Next
                 </Button>
               </InlineStack>
             </Box>
@@ -795,9 +893,12 @@ export default function ProductsPage() {
           <Modal.Section>
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
-                This creates a background job for all {totalStoreProducts} products. Estimated time: ~{Math.ceil((totalStoreProducts * 3.5) / 60)} minutes.
+                This creates a background job for all {totalStoreProducts} products. Estimated time: ~
+                {Math.ceil((totalStoreProducts * 3.5) / 60)} minutes.
               </Text>
-              <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
+              <Text as="p" variant="bodySm" fontWeight="semibold">
+                Content to generate:
+              </Text>
               <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />
               <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} />
               <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} />
@@ -807,11 +908,14 @@ export default function ProductsPage() {
                 onChange={setBulkAutoPublish}
                 helpText="Pushes directly to Shopify - no review step"
               />
-              {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
+              {bulkError && (
+                <Banner tone="critical">
+                  <p>{bulkError}</p>
+                </Banner>
+              )}
             </BlockStack>
           </Modal.Section>
         </Modal>
-
       </BlockStack>
     </Page>
   );

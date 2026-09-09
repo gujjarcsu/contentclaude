@@ -1,8 +1,21 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Layout, Card, Text, BlockStack, InlineStack,
-  TextField, Select, Button, Banner, Box, Checkbox, Divider, Badge,
+  ChoiceList,
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  TextField,
+  Select,
+  Button,
+  Banner,
+  Box,
+  Checkbox,
+  Divider,
+  Badge,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
@@ -26,10 +39,17 @@ export const loader = async ({ request }) => {
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
     brandVoice: brandVoice || {
-      storeName: "", brandTone: "professional", targetAudience: "",
-      keyDifferentiators: "", avoidPhrases: "", sampleContent: "",
-      additionalNotes: "", targetKeywords: "", language: "en",
-      autopilotEnabled: false, autopilotAutoPublish: false,
+      storeName: "",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      sampleContent: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      language: "en",
+      autopilotEnabled: false,
+      autopilotAutoPublish: false,
       autopilotContentTypes: "description,metaTitle,metaDescription",
     },
     templates,
@@ -60,9 +80,10 @@ export const action = async ({ request }) => {
   if (actionType === "saveTemplate") {
     const name = (formData.get("tplName") || "").slice(0, 100).trim();
     if (!name) return Response.json({ error: "Template name is required." });
-    const tplContentTypes = ["description", "metaTitle", "metaDescription", "faq"]
-      .filter((t) => formData.get(`tpl_${t}`) === "true")
-      .join(",") || "description,metaTitle,metaDescription";
+    const tplContentTypes =
+      ["description", "metaTitle", "metaDescription", "faq"]
+        .filter((t) => formData.get(`tpl_${t}`) === "true")
+        .join(",") || "description,metaTitle,metaDescription";
     const isDefault = formData.get("tplDefault") === "true";
     if (isDefault) {
       await prisma.contentTemplate.updateMany({ where: { shop }, data: { isDefault: false } });
@@ -87,15 +108,26 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, message: "Template deleted." });
   }
 
-  const VALID_TONES = new Set(["professional","friendly","premium","bold","scientific","warm","minimalist","playful","custom"]);
-  const VALID_LANGUAGES = new Set(["en","es","fr","de","it","pt","ja","zh","ko","ar","hi","nl"]);
+  const VALID_TONES = new Set([
+    "professional",
+    "friendly",
+    "premium",
+    "bold",
+    "scientific",
+    "warm",
+    "minimalist",
+    "playful",
+    "custom",
+  ]);
+  const VALID_LANGUAGES = new Set(["en", "es", "fr", "de", "it", "pt", "ja", "zh", "ko", "ar", "hi", "nl"]);
 
   const rawTone = formData.get("brandTone") || "professional";
   const rawLang = formData.get("language") || "en";
 
-  const autopilotContentTypes = ["description", "metaTitle", "metaDescription", "faq"]
-    .filter((t) => formData.get(`ap_${t}`) === "true")
-    .join(",") || "description,metaTitle,metaDescription";
+  const autopilotContentTypes =
+    ["description", "metaTitle", "metaDescription", "faq"]
+      .filter((t) => formData.get(`ap_${t}`) === "true")
+      .join(",") || "description,metaTitle,metaDescription";
 
   // Autopilot is Growth+. If a free/starter plan tries to enable it, DON'T
   // reject the whole save (that silently lost the merchant's store name, tone,
@@ -112,22 +144,24 @@ export const action = async ({ request }) => {
   }
 
   const data = {
-    storeName:            (formData.get("storeName") || "").slice(0, 200),
-    brandTone:            VALID_TONES.has(rawTone) ? rawTone : "professional",
-    targetAudience:       (formData.get("targetAudience") || "").slice(0, 500),
-    keyDifferentiators:   (formData.get("keyDifferentiators") || "").slice(0, 500),
-    avoidPhrases:         (formData.get("avoidPhrases") || "").slice(0, 500),
-    sampleContent:        (formData.get("sampleContent") || "").slice(0, 5000),
-    additionalNotes:      (formData.get("additionalNotes") || "").slice(0, 500),
-    targetKeywords:       (formData.get("targetKeywords") || "").slice(0, 500),
-    language:             VALID_LANGUAGES.has(rawLang) ? rawLang : "en",
+    storeName: (formData.get("storeName") || "").slice(0, 200),
+    brandTone: VALID_TONES.has(rawTone) ? rawTone : "professional",
+    targetAudience: (formData.get("targetAudience") || "").slice(0, 500),
+    keyDifferentiators: (formData.get("keyDifferentiators") || "").slice(0, 500),
+    avoidPhrases: (formData.get("avoidPhrases") || "").slice(0, 500),
+    sampleContent: (formData.get("sampleContent") || "").slice(0, 5000),
+    additionalNotes: (formData.get("additionalNotes") || "").slice(0, 500),
+    targetKeywords: (formData.get("targetKeywords") || "").slice(0, 500),
+    language: VALID_LANGUAGES.has(rawLang) ? rawLang : "en",
     autopilotEnabled,
     autopilotAutoPublish: autopilotEnabled && formData.get("autopilotAutoPublish") === "true",
     autopilotContentTypes,
   };
 
   await prisma.brandVoice.upsert({
-    where: { shop }, update: data, create: { shop, ...data },
+    where: { shop },
+    update: data,
+    create: { shop, ...data },
   });
 
   await invalidateCache(`bv:${shop}`);
@@ -139,24 +173,30 @@ export const action = async ({ request }) => {
 };
 
 const TONE_CARDS = [
-  { value: "professional", emoji: "💼", label: "Professional", desc: "Authoritative & trustworthy" },
-  { value: "friendly",     emoji: "😊", label: "Friendly",     desc: "Warm & conversational" },
-  { value: "premium",      emoji: "✨", label: "Premium",      desc: "Luxury & aspirational" },
-  { value: "bold",         emoji: "⚡", label: "Bold",         desc: "High energy & direct" },
-  { value: "scientific",   emoji: "🔬", label: "Scientific",   desc: "Technical & evidence-based" },
-  { value: "warm",         emoji: "🌿", label: "Warm",         desc: "Nurturing & empathetic" },
-  { value: "minimalist",   emoji: "□",  label: "Minimalist",  desc: "Clean & understated" },
-  { value: "playful",      emoji: "🎉", label: "Playful",      desc: "Fun & engaging" },
-  { value: "custom",       emoji: "✏️", label: "Custom",       desc: "Define your own tone" },
+  { value: "professional", label: "Professional", desc: "Authoritative & trustworthy" },
+  { value: "friendly", label: "Friendly", desc: "Warm & conversational" },
+  { value: "premium", label: "Premium", desc: "Luxury & aspirational" },
+  { value: "bold", label: "Bold", desc: "High energy & direct" },
+  { value: "scientific", label: "Scientific", desc: "Technical & evidence-based" },
+  { value: "warm", label: "Warm", desc: "Nurturing & empathetic" },
+  { value: "minimalist", label: "Minimalist", desc: "Clean & understated" },
+  { value: "playful", label: "Playful", desc: "Fun & engaging" },
+  { value: "custom", label: "Custom", desc: "Define your own tone" },
 ];
 
 const languageOptions = [
-  { label: "English", value: "en" }, { label: "Spanish", value: "es" },
-  { label: "French", value: "fr" }, { label: "German", value: "de" },
-  { label: "Italian", value: "it" }, { label: "Portuguese", value: "pt" },
-  { label: "Japanese", value: "ja" }, { label: "Chinese (Simplified)", value: "zh" },
-  { label: "Korean", value: "ko" }, { label: "Arabic", value: "ar" },
-  { label: "Hindi", value: "hi" }, { label: "Dutch", value: "nl" },
+  { label: "English", value: "en" },
+  { label: "Spanish", value: "es" },
+  { label: "French", value: "fr" },
+  { label: "German", value: "de" },
+  { label: "Italian", value: "it" },
+  { label: "Portuguese", value: "pt" },
+  { label: "Japanese", value: "ja" },
+  { label: "Chinese (Simplified)", value: "zh" },
+  { label: "Korean", value: "ko" },
+  { label: "Arabic", value: "ar" },
+  { label: "Hindi", value: "hi" },
+  { label: "Dutch", value: "nl" },
 ];
 
 const lengthOptions = [
@@ -172,7 +212,6 @@ export default function SettingsPage() {
   const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
-
 
   const [storeName, setStoreName] = useState(brandVoice.storeName);
   const [brandTone, setBrandTone] = useState(brandVoice.brandTone);
@@ -228,7 +267,9 @@ export default function SettingsPage() {
     >
       <BlockStack gap="500">
         {actionData?.error && !actionData?.success && (
-          <Banner tone="critical"><p>{actionData.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
         )}
 
         <Form method="post">
@@ -245,12 +286,13 @@ export default function SettingsPage() {
           <Layout>
             <Layout.Section>
               <BlockStack gap="400">
-
                 {/* Store Identity */}
                 <Card>
                   <BlockStack gap="400">
                     <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">Store Identity</Text>
+                      <Text as="h2" variant="headingLg">
+                        Store Identity
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         Tell the AI who you are — the more specific, the better the output.
                       </Text>
@@ -287,50 +329,37 @@ export default function SettingsPage() {
                   <BlockStack gap="400">
                     <input type="hidden" name="brandTone" value={brandTone} />
                     <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">Brand Tone</Text>
+                      <Text as="h2" variant="headingLg">
+                        Brand Tone
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         How should your content sound? Click to select.
                       </Text>
                     </BlockStack>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                        gap: "10px",
-                      }}
-                    >
-                      {TONE_CARDS.map((card) => {
-                        const isSelected = brandTone === card.value;
-                        return (
-                          <button
-                            key={card.value}
-                            type="button"
-                            aria-pressed={isSelected}
-                            aria-label={`Brand tone: ${card.label} — ${card.desc}`}
-                            onClick={() => setBrandTone(card.value)}
-                            style={{
-                              border: isSelected ? "2px solid #005BD3" : "1px solid #e1e3e5",
-                              borderRadius: "8px",
-                              padding: "12px",
-                              background: isSelected ? "#f3f7ff" : "#fff",
-                              cursor: "pointer",
-                              textAlign: "left",
-                              transition: "all 0.15s",
-                            }}
-                          >
-                            <BlockStack gap="100">
-                              <Text as="p" variant="bodyLg">{card.emoji}</Text>
-                              <Text as="p" variant="bodySm" fontWeight="semibold">
-                                {card.label}
-                              </Text>
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                {card.desc}
-                              </Text>
-                            </BlockStack>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {/* Phase 2 item 2.5 — this was a CSS grid of nine raw
+                        <button style> elements with hard-coded hex, and the
+                        selected one was indicated by colour alone: a 1px grey
+                        border became a 2px blue one and the background shifted
+                        to #f3f7ff. Colour-only status fails contrast and fails
+                        anyone who cannot distinguish those two.
+
+                        A Polaris ChoiceList is the component for "pick exactly
+                        one of these", and it renders a real radio group: keyboard
+                        arrows work, the selection is announced, and it needs no
+                        styling at all. The emoji went with it (item 2.5) — a
+                        briefcase and a microscope were carrying meaning that the
+                        label and the description already carry. */}
+                    <ChoiceList
+                      title="Brand tone"
+                      titleHidden
+                      choices={TONE_CARDS.map((card) => ({
+                        label: card.label,
+                        value: card.value,
+                        helpText: card.desc,
+                      }))}
+                      selected={[brandTone]}
+                      onChange={([value]) => setBrandTone(value)}
+                    />
                   </BlockStack>
                 </Card>
 
@@ -338,7 +367,9 @@ export default function SettingsPage() {
                 <Card>
                   <BlockStack gap="400">
                     <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">SEO Keyword Targeting</Text>
+                      <Text as="h2" variant="headingLg">
+                        SEO Keyword Targeting
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         These keywords are woven naturally into all generated content.
                       </Text>
@@ -359,7 +390,9 @@ export default function SettingsPage() {
                 <Card>
                   <BlockStack gap="400">
                     <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">What Makes You Unique</Text>
+                      <Text as="h2" variant="headingLg">
+                        What Makes You Unique
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         These details are injected into every piece of content to reinforce your brand.
                       </Text>
@@ -389,9 +422,12 @@ export default function SettingsPage() {
                 <Card>
                   <BlockStack gap="400">
                     <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">Train the AI on Your Voice</Text>
+                      <Text as="h2" variant="headingLg">
+                        Train the AI on Your Voice
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Paste 2–3 of your best product descriptions. This is the most powerful way to match your exact voice.
+                        Paste 2–3 of your best product descriptions. This is the most powerful way to match
+                        your exact voice.
                       </Text>
                     </BlockStack>
                     <TextField
@@ -420,7 +456,9 @@ export default function SettingsPage() {
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
                       <BlockStack gap="100">
-                        <Text as="h2" variant="headingLg">Autopilot Mode</Text>
+                        <Text as="h2" variant="headingLg">
+                          Autopilot Mode
+                        </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
                           Automatically generate content when a new product is added to your store.
                         </Text>
@@ -438,7 +476,9 @@ export default function SettingsPage() {
                     {autopilotEnabled && (
                       <BlockStack gap="300">
                         <Divider />
-                        <Text as="p" variant="bodySm" fontWeight="semibold">Content to auto-generate:</Text>
+                        <Text as="p" variant="bodySm" fontWeight="semibold">
+                          Content to auto-generate:
+                        </Text>
                         <InlineStack gap="400" wrap>
                           <Checkbox label="Description" checked={apDesc} onChange={setApDesc} />
                           <Checkbox label="Meta Title & Description" checked={apMeta} onChange={setApMeta} />
@@ -466,10 +506,13 @@ export default function SettingsPage() {
               <BlockStack gap="400">
                 <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Tips for Better Content</Text>
+                    <Text as="h2" variant="headingMd">
+                      Tips for Better Content
+                    </Text>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm">
-                        <strong>Be specific with your audience.</strong> "Active women aged 25-45 who love outdoor sports" beats "everyone."
+                        <strong>Be specific with your audience.</strong> "Active women aged 25-45 who love
+                        outdoor sports" beats "everyone."
                       </Text>
                       <Text as="p" variant="bodySm">
                         <strong>Add real keywords.</strong> Woven naturally — no keyword stuffing.
@@ -478,7 +521,8 @@ export default function SettingsPage() {
                         <strong>Real differentiators win.</strong> "Lab tested with COA" beats "high quality."
                       </Text>
                       <Text as="p" variant="bodySm">
-                        <strong>Paste real examples.</strong> The single most powerful way to clone your voice.
+                        <strong>Paste real examples.</strong> The single most powerful way to clone your
+                        voice.
                       </Text>
                     </BlockStack>
                   </BlockStack>
@@ -486,17 +530,18 @@ export default function SettingsPage() {
 
                 <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Tone Guide</Text>
+                    <Text as="h2" variant="headingMd">
+                      Tone Guide
+                    </Text>
                     <BlockStack gap="200">
                       {TONE_CARDS.slice(0, 4).map((card) => (
                         <Text key={card.value} as="p" variant="bodySm">
-                          <strong>{card.emoji} {card.label}</strong> — {card.desc}
+                          <strong>{card.label}</strong> — {card.desc}
                         </Text>
                       ))}
                     </BlockStack>
                   </BlockStack>
                 </Card>
-
               </BlockStack>
             </Layout.Section>
           </Layout>
@@ -506,10 +551,14 @@ export default function SettingsPage() {
         <Card>
           <InlineStack align="space-between" blockAlign="center">
             <BlockStack gap="100">
-              <Text as="h2" variant="headingMd">Brand Voice Setup Wizard</Text>
-              <Text as="p" variant="bodySm" tone="subdued">Re-run the guided setup to update your brand voice settings.</Text>
+              <Text as="h2" variant="headingMd">
+                Brand Voice Setup Wizard
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Re-run the guided setup to update your brand voice settings.
+              </Text>
             </BlockStack>
-            <Button onClick={() => navigate("/app/setup")}>Re-run onboarding wizard →</Button>
+            <Button onClick={() => navigate("/app/setup")}>Re-run onboarding wizard</Button>
           </InlineStack>
         </Card>
 
@@ -517,113 +566,124 @@ export default function SettingsPage() {
         {!entitlements?.contentTemplates ? (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingLg">Content Templates</Text>
+              <Text as="h2" variant="headingLg">
+                Content Templates
+              </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Save generation presets and apply them from any product page with one click.
-                Available on the Starter plan and above.
+                Save generation presets and apply them from any product page with one click. Available on the
+                Starter plan and above.
               </Text>
               <InlineStack>
-                <Button onClick={() => (window.location.href = "/app/plans")}>Upgrade to unlock →</Button>
+                <Button onClick={() => (window.location.href = "/app/plans")}>Upgrade to unlock</Button>
               </InlineStack>
             </BlockStack>
           </Card>
         ) : (
-        <Card>
-          <BlockStack gap="400">
-            <BlockStack gap="100">
-              <Text as="h2" variant="headingLg">Content Templates</Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Save generation presets — apply from the product page with one click.
+          <Card>
+            <BlockStack gap="400">
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingLg">
+                  Content Templates
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Save generation presets — apply from the product page with one click.
+                </Text>
+              </BlockStack>
+
+              {templates.length > 0 && (
+                <BlockStack gap="200">
+                  {templates.map((tpl) => (
+                    <Box key={tpl.id} padding="300" background="bg-surface-secondary" borderRadius="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text as="p" variant="bodyMd" fontWeight="semibold">
+                              {tpl.name}
+                            </Text>
+                            {tpl.isDefault && <Badge tone="success">Default</Badge>}
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {tpl.contentLength} · {tpl.contentTypes.replace(/,/g, ",")}
+                            {tpl.keywords && ` · keywords: ${tpl.keywords}`}
+                          </Text>
+                        </BlockStack>
+                        <Form method="post">
+                          <input type="hidden" name="actionType" value="deleteTemplate" />
+                          <input type="hidden" name="templateId" value={tpl.id} />
+                          <Button tone="critical" variant="plain" size="slim" submit>
+                            Delete
+                          </Button>
+                        </Form>
+                      </InlineStack>
+                    </Box>
+                  ))}
+                </BlockStack>
+              )}
+
+              <Divider />
+              <Text as="h3" variant="headingMd">
+                Add New Template
               </Text>
-            </BlockStack>
 
-            {templates.length > 0 && (
-              <BlockStack gap="200">
-                {templates.map((tpl) => (
-                  <Box key={tpl.id} padding="300" background="bg-surface-secondary" borderRadius="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="100">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">{tpl.name}</Text>
-                          {tpl.isDefault && <Badge tone="success">Default</Badge>}
-                        </InlineStack>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {tpl.contentLength} · {tpl.contentTypes.replace(/,/g, ", ")}
-                          {tpl.keywords && ` · keywords: ${tpl.keywords}`}
-                        </Text>
-                      </BlockStack>
-                      <Form method="post">
-                        <input type="hidden" name="actionType" value="deleteTemplate" />
-                        <input type="hidden" name="templateId" value={tpl.id} />
-                        <Button tone="critical" variant="plain" size="slim" submit>Delete</Button>
-                      </Form>
-                    </InlineStack>
-                  </Box>
-                ))}
-              </BlockStack>
-            )}
-
-            <Divider />
-            <Text as="h3" variant="headingMd">Add New Template</Text>
-
-            <Form method="post">
-              <input type="hidden" name="actionType" value="saveTemplate" />
-              <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
-              {/* Same defect as Autopilot's: the "Meta Title & Description"
+              <Form method="post">
+                <input type="hidden" name="actionType" value="saveTemplate" />
+                <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
+                {/* Same defect as Autopilot's: the "Meta Title & Description"
                   checkbox must submit both fields. */}
-              <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
-              <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
-              <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
-              <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
-              <BlockStack gap="300">
-                <TextField
-                  name="tplName"
-                  label="Template Name"
-                  value={tplName}
-                  onChange={setTplName}
-                  placeholder="e.g., Full SEO Package"
-                  autoComplete="off"
-                />
-                <Select
-                  name="tplLength"
-                  label="Description Length"
-                  options={lengthOptions}
-                  value={tplLength}
-                  onChange={setTplLength}
-                />
-                <Text as="p" variant="bodySm" fontWeight="semibold">Content types:</Text>
-                <InlineStack gap="400" wrap>
-                  <Checkbox label="Description" checked={tplDesc} onChange={setTplDesc} />
-                  <Checkbox label="Meta Title & Description" checked={tplMeta} onChange={setTplMeta} />
-                  <Checkbox label="FAQ" checked={tplFaq} onChange={setTplFaq} />
-                </InlineStack>
-                <TextField
-                  name="tplKeywords"
-                  label="Keywords (optional)"
-                  value={tplKeywords}
-                  onChange={setTplKeywords}
-                  autoComplete="off"
-                  placeholder="Override global keywords for this template"
-                />
-                <TextField
-                  name="tplInstructions"
-                  label="Custom Instructions (optional)"
-                  value={tplInstructions}
-                  onChange={setTplInstructions}
-                  multiline={2}
-                  autoComplete="off"
-                  placeholder="e.g., Focus on clinical applications, always mention purity"
-                />
-                <Checkbox label="Set as default template" checked={tplDefault} onChange={setTplDefault} />
-                <Button submit loading={isSaving} disabled={!tplName.trim()}>
-                  Save Template
-                </Button>
-              </BlockStack>
-            </Form>
-          </BlockStack>
-        </Card>
+                <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
+                <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
+                <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
+                <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
+                <BlockStack gap="300">
+                  <TextField
+                    name="tplName"
+                    label="Template Name"
+                    value={tplName}
+                    onChange={setTplName}
+                    placeholder="e.g., Full SEO Package"
+                    autoComplete="off"
+                  />
+                  <Select
+                    name="tplLength"
+                    label="Description Length"
+                    options={lengthOptions}
+                    value={tplLength}
+                    onChange={setTplLength}
+                  />
+                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                    Content types:
+                  </Text>
+                  <InlineStack gap="400" wrap>
+                    <Checkbox label="Description" checked={tplDesc} onChange={setTplDesc} />
+                    <Checkbox label="Meta Title & Description" checked={tplMeta} onChange={setTplMeta} />
+                    <Checkbox label="FAQ" checked={tplFaq} onChange={setTplFaq} />
+                  </InlineStack>
+                  <TextField
+                    name="tplKeywords"
+                    label="Keywords (optional)"
+                    value={tplKeywords}
+                    onChange={setTplKeywords}
+                    autoComplete="off"
+                    placeholder="Override global keywords for this template"
+                  />
+                  <TextField
+                    name="tplInstructions"
+                    label="Custom Instructions (optional)"
+                    value={tplInstructions}
+                    onChange={setTplInstructions}
+                    multiline={2}
+                    autoComplete="off"
+                    placeholder="e.g., Focus on clinical applications, always mention purity"
+                  />
+                  <Checkbox label="Set as default template" checked={tplDefault} onChange={setTplDefault} />
+                  <Button submit loading={isSaving} disabled={!tplName.trim()}>
+                    Save Template
+                  </Button>
+                </BlockStack>
+              </Form>
+            </BlockStack>
+          </Card>
         )}
-
       </BlockStack>
     </Page>
   );

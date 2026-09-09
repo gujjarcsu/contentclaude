@@ -68,7 +68,10 @@ export const loader = async ({ request }) => {
     exp: url.searchParams.get("exp"),
   });
   if (!signature.ok) {
-    logger.warn({ shop, chargeId, reason: signature.reason }, "Billing callback without a valid signature — no lookup performed");
+    logger.warn(
+      { shop, chargeId, reason: signature.reason },
+      "Billing callback without a valid signature — no lookup performed",
+    );
     return redirect(adminPlansUrl(shop, ""));
   }
 
@@ -98,7 +101,10 @@ export const loader = async ({ request }) => {
       // Do NOT touch the plan. The app_subscriptions/update webhook and the
       // Plans reconcile are the authoritative backstops; send the merchant back
       // into the app without a false "declined".
-      logger.warn({ shop, chargeId, reason }, "Billing callback could not read subscription state — plan left untouched");
+      logger.warn(
+        { shop, chargeId, reason },
+        "Billing callback could not read subscription state — plan left untouched",
+      );
       return redirect(adminPlansUrl(shop, "billing_error=1"));
     }
 
@@ -118,7 +124,10 @@ export const loader = async ({ request }) => {
     // Never dead-end. The APP_SUBSCRIPTIONS_UPDATE webhook and the Plans page's
     // own reconcile are the backstop for state — just get the merchant back
     // into the embedded app.
-    logger.error({ shop, chargeId, err: err.message }, "Billing callback failed — redirecting into app anyway");
+    logger.error(
+      { shop, chargeId, err: err.message },
+      "Billing callback failed — redirecting into app anyway",
+    );
     return redirect(adminPlansUrl(shop, "billing_error=1"));
   }
 };

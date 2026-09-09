@@ -15,8 +15,20 @@ import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useLoaderData, useFetcher, useNavigate, useRevalidator, Await, redirect } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Card, Text, BlockStack, InlineStack, Button, Box, Badge,
-  Banner, Divider, Spinner, Layout, SkeletonBodyText, SkeletonDisplayText,
+  Page,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  Box,
+  Badge,
+  Banner,
+  Divider,
+  Spinner,
+  Layout,
+  SkeletonBodyText,
+  SkeletonDisplayText,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -25,8 +37,13 @@ import logger from "../utils/logger.server.js";
 import { calculateSeoScore } from "../utils/seo.server.js";
 import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
-import { getOrCreatePlan, getMonthlyUsageCount, remainingGenerations, sliceToQuota, withGenerationCredit } from "../utils/plans.server.js";
-import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
+import {
+  getOrCreatePlan,
+  getMonthlyUsageCount,
+  remainingGenerations,
+  sliceToQuota,
+  withGenerationCredit,
+} from "../utils/plans.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const SCAN_LIMIT = 30;
@@ -56,7 +73,7 @@ async function scanProducts(admin) {
         } }
       }
     }`,
-    { variables: { n: SCAN_LIMIT } }
+    { variables: { n: SCAN_LIMIT } },
   );
   const { data } = await resp.json();
   return (data?.products?.edges ?? []).map(({ node }) => ({
@@ -103,8 +120,12 @@ export const loader = async ({ request }) => {
     prisma.brandVoice.findUnique({ where: { shop } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
-    prisma.generatedContent.count({ where: { shop, status: "published", productId: { startsWith: "gid://shopify/Product/" } } }),
-    prisma.generatedContent.count({ where: { shop, status: "draft", productId: { startsWith: "gid://shopify/Product/" } } }),
+    prisma.generatedContent.count({
+      where: { shop, status: "published", productId: { startsWith: "gid://shopify/Product/" } },
+    }),
+    prisma.generatedContent.count({
+      where: { shop, status: "draft", productId: { startsWith: "gid://shopify/Product/" } },
+    }),
     // Mark the welcome as seen so it shows exactly once (the dashboard stops
     // redirecting here after this). Idempotent.
     prisma.growthState.upsert({
@@ -126,7 +147,7 @@ export const loader = async ({ request }) => {
     const scored = products.map((p) => ({ ...p, scores: scoreProduct(p) }));
     // Demo target = the weakest product (biggest visible lift). Best = the strongest.
     const byCombined = [...scored].sort(
-      (a, b) => a.scores.geo + a.scores.seo - (b.scores.geo + b.scores.seo)
+      (a, b) => a.scores.geo + a.scores.seo - (b.scores.geo + b.scores.seo),
     );
     const worst = byCombined[0];
     const best = byCombined[byCombined.length - 1];
@@ -139,7 +160,10 @@ export const loader = async ({ request }) => {
     });
     const after = existing?.generatedContent
       ? {
-          content: existing.generatedContent.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
+          content: existing.generatedContent
+            .replace(/<[^>]+>/g, "")
+            .trim()
+            .slice(0, 600),
           geoAfter: calculateGeoScore({ ...worst, description: existing.generatedContent }).score,
         }
       : null;
@@ -155,7 +179,10 @@ export const loader = async ({ request }) => {
         title: worst.title,
         geoBefore: worst.scores.geo,
         seoBefore: worst.scores.seo,
-        beforeSnippet: (worst.description || "").replace(/<[^>]+>/g, " ").trim().slice(0, 280),
+        beforeSnippet: (worst.description || "")
+          .replace(/<[^>]+>/g, "")
+          .trim()
+          .slice(0, 280),
         alreadyGenerated: !!existing?.generatedContent,
         after,
       },
@@ -207,7 +234,11 @@ export const action = async ({ request }) => {
     });
     if (existing?.generatedContent) {
       const after = calculateGeoScore({ description: existing.generatedContent }).score;
-      return Response.json({ demoDone: true, content: existing.generatedContent.slice(0, 600), geoAfter: after });
+      return Response.json({
+        demoDone: true,
+        content: existing.generatedContent.slice(0, 600),
+        geoAfter: after,
+      });
     }
 
     // Phase 0 item 5 — the credit is refunded on any failure or empty draft.
@@ -227,7 +258,7 @@ export const action = async ({ request }) => {
                 tags seo{title description} featuredMedia{preview{image{url}}}
                 media(first:4){edges{node{mediaContentType ... on MediaImage{image{url}}}}}
                 variants(first:5){edges{node{title price}}} } }`,
-              { variables: { id: productId } }
+              { variables: { id: productId } },
             ),
           ]);
           const { data } = await resp.json();
@@ -251,7 +282,10 @@ export const action = async ({ request }) => {
           };
 
           const generated = await generateProductContent(product, brandVoice || {}, [
-            "description", "metaTitle", "metaDescription", "faq",
+            "description",
+            "metaTitle",
+            "metaDescription",
+            "faq",
           ]);
           if (!generated?.description?.trim()) return { empty: true };
           return { node, product, generated };
@@ -265,7 +299,10 @@ export const action = async ({ request }) => {
     }
 
     if (!outcome.allowed) {
-      return Response.json({ limitReached: true, error: "You're out of free generations — upgrade to continue." });
+      return Response.json({
+        limitReached: true,
+        error: "You're out of free generations — upgrade to continue.",
+      });
     }
     if (outcome.result?.notFound) {
       return Response.json({ error: "Product not found." }, { status: 404 });
@@ -273,7 +310,10 @@ export const action = async ({ request }) => {
     if (outcome.refunded) {
       // Empty draft is a failure, not a success — surface it so the UI can retry
       // instead of silently sticking on a "preparing" state.
-      return Response.json({ error: "The AI returned an empty draft. Please retry — this did not use a generation." }, { status: 502 });
+      return Response.json(
+        { error: "The AI returned an empty draft. Please retry — this did not use a generation." },
+        { status: 502 },
+      );
     }
 
     const { node, product, generated } = outcome.result;
@@ -281,7 +321,15 @@ export const action = async ({ request }) => {
     await prisma.generatedContent.upsert({
       where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
       update: { generatedContent: generated.description, status: "draft", version: { increment: 1 } },
-      create: { shop, productId, productTitle: node.title, contentType: "description", originalContent: node.descriptionHtml || "", generatedContent: generated.description, status: "draft" },
+      create: {
+        shop,
+        productId,
+        productTitle: node.title,
+        contentType: "description",
+        originalContent: node.descriptionHtml || "",
+        generatedContent: generated.description,
+        status: "draft",
+      },
     });
 
     const geoAfter = calculateGeoScore({
@@ -294,7 +342,10 @@ export const action = async ({ request }) => {
 
     return Response.json({
       demoDone: true,
-      content: generated.description.replace(/<[^>]+>/g, " ").trim().slice(0, 600),
+      content: generated.description
+        .replace(/<[^>]+>/g, "")
+        .trim()
+        .slice(0, 600),
       geoAfter,
     });
   }
@@ -307,12 +358,14 @@ export const action = async ({ request }) => {
     }
     const { enqueueGenerationJob } = await import("../queues/generationQueue.server");
     const ids = [];
-    let cursor = null, hasNext = true, pages = 0;
+    let cursor = null,
+      hasNext = true,
+      pages = 0;
     while (hasNext && pages < 20) {
       pages++;
       const r = await admin.graphql(
         `query($c:String){ products(first:250, after:$c){ pageInfo{hasNextPage endCursor} edges{node{id}} } }`,
-        { variables: { c: cursor } }
+        { variables: { c: cursor } },
       );
       const { data } = await r.json();
       const pg = data?.products;
@@ -326,16 +379,29 @@ export const action = async ({ request }) => {
     const remainingHere = await remainingGenerations(shop);
     const { targetIds: runIds, quotaSkipped } = sliceToQuota(ids, remainingHere);
     if (runIds.length === 0) {
-      return Response.json({ limitReached: true, error: "You're out of free generations — upgrade to continue." });
+      return Response.json({
+        limitReached: true,
+        error: "You're out of free generations — upgrade to continue.",
+      });
     }
     const job = await prisma.generationJob.create({
-      data: { shop, status: "queued", totalProducts: runIds.length, productIds: JSON.stringify(runIds), contentTypes: "description,metaTitle,metaDescription", autoPublish: false, quotaSkipped },
+      data: {
+        shop,
+        status: "queued",
+        totalProducts: runIds.length,
+        productIds: JSON.stringify(runIds),
+        contentTypes: "description,metaTitle,metaDescription",
+        autoPublish: false,
+        quotaSkipped,
+      },
     });
     try {
       await enqueueGenerationJob(job.id);
     } catch (err) {
       return Response.json({
-        error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the job. Please try again.",
+        error: err.message?.startsWith("You already have jobs")
+          ? err.message
+          : "Could not start the job. Please try again.",
       });
     }
     return redirect(`/app/jobs?${authParamString(request)}`);
@@ -355,8 +421,12 @@ function scoreTone(v) {
 function ScoreStat({ label, value, tone }) {
   return (
     <BlockStack gap="100" inlineAlign="center">
-      <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>{value}</Text>
-      <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+      <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
+        {value}
+      </Text>
+      <Text as="p" variant="bodySm" tone="subdued">
+        {label}
+      </Text>
     </BlockStack>
   );
 }
@@ -368,7 +438,9 @@ function ScanSkeleton() {
       <Card>
         <BlockStack gap="400">
           <SkeletonDisplayText size="small" />
-          <Box paddingBlockStart="200"><SkeletonBodyText lines={2} /></Box>
+          <Box paddingBlockStart="200">
+            <SkeletonBodyText lines={2} />
+          </Box>
         </BlockStack>
       </Card>
       <Card>
@@ -387,7 +459,9 @@ function ScanError() {
   return (
     <Card>
       <BlockStack gap="300">
-        <Banner tone="critical"><p>We couldn&apos;t scan your store just now.</p></Banner>
+        <Banner tone="critical">
+          <p>We couldn&apos;t scan your store just now.</p>
+        </Banner>
         <InlineStack>
           <Button onClick={() => revalidator.revalidate()} loading={revalidator.state === "loading"}>
             Retry scan
@@ -411,7 +485,6 @@ export default function WelcomePage() {
   return (
     <Page title="Welcome to Navaal" subtitle="Here's your store's AI-search readiness — scanned just now.">
       <BlockStack gap="500">
-        <GeoValueBanner variant="compact" />
         <Suspense fallback={<ScanSkeleton />}>
           <Await resolve={data.scan} errorElement={<ScanError />}>
             {(scan) => <MagicMomentBody scan={scan} loader={data} />}
@@ -459,9 +532,15 @@ function MagicMomentBody({ scan, loader }) {
     return (
       <Card>
         <BlockStack gap="300">
-          <Text as="h2" variant="headingLg">Add a product to see the magic</Text>
-          <Text as="p" tone="subdued">Once your store has products, Navaal will scan them and show your AI-search readiness instantly.</Text>
-          <Button variant="primary" onClick={() => navigate("/app")}>Go to Dashboard</Button>
+          <Text as="h2" variant="headingLg">
+            Add a product to see the magic
+          </Text>
+          <Text as="p" tone="subdued">
+            Once your store has products, Navaal will scan them and show your AI-search readiness instantly.
+          </Text>
+          <Button variant="primary" onClick={() => navigate("/app")}>
+            Go to Dashboard
+          </Button>
         </BlockStack>
       </Card>
     );
@@ -480,13 +559,24 @@ function MagicMomentBody({ scan, loader }) {
       {/* Scan result */}
       <Card>
         <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">We scanned {scan.totalScanned} of your products</Text>
+          <Text as="h2" variant="headingMd">
+            We scanned {scan.totalScanned} of your products
+          </Text>
           <InlineStack gap="800" align="center" wrap>
-            <ScoreStat label="GEO / AI-search score" value={`${scan.storeGeo}`} tone={scoreTone(scan.storeGeo)} />
-            <ScoreStat label="Traditional SEO score" value={`${scan.storeSeo}`} tone={scoreTone(scan.storeSeo)} />
+            <ScoreStat
+              label="GEO / AI-search score"
+              value={`${scan.storeGeo}`}
+              tone={scoreTone(scan.storeGeo)}
+            />
+            <ScoreStat
+              label="Traditional SEO score"
+              value={`${scan.storeSeo}`}
+              tone={scoreTone(scan.storeSeo)}
+            />
           </InlineStack>
           <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-            GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini, and Google AI Overviews.
+            GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini, and Google AI
+            Overviews.
           </Text>
         </BlockStack>
       </Card>
@@ -495,7 +585,9 @@ function MagicMomentBody({ scan, loader }) {
       <Card>
         <BlockStack gap="400">
           <InlineStack align="space-between" blockAlign="center">
-            <Text as="h2" variant="headingMd">Live demo: “{scan.demo.title}”</Text>
+            <Text as="h2" variant="headingMd">
+              Live demo: “{scan.demo.title}”
+            </Text>
             {lift != null && lift > 0 && <Badge tone="success">{`GEO +${lift} points`}</Badge>}
           </InlineStack>
 
@@ -503,36 +595,67 @@ function MagicMomentBody({ scan, loader }) {
             <Layout.Section variant="oneHalf">
               <Box padding="400" background="bg-surface-secondary" borderRadius="200">
                 <BlockStack gap="200">
-                  <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">BEFORE</Text><Badge tone="critical">{`GEO ${scan.demo.geoBefore}`}</Badge></InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">{scan.demo.beforeSnippet || "No real description — invisible to AI answer engines."}</Text>
+                  <InlineStack align="space-between">
+                    <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                      BEFORE
+                    </Text>
+                    <Badge tone="critical">{`GEO ${scan.demo.geoBefore}`}</Badge>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {scan.demo.beforeSnippet || "No real description — invisible to AI answer engines."}
+                  </Text>
                 </BlockStack>
               </Box>
             </Layout.Section>
             <Layout.Section variant="oneHalf">
               <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
                 <BlockStack gap="200">
-                  <InlineStack align="space-between"><Text as="p" variant="bodySm" fontWeight="semibold" tone="success">AFTER (AI-optimized)</Text>{geoAfter != null && <Badge tone="success">{`GEO ${geoAfter}`}</Badge>}</InlineStack>
+                  <InlineStack align="space-between">
+                    <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">
+                      AFTER (AI-optimized)
+                    </Text>
+                    {geoAfter != null && <Badge tone="success">{`GEO ${geoAfter}`}</Badge>}
+                  </InlineStack>
                   {generating && !timedOut ? (
-                    <InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="p" variant="bodySm" tone="subdued">Generating a real sample from your product…</Text></InlineStack>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Spinner size="small" />
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Generating a real sample from your product…
+                      </Text>
+                    </InlineStack>
                   ) : afterContent ? (
-                    <Text as="p" variant="bodySm">{afterContent}…</Text>
+                    <Text as="p" variant="bodySm">
+                      {afterContent}…
+                    </Text>
                   ) : result?.limitReached ? (
                     <BlockStack gap="200">
-                      <Banner tone="warning"><p>{result.error}</p></Banner>
+                      <Banner tone="warning">
+                        <p>{result.error}</p>
+                      </Banner>
                       <Button onClick={() => navigate("/app/plans")}>See plans →</Button>
                     </BlockStack>
                   ) : demoFailed || timedOut ? (
                     <BlockStack gap="200">
-                      <Banner tone="critical"><p>{timedOut ? "This is taking longer than expected — please retry." : (result?.error || "Couldn't generate the sample.")}</p></Banner>
+                      <Banner tone="critical">
+                        <p>
+                          {timedOut
+                            ? "This is taking longer than expected — please retry."
+                            : result?.error || "Couldn't generate the sample."}
+                        </p>
+                      </Banner>
                       <Button onClick={fireDemo}>Retry</Button>
                     </BlockStack>
                   ) : loader.remaining <= 0 ? (
                     <BlockStack gap="200">
-                      <Banner tone="warning"><p>You&apos;re out of free generations this month.</p></Banner>
+                      <Banner tone="warning">
+                        <p>You&apos;re out of free generations this month.</p>
+                      </Banner>
                       <Button onClick={() => navigate("/app/plans")}>Upgrade →</Button>
                     </BlockStack>
                   ) : (
-                    <Button variant="primary" onClick={fireDemo}>Generate my sample →</Button>
+                    <Button variant="primary" onClick={fireDemo}>
+                      Generate my sample →
+                    </Button>
                   )}
                 </BlockStack>
               </Box>
@@ -540,7 +663,9 @@ function MagicMomentBody({ scan, loader }) {
           </Layout>
           {afterContent && (
             <InlineStack gap="300">
-              <Button onClick={() => navigate(`/app/products/${scan.demo.numericId}`)}>Review &amp; edit this draft →</Button>
+              <Button onClick={() => navigate(`/app/products/${scan.demo.numericId}`)}>
+                Review &amp; edit this draft →
+              </Button>
             </InlineStack>
           )}
         </BlockStack>
@@ -550,8 +675,14 @@ function MagicMomentBody({ scan, loader }) {
       <Box padding="500" background="bg-fill-brand" borderRadius="300">
         <InlineStack align="space-between" blockAlign="center" wrap>
           <BlockStack gap="100">
-            <Text as="h2" variant="headingLg"><span style={{ color: "#fff" }}>Optimize your whole store</span></Text>
-            <Text as="p" variant="bodyMd"><span style={{ color: "rgba(255,255,255,0.85)" }}>Generate AI-search-ready content for every product — runs in the background.</span></Text>
+            <Text as="h2" variant="headingLg">
+              <span style={{ color: "#fff" }}>Optimize your whole store</span>
+            </Text>
+            <Text as="p" variant="bodyMd">
+              <span style={{ color: "rgba(255,255,255,0.85)" }}>
+                Generate AI-search-ready content for every product — runs in the background.
+              </span>
+            </Text>
           </BlockStack>
           <optimizeFetcher.Form method="post">
             <input type="hidden" name="intent" value="optimizeStore" />
@@ -565,23 +696,41 @@ function MagicMomentBody({ scan, loader }) {
       {/* First-run checklist */}
       <Card>
         <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Your setup checklist</Text>
+          <Text as="h2" variant="headingMd">
+            Your setup checklist
+          </Text>
           {[
             { done: loader.checklist.brandVoice, label: "Configure your brand voice", to: "/app/settings" },
-            { done: loader.checklist.generated, label: "Generate your first product content", to: `/app/products/${scan.demo.numericId}` },
-            { done: loader.checklist.published, label: "Publish your first AI content (activation!)", to: "/app/review" },
+            {
+              done: loader.checklist.generated,
+              label: "Generate your first product content",
+              to: `/app/products/${scan.demo.numericId}`,
+            },
+            {
+              done: loader.checklist.published,
+              label: "Publish your first AI content (activation!)",
+              to: "/app/review",
+            },
           ].map((step) => (
             <InlineStack key={step.label} align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
                 <Badge tone={step.done ? "success" : undefined}>{step.done ? "✓ Done" : "To do"}</Badge>
-                <Text as="p" variant="bodyMd">{step.label}</Text>
+                <Text as="p" variant="bodyMd">
+                  {step.label}
+                </Text>
               </InlineStack>
-              {!step.done && <Button variant="plain" onClick={() => navigate(step.to)}>Start →</Button>}
+              {!step.done && (
+                <Button variant="plain" onClick={() => navigate(step.to)}>
+                  Start →
+                </Button>
+              )}
             </InlineStack>
           ))}
           <Divider />
           <InlineStack align="end">
-            <Button variant="plain" onClick={() => navigate("/app")}>Skip to dashboard</Button>
+            <Button variant="plain" onClick={() => navigate("/app")}>
+              Skip to dashboard
+            </Button>
           </InlineStack>
         </BlockStack>
       </Card>

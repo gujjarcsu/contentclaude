@@ -1,17 +1,35 @@
 import { useState } from "react";
-import { useLoaderData, useNavigate, redirect } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, redirect } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import {
-  Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Box, Badge, ProgressBar, Banner, Divider, Collapsible,
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  Box,
+  Badge,
+  ProgressBar,
+  Banner,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
 import {
-  Package, CheckCircle, Clock, Zap, TrendingUp,
-  BarChart2, BookOpen, Search, ArrowRight, Sparkles,
-} from "lucide-react";
+  ProductIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  PlanIcon,
+  ChartHistogramGrowthIcon,
+  ChartVerticalIcon,
+  BlogIcon,
+  SearchIcon,
+  ArrowRightIcon,
+  MagicIcon,
+} from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -37,7 +55,18 @@ export const loader = async ({ request }) => {
   // Admin GraphQL call, cached 5 min) used to be awaited sequentially *before*
   // the DB queries, serializing a network round-trip ahead of everything else;
   // folding it into Promise.all makes total latency ≈ the single slowest call.
-  const [totalProducts, metrics, brandVoice, activeJobCount, plan, usageCount, recentActivity, blogStats, recentlyCompletedJob, growthState] = await Promise.all([
+  const [
+    totalProducts,
+    metrics,
+    brandVoice,
+    activeJobCount,
+    plan,
+    usageCount,
+    recentActivity,
+    blogStats,
+    recentlyCompletedJob,
+    growthState,
+  ] = await Promise.all([
     getCache(
       `productCount:${shop}`,
       async () => {
@@ -45,7 +74,7 @@ export const loader = async ({ request }) => {
         const d = await r.json();
         return d.data.productsCount.count;
       },
-      300
+      300,
     ),
     getContentMetrics(shop),
     prisma.brandVoice.findUnique({ where: { shop } }),
@@ -79,7 +108,10 @@ export const loader = async ({ request }) => {
     }),
     // First-run: has this shop already seen the welcome / magic-moment flow?
     // embedConfirmedAt drives the theme-embed setup card (requirement 5.1.3).
-    prisma.growthState.findUnique({ where: { shop }, select: { welcomeSeenAt: true, embedConfirmedAt: true } }),
+    prisma.growthState.findUnique({
+      where: { shop },
+      select: { welcomeSeenAt: true, embedConfirmedAt: true, geoNoteDismissedAt: true },
+    }),
   ]);
 
   // Phase 2 item 2.1 - one definition of product state, shared with Products
@@ -120,6 +152,7 @@ export const loader = async ({ request }) => {
     generatedCount,
     draftCount,
     needsContentCount,
+    geoNoteDismissed: !!growthState?.geoNoteDismissedAt,
     activeJobCount,
     hasBrandVoice,
     isNewShop,
@@ -144,20 +177,26 @@ export const loader = async ({ request }) => {
   });
 };
 
-function StatCard({ icon: Icon, iconColor, label, value, subtext, tone }) {
+function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
   return (
     <Card>
       <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="start">
           <BlockStack gap="100">
-            <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
-            <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>{value}</Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {label}
+            </Text>
+            <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
+              {value}
+            </Text>
           </BlockStack>
           <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-            <Icon size={20} color={iconColor} aria-hidden="true" />
+            <Icon source={iconSource} tone={iconTone} />
           </Box>
         </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">{subtext}</Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {subtext}
+        </Text>
       </BlockStack>
     </Card>
   );
@@ -178,20 +217,30 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
             borderRadius="full"
             minWidth="32px"
           >
-            <Text as="p" variant="bodySm" fontWeight="bold" alignment="center" tone={done ? "success" : undefined}>
+            <Text
+              as="p"
+              variant="bodySm"
+              fontWeight="bold"
+              alignment="center"
+              tone={done ? "success" : undefined}
+            >
               {done ? "✓" : number}
             </Text>
           </Box>
           <BlockStack gap="050">
-            <Text as="p" variant="bodyMd" fontWeight="semibold">{title}</Text>
-            <Text as="p" variant="bodySm" tone="subdued">{description}</Text>
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              {title}
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {description}
+            </Text>
           </BlockStack>
         </InlineStack>
         {done ? (
           <Badge tone="success">Done</Badge>
         ) : (
           <Button size="slim" variant="primary" tone="success" onClick={onAction}>
-            {actionLabel} <ArrowRight aria-hidden="true" size={14} />
+            {actionLabel} <Icon source={ArrowRightIcon} tone="inherit" />
           </Button>
         )}
       </InlineStack>
@@ -207,15 +256,49 @@ function timeAgo(isoString) {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
+/**
+ * Phase 2 item 2.4 — dismissing the one explainer banner.
+ *
+ * Stored against the shop, not the browser. localStorage would bring the banner
+ * back on the merchant's phone, and on their laptop the next time they cleared
+ * site data — which is how a "dismissible" banner becomes an undismissable one.
+ */
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  if (form.get("actionType") !== "dismissGeoNote") {
+    return Response.json({ ok: false }, { status: 400 });
+  }
+  await prisma.growthState.upsert({
+    where: { shop: session.shop },
+    create: { shop: session.shop, geoNoteDismissedAt: new Date() },
+    update: { geoNoteDismissedAt: new Date() },
+  });
+  return Response.json({ ok: true });
+};
+
 export default function Dashboard() {
   const {
-    totalProducts, generatedCount, draftCount, activeJobCount,
-    hasBrandVoice, isNewShop, plan, usageCount, recentActivity, storeName,
-    blogsTotal, blogsPublished, blogsDraft, recentlyCompletedJob,
-    shopDomain, embedConfirmed,
+    totalProducts,
+    generatedCount,
+    draftCount,
+    activeJobCount,
+    hasBrandVoice,
+    isNewShop,
+    plan,
+    usageCount,
+    recentActivity,
+    storeName,
+    blogsTotal,
+    blogsPublished,
+    blogsDraft,
+    recentlyCompletedJob,
+    shopDomain,
+    embedConfirmed,
+    geoNoteDismissed,
   } = useLoaderData();
   const navigate = useNavigate();
-  const [helpOpen, setHelpOpen] = useState(false);
+  const dismissGeoNote = useFetcher();
   // Banner dismissal must actually stick — keyed per job completion so a NEW
   // completed job shows a fresh banner but a dismissed one stays dismissed.
   const [jobBannerDismissed, setJobBannerDismissed] = useState(() => {
@@ -247,7 +330,7 @@ export default function Dashboard() {
   if (isNewShop) {
     heroSubtitle = "Let's generate your first product description — it takes under 30 seconds.";
   } else if (remaining === 0) {
-    heroSubtitle = `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more →`;
+    heroSubtitle = `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more `;
   } else if (remaining <= 3) {
     heroSubtitle = `Only ${remaining} generation${remaining !== 1 ? "s" : ""} left this month — upgrade to keep momentum going.`;
   } else {
@@ -257,18 +340,19 @@ export default function Dashboard() {
   return (
     <Page>
       <BlockStack gap="600">
-
         {/* ── Job completion banner ──────────────────────────────────────── */}
         {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
           <Banner
             tone="success"
             title={`Bulk job complete — ${recentlyCompletedJob.completedProducts} product${recentlyCompletedJob.completedProducts !== 1 ? "s" : ""} generated`}
-            action={{ content: "Review & Publish →", onAction: () => navigate("/app/review") }}
+            action={{ content: "Review drafts", onAction: () => navigate("/app/review") }}
             onDismiss={() => {
               setJobBannerDismissed(true);
               try {
                 sessionStorage.setItem(`navaal:jobBanner:${recentlyCompletedJob.completedAt}`, "1");
-              } catch { /* storage unavailable — dismiss still works for this view */ }
+              } catch {
+                /* storage unavailable — dismiss still works for this view */
+              }
             }}
           >
             <p>Your AI content is ready to review. Check drafts, make edits, and publish with one click.</p>
@@ -280,7 +364,7 @@ export default function Dashboard() {
           <Banner
             tone="info"
             title={`${activeJobCount} bulk job${activeJobCount > 1 ? "s" : ""} generating in the background`}
-            action={{ content: "View progress →", onAction: () => navigate("/app/jobs") }}
+            action={{ content: "View progress", onAction: () => navigate("/app/jobs") }}
           >
             <p>You can navigate freely — generation continues without this tab open.</p>
           </Banner>
@@ -292,7 +376,9 @@ export default function Dashboard() {
           <InlineStack align="space-between" blockAlign="center" gap="400">
             <BlockStack gap="200">
               <InlineStack gap="200" blockAlign="center">
-                <Sparkles aria-hidden="true" size={22} color="#ffffff" />
+                <span style={{ color: "#ffffff", display: "inline-flex" }}>
+                  <Icon source={MagicIcon} tone="inherit" />
+                </span>
                 <Text as="h1" variant="headingXl" fontWeight="bold">
                   <span style={{ color: "#ffffff" }}>Welcome back, {storeName}!</span>
                 </Text>
@@ -302,20 +388,32 @@ export default function Dashboard() {
               </Text>
             </BlockStack>
             {!isNewShop && (
-              <Button
-                variant="primary"
-                tone="success"
-                size="large"
-                onClick={() => navigate("/app/products")}
-              >
+              <Button variant="primary" tone="success" size="large" onClick={() => navigate("/app/products")}>
                 Generate content
               </Button>
             )}
           </InlineStack>
         </Box>
 
-        {/* ── Core value: what this app actually does (GEO / AI-search) ────── */}
-        <GeoValueBanner onLearnMore={() => setHelpOpen(true)} />
+        {/* Phase 2 item 2.4 - ONE explainer, on Home only.
+            A merchant who has already installed was told what the app does
+            three times on this screen: a dark gradient hero, the onboarding
+            checklist, and a 'How Navaal works' card. The same gradient strip
+            also rendered on five other routes, twice on Results alone.
+
+            Two lines, a link, and a dismiss that sticks. */}
+        {!geoNoteDismissed && (
+          <Banner
+            tone="info"
+            title="Written for Google and for AI search"
+            onDismiss={() => dismissGeoNote.submit({ actionType: "dismissGeoNote" }, { method: "POST" })}
+          >
+            <Text as="p" variant="bodyMd">
+              Your product content is written to rank in search and to be quoted by AI assistants, with FAQ
+              content published as real page copy.
+            </Text>
+          </Banner>
+        )}
 
         {/* ── Theme embed setup (5.1.3) — persistent until confirmed done ── */}
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
@@ -325,35 +423,45 @@ export default function Dashboard() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <Sparkles aria-hidden="true" size={20} color="#2C6ECB" />
-                <Text as="h2" variant="headingLg">Get started in 4 steps</Text>
+                <Icon source={MagicIcon} tone="info" />
+                <Text as="h2" variant="headingLg">
+                  Get started in 4 steps
+                </Text>
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
                 Complete these steps to generate content that converts.
               </Text>
               <BlockStack gap="200">
                 <OnboardingStep
-                  number="1" title="Configure your brand voice"
+                  number="1"
+                  title="Configure your brand voice"
                   description="Set your tone, audience, and differentiators so AI writes in your exact voice."
-                  done={hasBrandVoice} actionLabel="Set up now"
+                  done={hasBrandVoice}
+                  actionLabel="Set up now"
                   onAction={() => navigate("/app/settings")}
                 />
                 <OnboardingStep
-                  number="2" title="Generate your first product description"
+                  number="2"
+                  title="Generate your first product description"
                   description="Pick any product and get an AI description, meta title, and FAQ in under 30 seconds."
-                  done={generatedCount + draftCount > 0} actionLabel="Choose a product"
+                  done={generatedCount + draftCount > 0}
+                  actionLabel="Choose a product"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
-                  number="3" title="Review and publish"
+                  number="3"
+                  title="Review and publish"
                   description="Read the draft, make edits, and publish with one click to your Shopify store."
-                  done={generatedCount > 0} actionLabel="View products"
+                  done={generatedCount > 0}
+                  actionLabel="View products"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
-                  number="4" title="Enable the AI-search FAQ schema in your theme"
+                  number="4"
+                  title="Enable the AI-search FAQ schema in your theme"
                   description="One-time toggle in the theme editor — required for your FAQ content to reach the storefront and be readable by ChatGPT and Perplexity."
-                  done={embedConfirmed} actionLabel="Open theme editor"
+                  done={embedConfirmed}
+                  actionLabel="Open theme editor"
                   onAction={() => window.open(embedDeepLink(shopDomain), "_top")}
                 />
               </BlockStack>
@@ -365,23 +473,30 @@ export default function Dashboard() {
         <Layout>
           <Layout.Section variant="oneThird">
             <StatCard
-              icon={Package} iconColor="#6D7175"
-              label="Total Products" value={totalProducts}
+              icon={ProductIcon}
+              iconTone="subdued"
+              label="Total Products"
+              value={totalProducts}
               subtext="In your Shopify catalog"
             />
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <StatCard
-              icon={CheckCircle} iconColor="#1a7345"
-              label="Live on your storefront" value={generatedCount}
-              subtext="Products with published AI content" tone="success"
+              icon={CheckCircleIcon}
+              iconTone="success"
+              label="Live on your storefront"
+              value={generatedCount}
+              subtext="Products with published AI content"
+              tone="success"
             />
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <StatCard
-              icon={Clock} iconColor="#B98900"
-              label="Drafts Pending Review" value={draftCount}
-              subtext={draftCount > 0 ? "Ready to publish →" : "All caught up!"}
+              icon={ClockIcon}
+              iconTone="caution"
+              label="Drafts Pending Review"
+              value={draftCount}
+              subtext={draftCount > 0 ? "Ready to publish" : "All caught up!"}
             />
           </Layout.Section>
         </Layout>
@@ -391,8 +506,10 @@ export default function Dashboard() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <Zap aria-hidden="true" size={18} color={usagePct >= 60 ? "#916A00" : "#1a7345"} />
-                <Text as="h2" variant="headingMd">Monthly Usage</Text>
+                <Icon source={PlanIcon} tone={usagePct >= 60 ? "caution" : "success"} />
+                <Text as="h2" variant="headingMd">
+                  Monthly Usage
+                </Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {planLabels[plan.planName] ?? plan.planName} Plan
                 </Badge>
@@ -409,27 +526,28 @@ export default function Dashboard() {
                 {remaining === 0
                   ? `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more.`
                   : usagePct >= 90
-                  ? "Almost at your limit — upgrade to keep generating without interruption."
-                  : usagePct >= 60
-                  ? "You're more than halfway through your monthly quota."
-                  : "You're in good shape for this month."}
+                    ? "Almost at your limit — upgrade to keep generating without interruption."
+                    : usagePct >= 60
+                      ? "You're more than halfway through your monthly quota."
+                      : "You're in good shape for this month."}
               </Text>
               {isFreePlan && (
                 <Button size="slim" variant="primary" tone="success" onClick={() => navigate("/app/plans")}>
-                  Upgrade Plan →
+                  Upgrade Plan
                 </Button>
               )}
             </InlineStack>
 
-            {isFreePlan && (
-              <Divider />
-            )}
+            {isFreePlan && <Divider />}
             {isFreePlan && (
               <InlineStack gap="200" blockAlign="center">
-                <Zap aria-hidden="true" size={14} color="#2C6ECB" />
+                <Icon source={PlanIcon} tone="info" />
                 <Text as="p" variant="bodySm">
-                  <strong>Starter plan</strong> gives you {BILLING_PLANS.starter.monthlyLimit} generations/month for ${BILLING_PLANS.starter.amount}.{" "}
-                  <Button variant="plain" onClick={() => navigate("/app/plans")}>View all plans →</Button>
+                  <strong>Starter plan</strong> gives you {BILLING_PLANS.starter.monthlyLimit}{" "}
+                  generations/month for ${BILLING_PLANS.starter.amount}.{""}
+                  <Button variant="plain" onClick={() => navigate("/app/plans")}>
+                    View all plans
+                  </Button>
                 </Text>
               </InlineStack>
             )}
@@ -442,10 +560,14 @@ export default function Dashboard() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <TrendingUp aria-hidden="true" size={18} color="#2C6ECB" />
-                  <Text as="h2" variant="headingMd">Recent Activity</Text>
+                  <Icon source={ChartHistogramGrowthIcon} tone="info" />
+                  <Text as="h2" variant="headingMd">
+                    Recent Activity
+                  </Text>
                 </InlineStack>
-                <Button variant="plain" onClick={() => navigate("/app/analytics")}>View all activity →</Button>
+                <Button variant="plain" onClick={() => navigate("/app/analytics")}>
+                  View all activity
+                </Button>
               </InlineStack>
 
               <BlockStack gap="200">
@@ -457,12 +579,20 @@ export default function Dashboard() {
                   const target = isProduct
                     ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
                     : "/app/collections";
-                  const typeLabel = item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
+                  const typeLabel =
+                    item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
                   return (
-                    <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
+                    <Box
+                      key={item.productId}
+                      padding="300"
+                      background="bg-surface-secondary"
+                      borderRadius="200"
+                    >
                       <InlineStack align="space-between" blockAlign="center">
                         <BlockStack gap="050">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">{item.productTitle}</Text>
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            {item.productTitle}
+                          </Text>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {isProduct ? typeLabel : `Collection · ${typeLabel}`} · {timeAgo(item.updatedAt)}
                           </Text>
@@ -485,11 +615,14 @@ export default function Dashboard() {
             <InlineStack align="space-between" blockAlign="center" wrap={false}>
               <BlockStack gap="100">
                 <InlineStack gap="200" blockAlign="center">
-                  <Sparkles aria-hidden="true" size={18} color="#6D7175" />
-                  <Text as="h2" variant="headingLg">Optimize your store</Text>
+                  <Icon source={MagicIcon} tone="subdued" />
+                  <Text as="h2" variant="headingLg">
+                    Optimize your store
+                  </Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  Generate AI content for every product missing a description — one click, runs in the background.
+                  Generate AI content for every product missing a description — one click, runs in the
+                  background.
                 </Text>
               </BlockStack>
               <Button variant="primary" size="large" tone="success" onClick={() => navigate("/app/optimize")}>
@@ -505,112 +638,73 @@ export default function Dashboard() {
             three features undiscoverable at exactly the moment somebody is
             exploring the app. Always shown. */}
         <Layout>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Search aria-hidden="true" size={18} color="#2C6ECB" />
-                    <Text as="h2" variant="headingMd">SEO Audit</Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Scan your entire catalog for missing descriptions, meta tags, and alt text.
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={SearchIcon} tone="info" />
+                  <Text as="h2" variant="headingMd">
+                    SEO Audit
                   </Text>
-                  <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
-                    <BarChart2 aria-hidden="true" size={18} color="#2C6ECB" />
-                    <Text as="h2" variant="headingMd">Analytics</Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Track generation activity and usage trends month by month.
-                  </Text>
-                  <InlineStack gap="200">
-                    <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
-                    <Button variant="plain" onClick={() => navigate("/app/results")}>Results</Button>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
-                    <BookOpen aria-hidden="true" size={18} color="#2C6ECB" />
-                    <Text as="h2" variant="headingMd">Blog</Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Write SEO-optimised blog posts in your brand voice in under 60 seconds.
-                  </Text>
-                  {blogsTotal > 0 && (
-                    <InlineStack gap="200">
-                      <Badge tone="success">{blogsPublished} published</Badge>
-                      {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
-                    </InlineStack>
-                  )}
-                  <InlineStack gap="200">
-                    <Button onClick={() => navigate("/app/blog")}>Write a post</Button>
-                    {blogsTotal > 0 && (
-                      <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                        View all ({blogsTotal})
-                      </Button>
-                    )}
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-        </Layout>
-
-        {/* How Navaal works — value-communication + guidance (clean, collapsible) */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <Sparkles aria-hidden="true" size={18} color="#2C6ECB" />
-                <Text as="h2" variant="headingMd">How Navaal works</Text>
-              </InlineStack>
-              <Button variant="plain" disclosure={helpOpen ? "up" : "down"} onClick={() => setHelpOpen((v) => !v)}>
-                {helpOpen ? "Hide" : "Learn how"}
-              </Button>
-            </InlineStack>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Navaal writes your product content to win two kinds of search at once:{" "}
-              <strong>traditional SEO</strong> (ranking in Google &amp; Bing) and{" "}
-              <strong>GEO / AI-search</strong> — being cited by AI answer engines like ChatGPT,
-              Perplexity, Gemini, and Google&apos;s AI Overviews.
-            </Text>
-            <Collapsible open={helpOpen} id="how-it-works" transition={{ duration: "150ms" }}>
-              <BlockStack gap="400">
-                <Divider />
-                <BlockStack gap="150">
-                  <Text as="h3" variant="headingSm">How your content is made</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Premium AI writes in your brand voice (set it in Settings), using an answer-first
-                    structure and adding structured data — Product &amp; FAQ schema (JSON-LD) — that
-                    search crawlers and AI engines read to understand and quote your products.
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="150">
-                  <Text as="h3" variant="headingSm">The three scores, explained</Text>
-                  <Text as="p" variant="bodySm" tone="subdued"><strong>GEO / AI-search score</strong> — how ready a product is to be cited by AI answer engines.</Text>
-                  <Text as="p" variant="bodySm" tone="subdued"><strong>Traditional SEO score</strong> — how well it&apos;s set up to rank in classic search results.</Text>
-                  <Text as="p" variant="bodySm" tone="subdued"><strong>Content quality</strong> — how complete and well-written a specific draft is before you publish.</Text>
-                </BlockStack>
-                <BlockStack gap="150">
-                  <Text as="h3" variant="headingSm">Get results in 3 steps</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">1. Set your brand voice in Settings so content sounds like you.</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">2. Generate content, then review the draft and its GEO lift.</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">3. Publish — your content goes live and AI-search FAQ schema is attached to the product.</Text>
-                </BlockStack>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Scan your entire catalog for missing descriptions, meta tags, and alt text.
+                </Text>
+                <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
               </BlockStack>
-            </Collapsible>
-          </BlockStack>
-        </Card>
-
+            </Card>
+          </Layout.Section>
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={ChartVerticalIcon} tone="info" />
+                  <Text as="h2" variant="headingMd">
+                    Analytics
+                  </Text>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Track generation activity and usage trends month by month.
+                </Text>
+                <InlineStack gap="200">
+                  <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
+                  <Button variant="plain" onClick={() => navigate("/app/results")}>
+                    Results
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={BlogIcon} tone="info" />
+                  <Text as="h2" variant="headingMd">
+                    Blog
+                  </Text>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Write SEO-optimised blog posts in your brand voice in under 60 seconds.
+                </Text>
+                {blogsTotal > 0 && (
+                  <InlineStack gap="200">
+                    <Badge tone="success">{blogsPublished} published</Badge>
+                    {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
+                  </InlineStack>
+                )}
+                <InlineStack gap="200">
+                  <Button onClick={() => navigate("/app/blog")}>Write a post</Button>
+                  {blogsTotal > 0 && (
+                    <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
+                      View all ({blogsTotal})
+                    </Button>
+                  )}
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
       </BlockStack>
     </Page>
   );

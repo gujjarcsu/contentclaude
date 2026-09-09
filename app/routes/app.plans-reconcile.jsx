@@ -35,7 +35,7 @@ export const loader = async ({ request }) => {
     if (!ok) {
       logger.warn(
         { shop, beforePlan, reason },
-        "reconcile: active-subscription lookup not authoritative — kept current plan (no downgrade)"
+        "reconcile: active-subscription lookup not authoritative — kept current plan (no downgrade)",
       );
       return Response.json({ changed: false });
     }
@@ -48,7 +48,7 @@ export const loader = async ({ request }) => {
     if (changed) {
       logger.info(
         { shop, from: beforePlan, to: fresh.planName, subCount: subs.length },
-        "reconcile: plan reconciled from Shopify active subscriptions"
+        "reconcile: plan reconciled from Shopify active subscriptions",
       );
     }
     return Response.json({ changed });
@@ -57,7 +57,7 @@ export const loader = async ({ request }) => {
     // reconcile failure is visible rather than silently swallowed.
     logger.error(
       { shop, beforePlan, err: err?.message },
-      "reconcile: threw — kept current plan (no downgrade)"
+      "reconcile: threw — kept current plan (no downgrade)",
     );
     return Response.json({ changed: false });
   }

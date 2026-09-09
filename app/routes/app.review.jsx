@@ -46,10 +46,15 @@ const METAFIELDS_SET_MUTATION = `mutation setMetafields($metafields: [Metafields
 async function writeFaqMetafield(admin, metafieldInput, { shop, productId } = {}) {
   if (!metafieldInput) return true;
   try {
-    const response = await admin.graphql(METAFIELDS_SET_MUTATION, { variables: { metafields: [metafieldInput] } });
+    const response = await admin.graphql(METAFIELDS_SET_MUTATION, {
+      variables: { metafields: [metafieldInput] },
+    });
     const result = await readMutationResult(response, "metafieldsSet");
     if (!result.ok) {
-      logger.warn({ shop, productId, errors: result.errorMessages }, "FAQ metafieldsSet failed during bulk review publish");
+      logger.warn(
+        { shop, productId, errors: result.errorMessages },
+        "FAQ metafieldsSet failed during bulk review publish",
+      );
       return false;
     }
     return true;
@@ -91,7 +96,10 @@ export const loader = async ({ request }) => {
       select: { productId: true },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true, embedConfirmedAt: true } }),
+    prisma.growthState.findUnique({
+      where: { shop },
+      select: { reviewRequestedAt: true, embedConfirmedAt: true },
+    }),
   ]);
   const reviewRequested = !!growthState?.reviewRequestedAt;
   const embedConfirmed = !!growthState?.embedConfirmedAt;
@@ -108,7 +116,15 @@ export const loader = async ({ request }) => {
     : [];
 
   if (drafts.length === 0 && page === 1) {
-    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0, reviewRequested, embedConfirmed, shopDomain: shop });
+    return Response.json({
+      products: [],
+      page: 1,
+      totalPages: 1,
+      totalDraftCount: 0,
+      reviewRequested,
+      embedConfirmed,
+      shopDomain: shop,
+    });
   }
 
   // Group by productId — preserve the recency order from pageProductIds
@@ -177,10 +193,13 @@ async function fetchProductsBatch(admin, productIds) {
             }
           }
         }`,
-        { variables: { ids: batch } }
+        { variables: { ids: batch } },
       );
     } catch (err) {
-      logger.error({ batch: Math.floor(i / BATCH_SIZE) + 1, err: err.message }, "fetchProductsBatch batch failed");
+      logger.error(
+        { batch: Math.floor(i / BATCH_SIZE) + 1, err: err.message },
+        "fetchProductsBatch batch failed",
+      );
       continue;
     }
 
@@ -251,7 +270,9 @@ export const action = async ({ request }) => {
 
     // Make sure the faq_schema metafield definition exists before the batch
     // writes metafields (idempotent, cached 24h, non-fatal).
-    await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
+    await ensureFaqMetafieldDefinition(shop, async (q, v) =>
+      (await admin.graphql(q, v ? { variables: v } : undefined)).json(),
+    );
 
     // Publish with bounded concurrency (3) so a large approval batch doesn't
     // hammer Shopify into throttling; each call retries on 429/THROTTLED.
@@ -273,12 +294,15 @@ export const action = async ({ request }) => {
           // FAQPage schema (the AI-search/GEO promise) — not just for single-product
           // publishes, but for this bulk review flow too.
           if (result.ok) {
-            const faqOk = await writeFaqMetafield(admin, buildFaqSchemaMetafield(productId, content.faq), { shop, productId });
+            const faqOk = await writeFaqMetafield(admin, buildFaqSchemaMetafield(productId, content.faq), {
+              shop,
+              productId,
+            });
             if (!faqOk) result.faqFailed = true;
           }
           return result;
-        })
-      )
+        }),
+      ),
     );
 
     const faqFailedIds = [];
@@ -317,7 +341,7 @@ export const action = async ({ request }) => {
         }
 
         const editedProductIds = Object.keys(successfulEdits).filter((id) =>
-          successfulProductIds.includes(id)
+          successfulProductIds.includes(id),
         );
         if (editedProductIds.length > 0) {
           await Promise.all(
@@ -326,29 +350,34 @@ export const action = async ({ request }) => {
                 tx.generatedContent.updateMany({
                   where: { shop, productId, contentType: type, status: "published" },
                   data: { generatedContent: content },
-                })
-              )
-            )
+                }),
+              ),
+            ),
           );
         }
       });
     }
 
     const published = successfulProductIds.length;
-    const faqWarning = faqFailedIds.length > 0
-      ? ` FAQ schema failed for ${faqFailedIds.length} product${faqFailedIds.length !== 1 ? "s" : ""} — it stays in drafts so you can retry.`
-      : "";
+    const faqWarning =
+      faqFailedIds.length > 0
+        ? ` FAQ schema failed for ${faqFailedIds.length} product${faqFailedIds.length !== 1 ? "s" : ""} — it stays in drafts so you can retry.`
+        : "";
 
     // If FAQ content just published but the theme app embed is still off, the
     // JSON-LD won't reach the storefront — tell the merchant (5.1.3).
     const publishedFaq = draftRecords.some(
-      (r) => r.contentType === "faq" && successfulProductIds.includes(r.productId) && !faqFailedIds.includes(r.productId)
+      (r) =>
+        r.contentType === "faq" &&
+        successfulProductIds.includes(r.productId) &&
+        !faqFailedIds.includes(r.productId),
     );
     let embedNotice = "";
     if (publishedFaq) {
       const gs = await prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } });
       if (!gs?.embedConfirmedAt) {
-        embedNotice = " Note: your FAQ schema won't appear to search engines until you enable the \"AI-search FAQ schema\" app embed in your theme (see the setup card).";
+        embedNotice =
+          ' Note: your FAQ schema won\'t appear to search engines until you enable the "AI-search FAQ schema" app embed in your theme (see the setup card).';
       }
     }
 
@@ -393,7 +422,6 @@ export default function ReviewPage() {
   const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
 
-
   const [approved, setApproved] = useState(() => new Set(products.map((p) => p.productId)));
   const [search, setSearch] = useState("");
   // edits: { [productId]: { [contentType]: editedValue } }
@@ -430,9 +458,7 @@ export default function ReviewPage() {
   }, [approved, edits, submit]);
 
   const handleRejectUnapproved = useCallback(() => {
-    const rejectedIds = products
-      .map((p) => p.productId)
-      .filter((id) => !approved.has(id));
+    const rejectedIds = products.map((p) => p.productId).filter((id) => !approved.has(id));
     if (rejectedIds.length === 0) return;
     const fd = new FormData();
     fd.append("actionType", "reject");
@@ -450,25 +476,18 @@ export default function ReviewPage() {
     }
   }, [actionData]);
 
-  const filtered = products.filter((p) =>
-    p.productTitle.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = products.filter((p) => p.productTitle.toLowerCase().includes(search.toLowerCase()));
 
-  const approvedCount = [...approved].filter((id) =>
-    products.some((p) => p.productId === id)
-  ).length;
+  const approvedCount = [...approved].filter((id) => products.some((p) => p.productId === id)).length;
 
   if (products.length === 0) {
     return (
-      <Page
-        title="Review & Publish"
-        backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
-      >
+      <Page title="Review & Publish" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
         {/* After publishing all drafts we land here with a success actionData —
             still the right moment to ask for a review. */}
         <ReviewRequest active={askReview} />
         <EmptyState
-          heading="Nothing to review — you're all caught up! 🎉"
+          heading="Nothing to review — you're all caught up"
           image="/empty-review.svg"
           action={{ content: "Go to Products", onAction: () => navigate("/app/products") }}
         >
@@ -477,7 +496,6 @@ export default function ReviewPage() {
       </Page>
     );
   }
-
 
   return loadingThisRoute ? (
     <AppSkeleton title="Review & Publish" sections={2} layout="full" />
@@ -491,20 +509,23 @@ export default function ReviewPage() {
         <ReviewRequest active={askReview} />
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
-          Generated by premium AI in your brand voice. Review each draft, then publish — published
-          content goes live in your store with AI-search (GEO) FAQ schema attached, in the structured
-          format search engines and AI answer engines read and quote from.
+          Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ
+          schema attached, in the structured format search engines and AI answer engines read and quote from.
         </Banner>
 
         {actionData?.success && actionData.errors?.length > 0 && (
           <Banner tone="warning" title="Published with some errors">
             {actionData.errors.map((e, i) => (
-              <p key={i}>Failed: {e.productTitle || "Untitled product"} — {e.error}</p>
+              <p key={i}>
+                Failed: {e.productTitle || "Untitled product"} — {e.error}
+              </p>
             ))}
           </Banner>
         )}
         {actionData?.error && (
-          <Banner tone="critical"><p>{actionData.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
         )}
 
         {/* Action bar */}
@@ -515,8 +536,12 @@ export default function ReviewPage() {
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
                   {approvedCount} of {products.length} approved
                 </Text>
-                <Button variant="plain" size="slim" onClick={selectAll}>Select All</Button>
-                <Button variant="plain" size="slim" onClick={deselectAll}>Deselect All</Button>
+                <Button variant="plain" size="slim" onClick={selectAll}>
+                  Select All
+                </Button>
+                <Button variant="plain" size="slim" onClick={deselectAll}>
+                  Deselect All
+                </Button>
               </InlineStack>
               <ButtonGroup>
                 <Button
@@ -534,7 +559,7 @@ export default function ReviewPage() {
                   loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                   disabled={isSubmitting || approvedCount === 0}
                 >
-                  Publish {approvedCount} approved →
+                  Publish {approvedCount} approved
                 </Button>
               </ButtonGroup>
             </InlineStack>
@@ -580,7 +605,7 @@ export default function ReviewPage() {
                 loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                 disabled={isSubmitting || approvedCount === 0}
               >
-                Publish {approvedCount} approved →
+                Publish {approvedCount} approved
               </Button>
             </InlineStack>
           </Card>
@@ -589,18 +614,14 @@ export default function ReviewPage() {
         {totalPages > 1 && (
           <Card>
             <InlineStack align="center" gap="400">
-              <Button
-                disabled={page <= 1}
-                onClick={() => navigate(`/app/review?page=${page - 1}`)}
-              >
-                ← Previous
+              <Button disabled={page <= 1} onClick={() => navigate(`/app/review?page=${page - 1}`)}>
+                Previous
               </Button>
-              <Text as="p" variant="bodySm" tone="subdued">Page {page} of {totalPages}</Text>
-              <Button
-                disabled={page >= totalPages}
-                onClick={() => navigate(`/app/review?page=${page + 1}`)}
-              >
-                Next →
+              <Text as="p" variant="bodySm" tone="subdued">
+                Page {page} of {totalPages}
+              </Text>
+              <Button disabled={page >= totalPages} onClick={() => navigate(`/app/review?page=${page + 1}`)}>
+                Next
               </Button>
             </InlineStack>
           </Card>
@@ -612,18 +633,19 @@ export default function ReviewPage() {
 
 function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
   const [expanded, setExpanded] = useState({});
-  const toggleExpand = (type) =>
-    setExpanded((prev) => ({ ...prev, [type]: !prev[type] }));
+  const toggleExpand = (type) => setExpanded((prev) => ({ ...prev, [type]: !prev[type] }));
 
   const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-    (t) => product.content[t]
+    (t) => product.content[t],
   );
 
   return (
-    // Left accent stripe makes each card's include/skip state obvious at a glance:
-    // green = will publish, grey = skipped.
-    <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: `inset 4px 0 0 ${isApproved ? "#00A047" : "#C9CCCF"}` }}>
-    <Card>
+    // Phase 2 item 2.5 - this was a div with an inset box-shadow in
+    // hard-coded #00A047 / #C9CCCF: status by COLOUR ALONE, which fails
+    // anyone who cannot tell those two apart. Polaris Card carries the
+    // state as a background token, and the Badge beside the title says it
+    // in words.
+    <Card background={isApproved ? "bg-surface-success" : "bg-surface-secondary"}>
       <BlockStack gap="400">
         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
           <InlineStack gap="300" blockAlign="center">
@@ -637,14 +659,24 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
             />
             <BlockStack gap="100">
               <InlineStack gap="200" blockAlign="center">
-                <Text as="h3" variant="headingMd">{product.productTitle}</Text>
+                <Text as="h3" variant="headingMd">
+                  {product.productTitle}
+                </Text>
                 {product.qualityScore != null && (
                   // Labelled "Content quality" (distinct from GEO/AI-search and
                   // traditional SEO scores shown elsewhere). Unified colour rule:
                   // >=70 green, 40–69 amber, <40 red — a mid score is "work to do",
                   // not "broken", so it never shows alarming red.
                   <Tooltip content="Content quality score — measures how complete and structured this content is for AI search.">
-                    <Badge tone={product.qualityScore >= 70 ? "success" : product.qualityScore >= 40 ? "attention" : "critical"}>
+                    <Badge
+                      tone={
+                        product.qualityScore >= 70
+                          ? "success"
+                          : product.qualityScore >= 40
+                            ? "attention"
+                            : "critical"
+                      }
+                    >
                       {`Content quality: ${product.qualityScore}`}
                     </Badge>
                   </Tooltip>
@@ -652,15 +684,21 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
               </InlineStack>
               <InlineStack gap="200">
                 {contentTypes.map((t) => (
-                  <Badge key={t} tone="info">{t}</Badge>
+                  <Badge key={t} tone="info">
+                    {t}
+                  </Badge>
                 ))}
               </InlineStack>
             </BlockStack>
           </InlineStack>
           {isApproved ? (
-            <Button variant="primary" tone="success" onClick={onToggle}>✓ Approved</Button>
+            <Button variant="primary" tone="success" onClick={onToggle}>
+              ✓ Approved
+            </Button>
           ) : (
-            <Button variant="tertiary" onClick={onToggle}>Skipped — tap to include</Button>
+            <Button variant="tertiary" onClick={onToggle}>
+              Skipped — tap to include
+            </Button>
           )}
         </InlineStack>
 
@@ -678,13 +716,11 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
         ))}
       </BlockStack>
     </Card>
-    </div>
   );
 }
 
 function ContentSection({ type, content, expanded, onToggle, onEdit }) {
   const [editedValue, setEditedValue] = useState(content);
-
 
   const labels = {
     description: "Description",
@@ -693,10 +729,13 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     faq: "FAQ",
   };
 
-  const handleChange = useCallback((value) => {
-    setEditedValue(value);
-    onEdit(value);
-  }, [onEdit]);
+  const handleChange = useCallback(
+    (value) => {
+      setEditedValue(value);
+      onEdit(value);
+    },
+    [onEdit],
+  );
 
   // decodeHtmlEntities: stored content (and stripped HTML) can carry entities
   // ("Premium Skateboards &amp; Gear") which React renders literally.
@@ -712,7 +751,9 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
   return (
     <BlockStack gap="200">
       <InlineStack align="space-between" blockAlign="center">
-        <Text as="p" variant="bodySm" fontWeight="semibold">{labels[type] || type}</Text>
+        <Text as="p" variant="bodySm" fontWeight="semibold">
+          {labels[type] || type}
+        </Text>
         <Button variant="plain" size="slim" onClick={onToggle}>
           {expanded ? "Collapse" : "Edit"}
         </Button>
@@ -725,13 +766,19 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
             value={editedValue}
             onChange={handleChange}
             multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-            helpText={charLimit ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}` : "Edit before publishing"}
+            helpText={
+              charLimit
+                ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}`
+                : "Edit before publishing"
+            }
             error={overLimit ? `Shorten to under ${charLimit} characters` : ""}
             autoComplete="off"
           />
         </BlockStack>
       ) : (
-        <Text as="p" variant="bodySm" tone="subdued">{preview}</Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {preview}
+        </Text>
       )}
     </BlockStack>
   );

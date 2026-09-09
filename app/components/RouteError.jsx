@@ -18,38 +18,40 @@ export function RouteError() {
   const title = is404
     ? "Page not found"
     : is401
-    ? "Session expired — please re-authenticate"
-    : "An unexpected error occurred";
+      ? "Session expired — please re-authenticate"
+      : "An unexpected error occurred";
 
   const message = is404
     ? "This product or page doesn't exist. It may have been deleted from your Shopify store."
     : is401
-    ? "Your session has expired. Click below to log back in — your data is safe."
-    : `Something went wrong on our end.${error?.message ? ` Details: ${error.message}` : ""} Please try refreshing the page.`;
+      ? "Your session has expired. Click below to log back in — your data is safe."
+      : `Something went wrong on our end.${error?.message ? ` Details: ${error.message}` : ""} Please try refreshing the page.`;
 
   const action = is404
-    ? { content: "← Back to Products", onAction: () => navigate("/app/products") }
+    ? { content: "Back to Products", onAction: () => navigate("/app/products") }
     : is401
-    ? {
-        // 2.1.1: never send an embedded merchant to the /auth/login form (a
-        // dead-end inside the admin). Re-enter the app at /app with the current
-        // embedded params — the app re-authenticates silently via token
-        // exchange / the App Bridge bounce.
-        content: "Re-authenticate",
-        onAction: () => {
-          const search = typeof window !== "undefined" ? window.location.search : "";
-          if (typeof window !== "undefined") window.location.href = `/app${search}`;
-        },
-      }
-    : { content: "← Back to Dashboard", onAction: () => navigate("/app") };
+      ? {
+          // 2.1.1: never send an embedded merchant to the /auth/login form (a
+          // dead-end inside the admin). Re-enter the app at /app with the current
+          // embedded params — the app re-authenticates silently via token
+          // exchange / the App Bridge bounce.
+          content: "Re-authenticate",
+          onAction: () => {
+            const search = typeof window !== "undefined" ? window.location.search : "";
+            if (typeof window !== "undefined") window.location.href = `/app${search}`;
+          },
+        }
+      : { content: "Back to Dashboard", onAction: () => navigate("/app") };
 
   return (
     <Page>
       <Banner tone={is404 ? "warning" : "critical"} title={title} action={action}>
-        <Text as="p" variant="bodyMd">{message}</Text>
+        <Text as="p" variant="bodyMd">
+          {message}
+        </Text>
         <Text as="p" variant="bodySm" tone="subdued">
-          Still stuck? Email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> — include
-          what you were doing when this happened and we&apos;ll sort it out.
+          Still stuck? Email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> — include what you
+          were doing when this happened and we&apos;ll sort it out.
         </Text>
       </Banner>
     </Page>

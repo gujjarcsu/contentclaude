@@ -212,6 +212,10 @@ model GrowthState {
   embedConfirmedAt        DateTime?
   // Setup wizard finished (step 5 completed)
   setupCompletedAt        DateTime?
+  // Phase 2 item 2.4 — the one explainer banner on Home. Dismissal is stored
+  // per shop rather than in the browser, so it stays dismissed on the
+  // merchant's other devices and does not come back when they clear site data.
+  geoNoteDismissedAt      DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }

@@ -15,9 +15,10 @@ import {
   SkeletonPage,
   SkeletonBodyText,
   SkeletonDisplayText,
+  Icon,
 } from "@shopify/polaris";
 import { useEffect, useRef } from "react";
-import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
+import { ClockIcon, CheckCircleIcon, XCircleIcon, RefreshIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
@@ -127,30 +128,49 @@ export const action = async ({ request }) => {
   try {
     await enqueueGenerationJob(newJob.id);
   } catch (err) {
-    return Response.json({
-      error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the retry job. Please try again.",
-    }, { status: 409 });
+    return Response.json(
+      {
+        error: err.message?.startsWith("You already have jobs")
+          ? err.message
+          : "Could not start the retry job. Please try again.",
+      },
+      { status: 409 },
+    );
   }
   return Response.json({ success: true, newJobId: newJob.id });
 };
 
 function statusBadge(status) {
   switch (status) {
-    case "queued":     return <Badge tone="attention">Queued</Badge>;
-    case "processing": return <Badge tone="info" progress="incomplete">Processing...</Badge>;
-    case "complete":   return <Badge tone="success">Complete</Badge>;
-    case "failed":     return <Badge tone="critical">Failed</Badge>;
-    default:           return <Badge>{status}</Badge>;
+    case "queued":
+      return <Badge tone="attention">Queued</Badge>;
+    case "processing":
+      return (
+        <Badge tone="info" progress="incomplete">
+          Processing...
+        </Badge>
+      );
+    case "complete":
+      return <Badge tone="success">Complete</Badge>;
+    case "failed":
+      return <Badge tone="critical">Failed</Badge>;
+    default:
+      return <Badge>{status}</Badge>;
   }
 }
 
 function statusIcon(status) {
   switch (status) {
-    case "queued":     return <Clock aria-hidden="true" size={16} color="#916A00" />;
-    case "processing": return <Loader aria-hidden="true" size={16} color="#1656AC" />;
-    case "complete":   return <CheckCircle2 aria-hidden="true" size={16} color="#00A047" />;
-    case "failed":     return <XCircle aria-hidden="true" size={16} color="#E51C00" />;
-    default:           return null;
+    case "queued":
+      return <Icon source={ClockIcon} tone="caution" />;
+    case "processing":
+      return <Icon source={RefreshIcon} tone="info" />;
+    case "complete":
+      return <Icon source={CheckCircleIcon} tone="success" />;
+    case "failed":
+      return <Icon source={XCircleIcon} tone="critical" />;
+    default:
+      return null;
   }
 }
 
@@ -188,9 +208,8 @@ export default function JobsPage() {
   // A completed auto-publish job means content actually went live → ask for a
   // review (once). Non-auto-publish jobs only created drafts, so they don't count
   // here; the Review & Publish screen handles that path.
-  const askReview = !reviewRequested && jobs.some(
-    (j) => j.autoPublish && j.status === "complete" && j.completedProducts > 0
-  );
+  const askReview =
+    !reviewRequested && jobs.some((j) => j.autoPublish && j.status === "complete" && j.completedProducts > 0);
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
@@ -260,8 +279,18 @@ export default function JobsPage() {
     return (
       <SkeletonPage title="Bulk Generation Jobs" primaryAction>
         <BlockStack gap="400">
-          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={3} /></Box></Card>
-          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={5} /></Box></Card>
+          <Card>
+            <SkeletonDisplayText size="small" />
+            <Box paddingBlockStart="400">
+              <SkeletonBodyText lines={3} />
+            </Box>
+          </Card>
+          <Card>
+            <SkeletonDisplayText size="small" />
+            <Box paddingBlockStart="400">
+              <SkeletonBodyText lines={5} />
+            </Box>
+          </Card>
         </BlockStack>
       </SkeletonPage>
     );
@@ -292,20 +321,22 @@ export default function JobsPage() {
               heading="No generation jobs yet"
               image="/empty-jobs.svg"
               action={{
-                content: "Go to Products →",
+                content: "Go to Products",
                 onAction: () => navigate("/app/products"),
               }}
               secondaryAction={{
-                content: "Learn how bulk generation works →",
+                content: "How bulk generation works",
                 onAction: () => navigate("/app/optimize"),
               }}
             >
-              <p>Generate content for multiple products at once — jobs run in the background so you can keep working.</p>
+              <p>
+                Generate content for multiple products at once — jobs run in the background so you can keep
+                working.
+              </p>
             </EmptyState>
           </Card>
         ) : (
           <BlockStack gap="400">
-
             {/* Active jobs */}
             {activeJobs.map((job) => {
               const done = job.completedProducts + job.failedProducts;
@@ -315,12 +346,17 @@ export default function JobsPage() {
               const contentTypesList = job.contentTypes
                 .split(",")
                 .map((t) =>
-                  t === "description" ? "Description" :
-                  t === "metaTitle" ? "Meta Title" :
-                  t === "metaDescription" ? "Meta Description" :
-                  t === "faq" ? "FAQ" : t
+                  t === "description"
+                    ? "Description"
+                    : t === "metaTitle"
+                      ? "Meta Title"
+                      : t === "metaDescription"
+                        ? "Meta Description"
+                        : t === "faq"
+                          ? "FAQ"
+                          : t,
                 )
-                .join(", ");
+                .join(",");
 
               return (
                 <Card key={job.id}>
@@ -339,10 +375,14 @@ export default function JobsPage() {
                         </Text>
                         <InlineStack gap="300">
                           {elapsedTime && (
-                            <Text as="p" variant="bodySm" tone="subdued">{elapsedTime} elapsed</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              {elapsedTime} elapsed
+                            </Text>
                           )}
                           {eta && (
-                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="info">{eta}</Text>
+                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="info">
+                              {eta}
+                            </Text>
                           )}
                         </InlineStack>
                       </BlockStack>
@@ -351,7 +391,9 @@ export default function JobsPage() {
                         <Text as="p" variant="headingMd" fontWeight="bold">
                           {done}/{job.totalProducts}
                         </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">products done</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          products done
+                        </Text>
                         <cancelFetcher.Form method="post">
                           <input type="hidden" name="jobId" value={job.id} />
                           <input type="hidden" name="actionType" value="cancel" />
@@ -373,14 +415,11 @@ export default function JobsPage() {
 
                     {job.totalProducts > 0 && (
                       <BlockStack gap="100">
-                        <ProgressBar
-                          progress={progress}
-                          tone="highlight"
-                          size="large"
-                          animated
-                        />
+                        <ProgressBar progress={progress} tone="highlight" size="large" animated />
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">{progress}% complete</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {progress}% complete
+                          </Text>
                           {job.failedProducts > 0 && (
                             <Text as="p" variant="bodySm" tone="critical">
                               {job.failedProducts} failed
@@ -402,12 +441,17 @@ export default function JobsPage() {
               const contentTypesList = job.contentTypes
                 .split(",")
                 .map((t) =>
-                  t === "description" ? "Description" :
-                  t === "metaTitle" ? "Meta Title" :
-                  t === "metaDescription" ? "Meta Description" :
-                  t === "faq" ? "FAQ" : t
+                  t === "description"
+                    ? "Description"
+                    : t === "metaTitle"
+                      ? "Meta Title"
+                      : t === "metaDescription"
+                        ? "Meta Description"
+                        : t === "faq"
+                          ? "FAQ"
+                          : t,
                 )
-                .join(", ");
+                .join(",");
 
               return (
                 <Card key={job.id}>
@@ -422,7 +466,8 @@ export default function JobsPage() {
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          {job.mode === "enhance" ? "Enhance · " : ""}{contentTypesList}
+                          {job.mode === "enhance" ? "Enhance · " : ""}
+                          {contentTypesList}
                           {elapsedTime ? ` · ${elapsedTime}` : ""}
                         </Text>
                       </BlockStack>
@@ -431,7 +476,9 @@ export default function JobsPage() {
                         <Text as="p" variant="headingMd" fontWeight="bold">
                           {done}/{job.totalProducts}
                         </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">products done</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          products done
+                        </Text>
                       </BlockStack>
                     </InlineStack>
 
@@ -443,7 +490,9 @@ export default function JobsPage() {
                           size="small"
                         />
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">{progress}% complete</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {progress}% complete
+                          </Text>
                           {job.failedProducts > 0 && (
                             <Text as="p" variant="bodySm" tone="critical">
                               {job.failedProducts} failed
@@ -460,11 +509,17 @@ export default function JobsPage() {
                           <Text as="p" variant="bodySm" fontWeight="bold" tone="critical">
                             Errors ({job.errorLog.length})
                           </Text>
-                          {job.errorLog.slice(0, 10).map((err, i) => { // show first 10
+                          {job.errorLog.slice(0, 10).map((err, i) => {
+                            // show first 10
                             const numericId = err.productId?.replace("gid://shopify/Product/", "");
                             const isValidId = numericId && /^\d+$/.test(numericId);
                             return (
-                              <Box key={i} padding="200" background="bg-surface-critical-subdued" borderRadius="100">
+                              <Box
+                                key={i}
+                                padding="200"
+                                background="bg-surface-critical-subdued"
+                                borderRadius="100"
+                              >
                                 <InlineStack align="space-between" blockAlign="start" gap="200">
                                   <Text as="p" variant="bodySm">
                                     {isValidId ? (
@@ -478,7 +533,7 @@ export default function JobsPage() {
                                     ) : (
                                       <strong>{err.productId || "Unknown"}</strong>
                                     )}
-                                    {" — "}
+                                    {" —"}
                                     {err.error}
                                   </Text>
                                 </InlineStack>
@@ -553,10 +608,8 @@ export default function JobsPage() {
                 </Card>
               );
             })}
-
           </BlockStack>
         )}
-
       </BlockStack>
     </Page>
   );

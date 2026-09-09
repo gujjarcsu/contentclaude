@@ -1,10 +1,20 @@
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Box, Badge, EmptyState, Divider,
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  Box,
+  Badge,
+  EmptyState,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
-import { BookOpen, PenLine, Globe, Clock, FileText, Trash2 } from "lucide-react";
+import { BlogIcon, EditIcon, GlobeIcon, ClockIcon, TextIcon, DeleteIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -68,91 +78,94 @@ function PostCard({ post, onView }) {
   const isDeleting = fetcher.state !== "idle";
 
   return (
-    <Box
-      padding="400"
-      background="bg-surface"
-      borderRadius="200"
-      borderWidth="025"
-      borderColor="border"
-    >
+    <Box padding="400" background="bg-surface" borderRadius="200" borderWidth="025" borderColor="border">
       <BlockStack gap="200">
-      <InlineStack align="space-between" blockAlign="start" gap="400" wrap={false}>
-        <InlineStack gap="300" blockAlign="start" wrap={false}>
-          <Box
-            padding="200"
-            background={isDraft ? "bg-surface-secondary" : "bg-surface-success-subdued"}
-            borderRadius="200"
-          >
-            {isDraft ? (
-              <PenLine aria-hidden="true" size={18} color="#6D7175" />
-            ) : (
-              <Globe aria-hidden="true" size={18} color="#1a7345" />
-            )}
-          </Box>
-          <BlockStack gap="100">
-            <Text as="p" variant="bodyMd" fontWeight="semibold">
-              {post.title || post.topic || "Untitled Post"}
-            </Text>
-            <InlineStack gap="300" blockAlign="center">
-              {post.topic && (
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Topic: {post.topic}
-                </Text>
+        <InlineStack align="space-between" blockAlign="start" gap="400" wrap={false}>
+          <InlineStack gap="300" blockAlign="start" wrap={false}>
+            <Box
+              padding="200"
+              background={isDraft ? "bg-surface-secondary" : "bg-surface-success-subdued"}
+              borderRadius="200"
+            >
+              {isDraft ? (
+                <Icon source={EditIcon} tone="subdued" />
+              ) : (
+                <Icon source={GlobeIcon} tone="success" />
               )}
-              {post.wordCount > 0 && (
+            </Box>
+            <BlockStack gap="100">
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                {post.title || post.topic || "Untitled Post"}
+              </Text>
+              <InlineStack gap="300" blockAlign="center">
+                {post.topic && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Topic: {post.topic}
+                  </Text>
+                )}
+                {post.wordCount > 0 && (
+                  <InlineStack gap="100" blockAlign="center">
+                    <Icon source={TextIcon} tone="subdued" />
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {post.wordCount.toLocaleString()} words
+                    </Text>
+                  </InlineStack>
+                )}
                 <InlineStack gap="100" blockAlign="center">
-                  <FileText aria-hidden="true" size={12} color="#8C9196" />
-                  <Text as="p" variant="bodySm" tone="subdued">{post.wordCount.toLocaleString()} words</Text>
+                  <Icon source={ClockIcon} tone="subdued" />
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {timeAgo(post.updatedAt)}
+                  </Text>
+                </InlineStack>
+              </InlineStack>
+              {post.keywords && (
+                <InlineStack gap="100" wrap>
+                  {post.keywords
+                    .split(",")
+                    .slice(0, 4)
+                    .map((kw) => (
+                      <Box
+                        key={kw}
+                        padding="050"
+                        paddingInlineStart="150"
+                        paddingInlineEnd="150"
+                        background="bg-surface-secondary"
+                        borderRadius="full"
+                      >
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {kw.trim()}
+                        </Text>
+                      </Box>
+                    ))}
                 </InlineStack>
               )}
-              <InlineStack gap="100" blockAlign="center">
-                <Clock aria-hidden="true" size={12} color="#8C9196" />
-                <Text as="p" variant="bodySm" tone="subdued">{timeAgo(post.updatedAt)}</Text>
-              </InlineStack>
-            </InlineStack>
-            {post.keywords && (
-              <InlineStack gap="100" wrap>
-                {post.keywords.split(",").slice(0, 4).map((kw) => (
-                  <Box
-                    key={kw}
-                    padding="050"
-                    paddingInlineStart="150"
-                    paddingInlineEnd="150"
-                    background="bg-surface-secondary"
-                    borderRadius="full"
-                  >
-                    <Text as="span" variant="bodySm" tone="subdued">{kw.trim()}</Text>
-                  </Box>
-                ))}
-              </InlineStack>
-            )}
-          </BlockStack>
+            </BlockStack>
+          </InlineStack>
+          <InlineStack gap="200" blockAlign="center">
+            <Badge tone={isDraft ? "info" : "success"}>{isDraft ? "Draft" : "Published"}</Badge>
+            <Button size="slim" onClick={() => onView(post)}>
+              {isDraft ? "Edit / Publish" : "View"}
+            </Button>
+            <fetcher.Form method="post">
+              <input type="hidden" name="actionType" value="deletePost" />
+              <input type="hidden" name="postId" value={post.id} />
+              <Button
+                size="slim"
+                tone="critical"
+                variant="plain"
+                icon={DeleteIcon}
+                loading={isDeleting}
+                submit
+                accessibilityLabel="Delete post"
+              />
+            </fetcher.Form>
+          </InlineStack>
         </InlineStack>
-        <InlineStack gap="200" blockAlign="center">
-          <Badge tone={isDraft ? "info" : "success"}>
-            {isDraft ? "Draft" : "Published"}
-          </Badge>
-          <Button size="slim" onClick={() => onView(post)}>
-            {isDraft ? "Edit / Publish" : "View"}
-          </Button>
-          <fetcher.Form method="post">
-            <input type="hidden" name="actionType" value="deletePost" />
-            <input type="hidden" name="postId" value={post.id} />
-            <Button
-              size="slim"
-              tone="critical"
-              variant="plain"
-              icon={<Trash2 aria-hidden="true" size={14} />}
-              loading={isDeleting}
-              submit
-              accessibilityLabel="Delete post"
-            />
-          </fetcher.Form>
-        </InlineStack>
-      </InlineStack>
-      {fetcher.data?.error && (
-        <Text as="p" variant="bodySm" tone="critical">{fetcher.data.error}</Text>
-      )}
+        {fetcher.data?.error && (
+          <Text as="p" variant="bodySm" tone="critical">
+            {fetcher.data.error}
+          </Text>
+        )}
       </BlockStack>
     </Box>
   );
@@ -187,7 +200,6 @@ export default function BlogPosts() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-
             {posts.length === 0 ? (
               <Card>
                 <EmptyState
@@ -204,8 +216,10 @@ export default function BlogPosts() {
                   <Card>
                     <BlockStack gap="400">
                       <InlineStack gap="200" blockAlign="center">
-                        <PenLine aria-hidden="true" size={18} color="#6D7175" />
-                        <Text as="h2" variant="headingMd">Drafts</Text>
+                        <Icon source={EditIcon} tone="subdued" />
+                        <Text as="h2" variant="headingMd">
+                          Drafts
+                        </Text>
                         <Badge tone="info">{drafts.length}</Badge>
                       </InlineStack>
                       <BlockStack gap="200">
@@ -221,8 +235,10 @@ export default function BlogPosts() {
                   <Card>
                     <BlockStack gap="400">
                       <InlineStack gap="200" blockAlign="center">
-                        <Globe aria-hidden="true" size={18} color="#1a7345" />
-                        <Text as="h2" variant="headingMd">Published</Text>
+                        <Icon source={GlobeIcon} tone="success" />
+                        <Text as="h2" variant="headingMd">
+                          Published
+                        </Text>
                         <Badge tone="success">{published.length}</Badge>
                       </InlineStack>
                       <BlockStack gap="200">
@@ -235,7 +251,6 @@ export default function BlogPosts() {
                 )}
               </>
             )}
-
           </BlockStack>
         </Layout.Section>
 
@@ -244,27 +259,43 @@ export default function BlogPosts() {
             <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
-                  <BookOpen aria-hidden="true" size={18} color="#2C6ECB" />
-                  <Text as="h2" variant="headingMd">Blog Stats</Text>
+                  <Icon source={BlogIcon} tone="info" />
+                  <Text as="h2" variant="headingMd">
+                    Blog Stats
+                  </Text>
                 </InlineStack>
                 <Divider />
                 <InlineStack align="space-between">
-                  <Text as="p" variant="bodyMd" tone="subdued">Total posts</Text>
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">{posts.length}</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Total posts
+                  </Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {posts.length}
+                  </Text>
                 </InlineStack>
                 <InlineStack align="space-between">
-                  <Text as="p" variant="bodyMd" tone="subdued">Published</Text>
-                  <Text as="p" variant="bodyMd" fontWeight="semibold" tone="success">{published.length}</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Published
+                  </Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold" tone="success">
+                    {published.length}
+                  </Text>
                 </InlineStack>
                 <InlineStack align="space-between">
-                  <Text as="p" variant="bodyMd" tone="subdued">Drafts</Text>
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">{drafts.length}</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Drafts
+                  </Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {drafts.length}
+                  </Text>
                 </InlineStack>
                 {posts.length > 0 && (
                   <>
                     <Divider />
                     <InlineStack align="space-between">
-                      <Text as="p" variant="bodyMd" tone="subdued">Total words</Text>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Total words
+                      </Text>
                       <Text as="p" variant="bodyMd" fontWeight="semibold">
                         {posts.reduce((sum, p) => sum + p.wordCount, 0).toLocaleString()}
                       </Text>
@@ -276,18 +307,24 @@ export default function BlogPosts() {
 
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Tips</Text>
+                <Text as="h2" variant="headingMd">
+                  Tips
+                </Text>
                 <Divider />
                 <BlockStack gap="200">
                   {[
                     "Publish drafts to your Shopify blog to drive organic traffic.",
                     "Add 3–5 keywords per post for better SEO targeting.",
-                    "Aim for 800–1500 words for ideal search visibility.",
-                    "Repurpose posts into social media captions with the Blog Generator.",
+                    "Longer posts give the model more to work with.",
+                    "Publish drafts to your Shopify blog when you are happy with them.",
                   ].map((tip) => (
                     <InlineStack key={tip} gap="200" blockAlign="start">
-                      <Text as="span" variant="bodySm" tone="success">✓</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">{tip}</Text>
+                      <Text as="span" variant="bodySm" tone="success">
+                        ✓
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {tip}
+                      </Text>
                     </InlineStack>
                   ))}
                 </BlockStack>

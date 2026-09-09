@@ -21,12 +21,11 @@ import {
   ProgressBar,
   Collapsible,
   Modal,
+  Icon,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
-import { ContentBenefits } from "../components/ContentBenefits.jsx";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -77,7 +76,7 @@ export async function loader({ request, params }) {
         tags
       }
     }`,
-    { variables: { id: productId } }
+    { variables: { id: productId } },
   );
 
   const { data } = await response.json();
@@ -92,13 +91,20 @@ export async function loader({ request, params }) {
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
-    prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }], take: 50 }),
+    prisma.contentTemplate.findMany({
+      where: { shop },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      take: 50,
+    }),
     getOrCreatePlan(shop),
     prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
   ]);
 
   const { scoreContent } = await import("../utils/contentScorer.server.js");
-  const contentMap = existingContent.reduce((acc, c) => { acc[c.contentType] = c; return acc; }, {});
+  const contentMap = existingContent.reduce((acc, c) => {
+    acc[c.contentType] = c;
+    return acc;
+  }, {});
   const qualityScore = scoreContent({
     description: contentMap.description?.generatedContent || "",
     metaTitle: contentMap.metaTitle?.generatedContent || "",
@@ -147,7 +153,10 @@ export async function loader({ request, params }) {
         // copied from Shopify when the first draft was written, and the
         // "ORIGINAL (before AI)" panel renders it with dangerouslySetInnerHTML.
         // Same allowlist as everything else that reaches that API.
-        original: item.contentType === "description" ? sanitizeHtml(item.originalContent || "") : item.originalContent,
+        original:
+          item.contentType === "description"
+            ? sanitizeHtml(item.originalContent || "")
+            : item.originalContent,
         status: item.status,
         version: item.version,
         id: item.id,
@@ -175,41 +184,40 @@ export async function action({ request, params }) {
   const actionType = formData.get("actionType");
 
   try {
+    // Dynamic imports keep server-only modules out of the client bundle
+    const [
+      { generateProductContent, generateAltText, enhanceExistingContent },
+      { tryConsumeGeneration, checkEntitlement, refundGeneration, withGenerationCredit },
+      { checkRateLimit },
+      { getCache },
+    ] = await Promise.all([
+      import("../utils/ai.server.js"),
+      import("../utils/plans.server.js"),
+      import("../utils/rateLimit.server.js"),
+      import("../utils/cache.server.js"),
+    ]);
 
-  // Dynamic imports keep server-only modules out of the client bundle
-  const [
-    { generateProductContent, generateAltText, enhanceExistingContent },
-    { tryConsumeGeneration, checkEntitlement, refundGeneration, withGenerationCredit },
-    { checkRateLimit },
-    { getCache },
-  ] = await Promise.all([
-    import("../utils/ai.server.js"),
-    import("../utils/plans.server.js"),
-    import("../utils/rateLimit.server.js"),
-    import("../utils/cache.server.js"),
-  ]);
+    // ── Enhance Existing ─────────────────────────────────────────────────────
+    if (actionType === "enhance") {
+      const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+      if (!rl.allowed) {
+        return { error: "You're generating too fast. Please wait a moment before trying again." };
+      }
+      const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
+        (t) => formData.get(`gen_${t}`) === "true",
+      );
+      if (contentTypes.length === 0) return { error: "Select at least one content type to enhance." };
 
-  // ── Enhance Existing ─────────────────────────────────────────────────────
-  if (actionType === "enhance") {
-    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
-    if (!rl.allowed) {
-      return { error: "You're generating too fast. Please wait a moment before trying again." };
-    }
-    const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
-      (t) => formData.get(`gen_${t}`) === "true"
-    );
-    if (contentTypes.length === 0) return { error: "Select at least one content type to enhance." };
+      const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
 
-    const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
-
-    // Phase 0 item 5 — refund the credit on any failure or empty result.
-    const enhanceOutcome = await withGenerationCredit(
-      shop,
-      { contentType: contentTypes[0], productId },
-      async () => {
-        const [productResponse, brandVoice] = await Promise.all([
-          admin.graphql(
-            `query getProduct($id: ID!) {
+      // Phase 0 item 5 — refund the credit on any failure or empty result.
+      const enhanceOutcome = await withGenerationCredit(
+        shop,
+        { contentType: contentTypes[0], productId },
+        async () => {
+          const [productResponse, brandVoice] = await Promise.all([
+            admin.graphql(
+              `query getProduct($id: ID!) {
               product(id: $id) {
                 title productType vendor description descriptionHtml
                 seo { title description }
@@ -217,98 +225,113 @@ export async function action({ request, params }) {
                 tags
               }
             }`,
-            { variables: { id: productId } }
-          ),
-          getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-        ]);
-        const { data: pd } = await productResponse.json();
-        const p = pd?.product;
-        if (!p) return null;
+              { variables: { id: productId } },
+            ),
+            getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+          ]);
+          const { data: pd } = await productResponse.json();
+          const p = pd?.product;
+          if (!p) return null;
 
-        const generated = await enhanceExistingContent(
-          {
-            title: p.title,
-            productType: p.productType,
-            description: p.description,
-            descriptionHtml: p.descriptionHtml,
-            seoTitle: p.seo?.title || "",
-            seoDescription: p.seo?.description || "",
-            images: (p.images?.edges || []).map((e) => e.node),
-            tags: p.tags,
-          },
-          brandVoice,
-          contentTypes,
-          { keywords: targetKeywords }
-        );
-        return { p, generated };
-      },
-      { isEmpty: (r) => !r?.generated || !contentTypes.some((t) => r.generated[t]) },
-    );
+          const generated = await enhanceExistingContent(
+            {
+              title: p.title,
+              productType: p.productType,
+              description: p.description,
+              descriptionHtml: p.descriptionHtml,
+              seoTitle: p.seo?.title || "",
+              seoDescription: p.seo?.description || "",
+              images: (p.images?.edges || []).map((e) => e.node),
+              tags: p.tags,
+            },
+            brandVoice,
+            contentTypes,
+            { keywords: targetKeywords },
+          );
+          return { p, generated };
+        },
+        { isEmpty: (r) => !r?.generated || !contentTypes.some((t) => r.generated[t]) },
+      );
 
-    if (!enhanceOutcome.allowed) {
-      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
-    }
-    if (enhanceOutcome.refunded) {
-      return { error: "The AI returned nothing to enhance. Please retry — this did not use a generation." };
-    }
-    const { p, generated } = enhanceOutcome.result;
+      if (!enhanceOutcome.allowed) {
+        return {
+          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          limitReached: true,
+        };
+      }
+      if (enhanceOutcome.refunded) {
+        return { error: "The AI returned nothing to enhance. Please retry — this did not use a generation." };
+      }
+      const { p, generated } = enhanceOutcome.result;
 
-    const typesToSave = contentTypes.filter((t) => generated[t]);
-    const existing = await prisma.generatedContent.findMany({
-      where: { shop, productId, contentType: { in: typesToSave } },
-    });
-    await snapshotAndPrune(shop, productId, existing);
-    await Promise.all(
-      typesToSave.map((type) =>
-        prisma.generatedContent.upsert({
-          where: { shop_productId_contentType: { shop, productId, contentType: type } },
-          update: { generatedContent: generated[type], status: "draft", version: { increment: 1 } },
-          create: { shop, productId, productTitle: p.title, contentType: type, originalContent: "", generatedContent: generated[type], status: "draft" },
-        })
-      )
-    );
-    return { success: true, generated, message: "Existing content enhanced — review and publish when ready." };
-  }
-
-  // ── Generate ──────────────────────────────────────────────────────────────
-  if (actionType === "generate") {
-    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
-    if (!rl.allowed) {
-      return { error: "You're generating too fast. Please wait a moment before trying again." };
-    }
-
-    const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-      (t) => formData.get(`gen_${t}`) === "true"
-    );
-    const doAltText = formData.get("gen_altText") === "true";
-    const autoPublish = formData.get("autoPublish") === "true";
-    const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
-    const contentLength = ["short", "standard", "detailed"].includes(formData.get("contentLength"))
-      ? formData.get("contentLength")
-      : "standard";
-
-    if (contentTypes.length === 0 && !doAltText) {
-      return { error: "Select at least one content type to generate." };
-    }
-
-    const primaryContentType = contentTypes[0] ?? "altText";
-    const gate = await tryConsumeGeneration(shop, primaryContentType, productId);
-    if (!gate.allowed) {
+      const typesToSave = contentTypes.filter((t) => generated[t]);
+      const existing = await prisma.generatedContent.findMany({
+        where: { shop, productId, contentType: { in: typesToSave } },
+      });
+      await snapshotAndPrune(shop, productId, existing);
+      await Promise.all(
+        typesToSave.map((type) =>
+          prisma.generatedContent.upsert({
+            where: { shop_productId_contentType: { shop, productId, contentType: type } },
+            update: { generatedContent: generated[type], status: "draft", version: { increment: 1 } },
+            create: {
+              shop,
+              productId,
+              productTitle: p.title,
+              contentType: type,
+              originalContent: "",
+              generatedContent: generated[type],
+              status: "draft",
+            },
+          }),
+        ),
+      );
       return {
-        error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
-        limitReached: true,
+        success: true,
+        generated,
+        message: "Existing content enhanced — review and publish when ready.",
       };
     }
-    // Phase 0 item 5 — the credit above is given back on any failure or empty
-    // output between here and the point the content is saved. A 45 s timeout, a
-    // 5xx or an open circuit breaker used to eat it silently.
-    const refundThisGeneration = () =>
-      refundGeneration(shop, { productId, contentType: primaryContentType }).catch(() => {});
 
-    let product, productImages, brandVoice, recentTitles;
-    try {
-      const productResponse = await admin.graphql(
-        `query getProduct($id: ID!) {
+    // ── Generate ──────────────────────────────────────────────────────────────
+    if (actionType === "generate") {
+      const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+      if (!rl.allowed) {
+        return { error: "You're generating too fast. Please wait a moment before trying again." };
+      }
+
+      const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
+        (t) => formData.get(`gen_${t}`) === "true",
+      );
+      const doAltText = formData.get("gen_altText") === "true";
+      const autoPublish = formData.get("autoPublish") === "true";
+      const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
+      const contentLength = ["short", "standard", "detailed"].includes(formData.get("contentLength"))
+        ? formData.get("contentLength")
+        : "standard";
+
+      if (contentTypes.length === 0 && !doAltText) {
+        return { error: "Select at least one content type to generate." };
+      }
+
+      const primaryContentType = contentTypes[0] ?? "altText";
+      const gate = await tryConsumeGeneration(shop, primaryContentType, productId);
+      if (!gate.allowed) {
+        return {
+          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          limitReached: true,
+        };
+      }
+      // Phase 0 item 5 — the credit above is given back on any failure or empty
+      // output between here and the point the content is saved. A 45 s timeout, a
+      // 5xx or an open circuit breaker used to eat it silently.
+      const refundThisGeneration = () =>
+        refundGeneration(shop, { productId, contentType: primaryContentType }).catch(() => {});
+
+      let product, productImages, brandVoice, recentTitles;
+      try {
+        const productResponse = await admin.graphql(
+          `query getProduct($id: ID!) {
           product(id: $id) {
             title productType vendor description descriptionHtml
             seo { title description }
@@ -321,476 +344,572 @@ export async function action({ request, params }) {
             tags
           }
         }`,
-        { variables: { id: productId } }
-      );
-      const { data: productData } = await productResponse.json();
-      product = productData?.product;
-      if (!product) {
-        await refundThisGeneration();
-        return { error: "This product no longer exists in your store. This did not use a generation." };
-      }
-      productImages = mediaToImages(product.media);
-
-      const [bv, recentContent] = await Promise.all([
-        getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-        prisma.generatedContent.findMany({
-          where: { shop, contentType: "description", NOT: { productId } },
-          select: { productTitle: true },
-          orderBy: { updatedAt: "desc" },
-          take: 10,
-        }),
-      ]);
-      brandVoice = bv;
-      recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
-    } catch (err) {
-      await refundThisGeneration();
-      throw err;
-    }
-
-    let generated = {};
-    let autoPublishFailed = false;
-    if (contentTypes.length > 0) {
-      try {
-        generated = await generateProductContent(
-          {
-            title: product.title,
-            productType: product.productType,
-            vendor: product.vendor,
-            description: product.description,
-            descriptionHtml: product.descriptionHtml,
-            imageUrl: product.featuredImage?.url || "",
-            images: productImages,
-            variants: product.variants.edges.map((e) => e.node),
-            tags: product.tags,
-          },
-          brandVoice,
-          contentTypes,
-          { keywords: targetKeywords, length: contentLength, recentTitles }
+          { variables: { id: productId } },
         );
+        const { data: productData } = await productResponse.json();
+        product = productData?.product;
+        if (!product) {
+          await refundThisGeneration();
+          return { error: "This product no longer exists in your store. This did not use a generation." };
+        }
+        productImages = mediaToImages(product.media);
+
+        const [bv, recentContent] = await Promise.all([
+          getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+          prisma.generatedContent.findMany({
+            where: { shop, contentType: "description", NOT: { productId } },
+            select: { productTitle: true },
+            orderBy: { updatedAt: "desc" },
+            take: 10,
+          }),
+        ]);
+        brandVoice = bv;
+        recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
       } catch (err) {
         await refundThisGeneration();
         throw err;
       }
 
-      const finalStatus = autoPublish ? "published" : "draft";
-      const typesToSave = contentTypes.filter((t) => generated[t]);
-
-      // Nothing usable came back. Without this the credit was spent on an empty
-      // response and the merchant saw a "success" with no content.
-      if (typesToSave.length === 0 && !doAltText) {
-        await refundThisGeneration();
-        return { error: "The AI returned nothing usable. Please retry — this did not use a generation." };
-      }
-
-      // Snapshot existing content into version history before overwriting
-      const existing = await prisma.generatedContent.findMany({
-        where: { shop, productId, contentType: { in: typesToSave } },
-      });
-      await snapshotAndPrune(shop, productId, existing);
-
-      await Promise.all(
-        typesToSave.map((type) => {
-          const originalContent =
-            type === "description" ? product.descriptionHtml || "" :
-            type === "metaTitle" ? product.seo?.title || "" :
-            type === "metaDescription" ? product.seo?.description || "" : "";
-          return prisma.generatedContent.upsert({
-            where: { shop_productId_contentType: { shop, productId, contentType: type } },
-            // Never overwrite originalContent on update — it preserves the true
-            // Shopify original so merchants can always roll back.
-            update: { generatedContent: generated[type], status: finalStatus, version: { increment: 1 } },
-            create: { shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
-          });
-        })
-      );
-
-      // Auto-publish: immediately push to Shopify. The result MUST be read —
-      // a failed productUpdate here previously went completely unchecked and
-      // the merchant was told "published" regardless.
-      if (autoPublish) {
-        const input = { id: productId };
-        if (generated.description) input.descriptionHtml = generated.description;
-        if (generated.metaTitle || generated.metaDescription) {
-          input.seo = {};
-          if (generated.metaTitle) input.seo.title = generated.metaTitle;
-          if (generated.metaDescription) input.seo.description = generated.metaDescription;
+      let generated = {};
+      let autoPublishFailed = false;
+      if (contentTypes.length > 0) {
+        try {
+          generated = await generateProductContent(
+            {
+              title: product.title,
+              productType: product.productType,
+              vendor: product.vendor,
+              description: product.description,
+              descriptionHtml: product.descriptionHtml,
+              imageUrl: product.featuredImage?.url || "",
+              images: productImages,
+              variants: product.variants.edges.map((e) => e.node),
+              tags: product.tags,
+            },
+            brandVoice,
+            contentTypes,
+            { keywords: targetKeywords, length: contentLength, recentTitles },
+          );
+        } catch (err) {
+          await refundThisGeneration();
+          throw err;
         }
-        if (Object.keys(input).length > 1) {
-          const pubResponse = await admin.graphql(
-            `mutation updateProduct($product: ProductUpdateInput!) {
+
+        const finalStatus = autoPublish ? "published" : "draft";
+        const typesToSave = contentTypes.filter((t) => generated[t]);
+
+        // Nothing usable came back. Without this the credit was spent on an empty
+        // response and the merchant saw a "success" with no content.
+        if (typesToSave.length === 0 && !doAltText) {
+          await refundThisGeneration();
+          return { error: "The AI returned nothing usable. Please retry — this did not use a generation." };
+        }
+
+        // Snapshot existing content into version history before overwriting
+        const existing = await prisma.generatedContent.findMany({
+          where: { shop, productId, contentType: { in: typesToSave } },
+        });
+        await snapshotAndPrune(shop, productId, existing);
+
+        await Promise.all(
+          typesToSave.map((type) => {
+            const originalContent =
+              type === "description"
+                ? product.descriptionHtml || ""
+                : type === "metaTitle"
+                  ? product.seo?.title || ""
+                  : type === "metaDescription"
+                    ? product.seo?.description || ""
+                    : "";
+            return prisma.generatedContent.upsert({
+              where: { shop_productId_contentType: { shop, productId, contentType: type } },
+              // Never overwrite originalContent on update — it preserves the true
+              // Shopify original so merchants can always roll back.
+              update: { generatedContent: generated[type], status: finalStatus, version: { increment: 1 } },
+              create: {
+                shop,
+                productId,
+                productTitle: product.title,
+                contentType: type,
+                originalContent,
+                generatedContent: generated[type],
+                status: finalStatus,
+              },
+            });
+          }),
+        );
+
+        // Auto-publish: immediately push to Shopify. The result MUST be read —
+        // a failed productUpdate here previously went completely unchecked and
+        // the merchant was told "published" regardless.
+        if (autoPublish) {
+          const input = { id: productId };
+          if (generated.description) input.descriptionHtml = generated.description;
+          if (generated.metaTitle || generated.metaDescription) {
+            input.seo = {};
+            if (generated.metaTitle) input.seo.title = generated.metaTitle;
+            if (generated.metaDescription) input.seo.description = generated.metaDescription;
+          }
+          if (Object.keys(input).length > 1) {
+            const pubResponse = await admin.graphql(
+              `mutation updateProduct($product: ProductUpdateInput!) {
               productUpdate(product: $product) {
                 product { id }
                 userErrors { field message }
               }
             }`,
-            { variables: { product: input } }
-          );
-          const pub = await readMutationResult(pubResponse, "productUpdate");
-          if (!pub.ok) {
-            logger.warn({ shop, productId, errors: pub.errorMessages }, "Auto-publish productUpdate failed — keeping content as draft");
-            // The rows were saved as "published" above; make the DB honest.
-            await prisma.generatedContent.updateMany({
-              where: { shop, productId, contentType: { in: typesToSave }, status: "published" },
-              data: { status: "draft" },
-            });
-            autoPublishFailed = true;
+              { variables: { product: input } },
+            );
+            const pub = await readMutationResult(pubResponse, "productUpdate");
+            if (!pub.ok) {
+              logger.warn(
+                { shop, productId, errors: pub.errorMessages },
+                "Auto-publish productUpdate failed — keeping content as draft",
+              );
+              // The rows were saved as "published" above; make the DB honest.
+              await prisma.generatedContent.updateMany({
+                where: { shop, productId, contentType: { in: typesToSave }, status: "published" },
+                data: { status: "draft" },
+              });
+              autoPublishFailed = true;
+            }
           }
         }
       }
-    }
 
-    let altTextResults = [];
-    if (doAltText) {
-      // productImages are MediaImage nodes ({ id: MediaImage GID, url }).
-      // 1) Generate alt text per image (AI failures tracked per image).
-      // 2) Write ALL successful generations in ONE productUpdateMedia call.
-      //    (fileUpdate is Shopify's successor but requires the write_files
-      //    scope this app deliberately does not request; productUpdateMedia
-      //    is valid in 2026-04 and runs on write_products.)
-      const generatedAlts = [];
-      for (const img of productImages) {
-        try {
-          const altText = await generateAltText(img.url, product.title);
-          generatedAlts.push({ mediaId: img.id, url: img.url, altText });
-        } catch (err) {
-          logger.warn({ shop, productId, mediaId: img.id, err: err.message }, "Alt text generation failed for image");
-          altTextResults.push({ imageId: img.id, url: img.url, altText: "", error: "Couldn't generate alt text for this image. Please try again." });
+      let altTextResults = [];
+      if (doAltText) {
+        // productImages are MediaImage nodes ({ id: MediaImage GID, url }).
+        // 1) Generate alt text per image (AI failures tracked per image).
+        // 2) Write ALL successful generations in ONE productUpdateMedia call.
+        //    (fileUpdate is Shopify's successor but requires the write_files
+        //    scope this app deliberately does not request; productUpdateMedia
+        //    is valid in 2026-04 and runs on write_products.)
+        const generatedAlts = [];
+        for (const img of productImages) {
+          try {
+            const altText = await generateAltText(img.url, product.title);
+            generatedAlts.push({ mediaId: img.id, url: img.url, altText });
+          } catch (err) {
+            logger.warn(
+              { shop, productId, mediaId: img.id, err: err.message },
+              "Alt text generation failed for image",
+            );
+            altTextResults.push({
+              imageId: img.id,
+              url: img.url,
+              altText: "",
+              error: "Couldn't generate alt text for this image. Please try again.",
+            });
+          }
         }
-      }
 
-      if (generatedAlts.length > 0) {
-        let mutation;
-        try {
-          const mutResponse = await admin.graphql(
-            `mutation productUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+        if (generatedAlts.length > 0) {
+          let mutation;
+          try {
+            const mutResponse = await admin.graphql(
+              `mutation productUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
               productUpdateMedia(productId: $productId, media: $media) {
                 media { id alt }
                 mediaUserErrors { field message code }
               }
             }`,
-            {
-              variables: {
-                productId,
-                media: generatedAlts.map((g) => ({ id: g.mediaId, alt: g.altText })),
+              {
+                variables: {
+                  productId,
+                  media: generatedAlts.map((g) => ({ id: g.mediaId, alt: g.altText })),
+                },
               },
-            }
-          );
-          mutation = await readMutationResult(mutResponse, "productUpdateMedia", { userErrorKeys: ["mediaUserErrors"] });
-        } catch (err) {
-          mutation = { ok: false, userErrors: [], errorMessages: [err.message] };
+            );
+            mutation = await readMutationResult(mutResponse, "productUpdateMedia", {
+              userErrorKeys: ["mediaUserErrors"],
+            });
+          } catch (err) {
+            mutation = { ok: false, userErrors: [], errorMessages: [err.message] };
+          }
+
+          if (mutation.ok) {
+            altTextResults.push(
+              ...generatedAlts.map((g) => ({ imageId: g.mediaId, url: g.url, altText: g.altText })),
+            );
+          } else {
+            logger.error(
+              { shop, productId, errors: mutation.errorMessages },
+              "productUpdateMedia failed — alt text NOT applied",
+            );
+            // mediaUserErrors reference items by index in their field path
+            // (["media", "0", ...]); map those to the specific image where
+            // possible, otherwise the whole batch failed.
+            const failedIndexes = new Set(
+              mutation.userErrors
+                .map((e) =>
+                  Array.isArray(e.field) && e.field[0] === "media" ? parseInt(e.field[1], 10) : NaN,
+                )
+                .filter((n) => !Number.isNaN(n)),
+            );
+            const wholeBatchFailed = failedIndexes.size === 0;
+            generatedAlts.forEach((g, idx) => {
+              const failed = wholeBatchFailed || failedIndexes.has(idx);
+              altTextResults.push(
+                failed
+                  ? {
+                      imageId: g.mediaId,
+                      url: g.url,
+                      altText: g.altText,
+                      error: "Shopify couldn't apply this alt text. Please try again.",
+                    }
+                  : { imageId: g.mediaId, url: g.url, altText: g.altText },
+              );
+            });
+          }
         }
 
-        if (mutation.ok) {
-          altTextResults.push(...generatedAlts.map((g) => ({ imageId: g.mediaId, url: g.url, altText: g.altText })));
-        } else {
-          logger.error({ shop, productId, errors: mutation.errorMessages }, "productUpdateMedia failed — alt text NOT applied");
-          // mediaUserErrors reference items by index in their field path
-          // (["media", "0", ...]); map those to the specific image where
-          // possible, otherwise the whole batch failed.
-          const failedIndexes = new Set(
-            mutation.userErrors
-              .map((e) => (Array.isArray(e.field) && e.field[0] === "media" ? parseInt(e.field[1], 10) : NaN))
-              .filter((n) => !Number.isNaN(n))
-          );
-          const wholeBatchFailed = failedIndexes.size === 0;
-          generatedAlts.forEach((g, idx) => {
-            const failed = wholeBatchFailed || failedIndexes.has(idx);
-            altTextResults.push(
-              failed
-                ? { imageId: g.mediaId, url: g.url, altText: g.altText, error: "Shopify couldn't apply this alt text. Please try again." }
-                : { imageId: g.mediaId, url: g.url, altText: g.altText }
-            );
+        if (altTextResults.length > 0) {
+          const anyApplied = altTextResults.some((r) => !r.error);
+          await prisma.generatedContent.upsert({
+            where: { shop_productId_contentType: { shop, productId, contentType: "altText" } },
+            update: {
+              generatedContent: JSON.stringify(altTextResults),
+              status: anyApplied ? "published" : "draft",
+              version: { increment: 1 },
+            },
+            create: {
+              shop,
+              productId,
+              productTitle: product.title,
+              contentType: "altText",
+              originalContent: "",
+              generatedContent: JSON.stringify(altTextResults),
+              status: anyApplied ? "published" : "draft",
+            },
           });
         }
       }
 
-      if (altTextResults.length > 0) {
-        const anyApplied = altTextResults.some((r) => !r.error);
-        await prisma.generatedContent.upsert({
-          where: { shop_productId_contentType: { shop, productId, contentType: "altText" } },
-          update: { generatedContent: JSON.stringify(altTextResults), status: anyApplied ? "published" : "draft", version: { increment: 1 } },
-          create: { shop, productId, productTitle: product.title, contentType: "altText", originalContent: "", generatedContent: JSON.stringify(altTextResults), status: anyApplied ? "published" : "draft" },
-        });
+      const altTextApplied = altTextResults.filter((r) => !r.error).length;
+      const altTextFailed = altTextResults.length - altTextApplied;
+      const hasMoreImages = product.media?.pageInfo?.hasNextPage ?? false;
+
+      // Phase 0 item 5, alt-text-only run: the credit was charged as "altText"
+      // and nothing reached a single image. Give it back.
+      if (contentTypes.length === 0 && doAltText && altTextApplied === 0) {
+        await refundThisGeneration();
+        return {
+          error:
+            "Alt text could not be applied to any image. Please try again — this did not use a generation.",
+          altTextResults,
+        };
       }
-    }
 
-    const altTextApplied = altTextResults.filter((r) => !r.error).length;
-    const altTextFailed = altTextResults.length - altTextApplied;
-    const hasMoreImages = product.media?.pageInfo?.hasNextPage ?? false;
+      const messageParts = [];
+      if (contentTypes.length > 0) {
+        if (autoPublish && autoPublishFailed) {
+          messageParts.push(
+            "Content generated, but publishing to Shopify failed — it's saved as a draft. Please try publishing again.",
+          );
+        } else {
+          messageParts.push(
+            autoPublish
+              ? "Content generated and published to your store!"
+              : "Content generated — review below and publish when ready.",
+          );
+        }
+      }
+      if (doAltText && altTextResults.length > 0) {
+        if (altTextFailed === 0) {
+          messageParts.push(
+            `Alt text applied to all ${altTextApplied} image${altTextApplied !== 1 ? "s" : ""}.`,
+          );
+        } else if (altTextApplied > 0) {
+          messageParts.push(
+            `Alt text applied to ${altTextApplied} of ${altTextResults.length} images — ${altTextFailed} failed.`,
+          );
+        } else {
+          messageParts.push("Alt text could not be applied to any image. Please try again.");
+        }
+        if (hasMoreImages) {
+          messageParts.push(
+            `Note: this product has more than ${MAX_ALT_TEXT_IMAGES} images — only the first ${MAX_ALT_TEXT_IMAGES} were processed.`,
+          );
+        }
+      }
 
-    // Phase 0 item 5, alt-text-only run: the credit was charged as "altText"
-    // and nothing reached a single image. Give it back.
-    if (contentTypes.length === 0 && doAltText && altTextApplied === 0) {
-      await refundThisGeneration();
       return {
-        error: "Alt text could not be applied to any image. Please try again — this did not use a generation.",
+        success: true,
+        generated,
         altTextResults,
+        altTextApplied,
+        altTextFailed,
+        altTextTruncated: doAltText && hasMoreImages,
+        autoPublished: autoPublish && !autoPublishFailed,
+        autoPublishFailed,
+        message: messageParts.join("") || "Done!",
       };
     }
 
-    const messageParts = [];
-    if (contentTypes.length > 0) {
-      if (autoPublish && autoPublishFailed) {
-        messageParts.push("Content generated, but publishing to Shopify failed — it's saved as a draft. Please try publishing again.");
-      } else {
-        messageParts.push(
-          autoPublish
-            ? "Content generated and published to your store!"
-            : "Content generated — review below and publish when ready."
-        );
+    // ── Publish (with optional edited content) ────────────────────────────────
+    if (actionType === "publish") {
+      const description = formData.get("publishDescription");
+      const metaTitle = formData.get("publishMetaTitle");
+      const metaDescription = formData.get("publishMetaDescription");
+
+      const input = { id: productId };
+      if (description) input.descriptionHtml = description;
+      if (metaTitle || metaDescription) {
+        input.seo = {};
+        if (metaTitle) input.seo.title = metaTitle;
+        if (metaDescription) input.seo.description = metaDescription;
       }
-    }
-    if (doAltText && altTextResults.length > 0) {
-      if (altTextFailed === 0) {
-        messageParts.push(`Alt text applied to all ${altTextApplied} image${altTextApplied !== 1 ? "s" : ""}.`);
-      } else if (altTextApplied > 0) {
-        messageParts.push(`Alt text applied to ${altTextApplied} of ${altTextResults.length} images — ${altTextFailed} failed.`);
-      } else {
-        messageParts.push("Alt text could not be applied to any image. Please try again.");
-      }
-      if (hasMoreImages) {
-        messageParts.push(`Note: this product has more than ${MAX_ALT_TEXT_IMAGES} images — only the first ${MAX_ALT_TEXT_IMAGES} were processed.`);
-      }
-    }
 
-    return {
-      success: true,
-      generated,
-      altTextResults,
-      altTextApplied,
-      altTextFailed,
-      altTextTruncated: doAltText && hasMoreImages,
-      autoPublished: autoPublish && !autoPublishFailed,
-      autoPublishFailed,
-      message: messageParts.join(" ") || "Done!",
-    };
-  }
-
-  // ── Publish (with optional edited content) ────────────────────────────────
-  if (actionType === "publish") {
-    const description = formData.get("publishDescription");
-    const metaTitle = formData.get("publishMetaTitle");
-    const metaDescription = formData.get("publishMetaDescription");
-
-    const input = { id: productId };
-    if (description) input.descriptionHtml = description;
-    if (metaTitle || metaDescription) {
-      input.seo = {};
-      if (metaTitle) input.seo.title = metaTitle;
-      if (metaDescription) input.seo.description = metaDescription;
-    }
-
-    const mutationResult = await admin.graphql(
-      `mutation updateProduct($product: ProductUpdateInput!) {
+      const mutationResult = await admin.graphql(
+        `mutation updateProduct($product: ProductUpdateInput!) {
         productUpdate(product: $product) {
           product { id }
           userErrors { field message }
         }
       }`,
-      { variables: { product: input } }
-    );
+        { variables: { product: input } },
+      );
 
-    const mutation = await readMutationResult(mutationResult, "productUpdate");
-    if (!mutation.ok) {
-      logger.error({ shop, productId, errors: mutation.errorMessages }, "Publish productUpdate failed");
-      // userErrors are merchant-fixable (bad values); top-level errors are not —
-      // show the specific reason only when it's actionable.
-      const msg = mutation.userErrors.length > 0
-        ? mutation.errorMessages.join("; ")
-        : "Shopify couldn't apply the update. Please try again in a moment.";
-      return { error: `Publishing failed — ${msg} Nothing was published.` };
-    }
+      const mutation = await readMutationResult(mutationResult, "productUpdate");
+      if (!mutation.ok) {
+        logger.error({ shop, productId, errors: mutation.errorMessages }, "Publish productUpdate failed");
+        // userErrors are merchant-fixable (bad values); top-level errors are not —
+        // show the specific reason only when it's actionable.
+        const msg =
+          mutation.userErrors.length > 0
+            ? mutation.errorMessages.join(";")
+            : "Shopify couldn't apply the update. Please try again in a moment.";
+        return { error: `Publishing failed — ${msg} Nothing was published.` };
+      }
 
-    // Persist edited content + mark as published. The form fields carry
-    // whatever the merchant had in the editor (possibly hand-edited).
-    const typeContentMap = {
-      ...(description ? { description } : {}),
-      ...(metaTitle ? { metaTitle } : {}),
-      ...(metaDescription ? { metaDescription } : {}),
-    };
-    const publishedTypes = Object.keys(typeContentMap);
-    await Promise.all(
-      publishedTypes.map((type) =>
-        prisma.generatedContent.updateMany({
-          where: { shop, productId, contentType: type, status: "draft" },
-          data: { status: "published", generatedContent: typeContentMap[type] },
-        })
-      )
-    );
+      // Persist edited content + mark as published. The form fields carry
+      // whatever the merchant had in the editor (possibly hand-edited).
+      const typeContentMap = {
+        ...(description ? { description } : {}),
+        ...(metaTitle ? { metaTitle } : {}),
+        ...(metaDescription ? { metaDescription } : {}),
+      };
+      const publishedTypes = Object.keys(typeContentMap);
+      await Promise.all(
+        publishedTypes.map((type) =>
+          prisma.generatedContent.updateMany({
+            where: { shop, productId, contentType: type, status: "draft" },
+            data: { status: "published", generatedContent: typeContentMap[type] },
+          }),
+        ),
+      );
 
-    // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
-    let faqWarning = null;
-    const faqRecord = await prisma.generatedContent.findUnique({
-      where: { shop_productId_contentType: { shop, productId, contentType: "faq" } },
-    });
-    if (faqRecord?.generatedContent) {
-      const { faqToJsonLd, ensureFaqMetafieldDefinition } = await import("../utils/seo.server.js");
-      const jsonLd = faqToJsonLd(faqRecord.generatedContent);
-      if (jsonLd) {
-        // Definition gives the metafield admin visibility + a type guarantee.
-        // Non-fatal, cached 24h per shop.
-        await ensureFaqMetafieldDefinition(shop, async (q, v) => (await admin.graphql(q, v ? { variables: v } : undefined)).json());
-        const faqMutationResult = await admin.graphql(
-          `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
+      // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
+      let faqWarning = null;
+      const faqRecord = await prisma.generatedContent.findUnique({
+        where: { shop_productId_contentType: { shop, productId, contentType: "faq" } },
+      });
+      if (faqRecord?.generatedContent) {
+        const { faqToJsonLd, ensureFaqMetafieldDefinition } = await import("../utils/seo.server.js");
+        const jsonLd = faqToJsonLd(faqRecord.generatedContent);
+        if (jsonLd) {
+          // Definition gives the metafield admin visibility + a type guarantee.
+          // Non-fatal, cached 24h per shop.
+          await ensureFaqMetafieldDefinition(shop, async (q, v) =>
+            (await admin.graphql(q, v ? { variables: v } : undefined)).json(),
+          );
+          const faqMutationResult = await admin.graphql(
+            `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
             metafieldsSet(metafields: $metafields) {
               metafields { id }
               userErrors { field message }
             }
           }`,
-          {
-            variables: {
-              metafields: [{
-                ownerId: productId,
-                namespace: "contentclaude",
-                key: "faq_schema",
-                type: "json",
-                value: JSON.stringify(jsonLd),
-              }],
+            {
+              variables: {
+                metafields: [
+                  {
+                    ownerId: productId,
+                    namespace: "contentclaude",
+                    key: "faq_schema",
+                    type: "json",
+                    value: JSON.stringify(jsonLd),
+                  },
+                ],
+              },
             },
+          );
+          // metafieldsSet returns HTTP 200 even when Shopify rejects it — the
+          // failure can be in userErrors OR the top-level errors array. Both
+          // must fail the write, or the merchant is told everything published
+          // when the FAQ schema silently didn't.
+          const faqMutation = await readMutationResult(faqMutationResult, "metafieldsSet");
+          if (!faqMutation.ok) {
+            logger.warn(
+              { shop, productId, errors: faqMutation.errorMessages },
+              "FAQ metafieldsSet failed on publish",
+            );
+            faqWarning = faqMutation.errorMessages.join(";");
           }
-        );
-        // metafieldsSet returns HTTP 200 even when Shopify rejects it — the
-        // failure can be in userErrors OR the top-level errors array. Both
-        // must fail the write, or the merchant is told everything published
-        // when the FAQ schema silently didn't.
-        const faqMutation = await readMutationResult(faqMutationResult, "metafieldsSet");
-        if (!faqMutation.ok) {
-          logger.warn({ shop, productId, errors: faqMutation.errorMessages }, "FAQ metafieldsSet failed on publish");
-          faqWarning = faqMutation.errorMessages.join("; ");
         }
       }
-    }
 
-    // FAQ schema published while the theme app embed is off never reaches the
-    // storefront \u2014 say so instead of implying the outcome already happened.
-    let embedNotice = "";
-    if (faqRecord?.generatedContent && !faqWarning) {
-      const gs = await prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } });
-      if (!gs?.embedConfirmedAt) {
-        embedNotice = " Note: enable the \"AI-search FAQ schema\" app embed in your theme (see the Dashboard setup card) for the FAQ schema to appear to search engines.";
+      // FAQ schema published while the theme app embed is off never reaches the
+      // storefront \u2014 say so instead of implying the outcome already happened.
+      let embedNotice = "";
+      if (faqRecord?.generatedContent && !faqWarning) {
+        const gs = await prisma.growthState.findUnique({
+          where: { shop },
+          select: { embedConfirmedAt: true },
+        });
+        if (!gs?.embedConfirmedAt) {
+          embedNotice =
+            ' Note: enable the "AI-search FAQ schema" app embed in your theme (see the Dashboard setup card) for the FAQ schema to appear to search engines.';
+        }
       }
-    }
 
-    return {
-      success: true,
-      published: true,
-      message: faqWarning
-        ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
-        : `Content published to your Shopify store!${embedNotice}`,
-    };
-  }
-
-  // ── Generate Social Media Content ────────────────────────────────────────
-  if (actionType === "generateSocial") {
-    // Phase 0 item 24 — social captions are a normal AI generation and were the
-    // one path with NEITHER a rate limit NOR a credit: unlimited unmetered
-    // calls on any plan, from a button on the product page.
-    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
-    if (!rl.allowed) {
-      return { error: "You're generating too fast. Please wait a moment before trying again." };
-    }
-
-    const socialOutcome = await withGenerationCredit(
-      shop,
-      { contentType: "social", productId },
-      async () => {
-        const { generateSocialContent } = await import("../utils/ai.server.js");
-        const [productResp, brandVoice, descRecord] = await Promise.all([
-          admin.graphql(`query($id:ID!){product(id:$id){title description}}`, { variables: { id: productId } }),
-          prisma.brandVoice.findUnique({ where: { shop } }),
-          prisma.generatedContent.findUnique({
-            where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
-          }),
-        ]);
-        const { data: pd } = await productResp.json();
-        return generateSocialContent(
-          { title: pd.product?.title || "", description: descRecord?.generatedContent || pd.product?.description || "" },
-          brandVoice
-        );
-      },
-    );
-
-    if (!socialOutcome.allowed) {
-      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
-    }
-    if (socialOutcome.refunded) {
-      return { error: "The AI returned nothing. Please retry — this did not use a generation." };
-    }
-    return { success: true, social: socialOutcome.result };
-  }
-
-  // ── Restore Version ───────────────────────────────────────────────────────
-  if (actionType === "restoreVersion") {
-    // Version history & rollback is a Starter+ feature (pricing table row).
-    const vhEnt = await checkEntitlement(shop, "versionHistory");
-    if (!vhEnt.allowed) {
       return {
-        error: `Version history requires the ${vhEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
-        limitReached: true,
-      };
-    }
-    const versionId = formData.get("versionId");
-    // Scope the lookup to this shop + product in the WHERE clause so a guessed
-    // versionId can never read another tenant's row (defence in depth).
-    const ver = await prisma.contentVersion.findFirst({
-      where: { id: versionId, shop, productId },
-    });
-    if (!ver) {
-      return { error: "Version not found." };
-    }
-    await prisma.generatedContent.upsert({
-      where: { shop_productId_contentType: { shop, productId, contentType: ver.contentType } },
-      update: { generatedContent: ver.content, status: "draft" },
-      create: { shop, productId, productTitle: "", contentType: ver.contentType, generatedContent: ver.content, status: "draft" },
-    });
-    return { success: true, reverted: true, contentType: ver.contentType, message: `${ver.contentType} restored to version ${ver.version}.` };
-  }
-
-  // ── Generate A/B Variants ─────────────────────────────────────────────────
-  if (actionType === "generateVariants") {
-    // Server-side entitlement gate — A/B is a Growth+ feature
-    const ent = await checkEntitlement(shop, "abVariants");
-    if (!ent.allowed) {
-      return {
-        error: `A/B Variants require the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
-        limitReached: true,
+        success: true,
+        published: true,
+        message: faqWarning
+          ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
+          : `Content published to your Shopify store!${embedNotice}`,
       };
     }
 
-    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
-    if (!rl.allowed) {
-      return { error: "You're generating too fast. Please wait a moment before trying again." };
-    }
-    const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
-      (t) => formData.get(`gen_${t}`) === "true"
-    );
-    if (contentTypes.length === 0) {
-      return { error: "Select at least one content type to generate variants for." };
-    }
-    // A/B makes 2 parallel AI calls — consume 2 credits (one per call).
-    const gate1 = await tryConsumeGeneration(shop, contentTypes[0], productId);
-    if (!gate1.allowed) {
-      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
-    }
-    const gate2 = await tryConsumeGeneration(shop, contentTypes[0], productId);
-    if (!gate2.allowed) {
-      // A/B needs 2 credits and only 1 was available — refund the credit gate1
-      // consumed so the merchant isn't charged for a generation that won't run.
-      await refundGeneration(shop, { productId, contentType: contentTypes[0] });
-      return { error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.", limitReached: true };
+    // ── Generate Social Media Content ────────────────────────────────────────
+    if (actionType === "generateSocial") {
+      // Phase 0 item 24 — social captions are a normal AI generation and were the
+      // one path with NEITHER a rate limit NOR a credit: unlimited unmetered
+      // calls on any plan, from a button on the product page.
+      const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+      if (!rl.allowed) {
+        return { error: "You're generating too fast. Please wait a moment before trying again." };
+      }
+
+      const socialOutcome = await withGenerationCredit(
+        shop,
+        { contentType: "social", productId },
+        async () => {
+          const { generateSocialContent } = await import("../utils/ai.server.js");
+          const [productResp, brandVoice, descRecord] = await Promise.all([
+            admin.graphql(`query($id:ID!){product(id:$id){title description}}`, {
+              variables: { id: productId },
+            }),
+            prisma.brandVoice.findUnique({ where: { shop } }),
+            prisma.generatedContent.findUnique({
+              where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+            }),
+          ]);
+          const { data: pd } = await productResp.json();
+          return generateSocialContent(
+            {
+              title: pd.product?.title || "",
+              description: descRecord?.generatedContent || pd.product?.description || "",
+            },
+            brandVoice,
+          );
+        },
+      );
+
+      if (!socialOutcome.allowed) {
+        return {
+          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          limitReached: true,
+        };
+      }
+      if (socialOutcome.refunded) {
+        return { error: "The AI returned nothing. Please retry — this did not use a generation." };
+      }
+      return { success: true, social: socialOutcome.result };
     }
 
-    // Phase 0 item 5 — BOTH credits come back if the pair never arrives.
-    const refundBoth = async () => {
-      await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
-      await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
-    };
+    // ── Restore Version ───────────────────────────────────────────────────────
+    if (actionType === "restoreVersion") {
+      // Version history & rollback is a Starter+ feature (pricing table row).
+      const vhEnt = await checkEntitlement(shop, "versionHistory");
+      if (!vhEnt.allowed) {
+        return {
+          error: `Version history requires the ${vhEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+          limitReached: true,
+        };
+      }
+      const versionId = formData.get("versionId");
+      // Scope the lookup to this shop + product in the WHERE clause so a guessed
+      // versionId can never read another tenant's row (defence in depth).
+      const ver = await prisma.contentVersion.findFirst({
+        where: { id: versionId, shop, productId },
+      });
+      if (!ver) {
+        return { error: "Version not found." };
+      }
+      await prisma.generatedContent.upsert({
+        where: { shop_productId_contentType: { shop, productId, contentType: ver.contentType } },
+        update: { generatedContent: ver.content, status: "draft" },
+        create: {
+          shop,
+          productId,
+          productTitle: "",
+          contentType: ver.contentType,
+          generatedContent: ver.content,
+          status: "draft",
+        },
+      });
+      return {
+        success: true,
+        reverted: true,
+        contentType: ver.contentType,
+        message: `${ver.contentType} restored to version ${ver.version}.`,
+      };
+    }
 
-    let variantA, variantB;
-    try {
-      const [productResp, brandVoice] = await Promise.all([
-        admin.graphql(
-          `query getProduct($id: ID!) {
+    // ── Generate A/B Variants ─────────────────────────────────────────────────
+    if (actionType === "generateVariants") {
+      // Server-side entitlement gate — A/B is a Growth+ feature
+      const ent = await checkEntitlement(shop, "abVariants");
+      if (!ent.allowed) {
+        return {
+          error: `A/B Variants require the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
+          limitReached: true,
+        };
+      }
+
+      const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+      if (!rl.allowed) {
+        return { error: "You're generating too fast. Please wait a moment before trying again." };
+      }
+      const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
+        (t) => formData.get(`gen_${t}`) === "true",
+      );
+      if (contentTypes.length === 0) {
+        return { error: "Select at least one content type to generate variants for." };
+      }
+      // A/B makes 2 parallel AI calls — consume 2 credits (one per call).
+      const gate1 = await tryConsumeGeneration(shop, contentTypes[0], productId);
+      if (!gate1.allowed) {
+        return {
+          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          limitReached: true,
+        };
+      }
+      const gate2 = await tryConsumeGeneration(shop, contentTypes[0], productId);
+      if (!gate2.allowed) {
+        // A/B needs 2 credits and only 1 was available — refund the credit gate1
+        // consumed so the merchant isn't charged for a generation that won't run.
+        await refundGeneration(shop, { productId, contentType: contentTypes[0] });
+        return {
+          error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.",
+          limitReached: true,
+        };
+      }
+
+      // Phase 0 item 5 — BOTH credits come back if the pair never arrives.
+      const refundBoth = async () => {
+        await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
+        await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
+      };
+
+      let variantA, variantB;
+      try {
+        const [productResp, brandVoice] = await Promise.all([
+          admin.graphql(
+            `query getProduct($id: ID!) {
             product(id: $id) {
               title productType vendor description descriptionHtml
               seo { title description }
@@ -800,116 +919,137 @@ export async function action({ request, params }) {
               tags
             }
           }`,
-          { variables: { id: productId } }
-        ),
-        getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-      ]);
-      const { data: pd } = await productResp.json();
-      const p = pd?.product;
-      if (!p) {
+            { variables: { id: productId } },
+          ),
+          getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+        ]);
+        const { data: pd } = await productResp.json();
+        const p = pd?.product;
+        if (!p) {
+          await refundBoth();
+          return { error: "This product no longer exists in your store. This did not use any generations." };
+        }
+        const targetKeywords = (formData.get("targetKeywords") || "").trim();
+        const productData = {
+          title: p.title,
+          productType: p.productType,
+          vendor: p.vendor,
+          description: p.description,
+          descriptionHtml: p.descriptionHtml,
+          imageUrl: p.featuredImage?.url || "",
+          images: (p.images?.edges || []).map((e) => e.node),
+          variants: p.variants.edges.map((e) => e.node),
+          tags: p.tags,
+        };
+        const baseOptions = { keywords: targetKeywords, length: "standard" };
+
+        // Run both variants in parallel — 2 API credits but merchant gets a real choice
+        [variantA, variantB] = await Promise.all([
+          generateProductContent(productData, brandVoice, contentTypes, baseOptions),
+          generateProductContent(productData, brandVoice, contentTypes, {
+            ...baseOptions,
+            variantHint:
+              "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
+          }),
+        ]);
+      } catch (err) {
         await refundBoth();
-        return { error: "This product no longer exists in your store. This did not use any generations." };
+        throw err;
       }
-      const targetKeywords = (formData.get("targetKeywords") || "").trim();
-      const productData = {
-        title: p.title, productType: p.productType, vendor: p.vendor,
-        description: p.description, descriptionHtml: p.descriptionHtml,
-        imageUrl: p.featuredImage?.url || "",
-        images: (p.images?.edges || []).map((e) => e.node),
-        variants: p.variants.edges.map((e) => e.node),
-        tags: p.tags,
-      };
-      const baseOptions = { keywords: targetKeywords, length: "standard" };
 
-      // Run both variants in parallel — 2 API credits but merchant gets a real choice
-      [variantA, variantB] = await Promise.all([
-        generateProductContent(productData, brandVoice, contentTypes, baseOptions),
-        generateProductContent(productData, brandVoice, contentTypes, {
-          ...baseOptions,
-          variantHint: "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
-        }),
-      ]);
-    } catch (err) {
-      await refundBoth();
-      throw err;
+      // Neither option usable → the merchant has nothing to choose between.
+      const usable = (v) => v && contentTypes.some((t) => v[t]);
+      if (!usable(variantA) && !usable(variantB)) {
+        await refundBoth();
+        return { error: "The AI returned nothing usable. Please retry — this did not use any generations." };
+      }
+
+      return { success: true, variants: [variantA, variantB] };
     }
 
-    // Neither option usable → the merchant has nothing to choose between.
-    const usable = (v) => v && contentTypes.some((t) => v[t]);
-    if (!usable(variantA) && !usable(variantB)) {
-      await refundBoth();
-      return { error: "The AI returned nothing usable. Please retry — this did not use any generations." };
-    }
+    // ── Save chosen A/B variant ───────────────────────────────────────────────
+    if (actionType === "saveVariant") {
+      let variantContent;
+      try {
+        variantContent = JSON.parse(formData.get("variantContent") || "{}");
+      } catch {
+        return { error: "Invalid variant data." };
+      }
+      const typesToSave = Object.keys(variantContent).filter(
+        (t) => ["description", "metaTitle", "metaDescription"].includes(t) && variantContent[t],
+      );
+      if (typesToSave.length === 0) return { error: "No content to save." };
 
-    return { success: true, variants: [variantA, variantB] };
-  }
-
-  // ── Save chosen A/B variant ───────────────────────────────────────────────
-  if (actionType === "saveVariant") {
-    let variantContent;
-    try {
-      variantContent = JSON.parse(formData.get("variantContent") || "{}");
-    } catch {
-      return { error: "Invalid variant data." };
-    }
-    const typesToSave = Object.keys(variantContent).filter((t) =>
-      ["description", "metaTitle", "metaDescription"].includes(t) && variantContent[t]
-    );
-    if (typesToSave.length === 0) return { error: "No content to save." };
-
-    const existing = await prisma.generatedContent.findMany({
-      where: { shop, productId, contentType: { in: typesToSave } },
-    });
-    await snapshotAndPrune(shop, productId, existing);
-    await Promise.all(
-      typesToSave.map((type) =>
-        prisma.generatedContent.upsert({
-          where: { shop_productId_contentType: { shop, productId, contentType: type } },
-          update: { generatedContent: variantContent[type], status: "draft", version: { increment: 1 } },
-          create: { shop, productId, productTitle: "", contentType: type, originalContent: "", generatedContent: variantContent[type], status: "draft" },
-        })
-      )
-    );
-    return { success: true, generated: variantContent, message: "Variant saved as draft — review and publish when ready." };
-  }
-
-  // ── Revert ────────────────────────────────────────────────────────────────
-  if (actionType === "revert") {
-    const contentType = formData.get("contentType");
-    const existing = await prisma.generatedContent.findUnique({
-      where: { shop_productId_contentType: { shop, productId, contentType } },
-    });
-    if (!existing?.originalContent) {
-      return { error: "No original content saved to revert to." };
-    }
-    await prisma.generatedContent.update({
-      where: { shop_productId_contentType: { shop, productId, contentType } },
-      data: { generatedContent: existing.originalContent, status: "draft" },
-    });
-    return { success: true, reverted: true, contentType, message: `${contentType} reverted to original content.` };
-  }
-
-  if (actionType === "saveTemplate") {
-    // Content templates are a Starter+ feature (pricing table row) — enforce.
-    const tplEnt = await checkEntitlement(shop, "contentTemplates");
-    if (!tplEnt.allowed) {
+      const existing = await prisma.generatedContent.findMany({
+        where: { shop, productId, contentType: { in: typesToSave } },
+      });
+      await snapshotAndPrune(shop, productId, existing);
+      await Promise.all(
+        typesToSave.map((type) =>
+          prisma.generatedContent.upsert({
+            where: { shop_productId_contentType: { shop, productId, contentType: type } },
+            update: { generatedContent: variantContent[type], status: "draft", version: { increment: 1 } },
+            create: {
+              shop,
+              productId,
+              productTitle: "",
+              contentType: type,
+              originalContent: "",
+              generatedContent: variantContent[type],
+              status: "draft",
+            },
+          }),
+        ),
+      );
       return {
-        error: `Content templates require the ${tplEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
-        limitReached: true,
+        success: true,
+        generated: variantContent,
+        message: "Variant saved as draft — review and publish when ready.",
       };
     }
-    const name = (formData.get("name") || "").slice(0, 100).trim() || `Template ${new Date().toLocaleDateString()}`;
-    const contentTypes = (formData.get("contentTypes") || "description").slice(0, 200);
-    const tplContentLength = (formData.get("contentLength") || "standard").slice(0, 50);
-    const keywords = (formData.get("keywords") || "").slice(0, 500);
-    await prisma.contentTemplate.create({
-      data: { shop, name, contentTypes, contentLength: tplContentLength, keywords },
-    });
-    return { success: true, message: "Template saved! Available in Advanced Options." };
-  }
 
-  return { error: "Unknown action." };
+    // ── Revert ────────────────────────────────────────────────────────────────
+    if (actionType === "revert") {
+      const contentType = formData.get("contentType");
+      const existing = await prisma.generatedContent.findUnique({
+        where: { shop_productId_contentType: { shop, productId, contentType } },
+      });
+      if (!existing?.originalContent) {
+        return { error: "No original content saved to revert to." };
+      }
+      await prisma.generatedContent.update({
+        where: { shop_productId_contentType: { shop, productId, contentType } },
+        data: { generatedContent: existing.originalContent, status: "draft" },
+      });
+      return {
+        success: true,
+        reverted: true,
+        contentType,
+        message: `${contentType} reverted to original content.`,
+      };
+    }
 
+    if (actionType === "saveTemplate") {
+      // Content templates are a Starter+ feature (pricing table row) — enforce.
+      const tplEnt = await checkEntitlement(shop, "contentTemplates");
+      if (!tplEnt.allowed) {
+        return {
+          error: `Content templates require the ${tplEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+          limitReached: true,
+        };
+      }
+      const name =
+        (formData.get("name") || "").slice(0, 100).trim() || `Template ${new Date().toLocaleDateString()}`;
+      const contentTypes = (formData.get("contentTypes") || "description").slice(0, 200);
+      const tplContentLength = (formData.get("contentLength") || "standard").slice(0, 50);
+      const keywords = (formData.get("keywords") || "").slice(0, 500);
+      await prisma.contentTemplate.create({
+        data: { shop, name, contentTypes, contentLength: tplContentLength, keywords },
+      });
+      return { success: true, message: "Template saved! Available in Advanced Options." };
+    }
+
+    return { error: "Unknown action." };
   } catch (err) {
     if (err instanceof Response) throw err;
     logger.error({ err, shop, actionType }, "Unhandled action error in products.$id");
@@ -927,7 +1067,8 @@ function AltTextBadge({ results }) {
   if (!results?.length) return null;
   const applied = results.filter((r) => !r.error).length;
   if (applied === results.length) return <Badge tone="success">Applied to Shopify</Badge>;
-  if (applied > 0) return <Badge tone="attention">{`Partially applied — ${applied} of ${results.length}`}</Badge>;
+  if (applied > 0)
+    return <Badge tone="attention">{`Partially applied — ${applied} of ${results.length}`}</Badge>;
   return <Badge tone="critical">Not applied</Badge>;
 }
 
@@ -943,11 +1084,17 @@ function AltTextResultList({ results }) {
             <Thumbnail source={result.url} alt="" size="small" />
             <BlockStack gap="100">
               {result.error ? (
-                <Text as="p" variant="bodySm" tone="critical">{result.error}</Text>
+                <Text as="p" variant="bodySm" tone="critical">
+                  {result.error}
+                </Text>
               ) : (
                 <>
-                  <Text as="p" variant="bodySm" fontWeight="semibold">{result.altText}</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">{result.altText.length} characters</Text>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                    {result.altText}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {result.altText.length} characters
+                  </Text>
                 </>
               )}
             </BlockStack>
@@ -983,9 +1130,14 @@ function VersionHistorySection({ versions, restoreFetcher }) {
                 <restoreFetcher.Form method="post">
                   <input type="hidden" name="actionType" value="restoreVersion" />
                   <input type="hidden" name="versionId" value={v.id} />
-                  <Button size="slim" variant="plain"
-                    loading={restoreFetcher.state !== "idle" && restoreFetcher.formData?.get("versionId") === v.id}
-                    submit>
+                  <Button
+                    size="slim"
+                    variant="plain"
+                    loading={
+                      restoreFetcher.state !== "idle" && restoreFetcher.formData?.get("versionId") === v.id
+                    }
+                    submit
+                  >
                     Restore
                   </Button>
                 </restoreFetcher.Form>
@@ -1012,11 +1164,15 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
       {expanded && (
         <Box padding="300" background="bg-surface-secondary" borderRadius="200">
           <BlockStack gap="200">
-            <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">ORIGINAL (before AI):</Text>
+            <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
+              ORIGINAL (before AI):
+            </Text>
             {contentType === "description" ? (
               <div dangerouslySetInnerHTML={{ __html: original || "(empty)" }} />
             ) : (
-              <Text as="p" variant="bodySm">{original || "(empty)"}</Text>
+              <Text as="p" variant="bodySm">
+                {original || "(empty)"}
+              </Text>
             )}
             {original && (
               <revertFetcher.Form method="post">
@@ -1035,7 +1191,17 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
-  const { product, existingContent, hasBrandVoice, reviewRequested, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
+  const {
+    product,
+    existingContent,
+    hasBrandVoice,
+    reviewRequested,
+    qualityScore,
+    versionsByType,
+    templates,
+    entitlements,
+    shopDomain,
+  } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
 
@@ -1051,7 +1217,8 @@ export default function ProductGeneratePage() {
   const actionData = fetcher.data;
   // Ask for an App Store review once, right after a publish succeeds (single
   // publish or generate-with-auto-publish).
-  const askReview = !reviewRequested && (actionData?.published === true || actionData?.autoPublished === true);
+  const askReview =
+    !reviewRequested && (actionData?.published === true || actionData?.autoPublished === true);
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
   const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
@@ -1068,7 +1235,10 @@ export default function ProductGeneratePage() {
   ];
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   useEffect(() => {
-    if (!isGenerating && !isEnhancing) { setLoadingMsgIdx(0); return; }
+    if (!isGenerating && !isEnhancing) {
+      setLoadingMsgIdx(0);
+      return;
+    }
     const interval = setInterval(() => setLoadingMsgIdx((i) => (i + 1) % loadingMessages.length), 3000);
     return () => clearInterval(interval);
   }, [isGenerating, isEnhancing]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1087,24 +1257,28 @@ export default function ProductGeneratePage() {
   const [contentLength, setContentLength] = useState("standard");
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
-  const applyTemplate = useCallback((templateId) => {
-    setSelectedTemplate(templateId);
-    if (!templateId) return;
-    const tpl = templates.find((t) => t.id === templateId);
-    if (!tpl) return;
-    const types = tpl.contentTypes.split(",");
-    setGenDescription(types.includes("description"));
-    setGenMetaTitle(types.includes("metaTitle"));
-    setGenMetaDescription(types.includes("metaDescription"));
-    setGenFaq(types.includes("faq"));
-    setContentLength(tpl.contentLength || "standard");
-    if (tpl.keywords) setTargetKeywords(tpl.keywords);
-  }, [templates]);
+  const applyTemplate = useCallback(
+    (templateId) => {
+      setSelectedTemplate(templateId);
+      if (!templateId) return;
+      const tpl = templates.find((t) => t.id === templateId);
+      if (!tpl) return;
+      const types = tpl.contentTypes.split(",");
+      setGenDescription(types.includes("description"));
+      setGenMetaTitle(types.includes("metaTitle"));
+      setGenMetaDescription(types.includes("metaDescription"));
+      setGenFaq(types.includes("faq"));
+      setContentLength(tpl.contentLength || "standard");
+      if (tpl.keywords) setTargetKeywords(tpl.keywords);
+    },
+    [templates],
+  );
 
   // Editable content state — initialized from generated or existing
   const rawDescription = actionData?.generated?.description || existingContent.description?.generated || "";
   const rawMetaTitle = actionData?.generated?.metaTitle || existingContent.metaTitle?.generated || "";
-  const rawMetaDescription = actionData?.generated?.metaDescription || existingContent.metaDescription?.generated || "";
+  const rawMetaDescription =
+    actionData?.generated?.metaDescription || existingContent.metaDescription?.generated || "";
   const faq = actionData?.generated?.faq || existingContent.faq?.generated || "";
 
   const [editedDescription, setEditedDescription] = useState(rawDescription);
@@ -1144,10 +1318,16 @@ export default function ProductGeneratePage() {
   // Stored rows pass through normalizeAltTextResults: pre-fix rows are
   // success-shaped but never wrote anything (dead mutation era) — they must
   // render as "Not applied", never as the original false-success badge.
-  const altTextResults = actionData?.altTextResults ?? (() => {
-    const raw = existingContent.altText?.generated;
-    try { return normalizeAltTextResults(raw ? JSON.parse(raw) : []); } catch { return []; }
-  })();
+  const altTextResults =
+    actionData?.altTextResults ??
+    (() => {
+      const raw = existingContent.altText?.generated;
+      try {
+        return normalizeAltTextResults(raw ? JSON.parse(raw) : []);
+      } catch {
+        return [];
+      }
+    })();
 
   // Toast on success
   useEffect(() => {
@@ -1170,41 +1350,66 @@ export default function ProductGeneratePage() {
     }
   }, [revertFetcher.data, revalidator]);
 
-  const doGenerate = useCallback((overrideTypes = null) => {
-    const fd = new FormData();
-    fd.append("actionType", "generate");
-    const types = overrideTypes || {
-      description: genDescription,
-      metaTitle: genMetaTitle,
-      metaDescription: genMetaDescription,
-      faq: genFaq,
-      altText: genAltText,
-    };
-    fd.append("gen_description", (types.description ?? false).toString());
-    fd.append("gen_metaTitle", (types.metaTitle ?? false).toString());
-    fd.append("gen_metaDescription", (types.metaDescription ?? false).toString());
-    fd.append("gen_faq", (types.faq ?? false).toString());
-    fd.append("gen_altText", (types.altText ?? false).toString());
-    fd.append("autoPublish", autoPublish.toString());
-    fd.append("targetKeywords", targetKeywords);
-    fd.append("contentLength", contentLength);
-    fetcher.submit(fd, { method: "POST" });
-  }, [genDescription, genMetaTitle, genMetaDescription, genFaq, genAltText, autoPublish, targetKeywords, contentLength, fetcher]);
+  const doGenerate = useCallback(
+    (overrideTypes = null) => {
+      const fd = new FormData();
+      fd.append("actionType", "generate");
+      const types = overrideTypes || {
+        description: genDescription,
+        metaTitle: genMetaTitle,
+        metaDescription: genMetaDescription,
+        faq: genFaq,
+        altText: genAltText,
+      };
+      fd.append("gen_description", (types.description ?? false).toString());
+      fd.append("gen_metaTitle", (types.metaTitle ?? false).toString());
+      fd.append("gen_metaDescription", (types.metaDescription ?? false).toString());
+      fd.append("gen_faq", (types.faq ?? false).toString());
+      fd.append("gen_altText", (types.altText ?? false).toString());
+      fd.append("autoPublish", autoPublish.toString());
+      fd.append("targetKeywords", targetKeywords);
+      fd.append("contentLength", contentLength);
+      fetcher.submit(fd, { method: "POST" });
+    },
+    [
+      genDescription,
+      genMetaTitle,
+      genMetaDescription,
+      genFaq,
+      genAltText,
+      autoPublish,
+      targetKeywords,
+      contentLength,
+      fetcher,
+    ],
+  );
 
-  const handleGenerate = useCallback((overrideTypes = null) => {
-    if (autoPublish && !overrideTypes) {
-      setPendingGenerateTypes(null);
-      setShowAutoPublishConfirm(true);
-      return;
-    }
-    doGenerate(overrideTypes);
-  }, [autoPublish, doGenerate]);
+  const handleGenerate = useCallback(
+    (overrideTypes = null) => {
+      if (autoPublish && !overrideTypes) {
+        setPendingGenerateTypes(null);
+        setShowAutoPublishConfirm(true);
+        return;
+      }
+      doGenerate(overrideTypes);
+    },
+    [autoPublish, doGenerate],
+  );
 
-  const handleRegenerateSection = useCallback((type) => {
-    const types = { description: false, metaTitle: false, metaDescription: false, faq: false, altText: false };
-    types[type] = true;
-    handleGenerate(types);
-  }, [handleGenerate]);
+  const handleRegenerateSection = useCallback(
+    (type) => {
+      const types = {
+        description: false,
+        metaTitle: false,
+        metaDescription: false,
+        faq: false,
+        altText: false,
+      };
+      types[type] = true;
+      handleGenerate(types);
+    },
+    [handleGenerate],
+  );
 
   const handleEnhance = useCallback(() => {
     const fd = new FormData();
@@ -1226,12 +1431,15 @@ export default function ProductGeneratePage() {
     variantFetcher.submit(fd, { method: "POST" });
   }, [genDescription, genMetaTitle, genMetaDescription, targetKeywords, variantFetcher]);
 
-  const handleSaveVariant = useCallback((variantContent) => {
-    const fd = new FormData();
-    fd.append("actionType", "saveVariant");
-    fd.append("variantContent", JSON.stringify(variantContent));
-    fetcher.submit(fd, { method: "POST" });
-  }, [fetcher]);
+  const handleSaveVariant = useCallback(
+    (variantContent) => {
+      const fd = new FormData();
+      fd.append("actionType", "saveVariant");
+      fd.append("variantContent", JSON.stringify(variantContent));
+      fetcher.submit(fd, { method: "POST" });
+    },
+    [fetcher],
+  );
 
   const handlePublish = useCallback(() => {
     const fd = new FormData();
@@ -1284,7 +1492,6 @@ export default function ProductGeneratePage() {
     { label: "Detailed (~400-500 words) — complex/high-value products", value: "detailed" },
   ];
 
-
   return loadingThisRoute ? (
     <AppSkeleton title="Product" sections={3} layout="full" />
   ) : (
@@ -1294,28 +1501,29 @@ export default function ProductGeneratePage() {
     >
       <BlockStack gap="500">
         <ReviewRequest active={askReview} />
-        <GeoValueBanner variant="compact" />
         {actionData?.error && (
           <Banner tone="critical" title="Error">
             <p>{actionData.error}</p>
             {actionData.limitReached && (
               <Box paddingBlockStart="200">
                 <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                  View Plans & Billing →
+                  View Plans & Billing
                 </Button>
               </Box>
             )}
           </Banner>
         )}
         {revertFetcher.data?.error && (
-          <Banner tone="critical"><p>{revertFetcher.data.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{revertFetcher.data.error}</p>
+          </Banner>
         )}
         {!hasBrandVoice && (
           <Banner tone="warning">
             <p>
-              No brand voice configured — content will use a default tone.{" "}
+              No brand voice configured — content will use a default tone.{""}
               <Button variant="plain" onClick={() => navigate("/app/settings")}>
-                Set up brand voice →
+                Set up brand voice
               </Button>
             </p>
           </Banner>
@@ -1330,7 +1538,9 @@ export default function ProductGeneratePage() {
                   {product.imageUrl && (
                     <Thumbnail source={product.imageUrl} alt={product.title} size="large" />
                   )}
-                  <Text as="h2" variant="headingMd">{product.title}</Text>
+                  <Text as="h2" variant="headingMd">
+                    {product.title}
+                  </Text>
                   <InlineStack gap="200">
                     <Badge>{product.status}</Badge>
                     {product.productType && <Badge tone="info">{product.productType}</Badge>}
@@ -1340,7 +1550,7 @@ export default function ProductGeneratePage() {
                   </Text>
                   {product.tags.length > 0 && (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Tags: {product.tags.join(", ")}
+                      Tags: {product.tags.join(",")}
                     </Text>
                   )}
                 </BlockStack>
@@ -1349,15 +1559,29 @@ export default function ProductGeneratePage() {
               <Card>
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Generate Content</Text>
+                    <Text as="h2" variant="headingMd">
+                      Generate Content
+                    </Text>
                     {qualityScore.score > 0 && (
-                      <Badge tone={qualityScore.grade === "Excellent" ? "success" : qualityScore.grade === "Good" ? "info" : qualityScore.grade === "Fair" ? "attention" : "critical"}>
+                      <Badge
+                        tone={
+                          qualityScore.grade === "Excellent"
+                            ? "success"
+                            : qualityScore.grade === "Good"
+                              ? "info"
+                              : qualityScore.grade === "Fair"
+                                ? "attention"
+                                : "critical"
+                        }
+                      >
                         {`Content quality: ${qualityScore.grade} · ${qualityScore.score}/100`}
                       </Badge>
                     )}
                   </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">Select what to generate:</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Select what to generate:
+                  </Text>
                   <Checkbox
                     label="Product Description"
                     checked={genDescription}
@@ -1400,7 +1624,7 @@ export default function ProductGeneratePage() {
                   <Button
                     variant="plain"
                     size="slim"
-                    icon={advancedOpen ? <ChevronUp aria-hidden="true" size={14} /> : <ChevronDown aria-hidden="true" size={14} />}
+                    icon={advancedOpen ? ChevronUpIcon : ChevronDownIcon}
                     onClick={() => setAdvancedOpen((v) => !v)}
                   >
                     Advanced Options
@@ -1410,7 +1634,13 @@ export default function ProductGeneratePage() {
                       {entitlements?.contentTemplates && templates.length > 0 && (
                         <Select
                           label="Apply Template"
-                          options={[{ label: "— No template —", value: "" }, ...templates.map((t) => ({ label: t.name + (t.isDefault ? " (Default)" : ""), value: t.id }))]}
+                          options={[
+                            { label: "— No template —", value: "" },
+                            ...templates.map((t) => ({
+                              label: t.name + (t.isDefault ? " (Default)" : ""),
+                              value: t.id,
+                            })),
+                          ]}
                           value={selectedTemplate}
                           onChange={applyTemplate}
                           helpText="Pre-fills the options below"
@@ -1430,27 +1660,33 @@ export default function ProductGeneratePage() {
                         helpText="Overrides global keywords for this product"
                         autoComplete="off"
                       />
-                      {entitlements?.contentTemplates && (genDescription || genMetaTitle || genMetaDescription || genFaq) && (
-                        <Button
-                          variant="plain"
-                          size="slim"
-                          onClick={() => {
-                            const templateFd = new FormData();
-                            templateFd.append("actionType", "saveTemplate");
-                            templateFd.append("contentTypes", [
-                              genDescription && "description",
-                              genMetaTitle && "metaTitle",
-                              genMetaDescription && "metaDescription",
-                              genFaq && "faq",
-                            ].filter(Boolean).join(","));
-                            templateFd.append("contentLength", contentLength);
-                            templateFd.append("keywords", targetKeywords);
-                            fetcher.submit(templateFd, { method: "POST" });
-                          }}
-                        >
-                          Save current settings as template →
-                        </Button>
-                      )}
+                      {entitlements?.contentTemplates &&
+                        (genDescription || genMetaTitle || genMetaDescription || genFaq) && (
+                          <Button
+                            variant="plain"
+                            size="slim"
+                            onClick={() => {
+                              const templateFd = new FormData();
+                              templateFd.append("actionType", "saveTemplate");
+                              templateFd.append(
+                                "contentTypes",
+                                [
+                                  genDescription && "description",
+                                  genMetaTitle && "metaTitle",
+                                  genMetaDescription && "metaDescription",
+                                  genFaq && "faq",
+                                ]
+                                  .filter(Boolean)
+                                  .join(","),
+                              );
+                              templateFd.append("contentLength", contentLength);
+                              templateFd.append("keywords", targetKeywords);
+                              fetcher.submit(templateFd, { method: "POST" });
+                            }}
+                          >
+                            Save current settings as template
+                          </Button>
+                        )}
                     </BlockStack>
                   </Collapsible>
 
@@ -1473,7 +1709,12 @@ export default function ProductGeneratePage() {
                             {loadingMessages[loadingMsgIdx]}
                           </Text>
                         </InlineStack>
-                        <ProgressBar progress={((loadingMsgIdx + 1) / 5) * 85} tone="highlight" size="small" animated />
+                        <ProgressBar
+                          progress={((loadingMsgIdx + 1) / 5) * 85}
+                          tone="highlight"
+                          size="small"
+                          animated
+                        />
                         <Text as="p" variant="bodySm" tone="subdued">
                           Takes 10–30 seconds — you can stay on this page
                         </Text>
@@ -1492,7 +1733,6 @@ export default function ProductGeneratePage() {
                 </BlockStack>
               </Card>
               {/* What the generated content actually does for the merchant (GEO/SEO/AI) */}
-              <ContentBenefits />
             </BlockStack>
           </Layout.Section>
 
@@ -1502,622 +1742,806 @@ export default function ProductGeneratePage() {
               <Tabs tabs={productDetailTabs} selected={selectedTab} onSelect={setSelectedTab} fitted />
             </Card>
             <Box paddingBlockStart="400">
-            <BlockStack gap="400">
-
-            {/* ── Tab 0: Generate controls ── */}
-            {selectedTab === 0 && (
-              <>
-                {/* Success state after generation */}
-                {actionData?.success && !isGenerating && !isEnhancing && (
-                  <Box padding="400" background="bg-surface-success" borderRadius="200">
-                    <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center">
-                        <CheckCircle2 aria-hidden="true" size={20} color="#00A047" />
-                        <Text as="p" variant="headingSm" fontWeight="semibold">
-                          {actionData.autoPublished ? "Content published to your store!" : "Content generated — review & publish"}
-                        </Text>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">{actionData.message}</Text>
-                      {!actionData.autoPublished && (
-                        <Button size="slim" onClick={() => setSelectedTab(1)}>
-                          Review Generated Content →
-                        </Button>
-                      )}
-                      {(actionData.autoPublished || actionData.published) && product.handle && shopDomain && (
-                        <Button
-                          variant="plain"
-                          size="slim"
-                          url={`https://${shopDomain}/products/${product.handle}`}
-                          external
-                          target="_blank"
-                        >
-                          Preview in store →
-                        </Button>
-                      )}
-                    </BlockStack>
-                  </Box>
-                )}
-
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">
-                      {hasGeneratedContent ? "Regenerate Content" : "Ready to Generate"}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {hasGeneratedContent
-                        ? "Your product already has AI content. Generate again to create a fresh version."
-                        : "Select your content types in the left panel, then click Generate Content."}
-                    </Text>
-
-                    {(isGenerating || isGeneratingVariants || isEnhancing) && (
-                      <Box padding="300" background="bg-surface-info" borderRadius="200">
+              <BlockStack gap="400">
+                {/* ── Tab 0: Generate controls ── */}
+                {selectedTab === 0 && (
+                  <>
+                    {/* Success state after generation */}
+                    {actionData?.success && !isGenerating && !isEnhancing && (
+                      <Box padding="400" background="bg-surface-success" borderRadius="200">
                         <BlockStack gap="200">
                           <InlineStack gap="200" blockAlign="center">
-                            <Spinner size="small" />
-                            <Text as="p" variant="bodySm" fontWeight="semibold">
-                              {isGeneratingVariants
-                                ? "Writing 2 different versions..."
-                                : loadingMessages[loadingMsgIdx]}
+                            <Icon source={CheckCircleIcon} tone="success" />
+                            <Text as="p" variant="headingSm" fontWeight="semibold">
+                              {actionData.autoPublished
+                                ? "Content published to your store!"
+                                : "Content generated — review & publish"}
                             </Text>
                           </InlineStack>
-                          <ProgressBar
-                            progress={isGeneratingVariants ? 60 : ((loadingMsgIdx + 1) / 5) * 85}
-                            tone="highlight"
-                            size="small"
-                            animated
-                          />
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {isGeneratingVariants ? "20–40 seconds" : "10–30 seconds"} — you can stay on this page
+                            {actionData.message}
                           </Text>
+                          {!actionData.autoPublished && (
+                            <Button size="slim" onClick={() => setSelectedTab(1)}>
+                              Review Generated Content
+                            </Button>
+                          )}
+                          {(actionData.autoPublished || actionData.published) &&
+                            product.handle &&
+                            shopDomain && (
+                              <Button
+                                variant="plain"
+                                size="slim"
+                                url={`https://${shopDomain}/products/${product.handle}`}
+                                external
+                                target="_blank"
+                              >
+                                Preview in store
+                              </Button>
+                            )}
                         </BlockStack>
                       </Box>
                     )}
 
-                    <Button
-                      variant="primary"
-                      size="large"
-                      onClick={() => handleGenerate()}
-                      loading={isGenerating}
-                      disabled={isLoading || noneSelected}
-                      fullWidth
-                    >
-                      {isGenerating ? "Generating..." : "Generate Content ⌘↵"}
-                    </Button>
-                    {!isGenerating && !isEnhancing && (
-                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                        Tip: Press ⌘↵ (Mac) or Ctrl+↵ (Windows) to generate
-                      </Text>
-                    )}
-                    {(product.descriptionHtml || product.seoTitle) && (
-                      <BlockStack gap="100">
-                        <Button
-                          size="large"
-                          onClick={handleEnhance}
-                          loading={isEnhancing}
-                          disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}
-                          fullWidth
-                        >
-                          {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
-                        </Button>
-                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                          Improves what&apos;s already there — structure, SEO keywords, and
-                          AI-search readiness — without losing your facts or voice
+                    <Card>
+                      <BlockStack gap="300">
+                        <Text as="h2" variant="headingMd">
+                          {hasGeneratedContent ? "Regenerate Content" : "Ready to Generate"}
                         </Text>
-                      </BlockStack>
-                    )}
-                    {entitlements?.abVariants ? (
-                      <Button
-                        size="large"
-                        onClick={handleGenerateVariants}
-                        loading={isGeneratingVariants}
-                        disabled={isLoading || isGeneratingVariants || noneSelected}
-                        fullWidth
-                      >
-                        {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
-                      </Button>
-                    ) : (
-                      // NOT disabled — a disabled Polaris button never fires
-                      // onClick, which made this upsell a dead control. It
-                      // looks locked but genuinely navigates to Plans.
-                      <Button
-                        size="large"
-                        fullWidth
-                        onClick={() => navigate("/app/plans")}
-                      >
-                        🔒 A/B Variants — upgrade to Growth
-                      </Button>
-                    )}
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {hasGeneratedContent
+                            ? "Your product already has AI content. Generate again to create a fresh version."
+                            : "Select your content types in the left panel, then click Generate Content."}
+                        </Text>
 
-                    {actionData?.limitReached && (
-                      <UpgradePrompt
-                        tone="warning"
-                        title="Monthly limit reached"
-                        message="Upgrade your plan to keep generating content"
-                        onUpgrade={() => navigate("/app/plans")}
-                      />
-                    )}
-                  </BlockStack>
-                </Card>
-              </>
-            )}
+                        {(isGenerating || isGeneratingVariants || isEnhancing) && (
+                          <Box padding="300" background="bg-surface-info" borderRadius="200">
+                            <BlockStack gap="200">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Spinner size="small" />
+                                <Text as="p" variant="bodySm" fontWeight="semibold">
+                                  {isGeneratingVariants
+                                    ? "Writing 2 different versions..."
+                                    : loadingMessages[loadingMsgIdx]}
+                                </Text>
+                              </InlineStack>
+                              <ProgressBar
+                                progress={isGeneratingVariants ? 60 : ((loadingMsgIdx + 1) / 5) * 85}
+                                tone="highlight"
+                                size="small"
+                                animated
+                              />
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {isGeneratingVariants ? "20–40 seconds" : "10–30 seconds"} — you can stay on
+                                this page
+                              </Text>
+                            </BlockStack>
+                          </Box>
+                        )}
 
-            {/* ── A/B Variant comparison ── */}
-            {selectedTab === 0 && variants && (
-              <BlockStack gap="400">
-                <Banner tone="info" title="2 Options Generated">
-                  Compare both versions and click "Use This One" to save your favourite as a draft.
-                </Banner>
-                {variants.map((v, idx) => (
-                  <Card key={idx}>
-                    <BlockStack gap="300">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h3" variant="headingMd">Option {idx === 0 ? "A" : "B"}</Text>
                         <Button
                           variant="primary"
-                          size="slim"
-                          onClick={() => handleSaveVariant(v)}
-                          loading={isLoading}
-                          disabled={isLoading}
+                          size="large"
+                          onClick={() => handleGenerate()}
+                          loading={isGenerating}
+                          disabled={isLoading || noneSelected}
+                          fullWidth
                         >
-                          Use This One
+                          {isGenerating ? "Generating..." : "Generate Content"}
                         </Button>
-                      </InlineStack>
-                      {v.description && (
-                        <Box padding="200" background="bg-surface-secondary" borderRadius="100">
-                          <span dangerouslySetInnerHTML={{ __html: v.description.substring(0, 600) + (v.description.length > 600 ? "..." : "") }} />
-                        </Box>
-                      )}
-                      {v.metaTitle && (
-                        <Text as="p" variant="bodySm"><strong>Meta Title:</strong> {v.metaTitle}</Text>
-                      )}
-                      {v.metaDescription && (
-                        <Text as="p" variant="bodySm"><strong>Meta Desc:</strong> {v.metaDescription}</Text>
-                      )}
-                    </BlockStack>
-                  </Card>
-                ))}
-              </BlockStack>
-            )}
-
-            {/* ── Tab 1: Generated content + publish ── */}
-            {selectedTab === 1 && (<>
-
-              <Banner tone="info">
-                All content below was generated by AI — review and edit before publishing to your store.
-              </Banner>
-
-              {/* Description */}
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Product Description</Text>
-                    {rawDescription && (
-                      <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("description")} loading={isGenerating}>
-                        Regenerate
-                      </Button>
-                    )}
-                  </InlineStack>
-
-                  <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">CURRENT:</Text>
-                      {product.descriptionHtml ? (
-                        <span dangerouslySetInnerHTML={{ __html: product.descriptionHtml.substring(0, 500) }} />
-                      ) : (
-                        <Text as="p" tone="critical">No description — this product needs content.</Text>
-                      )}
-                    </BlockStack>
-                  </Box>
-
-                  {isGenerating && (
-                    <Box padding="400">
-                      <InlineStack align="center" gap="200">
-                        <Spinner size="small" />
-                        <Text as="p" variant="bodyMd">Generating... this takes 10–20 seconds</Text>
-                      </InlineStack>
-                    </Box>
-                  )}
-
-                  {rawDescription && (
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between">
-                        <Text as="p" variant="bodySm" fontWeight="bold" tone="success">AI-GENERATED (editable):</Text>
-                        <Badge tone={existingContent.description?.status === "published" ? "success" : "info"}>
-                          {existingContent.description?.status === "published" ? "Published" : "Draft"}
-                        </Badge>
-                      </InlineStack>
-                      <TextField
-                        label=""
-                        labelHidden
-                        value={editedDescription}
-                        onChange={setEditedDescription}
-                        multiline={8}
-                        helpText="Edit the HTML directly — changes are saved when you click Publish"
-                        autoComplete="off"
-                      />
-                      {editedDescription && (
-                        <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {editedDescription.replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length} words
-                            {" · "}
-                            {editedDescription.replace(/<[^>]+>/g, "").length} characters
+                        {!isGenerating && !isEnhancing && (
+                          <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                            Tip: press Cmd+Enter (Mac) or Ctrl+Enter (Windows) to generate
                           </Text>
+                        )}
+                        {(product.descriptionHtml || product.seoTitle) && (
+                          <BlockStack gap="100">
+                            <Button
+                              size="large"
+                              onClick={handleEnhance}
+                              loading={isEnhancing}
+                              disabled={
+                                isLoading ||
+                                isGeneratingVariants ||
+                                (!genDescription && !genMetaTitle && !genMetaDescription)
+                              }
+                              fullWidth
+                            >
+                              {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
+                            </Button>
+                            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                              Improves what&apos;s already there — structure, SEO keywords, and AI-search
+                              readiness — without losing your facts or voice
+                            </Text>
+                          </BlockStack>
+                        )}
+                        {entitlements?.abVariants ? (
                           <Button
-                            size="slim"
-                            variant="plain"
-                            onClick={() => {
-                              navigator.clipboard.writeText(editedDescription.replace(/<[^>]+>/g, ""));
-                              window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                            }}
+                            size="large"
+                            onClick={handleGenerateVariants}
+                            loading={isGeneratingVariants}
+                            disabled={isLoading || isGeneratingVariants || noneSelected}
+                            fullWidth
                           >
-                            Copy text
+                            {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
                           </Button>
-                        </InlineStack>
-                      )}
-                    </BlockStack>
-                  )}
-
-                  {!rawDescription && !isGenerating && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Click "Generate Content" to create an AI-optimised description.
-                    </Text>
-                  )}
-
-                  {existingContent.description?.original && (
-                    <>
-                      <Divider />
-                      <OriginalContentSection original={existingContent.description.original} contentType="description" revertFetcher={revertFetcher} />
-                    </>
-                  )}
-                  {entitlements?.versionHistory && versionsByType.description?.length > 0 && (
-                    <VersionHistorySection versions={versionsByType.description} contentType="description" restoreFetcher={restoreFetcher} />
-                  )}
-                </BlockStack>
-              </Card>
-
-              {/* Meta Title */}
-              {(rawMetaTitle || genMetaTitle) && (
-                <Card>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">Meta Title</Text>
-                      <InlineStack gap="200">
-                        {rawMetaTitle && (
-                          <Button size="slim" variant="plain" onClick={() => {
-                            navigator.clipboard.writeText(editedMetaTitle);
-                            window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                          }}>
-                            Copy
+                        ) : (
+                          // NOT disabled — a disabled Polaris button never fires
+                          // onClick, which made this upsell a dead control. It
+                          // looks locked but genuinely navigates to Plans.
+                          <Button size="large" fullWidth onClick={() => navigate("/app/plans")}>
+                            A/B Variants — upgrade to Growth
                           </Button>
                         )}
-                        {rawMetaTitle && (
-                          <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaTitle")} loading={isGenerating}>
-                            Regenerate
-                          </Button>
+
+                        {actionData?.limitReached && (
+                          <UpgradePrompt
+                            tone="warning"
+                            title="Monthly limit reached"
+                            message="Upgrade your plan to keep generating content"
+                            onUpgrade={() => navigate("/app/plans")}
+                          />
                         )}
-                      </InlineStack>
-                    </InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Current: {product.seoTitle || "(using product title)"}
-                    </Text>
-                    {rawMetaTitle && (
-                      <BlockStack gap="100">
-                        <TextField
-                          label=""
-                          labelHidden
-                          value={editedMetaTitle}
-                          onChange={setEditedMetaTitle}
-                          error={editedMetaTitle.length > 60 ? "Over 60 characters — shorten before publishing" : ""}
-                          autoComplete="off"
-                        />
-                        <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone={editedMetaTitle.length > 60 ? "critical" : "subdued"}>
-                            {editedMetaTitle.length}/60 characters
-                          </Text>
-                        </InlineStack>
-                        <ProgressBar
-                          progress={Math.min(100, Math.round((editedMetaTitle.length / 60) * 100))}
-                          tone={editedMetaTitle.length > 60 ? "critical" : editedMetaTitle.length >= 48 ? "highlight" : "success"}
-                          size="small"
-                        />
                       </BlockStack>
-                    )}
-                    {existingContent.metaTitle?.original && (
-                      <>
-                        <Divider />
-                        <OriginalContentSection original={existingContent.metaTitle.original} contentType="metaTitle" revertFetcher={revertFetcher} />
-                      </>
-                    )}
-                    {entitlements?.versionHistory && versionsByType.metaTitle?.length > 0 && (
-                      <VersionHistorySection versions={versionsByType.metaTitle} contentType="metaTitle" restoreFetcher={restoreFetcher} />
-                    )}
-                  </BlockStack>
-                </Card>
-              )}
+                    </Card>
+                  </>
+                )}
 
-              {/* Meta Description */}
-              {(rawMetaDescription || genMetaDescription) && (
-                <Card>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">Meta Description</Text>
-                      <InlineStack gap="200">
-                        {rawMetaDescription && (
-                          <Button size="slim" variant="plain" onClick={() => {
-                            navigator.clipboard.writeText(editedMetaDescription);
-                            window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                          }}>
-                            Copy
-                          </Button>
-                        )}
-                        {rawMetaDescription && (
-                          <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("metaDescription")} loading={isGenerating}>
-                            Regenerate
-                          </Button>
-                        )}
-                      </InlineStack>
-                    </InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Current: {product.seoDescription || "(none set)"}
-                    </Text>
-                    {rawMetaDescription && (
-                      <BlockStack gap="100">
-                        <TextField
-                          label=""
-                          labelHidden
-                          value={editedMetaDescription}
-                          onChange={setEditedMetaDescription}
-                          multiline={2}
-                          error={editedMetaDescription.length > 155 ? "Over 155 characters — shorten before publishing" : ""}
-                          autoComplete="off"
-                        />
-                        <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone={editedMetaDescription.length > 155 ? "critical" : "subdued"}>
-                            {editedMetaDescription.length}/155 characters
+                {/* ── A/B Variant comparison ── */}
+                {selectedTab === 0 && variants && (
+                  <BlockStack gap="400">
+                    <Banner tone="info" title="2 Options Generated">
+                      Compare both versions and click "Use This One" to save your favourite as a draft.
+                    </Banner>
+                    {variants.map((v, idx) => (
+                      <Card key={idx}>
+                        <BlockStack gap="300">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h3" variant="headingMd">
+                              Option {idx === 0 ? "A" : "B"}
+                            </Text>
+                            <Button
+                              variant="primary"
+                              size="slim"
+                              onClick={() => handleSaveVariant(v)}
+                              loading={isLoading}
+                              disabled={isLoading}
+                            >
+                              Use This One
+                            </Button>
+                          </InlineStack>
+                          {v.description && (
+                            <Box padding="200" background="bg-surface-secondary" borderRadius="100">
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html:
+                                    v.description.substring(0, 600) +
+                                    (v.description.length > 600 ? "..." : ""),
+                                }}
+                              />
+                            </Box>
+                          )}
+                          {v.metaTitle && (
+                            <Text as="p" variant="bodySm">
+                              <strong>Meta Title:</strong> {v.metaTitle}
+                            </Text>
+                          )}
+                          {v.metaDescription && (
+                            <Text as="p" variant="bodySm">
+                              <strong>Meta Desc:</strong> {v.metaDescription}
+                            </Text>
+                          )}
+                        </BlockStack>
+                      </Card>
+                    ))}
+                  </BlockStack>
+                )}
+
+                {/* ── Tab 1: Generated content + publish ── */}
+                {selectedTab === 1 && (
+                  <>
+                    <Banner tone="info">
+                      All content below was generated by AI — review and edit before publishing to your store.
+                    </Banner>
+
+                    {/* Description */}
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="h2" variant="headingMd">
+                            Product Description
                           </Text>
+                          {rawDescription && (
+                            <Button
+                              size="slim"
+                              variant="plain"
+                              onClick={() => handleRegenerateSection("description")}
+                              loading={isGenerating}
+                            >
+                              Regenerate
+                            </Button>
+                          )}
                         </InlineStack>
-                        <ProgressBar
-                          progress={Math.min(100, Math.round((editedMetaDescription.length / 155) * 100))}
-                          tone={editedMetaDescription.length > 155 ? "critical" : editedMetaDescription.length >= 124 ? "highlight" : "success"}
-                          size="small"
-                        />
-                      </BlockStack>
-                    )}
-                    {existingContent.metaDescription?.original && (
-                      <>
-                        <Divider />
-                        <OriginalContentSection original={existingContent.metaDescription.original} contentType="metaDescription" revertFetcher={revertFetcher} />
-                      </>
-                    )}
-                    {entitlements?.versionHistory && versionsByType.metaDescription?.length > 0 && (
-                      <VersionHistorySection versions={versionsByType.metaDescription} contentType="metaDescription" restoreFetcher={restoreFetcher} />
-                    )}
-                  </BlockStack>
-                </Card>
-              )}
 
-              {/* FAQ */}
-              {faq && (
-                <Card>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">FAQ Content</Text>
-                      <Button size="slim" variant="plain" onClick={() => handleRegenerateSection("faq")} loading={isGenerating}>
-                        Regenerate
-                      </Button>
-                    </InlineStack>
-                    <Box padding="200" background="bg-surface-success" borderRadius="200">
-                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>{faq}</pre>
-                    </Box>
-                    {existingContent.faq?.original && (
-                      <>
-                        <Divider />
-                        <OriginalContentSection
-                          original={existingContent.faq.original}
-                          contentType="faq"
-                          revertFetcher={revertFetcher}
-                        />
-                      </>
-                    )}
-                  </BlockStack>
-                </Card>
-              )}
+                        <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                          <BlockStack gap="100">
+                            <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
+                              CURRENT:
+                            </Text>
+                            {product.descriptionHtml ? (
+                              <span
+                                dangerouslySetInnerHTML={{
+                                  __html: product.descriptionHtml.substring(0, 500),
+                                }}
+                              />
+                            ) : (
+                              <Text as="p" tone="critical">
+                                No description — this product needs content.
+                              </Text>
+                            )}
+                          </BlockStack>
+                        </Box>
 
-              {/* Image Alt Text — the badge reflects the ACTUAL outcome:
-                  all applied / partially applied / failed. Never claim success
-                  for an operation that failed. */}
-              {(altTextResults.length > 0 || genAltText) && (
-                <Card>
-                  <BlockStack gap="300">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">Image Alt Text</Text>
-                      <AltTextBadge results={altTextResults} />
-                    </InlineStack>
-                    {actionData?.altTextTruncated && (
-                      <Banner tone="info">
-                        <p>This product has more images than one run covers — the first {altTextResults.length} were processed. Run again after reviewing to cover the rest, or edit the remaining images in Shopify admin.</p>
-                      </Banner>
-                    )}
-                    {isGenerating && genAltText && (
-                      <InlineStack gap="200">
-                        <Spinner size="small" />
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Generating alt text for {product.images.length} image{product.images.length !== 1 ? "s" : ""}...
-                        </Text>
-                      </InlineStack>
-                    )}
-                    <AltTextResultList results={altTextResults} />
-                    {!altTextResults.length && !isGenerating && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Check "Image Alt Text" and click Generate to create alt text for all images.
-                      </Text>
-                    )}
-                  </BlockStack>
-                </Card>
-              )}
+                        {isGenerating && (
+                          <Box padding="400">
+                            <InlineStack align="center" gap="200">
+                              <Spinner size="small" />
+                              <Text as="p" variant="bodyMd">
+                                Generating... this takes 10–20 seconds
+                              </Text>
+                            </InlineStack>
+                          </Box>
+                        )}
 
-              {/* Publish button */}
-              {hasGeneratedContent && !actionData?.autoPublished && (
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Content generated by AI • Review before publishing
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Your edits above will be published — not the original AI output.
-                    </Text>
-                    <Button
-                      variant="primary"
-                      size="large"
-                      onClick={handlePublish}
-                      loading={isPublishing}
-                      disabled={isLoading}
-                      fullWidth
-                    >
-                      {isPublishing ? "Publishing..." : "Publish to Store"}
-                    </Button>
-                  </BlockStack>
-                </Card>
-              )}
-
-              {/* Social Media Content */}
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Social Media Content</Text>
-                    <Button
-                      size="slim"
-                      loading={socialFetcher.state !== "idle"}
-                      onClick={() => {
-                        const fd = new FormData();
-                        fd.append("actionType", "generateSocial");
-                        socialFetcher.submit(fd, { method: "POST" });
-                      }}
-                    >
-                      Generate
-                    </Button>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Ready-to-post captions for Instagram, Facebook, and TikTok.
-                  </Text>
-                  {socialFetcher.data?.social && (
-                    <BlockStack gap="300">
-                      {[
-                        { key: "instagram", label: "Instagram" },
-                        { key: "facebook", label: "Facebook" },
-                        { key: "tiktok", label: "TikTok" },
-                      ].map(({ key, label }) =>
-                        socialFetcher.data.social[key] ? (
-                          <Box key={key} padding="300" background="bg-surface-secondary" borderRadius="200">
-                            <BlockStack gap="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="p" variant="bodySm" fontWeight="semibold">{label}</Text>
+                        {rawDescription && (
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between">
+                              <Text as="p" variant="bodySm" fontWeight="bold" tone="success">
+                                AI-GENERATED (editable):
+                              </Text>
+                              <Badge
+                                tone={
+                                  existingContent.description?.status === "published" ? "success" : "info"
+                                }
+                              >
+                                {existingContent.description?.status === "published" ? "Published" : "Draft"}
+                              </Badge>
+                            </InlineStack>
+                            <TextField
+                              label=""
+                              labelHidden
+                              value={editedDescription}
+                              onChange={setEditedDescription}
+                              multiline={8}
+                              helpText="Edit the HTML directly — changes are saved when you click Publish"
+                              autoComplete="off"
+                            />
+                            {editedDescription && (
+                              <InlineStack align="space-between">
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                  {
+                                    editedDescription
+                                      .replace(/<[^>]+>/g, "")
+                                      .trim()
+                                      .split(/\s+/)
+                                      .filter(Boolean).length
+                                  }{" "}
+                                  words
+                                  {" ·"}
+                                  {editedDescription.replace(/<[^>]+>/g, "").length} characters
+                                </Text>
                                 <Button
                                   size="slim"
                                   variant="plain"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(socialFetcher.data.social[key]);
-                                    if (window.shopify?.toast) {
-                                      window.shopify.toast.show(`${label} caption copied!`, { duration: 2000 });
-                                    }
+                                    navigator.clipboard.writeText(editedDescription.replace(/<[^>]+>/g, ""));
+                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
+                                  }}
+                                >
+                                  Copy text
+                                </Button>
+                              </InlineStack>
+                            )}
+                          </BlockStack>
+                        )}
+
+                        {!rawDescription && !isGenerating && (
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Click "Generate Content" to create an AI-optimised description.
+                          </Text>
+                        )}
+
+                        {existingContent.description?.original && (
+                          <>
+                            <Divider />
+                            <OriginalContentSection
+                              original={existingContent.description.original}
+                              contentType="description"
+                              revertFetcher={revertFetcher}
+                            />
+                          </>
+                        )}
+                        {entitlements?.versionHistory && versionsByType.description?.length > 0 && (
+                          <VersionHistorySection
+                            versions={versionsByType.description}
+                            contentType="description"
+                            restoreFetcher={restoreFetcher}
+                          />
+                        )}
+                      </BlockStack>
+                    </Card>
+
+                    {/* Meta Title */}
+                    {(rawMetaTitle || genMetaTitle) && (
+                      <Card>
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h2" variant="headingMd">
+                              Meta Title
+                            </Text>
+                            <InlineStack gap="200">
+                              {rawMetaTitle && (
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(editedMetaTitle);
+                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
                                   }}
                                 >
                                   Copy
                                 </Button>
+                              )}
+                              {rawMetaTitle && (
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => handleRegenerateSection("metaTitle")}
+                                  loading={isGenerating}
+                                >
+                                  Regenerate
+                                </Button>
+                              )}
+                            </InlineStack>
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Current: {product.seoTitle || "(using product title)"}
+                          </Text>
+                          {rawMetaTitle && (
+                            <BlockStack gap="100">
+                              <TextField
+                                label=""
+                                labelHidden
+                                value={editedMetaTitle}
+                                onChange={setEditedMetaTitle}
+                                error={
+                                  editedMetaTitle.length > 60
+                                    ? "Over 60 characters — shorten before publishing"
+                                    : ""
+                                }
+                                autoComplete="off"
+                              />
+                              <InlineStack align="space-between">
+                                <Text
+                                  as="p"
+                                  variant="bodySm"
+                                  tone={editedMetaTitle.length > 60 ? "critical" : "subdued"}
+                                >
+                                  {editedMetaTitle.length}/60 characters
+                                </Text>
                               </InlineStack>
-                              <Text as="p" variant="bodySm">{socialFetcher.data.social[key]}</Text>
+                              <ProgressBar
+                                progress={Math.min(100, Math.round((editedMetaTitle.length / 60) * 100))}
+                                tone={
+                                  editedMetaTitle.length > 60
+                                    ? "critical"
+                                    : editedMetaTitle.length >= 48
+                                      ? "highlight"
+                                      : "success"
+                                }
+                                size="small"
+                              />
                             </BlockStack>
+                          )}
+                          {existingContent.metaTitle?.original && (
+                            <>
+                              <Divider />
+                              <OriginalContentSection
+                                original={existingContent.metaTitle.original}
+                                contentType="metaTitle"
+                                revertFetcher={revertFetcher}
+                              />
+                            </>
+                          )}
+                          {entitlements?.versionHistory && versionsByType.metaTitle?.length > 0 && (
+                            <VersionHistorySection
+                              versions={versionsByType.metaTitle}
+                              contentType="metaTitle"
+                              restoreFetcher={restoreFetcher}
+                            />
+                          )}
+                        </BlockStack>
+                      </Card>
+                    )}
+
+                    {/* Meta Description */}
+                    {(rawMetaDescription || genMetaDescription) && (
+                      <Card>
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h2" variant="headingMd">
+                              Meta Description
+                            </Text>
+                            <InlineStack gap="200">
+                              {rawMetaDescription && (
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(editedMetaDescription);
+                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
+                                  }}
+                                >
+                                  Copy
+                                </Button>
+                              )}
+                              {rawMetaDescription && (
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => handleRegenerateSection("metaDescription")}
+                                  loading={isGenerating}
+                                >
+                                  Regenerate
+                                </Button>
+                              )}
+                            </InlineStack>
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Current: {product.seoDescription || "(none set)"}
+                          </Text>
+                          {rawMetaDescription && (
+                            <BlockStack gap="100">
+                              <TextField
+                                label=""
+                                labelHidden
+                                value={editedMetaDescription}
+                                onChange={setEditedMetaDescription}
+                                multiline={2}
+                                error={
+                                  editedMetaDescription.length > 155
+                                    ? "Over 155 characters — shorten before publishing"
+                                    : ""
+                                }
+                                autoComplete="off"
+                              />
+                              <InlineStack align="space-between">
+                                <Text
+                                  as="p"
+                                  variant="bodySm"
+                                  tone={editedMetaDescription.length > 155 ? "critical" : "subdued"}
+                                >
+                                  {editedMetaDescription.length}/155 characters
+                                </Text>
+                              </InlineStack>
+                              <ProgressBar
+                                progress={Math.min(
+                                  100,
+                                  Math.round((editedMetaDescription.length / 155) * 100),
+                                )}
+                                tone={
+                                  editedMetaDescription.length > 155
+                                    ? "critical"
+                                    : editedMetaDescription.length >= 124
+                                      ? "highlight"
+                                      : "success"
+                                }
+                                size="small"
+                              />
+                            </BlockStack>
+                          )}
+                          {existingContent.metaDescription?.original && (
+                            <>
+                              <Divider />
+                              <OriginalContentSection
+                                original={existingContent.metaDescription.original}
+                                contentType="metaDescription"
+                                revertFetcher={revertFetcher}
+                              />
+                            </>
+                          )}
+                          {entitlements?.versionHistory && versionsByType.metaDescription?.length > 0 && (
+                            <VersionHistorySection
+                              versions={versionsByType.metaDescription}
+                              contentType="metaDescription"
+                              restoreFetcher={restoreFetcher}
+                            />
+                          )}
+                        </BlockStack>
+                      </Card>
+                    )}
+
+                    {/* FAQ */}
+                    {faq && (
+                      <Card>
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h2" variant="headingMd">
+                              FAQ Content
+                            </Text>
+                            <Button
+                              size="slim"
+                              variant="plain"
+                              onClick={() => handleRegenerateSection("faq")}
+                              loading={isGenerating}
+                            >
+                              Regenerate
+                            </Button>
+                          </InlineStack>
+                          <Box padding="200" background="bg-surface-success" borderRadius="200">
+                            <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
+                              {faq}
+                            </pre>
                           </Box>
-                        ) : null
-                      )}
-                    </BlockStack>
-                  )}
-                  {socialFetcher.data?.error && (
-                    <Text as="p" variant="bodySm" tone="critical">{socialFetcher.data.error}</Text>
-                  )}
-                </BlockStack>
-              </Card>
+                          {existingContent.faq?.original && (
+                            <>
+                              <Divider />
+                              <OriginalContentSection
+                                original={existingContent.faq.original}
+                                contentType="faq"
+                                revertFetcher={revertFetcher}
+                              />
+                            </>
+                          )}
+                        </BlockStack>
+                      </Card>
+                    )}
 
-            </>)}
+                    {/* Image Alt Text — the badge reflects the ACTUAL outcome:
+                  all applied / partially applied / failed. Never claim success
+                  for an operation that failed. */}
+                    {(altTextResults.length > 0 || genAltText) && (
+                      <Card>
+                        <BlockStack gap="300">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h2" variant="headingMd">
+                              Image Alt Text
+                            </Text>
+                            <AltTextBadge results={altTextResults} />
+                          </InlineStack>
+                          {actionData?.altTextTruncated && (
+                            <Banner tone="info">
+                              <p>
+                                This product has more images than one run covers — the first{" "}
+                                {altTextResults.length} were processed. Run again after reviewing to cover the
+                                rest, or edit the remaining images in Shopify admin.
+                              </p>
+                            </Banner>
+                          )}
+                          {isGenerating && genAltText && (
+                            <InlineStack gap="200">
+                              <Spinner size="small" />
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Generating alt text for {product.images.length} image
+                                {product.images.length !== 1 ? "s" : ""}...
+                              </Text>
+                            </InlineStack>
+                          )}
+                          <AltTextResultList results={altTextResults} />
+                          {!altTextResults.length && !isGenerating && (
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Check "Image Alt Text" and click Generate to create alt text for all images.
+                            </Text>
+                          )}
+                        </BlockStack>
+                      </Card>
+                    )}
 
-            {/* ── Tab 2: Version history ── */}
-            {selectedTab === 2 && (
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Version History</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Previous versions of your generated content. Click Restore to roll back.
-                  </Text>
-                  {["description", "metaTitle", "metaDescription", "faq"].map((type) =>
-                    versionsByType[type]?.length > 0 ? (
-                      <BlockStack key={type} gap="200">
-                        <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                          {type === "description" ? "Description" : type === "metaTitle" ? "Meta Title" : type === "metaDescription" ? "Meta Description" : "FAQ"}
+                    {/* Publish button */}
+                    {hasGeneratedContent && !actionData?.autoPublished && (
+                      <Card>
+                        <BlockStack gap="200">
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Content generated by AI • Review before publishing
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Your edits above will be published — not the original AI output.
+                          </Text>
+                          <Button
+                            variant="primary"
+                            size="large"
+                            onClick={handlePublish}
+                            loading={isPublishing}
+                            disabled={isLoading}
+                            fullWidth
+                          >
+                            {isPublishing ? "Publishing..." : "Publish to Store"}
+                          </Button>
+                        </BlockStack>
+                      </Card>
+                    )}
+
+                    {/* Social Media Content */}
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="h2" variant="headingMd">
+                            Social Media Content
+                          </Text>
+                          <Button
+                            size="slim"
+                            loading={socialFetcher.state !== "idle"}
+                            onClick={() => {
+                              const fd = new FormData();
+                              fd.append("actionType", "generateSocial");
+                              socialFetcher.submit(fd, { method: "POST" });
+                            }}
+                          >
+                            Generate
+                          </Button>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Ready-to-post captions for Instagram, Facebook, and TikTok.
                         </Text>
-                        {entitlements?.versionHistory && (
-                          <VersionHistorySection versions={versionsByType[type]} contentType={type} restoreFetcher={restoreFetcher} />
+                        {socialFetcher.data?.social && (
+                          <BlockStack gap="300">
+                            {[
+                              { key: "instagram", label: "Instagram" },
+                              { key: "facebook", label: "Facebook" },
+                              { key: "tiktok", label: "TikTok" },
+                            ].map(({ key, label }) =>
+                              socialFetcher.data.social[key] ? (
+                                <Box
+                                  key={key}
+                                  padding="300"
+                                  background="bg-surface-secondary"
+                                  borderRadius="200"
+                                >
+                                  <BlockStack gap="200">
+                                    <InlineStack align="space-between" blockAlign="center">
+                                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                                        {label}
+                                      </Text>
+                                      <Button
+                                        size="slim"
+                                        variant="plain"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(socialFetcher.data.social[key]);
+                                          if (window.shopify?.toast) {
+                                            window.shopify.toast.show(`${label} caption copied!`, {
+                                              duration: 2000,
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        Copy
+                                      </Button>
+                                    </InlineStack>
+                                    <Text as="p" variant="bodySm">
+                                      {socialFetcher.data.social[key]}
+                                    </Text>
+                                  </BlockStack>
+                                </Box>
+                              ) : null,
+                            )}
+                          </BlockStack>
+                        )}
+                        {socialFetcher.data?.error && (
+                          <Text as="p" variant="bodySm" tone="critical">
+                            {socialFetcher.data.error}
+                          </Text>
                         )}
                       </BlockStack>
-                    ) : null
-                  )}
-                  {Object.values(versionsByType).every((v) => !v?.length) && (
-                    <Text as="p" variant="bodySm" tone="subdued">No version history yet. Generate content to start building history.</Text>
-                  )}
-                </BlockStack>
-              </Card>
-            )}
+                    </Card>
+                  </>
+                )}
 
-            {/* ── Tab 3: Alt text ── */}
-            {selectedTab === 3 && (
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Image Alt Text</Text>
-                    <AltTextBadge results={altTextResults} />
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    AI-generated accessibility descriptions applied directly to your product images.
-                  </Text>
-                  {product.images.length > 0 && (
-                    <Button
-                      onClick={() => {
-                        setGenAltText(true);
-                        handleGenerate({ description: false, metaTitle: false, metaDescription: false, faq: false, altText: true });
-                      }}
-                      loading={isGenerating && genAltText}
-                      disabled={isLoading}
-                    >
-                      Generate Alt Text for {product.images.length} Image{product.images.length !== 1 ? "s" : ""}
-                    </Button>
-                  )}
-                  <AltTextResultList results={altTextResults} />
-                  {/* What Shopify ACTUALLY holds right now — read live from the
+                {/* ── Tab 2: Version history ── */}
+                {selectedTab === 2 && (
+                  <Card>
+                    <BlockStack gap="400">
+                      <Text as="h2" variant="headingMd">
+                        Version History
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Previous versions of your generated content. Click Restore to roll back.
+                      </Text>
+                      {["description", "metaTitle", "metaDescription", "faq"].map((type) =>
+                        versionsByType[type]?.length > 0 ? (
+                          <BlockStack key={type} gap="200">
+                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                              {type === "description"
+                                ? "Description"
+                                : type === "metaTitle"
+                                  ? "Meta Title"
+                                  : type === "metaDescription"
+                                    ? "Meta Description"
+                                    : "FAQ"}
+                            </Text>
+                            {entitlements?.versionHistory && (
+                              <VersionHistorySection
+                                versions={versionsByType[type]}
+                                contentType={type}
+                                restoreFetcher={restoreFetcher}
+                              />
+                            )}
+                          </BlockStack>
+                        ) : null,
+                      )}
+                      {Object.values(versionsByType).every((v) => !v?.length) && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          No version history yet. Generate content to start building history.
+                        </Text>
+                      )}
+                    </BlockStack>
+                  </Card>
+                )}
+
+                {/* ── Tab 3: Alt text ── */}
+                {selectedTab === 3 && (
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h2" variant="headingMd">
+                          Image Alt Text
+                        </Text>
+                        <AltTextBadge results={altTextResults} />
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        AI-generated accessibility descriptions applied directly to your product images.
+                      </Text>
+                      {product.images.length > 0 && (
+                        <Button
+                          onClick={() => {
+                            setGenAltText(true);
+                            handleGenerate({
+                              description: false,
+                              metaTitle: false,
+                              metaDescription: false,
+                              faq: false,
+                              altText: true,
+                            });
+                          }}
+                          loading={isGenerating && genAltText}
+                          disabled={isLoading}
+                        >
+                          Generate Alt Text for {product.images.length} Image
+                          {product.images.length !== 1 ? "s" : ""}
+                        </Button>
+                      )}
+                      <AltTextResultList results={altTextResults} />
+                      {/* What Shopify ACTUALLY holds right now — read live from the
                       product's media on every page load. Lets a merchant (and
                       the E2E ground-truth check) confirm the alt text really
                       reached Shopify, independent of any generation result. */}
-                  {product.images.some((img) => img.altText) && (
-                    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                      <BlockStack gap="150">
-                        <Text as="p" variant="bodySm" fontWeight="semibold">Currently on Shopify</Text>
-                        {product.images.filter((img) => img.altText).map((img, i) => (
-                          <InlineStack key={img.id ?? i} gap="200" blockAlign="start" wrap={false}>
-                            <Thumbnail source={img.url} alt="" size="small" />
-                            <Text as="p" variant="bodySm" tone="subdued">{img.altText}</Text>
-                          </InlineStack>
-                        ))}
-                      </BlockStack>
-                    </Box>
-                  )}
-                  {!altTextResults.length && !isGenerating && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Click Generate Alt Text to create accessibility descriptions for all product images.
-                    </Text>
-                  )}
-                </BlockStack>
-              </Card>
-            )}
-
-            </BlockStack>
+                      {product.images.some((img) => img.altText) && (
+                        <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                          <BlockStack gap="150">
+                            <Text as="p" variant="bodySm" fontWeight="semibold">
+                              Currently on Shopify
+                            </Text>
+                            {product.images
+                              .filter((img) => img.altText)
+                              .map((img, i) => (
+                                <InlineStack key={img.id ?? i} gap="200" blockAlign="start" wrap={false}>
+                                  <Thumbnail source={img.url} alt="" size="small" />
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    {img.altText}
+                                  </Text>
+                                </InlineStack>
+                              ))}
+                          </BlockStack>
+                        </Box>
+                      )}
+                      {!altTextResults.length && !isGenerating && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Click Generate Alt Text to create accessibility descriptions for all product images.
+                        </Text>
+                      )}
+                    </BlockStack>
+                  </Card>
+                )}
+              </BlockStack>
             </Box>
           </Layout.Section>
         </Layout>
@@ -2130,13 +2554,17 @@ export default function ProductGeneratePage() {
         primaryAction={{
           content: "Generate & Publish Now",
           destructive: true,
-          onAction: () => { setShowAutoPublishConfirm(false); doGenerate(pendingGenerateTypes); },
+          onAction: () => {
+            setShowAutoPublishConfirm(false);
+            doGenerate(pendingGenerateTypes);
+          },
         }}
         secondaryActions={[{ content: "Cancel", onAction: () => setShowAutoPublishConfirm(false) }]}
       >
         <Modal.Section>
           <Text as="p" variant="bodyMd">
-            This will generate content and immediately publish it to your live Shopify store, skipping the review step. Are you sure?
+            This will generate content and immediately publish it to your live Shopify store, skipping the
+            review step. Are you sure?
           </Text>
         </Modal.Section>
       </Modal>

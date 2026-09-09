@@ -19,6 +19,6 @@ export const loader = () => {
       startedAt,
       env: process.env.NODE_ENV || "unknown",
     },
-    { headers: { "Cache-Control": "no-store" } }
+    { headers: { "Cache-Control": "no-store" } },
   );
 };

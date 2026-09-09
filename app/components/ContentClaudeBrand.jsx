@@ -19,9 +19,7 @@ export function ContentClaudeBrand() {
         <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", lineHeight: 1.2 }}>
           Nav<span style={{ color: "#0A84FF" }}>aal</span>
         </div>
-        <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>
-          AI SEO, AEO &amp; GEO
-        </div>
+        <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>AI SEO, AEO &amp; GEO</div>
       </div>
     </div>
   );

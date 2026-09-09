@@ -63,7 +63,12 @@ export const action = async ({ request }) => {
     const plan = await prisma.plan.findUnique({ where: { shop }, select: { shopifyChargeId: true } });
     if (plan?.shopifyChargeId && chargeId && plan.shopifyChargeId !== chargeId) {
       logger.info(
-        { shop, event: "subscription_cancelled_superseded", cancelled: chargeId, current: plan.shopifyChargeId },
+        {
+          shop,
+          event: "subscription_cancelled_superseded",
+          cancelled: chargeId,
+          current: plan.shopifyChargeId,
+        },
         "CANCELLED for a subscription that is not the current one — ignored (upgrade in flight)",
       );
       return new Response(null, { status: 200 });
@@ -113,7 +118,10 @@ export const action = async ({ request }) => {
           monthlyLimit: FREE_PLAN.monthlyLimit,
         },
       });
-      logger.info({ shop, status, event: "subscription_downgraded_to_free" }, "No active subscription remains — plan is Free");
+      logger.info(
+        { shop, status, event: "subscription_downgraded_to_free" },
+        "No active subscription remains — plan is Free",
+      );
       planChanged = true;
     }
   } else if (status === "FROZEN") {

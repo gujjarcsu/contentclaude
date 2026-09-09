@@ -42,26 +42,33 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
     <Banner tone="warning" title="One-time setup: turn on the AI-search FAQ schema">
       <BlockStack gap="300">
         <Text as="p" variant="bodyMd">
-          Your published FAQ content only reaches the storefront after you enable the{" "}
-          <strong>AI-search FAQ schema</strong> app embed in your theme — it&apos;s off by default,
-          and publishing alone doesn&apos;t make it live. This step adds the structured data AI
-          answer engines like ChatGPT and Perplexity can read.
+          Your published FAQ content only reaches the storefront after you enable the{""}
+          <strong>AI-search FAQ schema</strong> app embed in your theme — it&apos;s off by default, and
+          publishing alone doesn&apos;t make it live. This step adds the structured data AI answer engines
+          like ChatGPT and Perplexity can read.
         </Text>
         <Text as="p" variant="bodySm" tone="subdued">
-          For FAQ content shoppers can actually see on the page (recommended — also add this),
-          add the <strong>FAQ (Navaal)</strong> block to your product template from the same
-          theme editor.
+          For FAQ content shoppers can actually see on the page (recommended — also add this), add the{" "}
+          <strong>FAQ (Navaal)</strong> block to your product template from the same theme editor.
         </Text>
         <List type="number">
-          <List.Item>Click the button below — it opens your theme editor with the embed pre-selected.</List.Item>
-          <List.Item>Click <strong>Save</strong> in the theme editor.</List.Item>
+          <List.Item>
+            Click the button below — it opens your theme editor with the embed pre-selected.
+          </List.Item>
+          <List.Item>
+            Click <strong>Save</strong> in the theme editor.
+          </List.Item>
           <List.Item>Come back here and click &quot;I&apos;ve enabled it&quot;.</List.Item>
         </List>
         <InlineStack gap="300">
-          <Button variant="primary" onClick={openEditor}>Open theme editor →</Button>
+          <Button variant="primary" onClick={openEditor}>
+            Open theme editor
+          </Button>
           <fetcher.Form method="post" action="/app/embed-status">
             <input type="hidden" name="actionType" value="confirm" />
-            <Button submit loading={fetcher.state !== "idle"}>I&apos;ve enabled it</Button>
+            <Button submit loading={fetcher.state !== "idle"}>
+              I&apos;ve enabled it
+            </Button>
           </fetcher.Form>
         </InlineStack>
       </BlockStack>

@@ -17,15 +17,19 @@ import {
   ProgressBar,
   Checkbox,
   ButtonGroup,
+  Icon,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, FileText, CheckCircle2, Lightbulb } from "lucide-react";
+import { BlogIcon, FileIcon, CheckCircleIcon, LightbulbIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
+
+import blogPreviewStyles from "../blog-preview.css?url";
+
+export const links = () => [{ rel: "stylesheet", href: blogPreviewStyles }];
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -112,7 +116,7 @@ export const action = async ({ request }) => {
           const brandVoice = await getCache(
             `bv:${shop}`,
             () => prisma.brandVoice.findUnique({ where: { shop } }),
-            300
+            300,
           );
           return generateBlogPost(topic, brandVoice, { keywords, length, instructions });
         },
@@ -126,10 +130,13 @@ export const action = async ({ request }) => {
     }
 
     if (!outcome.allowed) {
-      return Response.json({
-        error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
-        limitReached: true,
-      }, { status: 429 });
+      return Response.json(
+        {
+          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          limitReached: true,
+        },
+        { status: 429 },
+      );
     }
     if (outcome.refunded) {
       return Response.json(
@@ -176,7 +183,10 @@ export const action = async ({ request }) => {
     // article, not create a duplicate. The saved post carries the article id
     // from the first publish.
     const existingPost = savedPostId
-      ? await prisma.blogPost.findFirst({ where: { id: savedPostId, shop }, select: { shopifyArticleId: true } })
+      ? await prisma.blogPost.findFirst({
+          where: { id: savedPostId, shop },
+          select: { shopifyArticleId: true },
+        })
       : null;
     if (existingPost?.shopifyArticleId) {
       const { readMutationResult } = await import("../utils/adminGraphql.server.js");
@@ -187,11 +197,14 @@ export const action = async ({ request }) => {
             userErrors { field message }
           }
         }`,
-        { variables: { id: existingPost.shopifyArticleId, article: { title, body: content } } }
+        { variables: { id: existingPost.shopifyArticleId, article: { title, body: content } } },
       );
       const updated = await readMutationResult(updateResult, "articleUpdate");
       if (!updated.ok) {
-        return Response.json({ error: `Could not update the published article: ${updated.errorMessages.join("; ")}` }, { status: 422 });
+        return Response.json(
+          { error: `Could not update the published article: ${updated.errorMessages.join(";")}` },
+          { status: 422 },
+        );
       }
       await prisma.blogPost.updateMany({
         where: { id: savedPostId, shop },
@@ -225,14 +238,17 @@ export const action = async ({ request }) => {
         `mutation createBlog($blog: BlogCreateInput!) {
           blogCreate(blog: $blog) { blog { id } userErrors { message } }
         }`,
-        { variables: { blog: { title: "News" } } }
+        { variables: { blog: { title: "News" } } },
       );
       const created = await readResult(createBlogResult, "blogCreate");
       blogId = created.payload?.blog?.id;
       if (!blogId) {
         // Surface the specific reason instead of a generic 500.
-        const reason = created.errorMessages.length > 0 ? ` (${created.errorMessages.join("; ")})` : "";
-        return Response.json({ error: `Could not find or create a blog to publish to${reason}.` }, { status: 500 });
+        const reason = created.errorMessages.length > 0 ? ` (${created.errorMessages.join(";")})` : "";
+        return Response.json(
+          { error: `Could not find or create a blog to publish to${reason}.` },
+          { status: 500 },
+        );
       }
     }
 
@@ -243,11 +259,15 @@ export const action = async ({ request }) => {
           userErrors { field message }
         }
       }`,
-      { variables: { article: { blogId, title, body: content, isPublished: true, author: { name: authorName } } } }
+      {
+        variables: {
+          article: { blogId, title, body: content, isPublished: true, author: { name: authorName } },
+        },
+      },
     );
     const createdArticle = await readResult(articleResult, "articleCreate");
     if (!createdArticle.ok) {
-      return Response.json({ error: createdArticle.errorMessages.join("; ") }, { status: 422 });
+      return Response.json({ error: createdArticle.errorMessages.join(";") }, { status: 422 });
     }
 
     const articleData = { articleCreate: createdArticle.payload };
@@ -284,15 +304,18 @@ const LOADING_MESSAGES = [
 ];
 
 export default function BlogPage() {
-  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost } = useLoaderData();
+  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost } =
+    useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
 
-  const isGenerating = navigation.state === "submitting" && navigation.formData?.get("actionType") === "generate";
+  const isGenerating =
+    navigation.state === "submitting" && navigation.formData?.get("actionType") === "generate";
 
-  const isPublishing = navigation.state === "submitting" && navigation.formData?.get("actionType") === "publish";
+  const isPublishing =
+    navigation.state === "submitting" && navigation.formData?.get("actionType") === "publish";
 
   const [topic, setTopic] = useState(resumePost?.topic || "");
   const [keywords, setKeywords] = useState(resumePost?.keywords || brandVoice?.targetKeywords || "");
@@ -309,11 +332,18 @@ export default function BlogPage() {
     suggestVisuals
       ? "Where a visual would strengthen a point, insert an italic placeholder on its own line like: <p><em>[Suggested image: a short description of the ideal image]</em></p>."
       : "",
-    addFaq ? "Add a short <h2>FAQ</h2> section near the end with 3-4 question/answer pairs relevant to the topic." : "",
-  ].filter(Boolean).join("\n");
+    addFaq
+      ? "Add a short <h2>FAQ</h2> section near the end with 3-4 question/answer pairs relevant to the topic."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   useEffect(() => {
-    if (!isGenerating) { setLoadingMsgIdx(0); return; }
+    if (!isGenerating) {
+      setLoadingMsgIdx(0);
+      return;
+    }
     const t = setInterval(() => setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length), 4000);
     return () => clearInterval(t);
   }, [isGenerating]);
@@ -358,7 +388,6 @@ export default function BlogPage() {
     { label: "Long (~2000 words)", value: "long" },
   ];
 
-
   return loadingThisRoute ? (
     <AppSkeleton title="Blog Generator" sections={2} layout="twoThird" />
   ) : (
@@ -374,24 +403,10 @@ export default function BlogPage() {
       ]}
     >
       <BlockStack gap="500">
-        <style>{`
-          .cc-blog-preview { max-width: 760px; margin: 0 auto; color: #202223; font-size: 16px; line-height: 1.7; }
-          .cc-blog-preview h1 { font-size: 30px; line-height: 1.25; font-weight: 700; margin: 0 0 16px; letter-spacing: -0.02em; }
-          .cc-blog-preview h2 { font-size: 22px; line-height: 1.3; font-weight: 700; margin: 32px 0 12px; }
-          .cc-blog-preview h3 { font-size: 18px; font-weight: 600; margin: 24px 0 8px; }
-          .cc-blog-preview p { margin: 0 0 16px; }
-          .cc-blog-preview ul, .cc-blog-preview ol { margin: 0 0 16px; padding-left: 24px; }
-          .cc-blog-preview li { margin: 0 0 8px; }
-          .cc-blog-preview blockquote { margin: 24px 0; padding: 10px 20px; border-left: 4px solid #2C6ECB; background: #f6f9fd; color: #42474c; font-style: italic; border-radius: 0 6px 6px 0; }
-          .cc-blog-preview strong { font-weight: 600; }
-          .cc-blog-preview a { color: #2C6ECB; text-decoration: underline; }
-          .cc-blog-preview em { color: #6d7175; }
-          .cc-blog-preview img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
-          .cc-blog-preview > *:first-child { margin-top: 0; }
-        `}</style>
-        <GeoValueBanner variant="compact" />
         {actionData?.error && (
-          <Banner tone="critical"><p>{actionData.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
         )}
         {actionData?.published && (
           <Banner tone="success" title="Blog Post Published!">
@@ -402,7 +417,8 @@ export default function BlogPage() {
           <Banner tone="success" title="Blog post generated!">
             <p>
               Saved as a draft. Review and edit below, then publish when ready.
-              {actionData.remaining !== undefined && ` · ${actionData.remaining} generations remaining this month.`}
+              {actionData.remaining !== undefined &&
+                ` · ${actionData.remaining} generations remaining this month.`}
             </p>
           </Banner>
         )}
@@ -414,8 +430,10 @@ export default function BlogPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Generate a Blog Post</Text>
-                    <BookOpen aria-hidden="true" size={18} color="#1656AC" />
+                    <Text as="h2" variant="headingMd">
+                      Generate a Blog Post
+                    </Text>
+                    <Icon source={BlogIcon} tone="info" />
                   </InlineStack>
 
                   {isOutOfUsage ? (
@@ -529,15 +547,29 @@ export default function BlogPage() {
               <Box padding="400" background="bg-surface-info" borderRadius="300">
                 <BlockStack gap="200">
                   <InlineStack gap="200" blockAlign="center">
-                    <Lightbulb aria-hidden="true" size={18} color="#1656AC" />
-                    <Text as="h2" variant="headingSm">Tips for great posts</Text>
+                    <Icon source={LightbulbIcon} tone="info" />
+                    <Text as="h2" variant="headingSm">
+                      Tips for great posts
+                    </Text>
                   </InlineStack>
                   <BlockStack gap="100">
-                    <Text as="p" variant="bodySm">• <strong>Be specific</strong> — "How to wax a snowboard for beginners" beats "snowboards".</Text>
-                    <Text as="p" variant="bodySm">• Add <strong>target keywords</strong> your customers actually search.</Text>
-                    <Text as="p" variant="bodySm">• Use <strong>special instructions</strong> to mention promos, comparisons, or your angle.</Text>
-                    <Text as="p" variant="bodySm">• <strong>Longer posts</strong> rank better for competitive topics.</Text>
-                    <Text as="p" variant="bodySm">• Turn on <strong>FAQ</strong> to add the Q&amp;A format AI answer engines quote from.</Text>
+                    <Text as="p" variant="bodySm">
+                      • <strong>Be specific</strong> — "How to wax a snowboard for beginners" beats
+                      "snowboards".
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      • Add <strong>target keywords</strong> your customers actually search.
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      • Use <strong>special instructions</strong> to mention promos, comparisons, or your
+                      angle.
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      • <strong>Longer posts</strong> give the model more to work with.
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      • Turn on <strong>FAQ</strong> to add a question-and-answer section.
+                    </Text>
                   </BlockStack>
                 </BlockStack>
               </Box>
@@ -547,8 +579,12 @@ export default function BlogPage() {
                 <Card>
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
-                      <Text as="p" variant="bodySm" fontWeight="semibold">Monthly Generations</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">{usageCount}/{monthlyLimit}</Text>
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Monthly Generations
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {usageCount}/{monthlyLimit}
+                      </Text>
                     </InlineStack>
                     <ProgressBar
                       progress={usagePct}
@@ -564,9 +600,11 @@ export default function BlogPage() {
                 <Card>
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">Recent Posts</Text>
+                      <Text as="h2" variant="headingMd">
+                        Recent Posts
+                      </Text>
                       <Button size="slim" variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                        View all →
+                        View all
                       </Button>
                     </InlineStack>
                     {recentPosts.map((post) => (
@@ -606,7 +644,9 @@ export default function BlogPage() {
                 <Box padding="600">
                   <InlineStack align="center" gap="300">
                     <Spinner size="large" />
-                    <Text as="p" variant="bodyLg">{LOADING_MESSAGES[loadingMsgIdx]}</Text>
+                    <Text as="p" variant="bodyLg">
+                      {LOADING_MESSAGES[loadingMsgIdx]}
+                    </Text>
                   </InlineStack>
                 </Box>
               </Card>
@@ -617,31 +657,17 @@ export default function BlogPage() {
                 <Card>
                   <Box padding="800">
                     <BlockStack gap="300" inlineAlign="center">
-                      <FileText aria-hidden="true" size={40} color="#8C9196" />
+                      <Icon source={FileIcon} tone="subdued" />
                       <Text as="p" variant="headingMd" alignment="center" tone="subdued">
                         No blog post yet
                       </Text>
                       <Text as="p" variant="bodySm" alignment="center" tone="subdued">
-                        Enter a topic on the left and click Generate Blog Post to create SEO-friendly content in your brand voice.
+                        Enter a topic on the left and click Generate Blog Post to create SEO-friendly content
+                        in your brand voice.
                       </Text>
                     </BlockStack>
                   </Box>
                 </Card>
-                <Box paddingBlockStart="400">
-                  <Card>
-                    <Box padding="600">
-                      <BlockStack gap="300" inlineAlign="center">
-                        <Text as="h2" variant="headingMd" alignment="center">Start driving organic traffic ✏️</Text>
-                        <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                          Write your first AI-powered blog post in under 60 seconds.
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                          Blog posts are written in your brand voice and optimised for the keywords in your Settings.
-                        </Text>
-                      </BlockStack>
-                    </Box>
-                  </Card>
-                </Box>
               </>
             )}
 
@@ -650,7 +676,7 @@ export default function BlogPage() {
                 {/* Success / resume indicator */}
                 <Box padding="300" background="bg-surface-success" borderRadius="200">
                   <InlineStack gap="200" blockAlign="center">
-                    <CheckCircle2 aria-hidden="true" size={18} color="#00A047" />
+                    <Icon source={CheckCircleIcon} tone="success" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
                       {generated
                         ? "Blog post generated and saved as draft — review and edit below"
@@ -672,26 +698,32 @@ export default function BlogPage() {
                         HTML only when you want to change the markup. */}
                     <InlineStack align="space-between" blockAlign="center" wrap>
                       <ButtonGroup variant="segmented">
-                        <Button
-                          pressed={blogView === "preview"}
-                          onClick={() => setBlogView("preview")}
-                        >
+                        <Button pressed={blogView === "preview"} onClick={() => setBlogView("preview")}>
                           Preview
                         </Button>
-                        <Button
-                          pressed={blogView === "html"}
-                          onClick={() => setBlogView("html")}
-                        >
+                        <Button pressed={blogView === "html"} onClick={() => setBlogView("html")}>
                           Edit HTML
                         </Button>
                       </ButtonGroup>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {editedContent.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length} words
+                        {
+                          editedContent
+                            .replace(/<[^>]+>/g, "")
+                            .split(/\s+/)
+                            .filter(Boolean).length
+                        }{" "}
+                        words
                       </Text>
                     </InlineStack>
 
                     {blogView === "preview" ? (
-                      <Box padding="500" background="bg-surface" borderRadius="300" borderColor="border" borderWidth="025">
+                      <Box
+                        padding="500"
+                        background="bg-surface"
+                        borderRadius="300"
+                        borderColor="border"
+                        borderWidth="025"
+                      >
                         <div className="cc-blog-preview">
                           <h1 style={{ marginTop: 0 }}>{editedTitle}</h1>
                           <div dangerouslySetInnerHTML={{ __html: editedContent }} />
@@ -716,7 +748,11 @@ export default function BlogPage() {
                     <input type="hidden" name="actionType" value="publish" />
                     <input type="hidden" name="title" value={editedTitle} />
                     <input type="hidden" name="content" value={editedContent} />
-                    <input type="hidden" name="savedPostId" value={actionData?.savedPostId || resumePost?.id || ""} />
+                    <input
+                      type="hidden"
+                      name="savedPostId"
+                      value={actionData?.savedPostId || resumePost?.id || ""}
+                    />
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">
                         This will publish the post directly to your Shopify blog.

@@ -1,6 +1,5 @@
 import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { GeoValueBanner } from "../components/GeoValueBanner.jsx";
 import {
   Page,
   Layout,
@@ -61,7 +60,7 @@ export const loader = async ({ request }) => {
           }
         }
       }`,
-      { variables: { cursor } }
+      { variables: { cursor } },
     );
     const { data } = await response.json();
     const page = data?.products;
@@ -87,7 +86,8 @@ export const loader = async ({ request }) => {
     };
     const { score, checks } = calculateSeoScore(productData);
     const dbRecord = contentByProductId.get(node.id);
-    const isStale = dbRecord && dbRecord.status === "published" && new Date(dbRecord.updatedAt) < SIX_MONTHS_AGO;
+    const isStale =
+      dbRecord && dbRecord.status === "published" && new Date(dbRecord.updatedAt) < SIX_MONTHS_AGO;
     return {
       id: node.id,
       numericId: node.id.replace("gid://shopify/Product/", ""),
@@ -102,9 +102,7 @@ export const loader = async ({ request }) => {
   products.sort((a, b) => a.score - b.score); // worst first
 
   const totalScore =
-    products.length > 0
-      ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length)
-      : 0;
+    products.length > 0 ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length) : 0;
 
   const missingDesc = products.filter((p) => !p.checks.hasDescription).length;
   const missingMeta = products.filter((p) => !p.checks.hasMetaTitle).length;
@@ -116,14 +114,21 @@ export const loader = async ({ request }) => {
   // truncated: the scan did not cover the whole catalog — either the product
   // cap was reached or the time budget ran out. hasMoreProducts is only known
   // when the last page reported another page.
-  const truncatedReason = stoppedByTimeout && hasNextPage
-    ? "timeout"
-    : hasNextPage && allEdges.length >= MAX_AUDIT_PRODUCTS
-      ? "cap"
-      : null;
+  const truncatedReason =
+    stoppedByTimeout && hasNextPage
+      ? "timeout"
+      : hasNextPage && allEdges.length >= MAX_AUDIT_PRODUCTS
+        ? "cap"
+        : null;
 
   return Response.json({
-    products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount,
+    products,
+    totalScore,
+    missingDesc,
+    missingMeta,
+    noImages,
+    missingAltText,
+    staleCount,
     truncatedReason,
     scannedCount: allEdges.length,
   });
@@ -139,20 +144,30 @@ function ScoreRing({ score }) {
       <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
         {score}
       </Text>
-      <Text as="p" variant="bodySm" tone="subdued">/ 100 — Traditional SEO score</Text>
+      <Text as="p" variant="bodySm" tone="subdued">
+        / 100 — Traditional SEO score
+      </Text>
       <ProgressBar progress={score} tone={tone} size="medium" />
     </BlockStack>
   );
 }
 
 function CheckIcon({ pass }) {
-  return pass
-    ? <Badge tone="success">✓</Badge>
-    : <Badge tone="critical">✗</Badge>;
+  return pass ? <Badge tone="success">✓</Badge> : <Badge tone="critical">✗</Badge>;
 }
 
 export default function SeoAuditPage() {
-  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount, truncatedReason, scannedCount } = useLoaderData();
+  const {
+    products,
+    totalScore,
+    missingDesc,
+    missingMeta,
+    noImages,
+    missingAltText,
+    staleCount,
+    truncatedReason,
+    scannedCount,
+  } = useLoaderData();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -165,16 +180,29 @@ export default function SeoAuditPage() {
 
   const rows = products.map((p) => [
     <InlineStack gap="200" blockAlign="center" key={p.id}>
-      <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>{p.title}</Button>
+      <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>
+        {p.title}
+      </Button>
       {p.isStale && <Badge tone="attention">Stale</Badge>}
     </InlineStack>,
-    <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={p.score >= 70 ? "success" : p.score >= 40 ? undefined : "critical"}>{p.score}</Text>,
+    <Text
+      key={`${p.id}-score`}
+      as="span"
+      fontWeight="bold"
+      tone={p.score >= 70 ? "success" : p.score >= 40 ? undefined : "critical"}
+    >
+      {p.score}
+    </Text>,
     <CheckIcon key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
     <CheckIcon key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
     <CheckIcon key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
-    p.checks.noImages
-      ? <Badge key={`${p.id}-alt`} tone="subdued">No images</Badge>
-      : <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />,
+    p.checks.noImages ? (
+      <Badge key={`${p.id}-alt`} tone="subdued">
+        No images
+      </Badge>
+    ) : (
+      <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />
+    ),
   ]);
 
   return (
@@ -196,7 +224,6 @@ export default function SeoAuditPage() {
       ]}
     >
       <BlockStack gap="500">
-        <GeoValueBanner variant="compact" />
         {truncatedReason && (
           <Banner tone="warning" title="This is a partial audit">
             <p>
@@ -210,7 +237,9 @@ export default function SeoAuditPage() {
           <Banner tone="info">
             <InlineStack gap="200" blockAlign="center">
               <Spinner size="small" />
-              <Text as="p" variant="bodyMd">Scanning your catalog... This may take a moment for large stores.</Text>
+              <Text as="p" variant="bodyMd">
+                Scanning your catalog... This may take a moment for large stores.
+              </Text>
             </InlineStack>
           </Banner>
         )}
@@ -220,7 +249,7 @@ export default function SeoAuditPage() {
             tone="warning"
             title={`${staleCount} product${staleCount !== 1 ? "s have" : " has"} content older than 6 months`}
           >
-            <p>Refreshing old descriptions keeps your SEO rankings strong and content relevant.</p>
+            <p>These descriptions were written more than six months ago.</p>
             <Box paddingBlockStart="200">
               <Button onClick={() => navigate("/app/optimize")}>Optimize store</Button>
             </Box>
@@ -236,33 +265,56 @@ export default function SeoAuditPage() {
           <Layout.Section>
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">Issues Found</Text>
+                <Text as="h2" variant="headingMd">
+                  Issues Found
+                </Text>
                 <InlineStack gap="400" wrap>
                   <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{missingDesc}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Missing descriptions</Text>
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                      {missingDesc}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Missing descriptions
+                    </Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{missingMeta}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Missing meta titles</Text>
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                      {missingMeta}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Missing meta titles
+                    </Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{noImages}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">No product images</Text>
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                      {noImages}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      No product images
+                    </Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{missingAltText}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Images missing alt text</Text>
+                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                      {missingAltText}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Images missing alt text
+                    </Text>
                   </BlockStack>
                   {staleCount > 0 && (
                     <BlockStack gap="100">
-                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="attention">{staleCount}</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">Content &gt;6 months old</Text>
+                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="attention">
+                        {staleCount}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Content &gt;6 months old
+                      </Text>
                     </BlockStack>
                   )}
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) · Has Images (10pts) · Alt Text (10pts)
+                  SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) ·
+                  Has Images (10pts) · Alt Text (10pts)
                 </Text>
               </BlockStack>
             </Card>

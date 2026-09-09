@@ -2,9 +2,9 @@ import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher, useLocat
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { Text, InlineStack, FooterHelp, Link } from "@shopify/polaris";
+import { FooterHelp, Link, Banner, Box, ProgressBar } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { ContentClaudeBrand } from "../components/ContentClaudeBrand.jsx";
@@ -57,7 +57,7 @@ function useStickyEmbeddedParams(host, shopDomain) {
         window.history.replaceState(
           window.history.state,
           "",
-          `${window.location.pathname}?${sp.toString()}${window.location.hash || ""}`
+          `${window.location.pathname}?${sp.toString()}${window.location.hash || ""}`,
         );
       }
     } catch {
@@ -66,18 +66,9 @@ function useStickyEmbeddedParams(host, shopDomain) {
   }, [location.pathname, location.search, host, shopDomain]);
 }
 
-const MESSAGES = [
-  "✨ AI is crafting your product content…",
-  "🔍 Researching keywords and SEO…",
-  "📝 Writing descriptions in your brand voice…",
-  "🚀 Almost there — polishing the content…",
-  "⚡ Generating at full speed…",
-];
-
 function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
   const fetcher = useFetcher();
   const timerRef = useRef(null);
-  const [msgIdx, setMsgIdx] = useState(0);
   const hasJobsRef = useRef(false);
   // Phase 1 item 6 — how many consecutive polls came back with nothing.
   const idleStreakRef = useRef(0);
@@ -128,7 +119,7 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobCount, onJobsPage]);
 
   // Count empty responses so the loop above can stop.
@@ -137,82 +128,36 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
     idleStreakRef.current = data.count > 0 ? 0 : idleStreakRef.current + 1;
   }, [data]);
 
-  useEffect(() => {
-    if (!hasJobs) return;
-    const t = setInterval(() => setMsgIdx((i) => (i + 1) % MESSAGES.length), 3500);
-    return () => clearInterval(t);
-  }, [hasJobs]);
-
   if (!hasJobs) return null;
 
+  /* Phase 2 item 2.5 — this was a `div` with `role="button"`, an animated
+     gradient, a `<style>` element injected into the DOM at runtime declaring two
+     @keyframes, a pulsing emoji, a fixed 260px progress track that overflowed at
+     375px, and a "View Jobs" pill made of a styled span. Its accessible name
+     was the concatenation of a rotating emoji sentence, a product count and a
+     percentage — a screen reader announced a long string that changed every 3.5
+     seconds.
+
+     It is now a Polaris Banner with a Polaris ProgressBar and a real Button.
+     The rotating messages are gone: five emoji sentences cycling every 3.5
+     seconds said nothing the progress bar does not, and "Almost there" was a
+     claim the code had no basis for. */
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-    <div
-      role="button"
-      tabIndex={0}
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 500,
-        background: "linear-gradient(90deg, #1a3c6b 0%, #2C6ECB 50%, #1a3c6b 100%)",
-        backgroundSize: "200% 100%",
-        animation: "gradientPan 4s ease infinite",
-        padding: "10px 20px",
-        cursor: "pointer",
-      }}
-      onClick={() => navigate("/app/jobs")}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate("/app/jobs"); }}
-    >
-      <style>{`
-        @keyframes gradientPan {
-          0%   { background-position: 0% 50%; }
-          50%  { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+    <Box paddingBlockStart="200" paddingInlineStart="400" paddingInlineEnd="400">
+      <Banner
+        tone="info"
+        title={
+          totalProducts > 0
+            ? `Generating content — ${completedProducts} of ${totalProducts} products`
+            : "Generating content"
         }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.5; }
-        }
-      `}</style>
-      <InlineStack align="space-between" blockAlign="center" gap="400">
-        <InlineStack gap="300" blockAlign="center">
-          <span style={{ animation: "pulse 1.5s ease-in-out infinite", fontSize: "14px" }}>⚡</span>
-          <Text as="span" variant="bodySm" fontWeight="semibold">
-            <span style={{ color: "#ffffff" }}>{MESSAGES[msgIdx]}</span>
-          </Text>
-          <Text as="span" variant="bodySm">
-            <span style={{ color: "rgba(255,255,255,0.7)" }}>
-              {completedProducts}/{totalProducts} products
-            </span>
-          </Text>
-        </InlineStack>
-        <InlineStack gap="300" blockAlign="center">
-          {/* Bigger, smoothly-animating bar — the width transition glides it
-              between poll updates instead of snapping. */}
-          <div style={{ width: 260, height: 10, background: "rgba(255,255,255,0.25)", borderRadius: 999, overflow: "hidden" }}>
-            <div style={{
-              width: `${pct}%`,
-              height: "100%",
-              background: "#ffffff",
-              borderRadius: 999,
-              transition: "width 0.6s ease",
-            }} />
-          </div>
-          <Text as="span" variant="bodyMd" fontWeight="bold">
-            <span style={{ color: "#ffffff" }}>{pct}%</span>
-          </Text>
-          <span style={{
-            background: "rgba(255,255,255,0.2)",
-            borderRadius: "4px",
-            padding: "2px 8px",
-            fontSize: "11px",
-            color: "#ffffff",
-            fontWeight: "600",
-            letterSpacing: "0.03em",
-          }}>View Jobs →</span>
-        </InlineStack>
-      </InlineStack>
-    </div>
+        action={{ content: "View progress", onAction: () => navigate("/app/jobs") }}
+      >
+        <Box paddingBlockStart="200">
+          <ProgressBar progress={pct} size="small" tone="primary" />
+        </Box>
+      </Banner>
+    </Box>
   );
 }
 
@@ -247,7 +192,9 @@ export default function App() {
               rel="home" stays on the first item: without a home link Shopify
               points the app title at "/", and a bare "/" used to reach the login
               form (App Store rejection 2.1.1). */}
-          <s-link href="/app" rel="home">Home</s-link>
+          <s-link href="/app" rel="home">
+            Home
+          </s-link>
           <s-link href="/app/products">Products</s-link>
           <s-link href="/app/review">Review</s-link>
           <s-link href="/app/blog">Blog</s-link>
@@ -265,7 +212,7 @@ export default function App() {
           <Outlet />
           {/* Support & bug reporting — visible on every page of the app */}
           <FooterHelp>
-            Questions, bugs, or suggestions?{" "}
+            Questions, bugs, or suggestions?{""}
             <Link url="mailto:hello@navaal.ai">Contact us at hello@navaal.ai</Link>
           </FooterHelp>
         </AppRenderBoundary>

@@ -1,8 +1,22 @@
 import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
 import {
-  Page, Layout, Card, Text, BlockStack, InlineStack,
-  Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
-  SkeletonPage, SkeletonBodyText, SkeletonDisplayText, List,
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  Badge,
+  ProgressBar,
+  Banner,
+  Checkbox,
+  Box,
+  Modal,
+  TextContainer,
+  SkeletonPage,
+  SkeletonBodyText,
+  SkeletonDisplayText,
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server.js";
@@ -30,7 +44,7 @@ export const loader = async ({ request }) => {
         const d = await r.json();
         return d.data.productsCount.count;
       },
-      300
+      300,
     ),
     getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
@@ -80,9 +94,10 @@ export const action = async ({ request }) => {
   // generate-only type — enhance mode preserves existing content and the
   // enhance prompt doesn't support FAQ.
   const mode = formData.get("mode") === "enhance" ? "enhance" : "generate";
-  const allowedTypes = mode === "enhance"
-    ? ["description", "metaTitle", "metaDescription"]
-    : ["description", "metaTitle", "metaDescription", "faq"];
+  const allowedTypes =
+    mode === "enhance"
+      ? ["description", "metaTitle", "metaDescription"]
+      : ["description", "metaTitle", "metaDescription", "faq"];
   const contentTypes = allowedTypes.filter((t) => formData.get(t) === "true");
   if (contentTypes.length === 0) return Response.json({ error: "Select at least one content type." });
   const autoPublish = formData.get("autoPublish") === "true";
@@ -121,17 +136,23 @@ export const action = async ({ request }) => {
             edges { node { id description(truncateAt: 20) } }
           }
         }`,
-        { variables: { cursor } }
+        { variables: { cursor } },
       );
     } catch {
       if (targetIds.length > 0) break; // partial list — proceed with what we have
-      return Response.json({ error: "Could not fetch your product list from Shopify. Please try again." }, { status: 503 });
+      return Response.json(
+        { error: "Could not fetch your product list from Shopify. Please try again." },
+        { status: 503 },
+      );
     }
 
     const { data } = await resp.json();
     if (!data?.products) {
       if (targetIds.length > 0) break;
-      return Response.json({ error: "Shopify returned an unexpected response. Please try again." }, { status: 503 });
+      return Response.json(
+        { error: "Shopify returned an unexpected response. Please try again." },
+        { status: 503 },
+      );
     }
 
     const { edges, pageInfo } = data.products;
@@ -148,9 +169,10 @@ export const action = async ({ request }) => {
 
   if (targetIds.length === 0) {
     return Response.json({
-      error: mode === "enhance"
-        ? "No products with an existing description were found — use the optimise flow above to generate fresh content first."
-        : "All products already have AI content — nothing to optimise.",
+      error:
+        mode === "enhance"
+          ? "No products with an existing description were found — use the optimise flow above to generate fresh content first."
+          : "All products already have AI content — nothing to optimise.",
     });
   }
 
@@ -185,7 +207,9 @@ export const action = async ({ request }) => {
   } catch (err) {
     // Concurrent-job cap or enqueue failure — banner, not the error boundary.
     return Response.json({
-      error: err.message?.startsWith("You already have jobs") ? err.message : "Could not start the bulk job. Please try again.",
+      error: err.message?.startsWith("You already have jobs")
+        ? err.message
+        : "Could not start the bulk job. Please try again.",
     });
   }
   return redirect("/app/jobs");
@@ -195,8 +219,14 @@ export const action = async ({ request }) => {
 
 export default function OptimizePage() {
   const {
-    totalProducts, publishedCount, draftCount, needsContent,
-    remaining, canOptimize, planName, monthlyLimit,
+    totalProducts,
+    publishedCount,
+    draftCount,
+    needsContent,
+    remaining,
+    canOptimize,
+    planName,
+    monthlyLimit,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -259,14 +289,24 @@ export default function OptimizePage() {
   }, [enhAutoPublish, doSubmitEnhance]);
 
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
-  const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
+  const estMinutes = Math.ceil((canOptimize * 3.5) / 60);
 
   if (loadingThisRoute) {
     return (
       <SkeletonPage title="Optimize store" primaryAction>
         <BlockStack gap="400">
-          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={4} /></Box></Card>
-          <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={6} /></Box></Card>
+          <Card>
+            <SkeletonDisplayText size="small" />
+            <Box paddingBlockStart="400">
+              <SkeletonBodyText lines={4} />
+            </Box>
+          </Card>
+          <Card>
+            <SkeletonDisplayText size="small" />
+            <Box paddingBlockStart="400">
+              <SkeletonBodyText lines={6} />
+            </Box>
+          </Card>
         </BlockStack>
       </SkeletonPage>
     );
@@ -279,12 +319,15 @@ export default function OptimizePage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-
         {actionData?.error && (
           <Banner
             tone={actionData?.limitReached ? "warning" : "critical"}
             title={actionData?.limitReached ? "Plan upgrade required" : "Error"}
-            action={actionData?.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+            action={
+              actionData?.limitReached
+                ? { content: "View Plans", onAction: () => navigate("/app/plans") }
+                : undefined
+            }
           >
             <p>{actionData.error}</p>
           </Banner>
@@ -295,32 +338,57 @@ export default function OptimizePage() {
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">Content Coverage</Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold"
-                  tone={coveragePct >= 50 ? "success" : "critical"}>{coveragePct}%</Text>
+                <Text as="h2" variant="headingMd">
+                  Content Coverage
+                </Text>
+                <Text
+                  as="p"
+                  variant="heading2xl"
+                  fontWeight="bold"
+                  tone={coveragePct >= 50 ? "success" : "critical"}
+                >
+                  {coveragePct}%
+                </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   {publishedCount} of {totalProducts} products have a published description
                 </Text>
-                <ProgressBar progress={coveragePct}
-                  tone={coveragePct >= 50 ? "success" : "critical"} size="small" />
+                <ProgressBar
+                  progress={coveragePct}
+                  tone={coveragePct >= 50 ? "success" : "critical"}
+                  size="small"
+                />
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">Needs Content</Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">{needsContent}</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Products with no AI description</Text>
+                <Text as="h2" variant="headingMd">
+                  Needs Content
+                </Text>
+                <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                  {needsContent}
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Products with no AI description
+                </Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">Quota Available</Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold"
-                  tone={remaining > 0 ? "success" : "critical"}>{remaining}</Text>
+                <Text as="h2" variant="headingMd">
+                  Quota Available
+                </Text>
+                <Text
+                  as="p"
+                  variant="heading2xl"
+                  fontWeight="bold"
+                  tone={remaining > 0 ? "success" : "critical"}
+                >
+                  {remaining}
+                </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   Generations left this month
                   <br />
@@ -358,7 +426,9 @@ export default function OptimizePage() {
               </Text>
 
               <BlockStack gap="200">
-                <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
+                <Text as="p" variant="bodySm" fontWeight="semibold">
+                  Content to generate:
+                </Text>
                 <InlineStack gap="500" wrap>
                   <Checkbox label="Description" checked={genDesc} onChange={setGenDesc} />
                   <Checkbox label="Meta Title & Description" checked={genMeta} onChange={setGenMeta} />
@@ -391,45 +461,18 @@ export default function OptimizePage() {
         {totalProducts > 0 && remaining > 0 && (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingLg">Improve Existing Descriptions</Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Already have descriptions? This takes each one and raises it to a world-class
-                standard — your facts, claims, and voice stay exactly as they are; the clarity,
-                formatting, and search-readiness improve. Runs on every product that has a
-                description (up to {totalProducts}), including ones optimised before, and saves
-                the results as drafts for your review unless auto-publish is on. Every enhanced
-                description delivers:
+              <Text as="h2" variant="headingLg">
+                Improve existing descriptions
               </Text>
-              <List type="bullet">
-                <List.Item>
-                  <strong>Search-friendly structure</strong> — clear headings, scannable
-                  paragraphs, and semantic relevance
-                </List.Item>
-                <List.Item>
-                  <strong>Entity-rich content</strong> — product, brand, category, materials,
-                  features, and use cases explicitly named so search engines and AI assistants
-                  identify them instantly
-                </List.Item>
-                <List.Item>
-                  <strong>Natural keyword coverage</strong> — primary, secondary, and long-tail
-                  search intent, without keyword stuffing
-                </List.Item>
-                <List.Item>
-                  <strong>Answer-ready information</strong> — concise, factual statements that
-                  AI engines like ChatGPT, Perplexity, and Google AI can quote directly
-                </List.Item>
-                <List.Item>
-                  <strong>Complete context &amp; trust signals</strong> — what it is, who
-                  it&apos;s for, benefits, and specs; accurate and verifiable, never invented
-                </List.Item>
-                <List.Item>
-                  <strong>Human-first writing</strong> — easy to read and genuinely persuasive
-                  for real shoppers, not just algorithms
-                </List.Item>
-              </List>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved
+                as drafts for your review unless auto-publish is on.
+              </Text>
 
               <BlockStack gap="200">
-                <Text as="p" variant="bodySm" fontWeight="semibold">Content to enhance:</Text>
+                <Text as="p" variant="bodySm" fontWeight="semibold">
+                  Content to enhance:
+                </Text>
                 <InlineStack gap="500" wrap>
                   <Checkbox label="Description" checked={enhDesc} onChange={setEnhDesc} />
                   <Checkbox label="Meta Title & Description" checked={enhMeta} onChange={setEnhMeta} />
@@ -484,27 +527,35 @@ export default function OptimizePage() {
               <p>
                 {confirmMode === "enhance" ? (
                   <>
-                    <strong>This will replace existing product descriptions with the enhanced versions.</strong>{" "}
-                    The enhancement preserves your structure and facts, but the live HTML is still overwritten.
-                    Original content is saved automatically and can be restored from each product&apos;s History tab.
+                    <strong>
+                      This will replace existing product descriptions with the enhanced versions.
+                    </strong>
+                    {""}
+                    The enhancement preserves your structure and facts, but the live HTML is still
+                    overwritten. Original content is saved automatically and can be restored from each
+                    product&apos;s History tab.
                   </>
                 ) : (
                   <>
-                    <strong>This will replace existing product descriptions entirely.</strong>{" "}
-                    Original content is saved automatically and can be restored from each product&apos;s History tab.
-                    If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.
+                    <strong>This will replace existing product descriptions entirely.</strong>
+                    {""}
+                    Original content is saved automatically and can be restored from each product&apos;s
+                    History tab. If a product has custom HTML, embedded videos, or widgets in its description,
+                    they will be removed.
                   </>
                 )}
               </p>
             </Banner>
             <Text as="p">
-              Auto-publish will overwrite the live product descriptions on your Shopify storefront
-              for {confirmMode === "enhance" ? "up to" : "all"}{" "}
-              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products — without a review step.
+              Auto-publish will overwrite the live product descriptions on your Shopify storefront for{" "}
+              {confirmMode === "enhance" ? "up to" : "all"}
+              {""}
+              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products — without a
+              review step.
             </Text>
             <Text as="p" tone="subdued">
-              This cannot be undone from Navaal. You can revert individual products via
-              the product editor after the job completes.
+              This cannot be undone from Navaal. You can revert individual products via the product editor
+              after the job completes.
             </Text>
           </TextContainer>
         </Modal.Section>

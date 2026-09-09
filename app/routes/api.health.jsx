@@ -61,7 +61,11 @@ export const loader = async ({ request }) => {
   // ── Redis ───────────────────────────────────────────────────────────────
   if (process.env.REDIS_URL) {
     try {
-      await withTimeout(getCache("__health_ping__", async () => "ok", 5), REDIS_TIMEOUT_MS, "redis");
+      await withTimeout(
+        getCache("__health_ping__", async () => "ok", 5),
+        REDIS_TIMEOUT_MS,
+        "redis",
+      );
       checks.redis = "ok";
     } catch (err) {
       // Not fatal for serving pages — the cache falls back to memory — but it

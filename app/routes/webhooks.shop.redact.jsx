@@ -16,32 +16,35 @@ export const action = async ({ request }) => {
   if (duplicate) return new Response("Duplicate", { status: 200 });
 
   try {
-    await db.$transaction(async (tx) => {
-      // Log the request first (inside the transaction so it's part of the atomic op)
-      // NON-PII digest only (shop_redact payloads carry no customer PII, but
-      // keep the same discipline as the customer handlers).
-      await tx.gDPRRequest.create({
-        data: {
-          shop,
-          requestType: "shop_redact",
-          payload: JSON.stringify({ shop_id: payload.shop_id, shop_domain: payload.shop_domain }),
-        },
-      });
+    await db.$transaction(
+      async (tx) => {
+        // Log the request first (inside the transaction so it's part of the atomic op)
+        // NON-PII digest only (shop_redact payloads carry no customer PII, but
+        // keep the same discipline as the customer handlers).
+        await tx.gDPRRequest.create({
+          data: {
+            shop,
+            requestType: "shop_redact",
+            payload: JSON.stringify({ shop_id: payload.shop_id, shop_domain: payload.shop_domain }),
+          },
+        });
 
-      // Delete every table that holds shop data, in bounded batches so a large
-      // tenant's redaction stays within the transaction timeout.
-      for (const model of GDPR_SHOP_MODELS) {
-        await chunkDelete(tx, model, { shop });
-      }
+        // Delete every table that holds shop data, in bounded batches so a large
+        // tenant's redaction stays within the transaction timeout.
+        for (const model of GDPR_SHOP_MODELS) {
+          await chunkDelete(tx, model, { shop });
+        }
 
-      // The Shop (install-attribution) row is anonymised rather than deleted so
-      // aggregate install/uninstall counts stay truthful with nothing that
-      // identifies the store (domain → hash; referer/detail/ref cleared).
-      await redactShopRecord(tx, shop);
+        // The Shop (install-attribution) row is anonymised rather than deleted so
+        // aggregate install/uninstall counts stay truthful with nothing that
+        // identifies the store (domain → hash; referer/detail/ref cleared).
+        await redactShopRecord(tx, shop);
 
-      // GDPRRequest rows for this shop are intentionally kept — they are the
-      // audit trail proving deletion occurred, which regulators may request.
-    }, { timeout: 60_000 });
+        // GDPRRequest rows for this shop are intentionally kept — they are the
+        // audit trail proving deletion occurred, which regulators may request.
+      },
+      { timeout: 60_000 },
+    );
   } catch (err) {
     // The transaction rolled back — nothing was deleted and nothing recorded.
     // Hand the delivery id back so Shopify's retry is allowed to run.

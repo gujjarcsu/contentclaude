@@ -31,7 +31,9 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   let shop;
   try {
-    ({ session: { shop } } = await authenticate.admin(request));
+    ({
+      session: { shop },
+    } = await authenticate.admin(request));
   } catch {
     return Response.json({ ok: false, reason: "unauthenticated" });
   }

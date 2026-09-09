@@ -1,0 +1,15 @@
+-- Phase 2 item 2.4 — one dismissible explainer banner on Home.
+--
+-- The app previously explained itself to an already-installed merchant three
+-- times on the Home screen and rendered the same gradient marketing strip on
+-- six routes. That is replaced by a single Polaris banner, and a banner that
+-- cannot be dismissed permanently is just a banner.
+--
+-- Dismissal is per shop rather than per browser: localStorage would bring it
+-- back on the merchant's phone, and on their laptop the next time they cleared
+-- site data.
+--
+-- Nullable with no default and no backfill, so this is additive: every existing
+-- row reads NULL, which means "not dismissed", which is the correct state for a
+-- banner nobody has seen yet.
+ALTER TABLE "GrowthState" ADD COLUMN "geoNoteDismissedAt" TIMESTAMP(3);

@@ -78,10 +78,15 @@ describe("defect B: product counts exclude collection rows", () => {
   });
 
   it("welcome loader counts filter to Product GIDs", () => {
-    const src = read("app/routes/app.welcome.jsx");
-    const countLines = src.split("\n").filter((l) => l.includes("generatedContent.count"));
-    for (const line of countLines) {
-      expect(line, `unfiltered count: ${line.trim()}`).toContain('startsWith: "gid://shopify/Product/"');
-    }
+    // Counts the whole file rather than each line. The original checked that
+    // every LINE containing `generatedContent.count` also contained the GID
+    // filter, which broke the moment a formatter split the call across lines —
+    // the guard failed while the code was still correct. Every count must have
+    // a filter; where they sit relative to each other is formatting.
+    const src = code("app/routes/app.welcome.jsx");
+    const counts = (src.match(/generatedContent\.count\(/g) || []).length;
+    const filters = (src.match(/startsWith: "gid:\/\/shopify\/Product\/"/g) || []).length;
+    expect(counts, "welcome.jsx no longer counts content").toBeGreaterThan(0);
+    expect(filters, "a content count is missing its Product GID filter").toBeGreaterThanOrEqual(counts);
   });
 });

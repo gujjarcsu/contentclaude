@@ -5,7 +5,11 @@
 // scopesFromPayload lives in the util module, not here: a route file may only
 // export route members — a stray helper export passes tests but breaks the
 // client build in CI.
-import { verifyShopifyWebhook, releaseWebhookDelivery, scopesFromPayload } from "../utils/webhookAuth.server.js";
+import {
+  verifyShopifyWebhook,
+  releaseWebhookDelivery,
+  scopesFromPayload,
+} from "../utils/webhookAuth.server.js";
 import db from "../db.server.js";
 import logger from "../utils/logger.server.js";
 
@@ -18,7 +22,10 @@ export const action = async ({ request }) => {
 
   const scope = scopesFromPayload(payload);
   if (!scope) {
-    logger.warn({ shop, event: "scopes_update_empty" }, "app/scopes_update carried no scopes — nothing written");
+    logger.warn(
+      { shop, event: "scopes_update_empty" },
+      "app/scopes_update carried no scopes — nothing written",
+    );
     return new Response(null, { status: 200 });
   }
 

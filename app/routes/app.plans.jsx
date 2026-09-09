@@ -1,16 +1,49 @@
 import { useState, useEffect, useRef } from "react";
-import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator, useFetcher, Form } from "react-router";
+import {
+  useLoaderData,
+  useActionData,
+  useNavigation,
+  useNavigate,
+  useRevalidator,
+  useFetcher,
+  Form,
+} from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
-  Page, Card, Text, BlockStack, InlineStack, Button, ButtonGroup, Banner,
-  Box, ProgressBar, Badge, Divider, DataTable,
+  Page,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Button,
+  ButtonGroup,
+  Banner,
+  Box,
+  ProgressBar,
+  Badge,
+  Divider,
+  DataTable,
+  Icon,
+  InlineGrid,
 } from "@shopify/polaris";
-import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
+import {
+  CheckIcon,
+  XIcon,
+  PlanIcon,
+  StarFilledIcon,
+  ChartHistogramGrowthIcon,
+  OrganizationIcon,
+} from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
-import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, hasUsedTrial } from "../utils/plans.server.js";
+import {
+  getOrCreatePlan,
+  getMonthlyUsageCount,
+  syncBillingToPlan,
+  hasUsedTrial,
+} from "../utils/plans.server.js";
 import { signShopCallback } from "../utils/signedUrl.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -25,10 +58,7 @@ export const loader = async ({ request }) => {
   // /app/plans-reconcile. (Doing it inline — even as a streamed deferred promise —
   // held the response open behind the edge proxy's buffering and froze the page
   // for the full billing.check duration.)
-  const [plan, usageCount] = await Promise.all([
-    getOrCreatePlan(shop),
-    getMonthlyUsageCount(shop),
-  ]);
+  const [plan, usageCount] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
 
   const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 
@@ -36,10 +66,13 @@ export const loader = async ({ request }) => {
   // upgraded=1 on a successful approval, declined=1 when the charge was
   // declined/expired, billing_error=1 if the callback couldn't read state.
   const url = new URL(request.url);
-  const billingNotice =
-    url.searchParams.get("upgraded") ? "upgraded" :
-    url.searchParams.get("declined") ? "declined" :
-    url.searchParams.get("billing_error") ? "error" : null;
+  const billingNotice = url.searchParams.get("upgraded")
+    ? "upgraded"
+    : url.searchParams.get("declined")
+      ? "declined"
+      : url.searchParams.get("billing_error")
+        ? "error"
+        : null;
 
   return {
     plan: {
@@ -72,8 +105,8 @@ export const action = async ({ request }) => {
     const isTest = await resolveBillingTest(admin, session.shop);
     // Phase 0 item 10 — the 7-day trial is once per shop, for the life of the
     // shop. trialDays: 7 is baked into every plan in the billing config, so
-    // subscribe → cancel → resubscribe granted an unlimited series of free
-    // trials, and uninstall → reinstall did the same. The flag lives on the Shop
+    // subscribe then cancel then resubscribe granted an unlimited series of free
+    // trials, and uninstall then reinstall did the same. The flag lives on the Shop
     // row (Plan is deleted on uninstall); passing 0 overrides the config for
     // this request only.
     const trialSpent = await hasUsedTrial(session.shop);
@@ -96,7 +129,8 @@ export const action = async ({ request }) => {
         // Signed (Phase 0 item 20): /billing/callback is public and reads the
         // shop's subscription state, so the link must prove WE issued it for
         // THIS shop, and must stop working after a few hours.
-        returnUrl: `${process.env.SHOPIFY_APP_URL}/billing/callback?shop=${encodeURIComponent(session.shop)}` +
+        returnUrl:
+          `${process.env.SHOPIFY_APP_URL}/billing/callback?shop=${encodeURIComponent(session.shop)}` +
           `&sig=${encodeURIComponent(callbackSig.sig)}&exp=${encodeURIComponent(callbackSig.exp)}`,
       });
     } catch (err) {
@@ -115,7 +149,7 @@ export const action = async ({ request }) => {
       const msg = err?.message ?? String(err);
       return Response.json(
         { error: `Could not start subscription: ${msg}. Please try again or contact support.` },
-        { status: 500 }
+        { status: 500 },
       );
     }
   }
@@ -129,8 +163,11 @@ export const action = async ({ request }) => {
       const { ok, subs } = await getActiveSubscriptions(admin.graphql);
       if (!ok) {
         return Response.json(
-          { error: "We couldn't reach Shopify to confirm your subscription. Please try again in a moment, or contact support at hello@navaal.ai." },
-          { status: 503 }
+          {
+            error:
+              "We couldn't reach Shopify to confirm your subscription. Please try again in a moment, or contact support at hello@navaal.ai.",
+          },
+          { status: 503 },
         );
       }
       const activeSub = subs.find((s) => s.status === "ACTIVE");
@@ -139,8 +176,11 @@ export const action = async ({ request }) => {
         // merchant they cancelled while Shopify keeps charging them — and
         // syncBillingToPlan(shop, []) would wipe their paid plan locally.
         return Response.json(
-          { error: "We couldn't find an active subscription to cancel. If you believe you have one, please contact support at hello@navaal.ai before assuming it's cancelled." },
-          { status: 409 }
+          {
+            error:
+              "We couldn't find an active subscription to cancel. If you believe you have one, please contact support at hello@navaal.ai before assuming it's cancelled.",
+          },
+          { status: 409 },
         );
       }
       // Cancel with the sub's ACTUAL test flag, not a re-resolved isTest —
@@ -148,7 +188,10 @@ export const action = async ({ request }) => {
       await billing.cancel({ subscriptionId: activeSub.id, isTest: activeSub.test, prorate: true });
     } catch (err) {
       if (err instanceof Response) throw err;
-      return Response.json({ error: `Could not cancel subscription: ${err?.message ?? err}` }, { status: 500 });
+      return Response.json(
+        { error: `Could not cancel subscription: ${err?.message ?? err}` },
+        { status: 500 },
+      );
     }
 
     // Immediately reflect cancelled state — don't wait for Shopify webhook delivery
@@ -170,11 +213,8 @@ const PLAN_DISPLAY = [
     price: "$0",
     period: "forever",
     monthlyLimit: FREE_PLAN.monthlyLimit,
-    icon: Zap,
-    iconColor: "#8C9196",
-    accent: "#f6f6f7",
-    accentBorder: "#e3e3e3",
-    textColor: "#202223",
+    icon: PlanIcon,
+    iconTone: "subdued",
     highlight: false,
     planKey: null,
     features: [
@@ -193,11 +233,8 @@ const PLAN_DISPLAY = [
     price: "$9.99",
     period: "/ month",
     monthlyLimit: BILLING_PLANS.starter.monthlyLimit,
-    icon: Star,
-    iconColor: "#2C6ECB",
-    accent: "#f3f7fd",
-    accentBorder: "#b3cef0",
-    textColor: "#202223",
+    icon: StarFilledIcon,
+    iconTone: "info",
     highlight: false,
     planKey: BILLING_PLANS.starter.key,
     annualPlanKey: BILLING_PLANS.starter.annualKey,
@@ -218,11 +255,8 @@ const PLAN_DISPLAY = [
     price: "$29.99",
     period: "/ month",
     monthlyLimit: BILLING_PLANS.growth.monthlyLimit,
-    icon: Rocket,
-    iconColor: "#ffffff",
-    accent: "#2C6ECB",
-    accentBorder: "#1a5099",
-    textColor: "#ffffff",
+    icon: ChartHistogramGrowthIcon,
+    iconTone: "info",
     highlight: true,
     planKey: BILLING_PLANS.growth.key,
     annualPlanKey: BILLING_PLANS.growth.annualKey,
@@ -243,11 +277,8 @@ const PLAN_DISPLAY = [
     price: "$79.99",
     period: "/ month",
     monthlyLimit: BILLING_PLANS.pro.monthlyLimit,
-    icon: Building2,
-    iconColor: "#1656AC",
-    accent: "#f8f8f8",
-    accentBorder: "#d2d5d8",
-    textColor: "#202223",
+    icon: OrganizationIcon,
+    iconTone: "info",
     highlight: false,
     planKey: BILLING_PLANS.pro.key,
     annualPlanKey: BILLING_PLANS.pro.annualKey,
@@ -299,166 +330,133 @@ const FAQ_ITEMS = [
 ];
 
 function FeatureCell({ value }) {
-  if (value === true) return <Text as="span" tone="success">✓</Text>;
-  if (value === false) return <Text as="span" tone="subdued">—</Text>;
-  return <Text as="span" variant="bodySm" fontWeight="semibold">{value}</Text>;
+  // Never colour- or glyph-only: Polaris Icon renders accessibilityLabel as
+  // visually-hidden text, so a screen reader hears "Included" / "Not included"
+  // instead of a bare check glyph or an em dash.
+  if (value === true) return <Icon source={CheckIcon} tone="success" accessibilityLabel="Included" />;
+  if (value === false) return <Icon source={XIcon} tone="subdued" accessibilityLabel="Not included" />;
+  return (
+    <Text as="span" variant="bodySm" fontWeight="semibold">
+      {value}
+    </Text>
+  );
 }
 
-function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting, submittingPlan, billingPeriod }) {
-  const Icon = displayPlan.icon;
-  const isLight = !displayPlan.highlight;
+function PlanCard({
+  displayPlan,
+  isCurrent,
+  isUpgrade,
+  isDowngrade,
+  isSubmitting,
+  submittingPlan,
+  billingPeriod,
+}) {
   const isAnnual = billingPeriod === "annual" && !!displayPlan.annualPlanKey;
   const shownPrice = isAnnual ? displayPlan.annualPrice : displayPlan.price;
   const shownPeriod = isAnnual ? "/ year" : displayPlan.period;
   const activeKey = isAnnual ? displayPlan.annualPlanKey : displayPlan.planKey;
+  // The spinner stays on the plan actually being purchased; the disable is
+  // global, so the highest-intent button in the app cannot be double-submitted
+  // and no second plan can be started while one hand-off is already in flight.
+  const isSubmittingThisPlan = isSubmitting && submittingPlan === activeKey;
 
   return (
-    <div style={{
-      background: displayPlan.accent,
-      border: `2px solid ${isCurrent ? "#00A047" : displayPlan.accentBorder}`,
-      borderRadius: "12px",
-      padding: "24px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "20px",
-      position: "relative",
-      transform: displayPlan.highlight ? "scale(1.03)" : "scale(1)",
-      boxShadow: displayPlan.highlight ? "0 8px 32px rgba(44,110,203,0.25)" : "0 1px 4px rgba(0,0,0,0.06)",
-    }}>
-      {displayPlan.highlight && (
-        <div style={{
-          position: "absolute",
-          top: "-12px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "#00A047",
-          color: "#fff",
-          fontSize: "11px",
-          fontWeight: "700",
-          letterSpacing: "0.08em",
-          padding: "4px 12px",
-          borderRadius: "20px",
-          whiteSpace: "nowrap",
-        }}>⭐ MOST POPULAR</div>
-      )}
-      {isCurrent && (
-        <div style={{
-          position: "absolute",
-          top: "-12px",
-          right: "16px",
-          background: "#00A047",
-          color: "#fff",
-          fontSize: "11px",
-          fontWeight: "700",
-          padding: "4px 10px",
-          borderRadius: "20px",
-        }}>Current Plan</div>
-      )}
-
-      {/* Header */}
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-          <Icon size={22} color={displayPlan.iconColor} aria-hidden="true" />
-        </div>
-        <div style={{ color: displayPlan.textColor, fontSize: "18px", fontWeight: "700", marginBottom: "4px" }}>
-          {displayPlan.label}
-        </div>
-        <div style={{ color: isLight ? "#6D7175" : "rgba(255,255,255,0.75)", fontSize: "13px", marginBottom: "12px" }}>
-          {displayPlan.tagline}
-        </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
-          <span style={{ color: displayPlan.textColor, fontSize: "32px", fontWeight: "800", lineHeight: 1 }}>
-            {shownPrice}
-          </span>
-          <span style={{ color: isLight ? "#8C9196" : "rgba(255,255,255,0.6)", fontSize: "13px" }}>
-            {shownPeriod}
-          </span>
-        </div>
-        {isAnnual && (
-          <div style={{ color: displayPlan.highlight ? "#a8d5b5" : "#1a7345", fontSize: "12px", fontWeight: 600, marginTop: "4px" }}>
-            2 months free vs monthly
-          </div>
+    <Card>
+      <BlockStack gap="400">
+        {/* Status badges in normal flow. The old pills were both absolutely
+            positioned at top:-12px and overlapped each other on the Growth
+            card whenever Growth was also the current plan. */}
+        {(isCurrent || displayPlan.highlight) && (
+          <InlineStack gap="200" blockAlign="center" wrap>
+            {isCurrent && <Badge tone="success">Current plan</Badge>}
+            {displayPlan.highlight && <Badge tone="info">Most popular</Badge>}
+          </InlineStack>
         )}
-      </div>
 
-      {/* Features */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
-        {displayPlan.features.map((f) => (
-          <div key={f} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-            <Check aria-hidden="true" size={14} color={displayPlan.highlight ? "#a8d5b5" : "#00A047"} style={{ flexShrink: 0, marginTop: "2px" }} />
-            <span style={{ color: isLight ? "#202223" : "rgba(255,255,255,0.9)", fontSize: "13px", lineHeight: "1.4" }}>
-              {f}
-            </span>
-          </div>
-        ))}
-      </div>
+        {/* Header */}
+        <BlockStack gap="100">
+          <InlineStack gap="200" blockAlign="center" wrap={false}>
+            <Box minWidth="20px">
+              <Icon source={displayPlan.icon} tone={displayPlan.iconTone} />
+            </Box>
+            <Text as="h3" variant="headingMd">
+              {displayPlan.label}
+            </Text>
+          </InlineStack>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {displayPlan.tagline}
+          </Text>
+          <InlineStack gap="100" blockAlign="baseline" wrap={false}>
+            <Text as="span" variant="heading2xl">
+              {shownPrice}
+            </Text>
+            <Text as="span" variant="bodySm" tone="subdued">
+              {shownPeriod}
+            </Text>
+          </InlineStack>
+          {isAnnual && (
+            <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
+              2 months free vs monthly
+            </Text>
+          )}
+        </BlockStack>
 
-      {/* CTA */}
-      <div>
-        {isCurrent ? (
-          <div style={{
-            textAlign: "center",
-            padding: "10px",
-            background: isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.15)",
-            borderRadius: "8px",
-            color: isLight ? "#6D7175" : "rgba(255,255,255,0.7)",
-            fontSize: "13px",
-            fontWeight: "600",
-          }}>
-            ✓ Active Plan
-          </div>
-        ) : displayPlan.planKey && isUpgrade ? (
-          <Form method="post">
-            <input type="hidden" name="actionType" value="subscribe" />
-            <input type="hidden" name="planKey" value={activeKey} />
-            <button type="submit" style={{
-              width: "100%",
-              padding: "12px 16px",
-              background: displayPlan.highlight ? "#ffffff" : "#2C6ECB",
-              color: displayPlan.highlight ? "#2C6ECB" : "#ffffff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: "700",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              opacity: isSubmitting && submittingPlan === activeKey ? 0.7 : 1,
-            }}>
-              {isSubmitting && submittingPlan === activeKey ? "Processing…" : (
-                <>Upgrade to {displayPlan.label} <ArrowRight aria-hidden="true" size={14} /></>
-              )}
-            </button>
-          </Form>
-        ) : isDowngrade ? (
-          <div style={{
-            textAlign: "center",
-            color: isLight ? "#8C9196" : "rgba(255,255,255,0.5)",
-            fontSize: "12px",
-          }}>
-            Cancel current plan to switch
-          </div>
-        ) : (
-          <div style={{
-            textAlign: "center",
-            padding: "10px",
-            background: "rgba(0,0,0,0.05)",
-            borderRadius: "8px",
-            color: "#6D7175",
-            fontSize: "13px",
-          }}>
-            Free forever
-          </div>
-        )}
-        {displayPlan.planKey && !isCurrent && (
-          <div style={{ textAlign: "center", marginTop: "8px", color: isLight ? "#8C9196" : "rgba(255,255,255,0.5)", fontSize: "12px" }}>
-            7-day free trial · Cancel anytime
-          </div>
-        )}
-      </div>
-    </div>
+        {/* Features */}
+        <BlockStack gap="200">
+          {displayPlan.features.map((f) => (
+            <InlineStack key={f} gap="200" blockAlign="start" wrap={false}>
+              <Box minWidth="20px">
+                <Icon source={CheckIcon} tone="success" accessibilityLabel="Included" />
+              </Box>
+              <Text as="span" variant="bodySm">
+                {f}
+              </Text>
+            </InlineStack>
+          ))}
+        </BlockStack>
+
+        {/* CTA */}
+        <BlockStack gap="200">
+          {isCurrent ? (
+            <InlineStack gap="100" align="center" blockAlign="center" wrap={false}>
+              <Box minWidth="20px">
+                <Icon source={CheckIcon} tone="success" accessibilityLabel="Active" />
+              </Box>
+              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                Active plan
+              </Text>
+            </InlineStack>
+          ) : displayPlan.planKey && isUpgrade ? (
+            <Form method="post">
+              <input type="hidden" name="actionType" value="subscribe" />
+              <input type="hidden" name="planKey" value={activeKey} />
+              <Button
+                variant="primary"
+                submit
+                fullWidth
+                loading={isSubmittingThisPlan}
+                disabled={isSubmitting}
+              >
+                Upgrade to {displayPlan.label}
+              </Button>
+            </Form>
+          ) : isDowngrade ? (
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              Cancel current plan to switch
+            </Text>
+          ) : (
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              Free forever
+            </Text>
+          )}
+          {displayPlan.planKey && !isCurrent && (
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              7-day free trial · Cancel anytime
+            </Text>
+          )}
+        </BlockStack>
+      </BlockStack>
+    </Card>
   );
 }
 
@@ -523,20 +521,28 @@ export default function PlansPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
-
         {billingNotice === "upgraded" && plan.planName !== "free" && (
-          <Banner tone="success" title={`You're on the ${PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} plan`}>
+          <Banner
+            tone="success"
+            title={`You're on the ${PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} plan`}
+          >
             <p>Your subscription is active. Your new monthly generation limit is live.</p>
           </Banner>
         )}
         {billingNotice === "declined" && (
           <Banner tone="warning" title="Charge not approved">
-            <p>The subscription charge was declined or wasn&apos;t completed, so you&apos;re still on your current plan. You can try upgrading again anytime.</p>
+            <p>
+              The subscription charge was declined or wasn&apos;t completed, so you&apos;re still on your
+              current plan. You can try upgrading again anytime.
+            </p>
           </Banner>
         )}
         {billingNotice === "error" && (
           <Banner tone="warning" title="We couldn't confirm the change just now">
-            <p>Your plan will update automatically within a few moments if the charge went through. Refresh this page shortly, or contact hello@navaal.ai if it doesn&apos;t.</p>
+            <p>
+              Your plan will update automatically within a few moments if the charge went through. Refresh
+              this page shortly, or contact hello@navaal.ai if it doesn&apos;t.
+            </p>
           </Banner>
         )}
 
@@ -546,15 +552,19 @@ export default function PlansPage() {
           </Banner>
         )}
         {actionData?.error && (
-          <Banner tone="critical"><p>{actionData.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
         )}
 
         {/* Usage summary — compact horizontal bar */}
         <Card>
-          <InlineStack align="space-between" blockAlign="center" gap="600" wrap={true}>
+          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400" alignItems="center">
             <BlockStack gap="100">
-              <InlineStack gap="200" blockAlign="center">
-                <Text as="h2" variant="headingMd">Monthly Usage</Text>
+              <InlineStack gap="200" blockAlign="center" wrap>
+                <Text as="h2" variant="headingMd">
+                  Monthly Usage
+                </Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {currentDisplay?.label ?? plan.planName} Plan
                 </Badge>
@@ -564,38 +574,40 @@ export default function PlansPage() {
                   </Text>
                 )}
               </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">{currentMonth}</Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {currentMonth}
+              </Text>
             </BlockStack>
 
-            <div style={{ flex: "1 1 300px", maxWidth: "400px" }}>
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="p" variant="bodySm" tone="subdued">{usageCount} used</Text>
-                <Text as="p" variant="bodySm" fontWeight="semibold"
-                  tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? undefined : "success"}>
+            <BlockStack gap="100">
+              <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {usageCount} used
+                </Text>
+                <Text
+                  as="p"
+                  variant="bodySm"
+                  fontWeight="semibold"
+                  tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? undefined : "success"}
+                >
                   {usageRemaining} remaining of {plan.monthlyLimit}
                 </Text>
               </InlineStack>
-              <Box paddingBlockStart="100">
-                <ProgressBar
-                  progress={usagePct}
-                  tone={usagePct >= 90 ? "critical" : "success"}
-                  size="small"
-                />
-              </Box>
-            </div>
-
-            {usagePct >= 70 && plan.planName !== "pro" && (
-              <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "critical" : undefined}>
-                {usagePct >= 90 ? "⚠️ Nearly at limit" : "Usage climbing — consider upgrading"}
-              </Text>
-            )}
-          </InlineStack>
+              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />
+              {usagePct >= 70 && plan.planName !== "pro" && (
+                <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "critical" : undefined}>
+                  {usagePct >= 90 ? "Nearly at limit" : "Usage climbing — consider upgrading"}
+                </Text>
+              )}
+            </BlockStack>
+          </InlineGrid>
         </Card>
-
         {/* Horizontal plan cards */}
         <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-            <Text as="h2" variant="headingLg">Choose Your Plan</Text>
+            <Text as="h2" variant="headingLg">
+              Choose Your Plan
+            </Text>
             <ButtonGroup variant="segmented">
               <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
                 Monthly
@@ -605,12 +617,7 @@ export default function PlansPage() {
               </Button>
             </ButtonGroup>
           </InlineStack>
-          <div data-cc-plans-grid style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "16px",
-            alignItems: "stretch",
-          }}>
+          <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
             {PLAN_DISPLAY.map((displayPlan) => {
               const isCurrent = displayPlan.planName === plan.planName;
               const planIndex = PLAN_ORDER.indexOf(displayPlan.planName);
@@ -630,20 +637,26 @@ export default function PlansPage() {
                 />
               );
             })}
-          </div>
+          </InlineGrid>
         </BlockStack>
 
         {/* Feature comparison table */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">Full Feature Comparison</Text>
+            <Text as="h2" variant="headingLg">
+              Full Feature Comparison
+            </Text>
             <DataTable
               columnContentTypes={["text", "text", "text", "text", "text"]}
               headings={[
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued" key="feature">Feature</Text>,
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued" key="feature">
+                  Feature
+                </Text>,
                 "Free",
                 "Starter",
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="success" key="growth">Growth ⭐</Text>,
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="success" key="growth">
+                  Growth
+                </Text>,
                 "Professional",
               ]}
               rows={FEATURE_TABLE.map((row) => [
@@ -660,11 +673,17 @@ export default function PlansPage() {
         {/* FAQ */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">Frequently Asked Questions</Text>
+            <Text as="h2" variant="headingLg">
+              Frequently Asked Questions
+            </Text>
             {FAQ_ITEMS.map((item, i) => (
               <BlockStack key={i} gap="100">
-                <Text as="p" variant="bodyMd" fontWeight="semibold">{item.q}</Text>
-                <Text as="p" variant="bodySm" tone="subdued">{item.a}</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  {item.q}
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {item.a}
+                </Text>
                 {i < FAQ_ITEMS.length - 1 && <Divider />}
               </BlockStack>
             ))}
@@ -676,7 +695,9 @@ export default function PlansPage() {
           <Card>
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
-                <Text as="h2" variant="headingMd">Cancel Subscription</Text>
+                <Text as="h2" variant="headingMd">
+                  Cancel Subscription
+                </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   You&apos;ll be moved to the Free plan. Unused time is prorated automatically.
                 </Text>
@@ -690,7 +711,6 @@ export default function PlansPage() {
             </InlineStack>
           </Card>
         )}
-
       </BlockStack>
     </Page>
   );

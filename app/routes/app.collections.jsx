@@ -61,11 +61,15 @@ export const loader = async ({ request }) => {
     select: { productId: true, status: true },
   });
   const statusMap = {};
-  generated.forEach(({ productId, status }) => { statusMap[productId] = status; });
+  generated.forEach(({ productId, status }) => {
+    statusMap[productId] = status;
+  });
 
   const voiceOverrides = await prisma.collectionVoice.findMany({ where: { shop } });
   const voiceMap = {};
-  voiceOverrides.forEach((v) => { voiceMap[v.collectionId] = v; });
+  voiceOverrides.forEach((v) => {
+    voiceMap[v.collectionId] = v;
+  });
 
   return Response.json({ collections, statusMap, voiceMap });
 };
@@ -84,36 +88,43 @@ export const action = async ({ request }) => {
     const collectionDescription = formData.get("collectionDescription") || "";
     const productsCount = formData.get("productsCount") || "";
 
-    const [{ generateCollectionDescription }, { getCache }, { withGenerationCredit }, { checkRateLimit }] = await Promise.all([
-      import("../utils/ai.server.js"),
-      import("../utils/cache.server.js"),
-      import("../utils/plans.server.js"),
-      import("../utils/rateLimit.server.js"),
-    ]);
+    const [{ generateCollectionDescription }, { getCache }, { withGenerationCredit }, { checkRateLimit }] =
+      await Promise.all([
+        import("../utils/ai.server.js"),
+        import("../utils/cache.server.js"),
+        import("../utils/plans.server.js"),
+        import("../utils/rateLimit.server.js"),
+      ]);
 
     // Collection generation is a normal AI generation: same rate limit and
     // monthly quota as products. It previously had NEITHER — unlimited free
     // AI calls on any plan.
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
-      return Response.json({ error: "You're generating too fast. Please wait a moment before trying again." });
+      return Response.json({
+        error: "You're generating too fast. Please wait a moment before trying again.",
+      });
     }
 
     // Phase 0 item 5 — the credit comes back if the generation fails or returns
     // nothing usable.
     let outcome;
     try {
-      outcome = await withGenerationCredit(shop, { contentType: "description", productId: collectionId }, async () => {
-        const brandVoice = await getCache(
-          `bv:${shop}`,
-          () => prisma.brandVoice.findUnique({ where: { shop } }),
-          300
-        );
-        return generateCollectionDescription(
-          { id: collectionId, title: collectionTitle, description: collectionDescription, productsCount },
-          brandVoice
-        );
-      });
+      outcome = await withGenerationCredit(
+        shop,
+        { contentType: "description", productId: collectionId },
+        async () => {
+          const brandVoice = await getCache(
+            `bv:${shop}`,
+            () => prisma.brandVoice.findUnique({ where: { shop } }),
+            300,
+          );
+          return generateCollectionDescription(
+            { id: collectionId, title: collectionTitle, description: collectionDescription, productsCount },
+            brandVoice,
+          );
+        },
+      );
     } catch (err) {
       return Response.json(
         { error: `We couldn't write this collection: ${err.message}. This did not use a generation.` },
@@ -128,7 +139,9 @@ export const action = async ({ request }) => {
     }
     if (outcome.refunded) {
       return Response.json(
-        { error: "The AI returned nothing for this collection. Please retry — this did not use a generation." },
+        {
+          error: "The AI returned nothing for this collection. Please retry — this did not use a generation.",
+        },
         { status: 502 },
       );
     }
@@ -142,9 +155,17 @@ export const action = async ({ request }) => {
           prisma.generatedContent.upsert({
             where: { shop_productId_contentType: { shop, productId: collectionId, contentType: type } },
             update: { generatedContent: val, status: "draft", version: { increment: 1 } },
-            create: { shop, productId: collectionId, productTitle: collectionTitle, contentType: type, originalContent: "", generatedContent: val, status: "draft" },
-          })
-        )
+            create: {
+              shop,
+              productId: collectionId,
+              productTitle: collectionTitle,
+              contentType: type,
+              originalContent: "",
+              generatedContent: val,
+              status: "draft",
+            },
+          }),
+        ),
     );
 
     return Response.json({ success: true, generated, collectionId });
@@ -171,12 +192,12 @@ export const action = async ({ request }) => {
           userErrors { field message }
         }
       }`,
-      { variables: { input } }
+      { variables: { input } },
     );
     const { data } = await result.json();
     const errors = data?.collectionUpdate?.userErrors ?? [];
     if (errors.length > 0) {
-      return Response.json({ error: errors.map((e) => e.message).join("; ") }, { status: 422 });
+      return Response.json({ error: errors.map((e) => e.message).join(";") }, { status: 422 });
     }
 
     const typeContentMap = {
@@ -189,8 +210,8 @@ export const action = async ({ request }) => {
         prisma.generatedContent.updateMany({
           where: { shop, productId: collectionId, contentType: type, status: "draft" },
           data: { status: "published", generatedContent: val },
-        })
-      )
+        }),
+      ),
     );
 
     return Response.json({ success: true, published: true, collectionId });
@@ -303,7 +324,7 @@ export default function CollectionsPage() {
       fetcher.submit(fd, { method: "POST" });
       setExpandedId(collection.id);
     },
-    [fetcher]
+    [fetcher],
   );
 
   const handlePublish = useCallback(
@@ -317,7 +338,7 @@ export default function CollectionsPage() {
       if (content.metaDescription) fd.append("metaDescription", content.metaDescription);
       fetcher.submit(fd, { method: "POST" });
     },
-    [fetcher, editedContent, fetcherData]
+    [fetcher, editedContent, fetcherData],
   );
 
   const updateEdit = (collectionId, field, value) => {
@@ -348,7 +369,7 @@ export default function CollectionsPage() {
       }
       voiceFetcher.submit(fd, { method: "POST" });
     },
-    [voiceFetcher, voiceForms]
+    [voiceFetcher, voiceForms],
   );
 
   // Instant feedback during client-side navigation into this route — prevents
@@ -359,20 +380,13 @@ export default function CollectionsPage() {
 
   if (collections.length === 0) {
     return (
-      <Page
-        title="Collections"
-        backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
-      >
-        <EmptyState
-          heading="No collections found"
-          image="/empty-collections.svg"
-        >
+      <Page title="Collections" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
+        <EmptyState heading="No collections found" image="/empty-collections.svg">
           <p>Create collections in your Shopify admin, then come back to generate descriptions.</p>
         </EmptyState>
       </Page>
     );
   }
-
 
   return (
     <Page
@@ -382,7 +396,9 @@ export default function CollectionsPage() {
     >
       <BlockStack gap="400">
         {fetcherData?.error && (
-          <Banner tone="critical"><p>{fetcherData.error}</p></Banner>
+          <Banner tone="critical">
+            <p>{fetcherData.error}</p>
+          </Banner>
         )}
         {fetcherData?.success && fetcherData?.published && (
           <Banner tone="success" title="Published!">
@@ -407,7 +423,9 @@ export default function CollectionsPage() {
                       <Box width="40px" minHeight="40px" background="bg-fill-secondary" borderRadius="100" />
                     )}
                     <BlockStack gap="100">
-                      <Text as="h3" variant="headingMd">{collection.title}</Text>
+                      <Text as="h3" variant="headingMd">
+                        {collection.title}
+                      </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         {collection.productsCount} product{collection.productsCount !== 1 ? "s" : ""}
                       </Text>
@@ -435,7 +453,9 @@ export default function CollectionsPage() {
                     <Layout>
                       <Layout.Section>
                         <BlockStack gap="200">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">Generated Description</Text>
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            Generated Description
+                          </Text>
                           <TextField
                             label=""
                             labelHidden
@@ -481,19 +501,29 @@ export default function CollectionsPage() {
                 {isActive && isGenerating && fetcher.formData?.get("collectionId") === collection.id && (
                   <InlineStack gap="200" blockAlign="center">
                     <Spinner size="small" />
-                    <Text as="p" variant="bodySm" tone="subdued">Generating collection content...</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Generating collection content...
+                    </Text>
                   </InlineStack>
                 )}
 
                 <Divider />
                 <InlineStack align="space-between" blockAlign="center">
-                  <Text as="p" variant="bodySm" fontWeight="semibold">Voice Override</Text>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                    Voice Override
+                  </Text>
                   <Button
                     variant="plain"
                     size="slim"
-                    onClick={() => setVoiceOpen((prev) => ({ ...prev, [collection.id]: !prev[collection.id] }))}
+                    onClick={() =>
+                      setVoiceOpen((prev) => ({ ...prev, [collection.id]: !prev[collection.id] }))
+                    }
                   >
-                    {voiceOpen[collection.id] ? "Hide" : voiceMap[collection.id] ? "Edit Override" : "Set Override"}
+                    {voiceOpen[collection.id]
+                      ? "Hide"
+                      : voiceMap[collection.id]
+                        ? "Edit Override"
+                        : "Set Override"}
                   </Button>
                 </InlineStack>
 
@@ -501,7 +531,7 @@ export default function CollectionsPage() {
                   <BlockStack gap="300">
                     <Checkbox
                       label="Use store defaults (no override)"
-                      checked={!!(voiceForms[collection.id]?.useDefaults)}
+                      checked={!!voiceForms[collection.id]?.useDefaults}
                       onChange={(v) => updateVoiceForm(collection.id, "useDefaults", v)}
                     />
                     {!voiceForms[collection.id]?.useDefaults && (

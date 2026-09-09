@@ -1,69 +1,69 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate } from "react-router";
-import { Button, Box, Text, InlineStack, BlockStack } from "@shopify/polaris";
-import { Zap, X } from "lucide-react";
+import { Button, Banner, Text, InlineStack, BlockStack } from "@shopify/polaris";
 import { quotaGapTitle, N_DEFINITION_COPY } from "../utils/planFit.js";
 
 /**
  * Contextual upgrade prompt — appears anywhere usage limits are relevant.
  *
+ * Phase 2 item 2.5 — this was a raw `div` with `border: "2px solid #E1A500"`
+ * wrapped around a Polaris `Box`, which produced a visible double corner because
+ * the outer 8px radius did not match the inner Polaris token. The background
+ * used `bg-surface-warning-hover` — a HOVER token as a resting state, which
+ * shifts under any Polaris theme change. The icon was a hand-coloured lucide
+ * glyph, and the dismiss was a plain Button wrapping a lucide `X` passed as a
+ * render function where Polaris expects an icon source.
+ *
+ * All of that existed to make the prompt "a distinct, can't-miss callout instead
+ * of blending into the page as faint text". Polaris `Banner` IS that component.
+ * It brings its own border, icon, dismiss button and semantics, and it stays
+ * correct across Polaris upgrades.
+ *
+ * Every copy string below is unchanged — several are asserted verbatim by tests
+ * and the wording is deliberate. The only edits are the removal of trailing
+ * arrows from two button labels (Phase 2 item 2.5).
+ *
  * Props:
  *   title      – headline (default: "Ready to scale?")
  *   message    – body copy
- *   ctaLabel   – button text (default: "See Plans →")
+ *   ctaLabel   – button text
  *   onUpgrade  – click handler (navigate to /app/plans)
  *   tone       – "warning" | "info" (default: "info")
- *   compact    – true = inline pill style, false = card style (default: false)
+ *   compact    – true = tighter layout, false = full card (default: false)
  */
-export function UpgradePrompt({ title, message, ctaLabel = "See Plans →", onUpgrade, tone = "info", compact = false }) {
-  const bg = tone === "warning" ? "bg-surface-warning-hover" : "bg-surface-info-hover";
-  const iconColor = tone === "warning" ? "#916A00" : "#1656AC";
-
-  // Coloured border so the prompt reads as a distinct, can't-miss callout
-  // instead of blending into the page as faint text.
-  const border = tone === "warning" ? "2px solid #E1A500" : "2px solid #2C6ECB";
+export function UpgradePrompt({
+  title,
+  message,
+  ctaLabel = "See plans",
+  onUpgrade,
+  tone = "info",
+  compact = false,
+}) {
+  const heading = title || "Ready to scale?";
 
   if (compact) {
     return (
-      <div style={{ borderRadius: 8, border }}>
-        <Box padding="400" background={bg} borderRadius="200">
-          <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-            <InlineStack gap="200" blockAlign="center">
-              <Zap aria-hidden="true" size={18} color={iconColor} />
-              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                {title || "Ready to scale?"}{message ? ` — ${message}` : ""}
-              </Text>
-            </InlineStack>
-            <Button onClick={onUpgrade} variant="primary" tone="success">
-              {ctaLabel}
-            </Button>
-          </InlineStack>
-        </Box>
-      </div>
+      <Banner tone={tone} title={message ? `${heading} — ${message}` : heading}>
+        <InlineStack gap="300" blockAlign="center" wrap>
+          <Button onClick={onUpgrade}>{ctaLabel}</Button>
+        </InlineStack>
+      </Banner>
     );
   }
 
   return (
-    <div style={{ borderRadius: 8, border }}>
-      <Box padding="500" background={bg} borderRadius="200">
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <Zap aria-hidden="true" size={20} color={iconColor} />
-            <Text as="p" variant="headingMd" fontWeight="bold">
-              {title || "Ready to scale?"}
-            </Text>
-          </InlineStack>
-          {message && (
-            <Text as="p" variant="bodyMd">{message}</Text>
-          )}
-          <div>
-            <Button onClick={onUpgrade} variant="primary" tone="success" size="large">
-              {ctaLabel}
-            </Button>
-          </div>
-        </BlockStack>
-      </Box>
-    </div>
+    <Banner tone={tone} title={heading}>
+      <BlockStack gap="300">
+        {message && (
+          <Text as="p" variant="bodyMd">
+            {message}
+          </Text>
+        )}
+        <InlineStack>
+          <Button onClick={onUpgrade}>{ctaLabel}</Button>
+        </InlineStack>
+      </BlockStack>
+    </Banner>
   );
 }
 
@@ -90,7 +90,11 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
   const storageKey = promptId ? `navaal:upgradePrompt:${promptId}` : null;
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined" || !storageKey) return false;
-    try { return sessionStorage.getItem(storageKey) === "1"; } catch { return false; }
+    try {
+      return sessionStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
   });
 
   const post = (event) => {
@@ -112,34 +116,34 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
 
   if (!upsell || dismissed) return null;
 
-  const border = "2px solid #E1A500";
   const planLabel = upsell.planLabel;
 
   if (upsell.neutral || !upsell.fit) {
     return (
-      <div style={{ borderRadius: 8, border }} data-quota-prompt="neutral">
-        <Box padding="400" background="bg-surface-warning-hover" borderRadius="200">
-          <InlineStack gap="200" blockAlign="center">
-            <Zap aria-hidden="true" size={18} color="#916A00" />
-            <Text as="p" variant="bodyMd">
-              You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}. They reset on {upsell.resetDate}.
-            </Text>
-          </InlineStack>
-        </Box>
+      <div data-quota-prompt="neutral">
+        <Banner tone="warning">
+          <Text as="p" variant="bodyMd">
+            You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}. They
+            reset on {upsell.resetDate}.
+          </Text>
+        </Banner>
       </div>
     );
   }
 
   const { fit, n, truncated, nDefinition, scanned } = upsell;
   const title = quotaGapTitle({ n, truncated, fit });
-  const clause = !truncated && fit.covers
-    ? ` — enough to finish these ${n}`
-    : !fit.covers
-      ? ` — at that rate ${n} products take about ${fit.monthsToCover} months`
-      : "";
+  const clause =
+    !truncated && fit.covers
+      ? ` — enough to finish these ${n}`
+      : !fit.covers
+        ? ` — at that rate ${n} products take about ${fit.monthsToCover} months`
+        : "";
   let definition = `Counted as: ${N_DEFINITION_COPY[nDefinition] || N_DEFINITION_COPY.catalog_gaps}`;
-  if (truncated && nDefinition === "catalog_gaps" && scanned) definition += ` · scan stopped at ${scanned} products`;
-  if (truncated && nDefinition === "audit_missing_description" && scanned) definition += ` · ${n} of the ${scanned} products scanned`;
+  if (truncated && nDefinition === "catalog_gaps" && scanned)
+    definition += ` · scan stopped at ${scanned} products`;
+  if (truncated && nDefinition === "audit_missing_description" && scanned)
+    definition += ` · ${n} of the ${scanned} products scanned`;
 
   const goPlans = (withFit) => {
     post("cta_clicked");
@@ -150,32 +154,37 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
   };
   const dismiss = () => {
     setDismissed(true);
-    try { if (storageKey) sessionStorage.setItem(storageKey, "1"); } catch { /* per-session convenience only */ }
+    try {
+      if (storageKey) sessionStorage.setItem(storageKey, "1");
+    } catch {
+      /* per-session convenience only */
+    }
     post("dismissed");
   };
 
   return (
-    <div style={{ borderRadius: 8, border }} data-quota-prompt={surface || "prompt"}>
-      <Box padding="500" background="bg-surface-warning-hover" borderRadius="200">
+    <div data-quota-prompt={surface || "prompt"}>
+      <Banner tone="warning" title={title} onDismiss={dismiss}>
         <BlockStack gap="300">
-          <InlineStack align="space-between" blockAlign="start" gap="300" wrap={false}>
-            <InlineStack gap="200" blockAlign="center">
-              <Zap aria-hidden="true" size={20} color="#916A00" />
-              <Text as="p" variant="headingMd" fontWeight="bold">{title}</Text>
-            </InlineStack>
-            <Button variant="plain" onClick={dismiss} accessibilityLabel="Dismiss" icon={() => <X size={16} aria-hidden="true" />} />
-          </InlineStack>
           <Text as="p" variant="bodyMd">
-            You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}. {fit.label} covers {fit.monthlyLimit}/month for {fit.priceLabel}{clause}.
+            You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}.{" "}
+            {fit.label} covers {fit.monthlyLimit}/month for {fit.priceLabel}
+            {clause}.
           </Text>
-          <Text as="p" variant="bodyMd">Or wait — your {planLabel} generations reset on {upsell.resetDate}.</Text>
-          <Text as="p" variant="bodySm" tone="subdued">{definition}</Text>
+          <Text as="p" variant="bodyMd">
+            Or wait — your {planLabel} generations reset on {upsell.resetDate}.
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {definition}
+          </Text>
           <InlineStack gap="300" blockAlign="center" wrap>
-            <Button onClick={() => goPlans(true)} variant="primary" tone="success">{`See ${fit.label} plan →`}</Button>
-            <Button onClick={() => goPlans(false)} variant="plain">Compare all plans</Button>
+            <Button onClick={() => goPlans(true)} variant="primary">{`See ${fit.label} plan`}</Button>
+            <Button onClick={() => goPlans(false)} variant="plain">
+              Compare all plans
+            </Button>
           </InlineStack>
         </BlockStack>
-      </Box>
+      </Banner>
     </div>
   );
 }

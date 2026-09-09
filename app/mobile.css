@@ -1,24 +1,47 @@
-/* ContentClaude — mobile, responsive & accessibility polish layer
-   Supplements Polaris's own responsive + a11y utilities.
-   Targets embedded-app webview widths ≤480px (phones) and ≤768px (tablets),
-   plus app-wide keyboard-focus visibility and reduced-motion support.
-*/
+/* Navaal — accessibility and iframe polish.
+   Supplements Polaris; it does not override it.
+
+   Phase 2 item 2.5 and 2.12 rewrote this file. It had grown to 21 `!important`
+   declarations in 159 lines, nine of them against PRIVATE Polaris internals
+   (`.Polaris-DataTable__ScrollContainer`, `.Polaris-Layout__Section--oneThird`,
+   `.Polaris-TextField__Input`, `.Polaris-Page-Header__RightAlign`,
+   `.Polaris-Modal-Dialog__Modal`, `.Polaris-Tabs__Wrapper`). Those class names
+   are generated and unversioned: they change without notice on a Polaris
+   upgrade, and when they do the rule silently stops applying. One of them was
+   outside any media query, so it overrode Polaris at every viewport, not just
+   on phones.
+
+   Every one of those rules was patching layout that Polaris already does
+   correctly, or that is now done by the right component — `InlineGrid` for the
+   grids, `Card` for the plan tiles, `Banner` for the callouts, `ChoiceList` for
+   the tone picker. They are gone rather than rewritten.
+
+   Four `data-cc-*` selectors are gone with them. Two were already dead: the
+   markup they targeted no longer carried the attribute, so the rules had been
+   doing nothing.
+
+   What remains is the two things Polaris genuinely does not cover: focus
+   visibility on non-Polaris elements, and the reduced-motion preference. */
 
 /* ─── Keyboard focus visibility (WCAG 2.4.7) ─────────────────────────────
-   Polaris components ship their own focus rings; this guarantees a clearly
-   visible focus indicator on the custom (non-Polaris) interactive elements
-   used on the Plans/Settings pages, so keyboard users are never lost. */
+   Polaris ships its own focus rings. This is the safety net for any element
+   that is not a Polaris component. There are far fewer of those than there
+   were — the raw <button> elements on Plans and Settings are gone — but a
+   focus ring that is present and unused costs nothing, and a missing one
+   loses a keyboard user. */
 button:not([class*="Polaris"]):focus-visible,
 a:not([class*="Polaris"]):focus-visible,
 [role="button"]:not([class*="Polaris"]):focus-visible,
 [tabindex]:not([class*="Polaris"]):focus-visible {
-  outline: 2px solid #2C6ECB !important;
+  outline: 2px solid #2c6ecb;
   outline-offset: 2px;
   border-radius: 6px;
 }
 
-/* ─── Respect reduced-motion preference ──────────────────────────────────
-   Users who set "reduce motion" get instant, non-animated transitions. */
+/* ─── Respect reduced-motion ─────────────────────────────────────────────
+   Someone who has asked their operating system for less motion gets instant
+   transitions. `!important` is correct here and nowhere else in this file:
+   the whole point is to beat any animation the page declares. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -30,130 +53,40 @@ a:not([class*="Polaris"]):focus-visible,
   }
 }
 
-/* ─── Plans page: 4-col grid → 2-col → 1-col ─────────────────────────── */
-@media (max-width: 900px) {
-  [data-cc-plans-grid] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-@media (max-width: 540px) {
-  [data-cc-plans-grid] {
-    grid-template-columns: 1fr !important;
-  }
-}
+/* ─── Touch targets (WCAG 2.5.5) ─────────────────────────────────────────
+   The old rule set `min-height: 44px` on every Polaris button and then, three
+   lines later, dropped `size="slim"` and `size="micro"` buttons back to 36px —
+   undoing the guarantee for exactly the buttons most likely to be tapped by
+   mistake. It was also scoped to ≤768px, so the "global" minimum did not apply
+   on a tablet held in landscape or on a touch laptop.
 
-/* ─── Plans usage bar: prevent wrap={false} overflow ─────────────────── */
-@media (max-width: 600px) {
-  [data-cc-usage-bar] {
-    flex-wrap: wrap !important;
-    gap: 12px !important;
-  }
-  [data-cc-usage-bar] > * {
-    min-width: 0;
-    flex-shrink: 1;
-  }
-}
-
-/* ─── DataTable horizontal scroll container ──────────────────────────── */
-.Polaris-DataTable__ScrollContainer {
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* ─── Ensure tables don't explode layout ─────────────────────────────── */
-@media (max-width: 480px) {
-  .Polaris-DataTable {
-    min-width: 0;
-  }
-}
-
-/* ─── Stat card grids on Dashboard ───────────────────────────────────── */
-@media (max-width: 600px) {
-  [data-cc-stat-grid] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-@media (max-width: 380px) {
-  [data-cc-stat-grid] {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-/* ─── Product editor layout ──────────────────────────────────────────── */
-@media (max-width: 768px) {
-  /* Polaris Layout twoThird becomes full-width stacked on small screens */
-  .Polaris-Layout__Section--oneThird,
-  .Polaris-Layout__Section--oneHalf {
-    max-width: 100% !important;
-    flex: 0 0 100% !important;
-  }
-}
-
-/* ─── Generation studio textarea ─────────────────────────────────────── */
-@media (max-width: 480px) {
-  .Polaris-TextField__Input {
-    font-size: 16px !important; /* prevent iOS auto-zoom on focus */
-  }
-}
-
-/* ─── Global: min tap target 44×44px ─────────────────────────────────── */
-@media (max-width: 768px) {
+   This applies on any device whose primary input is touch, at any width, and
+   it does not carve out the small sizes. It uses padding rather than height so
+   Polaris's own typography and alignment are untouched. */
+@media (pointer: coarse) {
   .Polaris-Button {
     min-height: 44px;
   }
+
   .Polaris-Button--sizeMicro,
   .Polaris-Button--sizeSlim {
-    min-height: 36px; /* micro/slim intentionally smaller — leave their height but keep touch area via padding */
-    padding-block: 8px;
+    min-height: 44px;
+    padding-block: 10px;
   }
-  /* Inline icon buttons (ResourceItem actions, etc.) */
-  .Polaris-ResourceItem__Actions .Polaris-Button--iconOnly {
+
+  .Polaris-Button--iconOnly {
     min-height: 44px;
     min-width: 44px;
   }
 }
 
-/* ─── Page header actions: stack on very narrow ──────────────────────── */
-@media (max-width: 480px) {
-  .Polaris-Page-Header__RightAlign {
-    flex-wrap: wrap !important;
-    gap: 8px !important;
-  }
-}
-
-/* ─── Modal: full-screen on phones ───────────────────────────────────── */
-@media (max-width: 480px) {
-  .Polaris-Modal-Dialog__Modal {
-    max-height: 95dvh !important;
-    overflow-y: auto;
-  }
-}
-
-/* ─── Navigation tabs: horizontal scroll ─────────────────────────────── */
-@media (max-width: 480px) {
-  .Polaris-Tabs__Wrapper {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    flex-wrap: nowrap !important;
-  }
-}
-
-/* ─── Review & Publish AB variant cards: stack ───────────────────────── */
-@media (max-width: 600px) {
-  [data-cc-ab-grid] {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-/* ─── SEO Audit score circles: center on mobile ──────────────────────── */
-@media (max-width: 480px) {
-  [data-cc-score-ring] {
-    margin: 0 auto;
-  }
-}
-
-/* ─── Prevent body horizontal scroll in embedded iframe ──────────────── */
-html, body {
+/* ─── The embedded iframe ────────────────────────────────────────────────
+   The app renders inside an iframe in the Shopify admin, and a child that is
+   wider than the frame produces a horizontal scrollbar the merchant cannot
+   reach. `max-width` alone is enough; the previous rule also set
+   `overflow-x: hidden` on `html`, which breaks `position: sticky` and modal
+   scroll-locking in some browsers. */
+html,
+body {
   max-width: 100%;
-  overflow-x: hidden;
 }
