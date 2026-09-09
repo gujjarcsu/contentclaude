@@ -1,8 +1,8 @@
-# Navaal: AI SEO & GEO Content — Shopify App Configuration
+# Navaal: AI SEO, AEO & GEO — Shopify App Configuration
 # Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1279a14cca41d4a6f8e6e3c485870b77"
-name = "Navaal: AI SEO & GEO Content"
+name = "Navaal: AI SEO, AEO & GEO"
 handle = "navaal-seo-geo-content"
 application_url = "https://app.navaal.ai"
 embedded = true

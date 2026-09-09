@@ -22,11 +22,11 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Navaal — AI product content & AI-search (GEO) optimization</title>
-        <meta name="description" content="Generate product descriptions, blogs, and SEO/GEO content with premium AI — answer-first structure, FAQPage schema, and an llms.txt feed for AI search engines." />
+        <title>Navaal: AI SEO, AEO & GEO</title>
+        <meta name="description" content="Navaal: AI SEO, AEO & GEO — product descriptions, meta tags, FAQs with schema, and an llms.txt feed written to rank in Google and be quoted by ChatGPT, Perplexity and AI Overviews." />
         <meta name="theme-color" content="#0A84FF" />
-        <meta property="og:title" content="Navaal — AI SEO & GEO Content" />
-        <meta property="og:description" content="AI-powered product content and blog generation for Shopify merchants" />
+        <meta property="og:title" content="Navaal: AI SEO, AEO & GEO" />
+        <meta property="og:description" content="AI SEO, AEO & GEO content for Shopify merchants — descriptions, meta tags, FAQ schema and llms.txt." />
         <meta property="og:image" content="/icon-512.svg" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="icon" href="/logos/contentclaude-icon-square.svg" type="image/svg+xml" sizes="any" />
