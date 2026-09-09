@@ -3,15 +3,20 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
 
 [build]
 
-# Sync the database schema before the new release goes live. This project uses
-# Prisma's schema-push workflow (no migrations folder), so `db push` is the
-# correct, idempotent command — it applies additive changes (new indexes, columns)
-# with no data loss and is a no-op when the schema is already current.
+# Apply migrations before the new release goes live (Phase 1 item 1).
+#
+# This was `prisma db push --skip-generate`, which diffs the live database
+# against schema.prisma and applies whatever it decides, with no history and no
+# reverse. `migrate deploy` applies exactly the committed migrations that are not
+# yet recorded, in order, and refuses to invent anything. If it fails the release
+# fails and Fly keeps serving the previous version — which is what should happen
+# when a schema change cannot be applied.
+#
+# The 0_init baseline was marked applied on production with
+# `prisma migrate resolve --applied 0_init` before this switch, so this is a
+# no-op until the first real migration. Rollback: prisma/migrations/README.md.
 [deploy]
-  # NOTE: never add --accept-data-loss here as a standing flag. It was used
-  # exactly once (2026-08-12 hardening release, dead-column drop, verified
-  # backup taken) and reverted in the same session.
-  release_command = "npx prisma db push --skip-generate"
+  release_command = "npx prisma migrate deploy"
 
 # Phase 0 item 12 — Fly sends SIGTERM and then SIGKILLs after kill_timeout,
 # which defaults to 5 SECONDS. The graceful shutdown in startup.server.js drains
