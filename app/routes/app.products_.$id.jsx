@@ -885,7 +885,7 @@ export async function action({ request, params }) {
       const ent = await checkEntitlement(shop, "abVariants");
       if (!ent.allowed) {
         return {
-          error: `A/B Variants require the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
+          error: `Comparing two options requires the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
           limitReached: true,
         };
       }
@@ -1640,7 +1640,7 @@ export default function ProductGeneratePage() {
                     label="FAQ Content"
                     checked={genFaq}
                     onChange={setGenFaq}
-                    helpText="Adds FAQPage schema — the format ChatGPT, Perplexity & Google AI cite."
+                    helpText="Adds a question-and-answer section AI assistants can quote."
                   />
                   <Checkbox
                     label="Image Alt Text"
@@ -1892,14 +1892,16 @@ export default function ProductGeneratePage() {
                             disabled={isLoading || isGeneratingVariants || noneSelected}
                             fullWidth
                           >
-                            {isGeneratingVariants ? "Generating 2 options..." : "Generate 2 Options (A/B)"}
+                            {isGeneratingVariants
+                              ? "Generating 2 options..."
+                              : "Generate two options to compare"}
                           </Button>
                         ) : (
                           // NOT disabled — a disabled Polaris button never fires
                           // onClick, which made this upsell a dead control. It
                           // looks locked but genuinely navigates to Plans.
                           <Button size="large" fullWidth onClick={() => navigate("/app/plans")}>
-                            A/B Variants — upgrade to Growth
+                            Two options to compare — upgrade to Growth
                           </Button>
                         )}
 

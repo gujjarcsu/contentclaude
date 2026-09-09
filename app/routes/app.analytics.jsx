@@ -233,7 +233,7 @@ export default function AnalyticsPage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Bulk Jobs
+                  Bulk runs
                 </Text>
                 <InlineStack gap="300">
                   <BlockStack gap="100" inlineAlign="center">

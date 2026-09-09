@@ -184,23 +184,23 @@ export default function ResultsPage() {
                 AI-search schema
               </Text>
               {data.faqSchemaProducts > 0 && (
-                <Badge tone="success">{`FAQPage live on ${data.faqSchemaProducts} product${data.faqSchemaProducts !== 1 ? "s" : ""}`}</Badge>
+                <Badge tone="success">{`Q&A live on ${data.faqSchemaProducts} product${data.faqSchemaProducts !== 1 ? "s" : ""}`}</Badge>
               )}
             </InlineStack>
+            {/* Phase 2 item 2.9 - the paragraph below carried five pieces of
+                jargon a merchant has no reason to know (FAQPage, JSON-LD,
+                structured data, answer-first, llms.txt), ran to seven lines, and
+                finished on a marketing flourish. It states one fact now. */}
             {data.faqSchemaProducts > 0 ? (
               <Text as="p" variant="bodyMd">
-                <strong>{data.faqSchemaProducts}</strong> of your products now serve{" "}
-                <strong>FAQPage structured data (JSON-LD)</strong> on their storefront — the machine-readable
-                format ChatGPT, Perplexity, Gemini &amp; Google AI Overviews read to quote and cite answers.
-                Your content is also written <strong>answer-first</strong>, and your catalog is exposed via{" "}
-                <strong>llms.txt</strong> for AI crawlers. That's the difference between being <em>found</em>{" "}
-                and being <em>cited</em>.
+                <strong>{data.faqSchemaProducts}</strong> of your products publish a question-and-answer
+                section that AI assistants can quote.
               </Text>
             ) : (
               <BlockStack gap="300">
                 <Text as="p" variant="bodyMd">
                   You haven't published <strong>FAQ content</strong> yet — that's what adds{" "}
-                  <strong>FAQPage schema</strong> to your product pages, the structured data AI answer engines
+                  <strong>a question-and-answer section</strong> to your product pages, which AI assistants
                   cite. Generate content with the <strong>FAQ</strong> option selected, then publish, to make
                   your products citable by AI.
                 </Text>

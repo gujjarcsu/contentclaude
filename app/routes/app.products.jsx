@@ -751,11 +751,6 @@ export default function ProductsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated · runs in background
                     </Text>
-                    {isLowUsage && (
-                      <Text as="p" variant="bodySm" tone="critical">
-                        Only {usageRemaining} generation{usageRemaining !== 1 ? "s" : ""} left!
-                      </Text>
-                    )}
                   </InlineStack>
                 </>
               )}

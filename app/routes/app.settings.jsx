@@ -517,7 +517,7 @@ export default function SettingsPage() {
                       label="Enable Autopilot"
                       checked={autopilotEnabled}
                       onChange={setAutopilotEnabled}
-                      helpText="Requires the products/create webhook to be registered in your Shopify app."
+                      helpText="New products are picked up automatically once this is on."
                     />
 
                     {autopilotEnabled && (

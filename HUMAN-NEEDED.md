@@ -11,7 +11,7 @@ and restarts both machines onto it.
 
 ## Open
 
-Five items, all with the owner. Every one needs an account or a console the
+Six items, all with the owner. Every one needs an account or a console the
 agent cannot reach. The code for each is shipped and degrades honestly without
 it.
 
@@ -96,6 +96,17 @@ take `directUrl`.
   1-3: Home LCP p75 4012 ms, Products 2660 ms, Review 2344 ms, CLS 0 on all three, INP 16-24 ms. It is a
   single sample per screen, not the p75-over-10 the brief asks for, and it is recorded as an indication
   rather than a result.
+
+### 6. Change the App Store listing to US spelling (Phase 2 item 2.9)
+- **Why:** the app was split between British and US spelling of the same word — 20 user-visible
+  "Optimis-" against 9 "Optimiz-", with the same metric spelled both ways on adjacent screens (Results
+  said "Products optimized", Analytics said "products optimised"). The route has always been
+  `/app/optimize` while every label said "Optimise". The app is now US throughout, and the listing has
+  to match or the split simply moves outside the app.
+- **Steps:** Partner Dashboard → the app → App listing → search the copy for "optimis", "analys",
+  "favourite", "colour" and "behaviour", and change each to the US form. The app name itself
+  (`Navaal: AI SEO, AEO & GEO`) is unaffected.
+- **Verify:** the listing and the in-app copy use one spelling. Nothing in the app needs redeploying.
 
 ## Done
 

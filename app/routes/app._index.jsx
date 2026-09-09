@@ -427,11 +427,11 @@ export default function Dashboard() {
   let heroSubtitle;
   if (isNewShop) {
     heroSubtitle = "Let's generate your first product description — it takes under 30 seconds.";
-  } else if (remaining === 0) {
-    heroSubtitle = `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more `;
-  } else if (remaining <= 3) {
-    heroSubtitle = `Only ${remaining} generation${remaining !== 1 ? "s" : ""} left this month — upgrade to keep momentum going.`;
   } else {
+    // Phase 2 item 2.9 - the hero used to turn into an upsell whenever quota
+    // ran low ("Only 2 generations left - upgrade to keep momentum going").
+    // Quota is stated once, plainly, in the usage card. The hero says what the
+    // merchant has actually done.
     heroSubtitle = `${generatedCount} product${generatedCount !== 1 ? "s" : ""} optimized · ${draftCount} draft${draftCount !== 1 ? "s" : ""} awaiting review`;
   }
 

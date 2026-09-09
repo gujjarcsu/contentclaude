@@ -2045,3 +2045,32 @@ and the twelve screenshots of an error page were **deleted rather than kept**.
 One partial reading did land before the session degraded, on the deploy carrying increments 1-3: Home
 LCP p75 4012 ms, Products 2660 ms, Review 2344 ms; CLS 0 everywhere; INP 16-24 ms. That is one sample per
 screen, not the p75 over ten the brief asks for, and it is recorded as an indication, not a result.
+
+## 2.9 — Copy
+
+Three problems, and only the first is cosmetic.
+
+**Spelling was genuinely split**: 20 user-visible "Optimis-" against 9 "Optimiz-", and the *same metric*
+was spelled both ways on adjacent screens — Results said `Products optimized` while Analytics said
+`products optimised`. The route has always been `/app/optimize` while every label said "Optimise". US
+throughout now, and the listing follows as HUMAN-NEEDED item 6, because otherwise the split just moves
+outside the app.
+
+**Jargon is not a matter of taste.** Two were worse than the brief's list:
+
+- `(distinct products)` — database vocabulary, rendered verbatim in a merchant dashboard.
+- `Requires the products/create webhook to be registered in your Shopify app.` — a raw Shopify topic
+  string, as help text on a checkbox the merchant is asked to tick.
+
+Gone with them: `FAQPage`, `JSON-LD`, `A/B Variants`, `Bulk Jobs`, `llms.txt` in merchant-facing copy,
+and `Product #123456` as a button label where a product name belongs. The Results page's seven-line
+paragraph carrying five of those acronyms and finishing on "the difference between being found and being
+cited" now states the one fact it was actually reporting.
+
+**Quota copy applied pressure instead of stating a number.** The Home hero *became an upsell* whenever
+quota ran low — "Only 2 generations left this month — upgrade to keep momentum going" — and a red
+"Only 2 generations left!" sat inside the generate panel, inches from the button, in critical tone. Both
+are gone. Quota is stated once, in the usage card, in the same tone as any other number. A test checks
+that removing the pressure did not remove the information.
+
+18 assertions.

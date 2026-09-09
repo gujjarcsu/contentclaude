@@ -528,7 +528,7 @@ export default function JobsPage() {
                                         size="slim"
                                         onClick={() => navigate(`/app/products/${numericId}`)}
                                       >
-                                        Product #{numericId}
+                                        Open product
                                       </Button>
                                     ) : (
                                       <strong>{err.productId || "Unknown"}</strong>
@@ -553,9 +553,7 @@ export default function JobsPage() {
                       <>
                         <Divider />
                         <InlineStack gap="300" blockAlign="center">
-                          <Button onClick={() => navigate("/app/review")}>
-                            Review drafts
-                          </Button>
+                          <Button onClick={() => navigate("/app/review")}>Review drafts</Button>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {job.completedProducts} product{job.completedProducts !== 1 ? "s" : ""} ready
                           </Text>
