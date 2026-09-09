@@ -1,0 +1,25 @@
+name: Weekly time-to-value report
+
+# Brief item 3: report the median install → first draft / first publish for the
+# last 20 installs weekly. Read-only: runs scripts/ttv-report.mjs on the Fly
+# machine (it already has DATABASE_URL + the Prisma client) and writes the
+# Markdown to the job summary. Monday 08:00 Sydney = Sunday 22:00 UTC.
+
+on:
+  schedule:
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+
+jobs:
+  report:
+    name: Growth report (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run report on the Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console --app contentclaude -C "sh -c 'REPORT_FORMAT=md node /app/scripts/ttv-report.mjs'" | tee report.md
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat report.md >> "$GITHUB_STEP_SUMMARY"

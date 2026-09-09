@@ -18,7 +18,7 @@ const { db, tx, webhook } = vi.hoisted(() => {
     updateMany: vi.fn(async () => ({ count: 1 })),
   });
   const tx = {};
-  for (const m of ["generatedContent", "contentVersion", "contentTemplate", "collectionVoice", "brandVoice", "blogPost", "generationJob", "usageRecord", "plan", "growthState", "session", "gDPRRequest", "shop"]) tx[m] = model();
+  for (const m of ["generatedContent", "contentVersion", "contentTemplate", "collectionVoice", "brandVoice", "blogPost", "generationJob", "usageRecord", "plan", "growthState", "reviewRequestAttempt", "upgradePrompt", "session", "gDPRRequest", "shop"]) tx[m] = model();
   const db = { $transaction: vi.fn(async (fn) => fn(tx)), shop: { updateMany: vi.fn(async () => ({ count: 1 })) } };
   const webhook = vi.fn();
   return { db, tx, webhook };

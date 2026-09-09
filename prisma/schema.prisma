@@ -168,6 +168,7 @@ model GenerationJob {
   contentTypes      String    @default("description") // comma-separated
   mode              String    @default("generate")     // "generate" (from scratch) | "enhance" (improve existing)
   autoPublish       Boolean   @default(false)          // push to Shopify immediately after generation
+  quotaSkipped      Int       @default(0)              // products excluded before the run because the monthly quota could not cover them (disclosed pre-run)
   errorLog          String?   // JSON array of { productId, error }
   startedAt         DateTime?
   completedAt       DateTime?
@@ -266,9 +267,93 @@ model Shop {
   reinstallReferer     String?
   uninstalledAt        DateTime?
   redactedAt           DateTime?
+  // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).
+  // Stamped first-writer-wins (updateMany where null) by the server at the moment the thing
+  // happened; recordReinstall nulls them (the uninstall deleted the content).
+  productCountAtFirstLoad Int?      // catalog size on the first dashboard load (explains installs that cannot reach a draft)
+  quickStartStartedAt  DateTime?    // merchant pressed "Write N descriptions now"
+  quickStartDraftCount Int       @default(0)
+  firstDraftSeenAt     DateTime?    // first HTTP response that put an AI draft on the merchant screen
+  firstDraftSource     String?      // quick_start | quick_start_reload | product_page | review_page | welcome
+  firstPublishAt       DateTime?    // first Shopify-ACCEPTED productUpdate of AI content
+  firstPublishSource   String?      // review_page | product_page | product_page_auto | bulk_auto_publish
+  // ── Item 4: durable review-ask summary. SURVIVES uninstall/reinstall (never reset); anonymised at shop/redact.
+  reviewAskCount       Int       @default(0)   // reviews.request() calls opened for this shop (optimistic-lock key)
+  reviewLastAskedAt    DateTime?
+  reviewLastCode       String?      // "pending" | success | <Shopify decline code> | unavailable | error | skipped-hidden | unknown
+  reviewNextEligibleAt DateTime?    // per-code hold; a 60-day pending hold is written at open time
+  reviewShownAt        DateTime?    // set only on "success" — the one displayed modal
+  reviewDoneAt         DateTime?    // terminal: success | already-reviewed | merchant-ineligible
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   @@index([installedAt])
   @@index([installSource])
+  @@index([firstDraftSeenAt])
+  @@index([firstPublishAt])
+}
+
+// One row per shopify.reviews.request() call we decided to make. Created (code
+// null) inside the publish action the merchant pressed; completed by
+// /app/review-request with the code Shopify returned. Per-shop data: in GDPR_SHOP_MODELS.
+model ReviewRequestAttempt {
+  id                String    @id @default(cuid())
+  shop              String
+  surface           String    // review_page | product_page
+  trigger           String    @default("publish") // first_publish | publish
+  attemptNo         Int       @default(1)
+  publishedCount    Int       @default(0)
+  installAgeSeconds Int?
+  requestedAt       DateTime  @default(now())
+  respondedAt       DateTime?
+  code              String?   // null = pending
+  success           Boolean?
+  message           String?   // the message Shopify returned, at most 200 chars
+  nextEligibleAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([shop, requestedAt])
+  @@index([code])
+}
+
+// Item 5 — upgrade prompt funnel. One row per (shop, trigger, surface, month).
+// The condition is recorded by a loader; shows/clicks are confirmed by the client;
+// "plan chosen" is attributed only from the authoritative ACTIVE subscription
+// when its id changes (never from a view-only exposure). Per-shop data: in GDPR_SHOP_MODELS.
+model UpgradePrompt {
+  id                   String    @id @default(cuid())
+  shop                 String
+  trigger              String    // quota_exhausted | optimize_coverage | bulk_gate
+  surface              String    // dashboard | products | product_page | optimize | seo_audit | quick_start
+  month                String    // "2026-09" (UTC — same key as UsageRecord.month)
+  n                    Int       @default(0)
+  nDefinition          String    @default("catalog_gaps") // catalog_gaps | no_ai_description | audit_missing_description
+  truncated            Boolean   @default(false)
+  remaining            Int       @default(0)
+  monthlyLimit         Int       @default(0)
+  currentPlan          String    @default("free")
+  fitPlanName          String?   // starter | growth | pro
+  monthsToCover        Int       @default(1)
+  lastSeenAt           DateTime  @default(now())
+  shownCount           Int       @default(0)     // client-confirmed renders
+  firstShownAt         DateTime?
+  lastShownAt          DateTime?
+  openedAt             DateTime?
+  dismissedAt          DateTime?
+  ctaClickedAt         DateTime?
+  arrivedAtPlansAt     DateTime?
+  subscribeRequestedAt DateTime?
+  planKeyRequested     String?
+  planChosen           String?
+  planChosenFrom       String?
+  planChosenAt         DateTime?
+  chargeId             String?   // AppSubscription GID
+  declinedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([shop, trigger, surface, month])
+  @@index([shop, lastSeenAt])
+  @@index([chargeId])
 }

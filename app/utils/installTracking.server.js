@@ -220,6 +220,10 @@ async function createShopRow(shop, sig) {
 // being set, so the two parallel loaders of the same document request (or two
 // machines) can both reach here and exactly one increments; the other re-reads.
 async function recordReinstall(existing, sig) {
+  logger.info(
+    { shop: existing.shop, event: "ttv_reset_on_reinstall", firstDraftSeenAt: existing.firstDraftSeenAt ?? null, firstPublishAt: existing.firstPublishAt ?? null, quickStartDraftCount: existing.quickStartDraftCount ?? 0, productCountAtFirstLoad: existing.productCountAtFirstLoad ?? null },
+    "reinstall: activation milestones reset"
+  );
   const r = await prisma.shop.updateMany({
     where: { shop: existing.shop, uninstalledAt: { not: null } },
     data: {
@@ -228,6 +232,15 @@ async function recordReinstall(existing, sig) {
       installCount: { increment: 1 },
       reinstallSource: classifyInstallSource(sig),
       reinstallReferer: sig.referer,
+      // A reinstall is a new activation clock (the uninstall deleted the content).
+      // Review-ask fields are NOT reset: "never retry within the cooldown" survives reinstall.
+      productCountAtFirstLoad: null,
+      quickStartStartedAt: null,
+      quickStartDraftCount: 0,
+      firstDraftSeenAt: null,
+      firstDraftSource: null,
+      firstPublishAt: null,
+      firstPublishSource: null,
     },
   });
   const row = await prisma.shop.findUnique({ where: { shop: existing.shop } });

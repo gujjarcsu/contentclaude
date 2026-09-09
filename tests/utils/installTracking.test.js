@@ -229,6 +229,10 @@ describe("trackShopAuth — reinstall", () => {
     const { where, data } = db.shop.updateMany.mock.calls[0][0];
     expect(where).toEqual({ shop: SHOP, uninstalledAt: { not: null } });
     expect(data).toMatchObject({ uninstalledAt: null, installCount: { increment: 1 }, reinstallSource: "ref:outreach-sep", reinstallReferer: "https://admin.shopify.com/" });
+    // activation milestones restart with the reinstall
+    expect(data).toMatchObject({ firstDraftSeenAt: null, firstDraftSource: null, firstPublishAt: null, firstPublishSource: null, productCountAtFirstLoad: null, quickStartStartedAt: null, quickStartDraftCount: 0 });
+    for (const k of ["reviewAskCount", "reviewDoneAt", "reviewNextEligibleAt", "reviewShownAt"]) expect(k in data).toBe(false);
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ event: "ttv_reset_on_reinstall" }), expect.any(String));
     expect(data.reinstalledAt).toBeInstanceOf(Date);
     for (const k of ["installSource", "surfaceType", "surfaceDetail", "installRef", "installReferer", "installLandingPath"]) {
       expect(k in data).toBe(false);

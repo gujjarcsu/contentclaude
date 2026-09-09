@@ -17,6 +17,8 @@ export const GDPR_SHOP_MODELS = [
   "usageRecord",
   "plan",
   "growthState",
+  "reviewRequestAttempt",
+  "upgradePrompt",
   "session",
 ];
 
