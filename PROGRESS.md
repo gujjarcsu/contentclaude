@@ -1432,3 +1432,52 @@ And every one of these emails goes nowhere without `RESEND_API_KEY` — HUMAN-NE
 exists, each alert is logged at **error** level with its full body, so it reaches Sentry and `fly logs`
 and can be found. That is a real degradation and it is stated rather than papered over: the alert exists,
 it is correct, and it is not yet arriving in an inbox.
+
+---
+
+# PHASE 1 — COMPLETE. Item-by-item ledger.
+
+Five deploys. Every one through the same guardrails: cold-cache lint, blocking typecheck, the full test
+suite, a build, and the post-deploy smoke job.
+
+| # | Item | Commit(s) | Deployed | Verified |
+|---|---|---|---|---|
+| 1 | Migrations | `5af8e82`, `be634d9`, `82246c2` | `82246c2` | **LIVE** — release command runs `migrate deploy`; build-info confirms |
+| 2 | Topology (web/worker) | `53e9e27`, `14b73f8`, `71d7197` | `cc0d2b2` | **LIVE** — worker survived a web deploy, 143 → 144 web, worker never restarted |
+| 3 | Docker: Node 22, non-root | `53e9e27` | `82246c2` | **LIVE** — `ps` on the machine shows `node   643 node worker.js`; `node -v` is v22.23.2 |
+| 4 | CI: typecheck blocking, smoke | `53e9e27` | `82246c2` | **LIVE** — the smoke job has run green on every deploy since |
+| 5 | Alerting | `71d7197`, `fab0a38` | `fab0a38` | **LIVE** — `Operator scheduler started` on the worker only, with `healthEveryMs: 300000`, `appUrl` and `degradedProbesBeforeAlert: 3` |
+| 6 | Polling load | `71d7197` | `cc0d2b2` | code + smoke — the loader change is deployed; the ticker's behaviour is covered by 11 assertions |
+| 7 | Backups | `71d7197` | `cc0d2b2` | code-only — it will log `backup_not_configured` at 03:00 Sydney until R2 exists (HUMAN-NEEDED 6) |
+| 8 | Docs | `cc0d2b2` | `cc0d2b2` | **LIVE** in the repo — 29 assertions hold each rewritten claim |
+| 9 | Repo hygiene | `cc0d2b2` | `cc0d2b2` | **LIVE** — 186 MB gone from the build context; 13 assertions keep it gone |
+| 10 | Tests that matter | `3888cd6` | `3888cd6` | **LIVE** — 55 tracked files, 674 assertions, coverage now includes routes |
+
+**Final deployed SHA: `fab0a38`.** `/api/health?deep=1` reports `status: "ok"`, `database: "ok"`,
+`redis: "ok"`, `workerRunning: true`, `stuckProcessing: 0`, breaker closed.
+
+## What Phase 1 did NOT do, stated plainly
+
+- **Two-region web.** The brief asks for `iad` alongside `syd`. Not done, and the reason is in item 2: an
+  `iad` web machine would pay a Pacific crossing on **every query** because Neon is in Sydney. For a page
+  making four sequential queries that is a net loss. It is worth doing after the database is regional,
+  and not before.
+- **The advisory-lock override is temporary.** `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` is safe only while
+  there are no pending migrations. Before the first real migration it needs `DIRECT_URL` — HUMAN-NEEDED
+  item 1.
+- **No alert can leave the building yet.** Every one is correct and tested; without `RESEND_API_KEY` each
+  is logged at **error** level with its full body rather than emailed. HUMAN-NEEDED item 4.
+- **No external monitor.** Three of the four failure answers come from a checker running inside the thing
+  it checks. HUMAN-NEEDED item 3.
+- **The backup has never run, and no restore has been drilled.** HUMAN-NEEDED items 5, 6 and 7. An
+  untested backup is a hope.
+- **The two recovered worktree patches have not been applied or assessed.** They are at `ff52f34`, which
+  predates every Phase 0 fix, so they may apply cleanly and still be wrong. Recorded in
+  `docs/history/worktree-recovery/` for whoever picks them up.
+
+## One process note worth recording
+
+The items 5-7 push went red in CI on a test that had nothing to do with it: `growthFoundation` built the
+same timestamp twice from `Date.now()` and the two differed by a millisecond. Re-running would have gone
+green and left a test that fails roughly one run in a few hundred, forever. It was fixed instead — one
+clock, pinned at import. A flake that is re-run rather than fixed is how a suite stops being believed.
