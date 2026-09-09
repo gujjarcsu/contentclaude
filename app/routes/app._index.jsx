@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLoaderData, useNavigate, useFetcher, redirect } from "react-router";
+import { Suspense, useState } from "react";
+import { Await, useLoaderData, useNavigate, useFetcher, redirect } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
@@ -17,6 +17,8 @@ import {
   Banner,
   Divider,
   Icon,
+  SkeletonBodyText,
+  SkeletonDisplayText,
 } from "@shopify/polaris";
 import {
   ProductIcon,
@@ -31,6 +33,7 @@ import {
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
@@ -50,10 +53,56 @@ export const loader = async ({ request }) => {
     if (val) authParams.set(key, val);
   }
 
-  // All dashboard data fetched in ONE parallel batch. The product count (an
-  // Admin GraphQL call, cached 5 min) used to be awaited sequentially *before*
-  // the DB queries, serializing a network round-trip ahead of everything else;
-  // folding it into Promise.all makes total latency ≈ the single slowest call.
+  // Phase 2 item 2.11 — the two below-the-fold queries are started here, with
+  // the batch below, but never awaited. Recent Activity and the blog counts sit
+  // under the stat cards, the usage card and the primary action; making the
+  // first paint wait on two groupBy aggregates over the whole content table
+  // charged every merchant for something most of them never scroll to.
+  // Streamed to <Await> instead, and resolved (never rejected) so a failed
+  // aggregate costs the merchant a decorative card, not the dashboard.
+  const belowFold = Promise.all([
+    prisma.generatedContent.groupBy({
+      by: ["productId", "productTitle"],
+      where: { shop },
+      _max: { updatedAt: true },
+      _count: { contentType: true },
+      orderBy: { _max: { updatedAt: "desc" } },
+      take: 5,
+    }),
+    prisma.blogPost.groupBy({
+      by: ["status"],
+      where: { shop },
+      _count: { status: true },
+    }),
+  ])
+    .then(([recent, blogStats]) => {
+      const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
+      const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
+      return {
+        recentActivity: recent.map((r) => ({
+          productId: r.productId,
+          productTitle: r.productTitle || "Product",
+          contentTypesCount: r._count.contentType,
+          updatedAt: r._max.updatedAt.toISOString(),
+        })),
+        blogsTotal: blogsPublished + blogsDraft,
+        blogsPublished,
+        blogsDraft,
+      };
+    })
+    .catch((err) => {
+      // A streamed promise cannot redirect or re-authenticate — the headers are
+      // already sent — so this degrades to an empty activity list and no blog
+      // badges. Log the real cause so the failure is not invisible.
+      logger.error({ shop, err: err?.message }, "dashboard below-fold queries failed");
+      return { recentActivity: [], blogsTotal: 0, blogsPublished: 0, blogsDraft: 0 };
+    });
+
+  // Everything the first paint needs, in ONE parallel batch. The product count
+  // (an Admin GraphQL call, cached 5 min) used to be awaited sequentially
+  // *before* the DB queries, serializing a network round-trip ahead of
+  // everything else; folding it into Promise.all makes total latency ≈ the
+  // single slowest call.
   const [
     totalProducts,
     metrics,
@@ -61,8 +110,6 @@ export const loader = async ({ request }) => {
     activeJobCount,
     plan,
     usageCount,
-    recentActivity,
-    blogStats,
     recentlyCompletedJob,
     growthState,
   ] = await Promise.all([
@@ -82,19 +129,6 @@ export const loader = async ({ request }) => {
     }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
-    prisma.generatedContent.groupBy({
-      by: ["productId", "productTitle"],
-      where: { shop },
-      _max: { updatedAt: true },
-      _count: { contentType: true },
-      orderBy: { _max: { updatedAt: "desc" } },
-      take: 5,
-    }),
-    prisma.blogPost.groupBy({
-      by: ["status"],
-      where: { shop },
-      _count: { status: true },
-    }),
     // Detect a job that finished in the last 15 min so we can surface a success banner
     prisma.generationJob.findFirst({
       where: {
@@ -120,9 +154,6 @@ export const loader = async ({ request }) => {
   const generatedCount = metrics.publishedProducts;
   const draftCount = metrics.draftProducts;
   const needsContentCount = needsContentFrom(metrics, totalProducts);
-  const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
-  const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
-  const blogsTotal = blogsPublished + blogsDraft;
 
   const hasBrandVoice = !!(
     brandVoice &&
@@ -144,7 +175,7 @@ export const loader = async ({ request }) => {
 
   const storeName = brandVoice?.storeName || shop.split(".")[0];
 
-  return Response.json({
+  const payload = {
     shopDomain: shop,
     embedConfirmed: !!growthState?.embedConfirmedAt,
     totalProducts,
@@ -157,23 +188,20 @@ export const loader = async ({ request }) => {
     isNewShop,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
-    recentActivity: recentActivity.map((r) => ({
-      productId: r.productId,
-      productTitle: r.productTitle || "Product",
-      contentTypesCount: r._count.contentType,
-      updatedAt: r._max.updatedAt.toISOString(),
-    })),
     storeName,
-    blogsTotal,
-    blogsPublished,
-    blogsDraft,
     recentlyCompletedJob: recentlyCompletedJob
       ? {
           completedProducts: recentlyCompletedJob.completedProducts,
           completedAt: recentlyCompletedJob.completedAt.toISOString(),
         }
       : null,
-  });
+    // recentActivity, blogsTotal, blogsPublished and blogsDraft resolve here.
+    belowFold,
+  };
+
+  // A promise only streams if the loader returns a plain object - Response.json
+  // cannot carry one, so this returns the object itself.
+  return payload;
 };
 
 function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
@@ -247,6 +275,79 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
   );
 }
 
+/** Placeholder the size of the Recent Activity card, while it streams in. */
+function RecentActivitySkeleton() {
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <SkeletonDisplayText size="small" />
+        <SkeletonBodyText lines={5} />
+      </BlockStack>
+    </Card>
+  );
+}
+
+/**
+ * The <Await> error path. The streamed promise resolves rather than rejects
+ * (see the loader), so this only fires on something genuinely unexpected —
+ * and both pieces behind it are decoration, so the dashboard keeps working
+ * without them.
+ */
+function BelowFoldUnavailable() {
+  return null;
+}
+
+function RecentActivityCard({ items, navigate }) {
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="200" blockAlign="center">
+            <Icon source={ChartHistogramGrowthIcon} tone="info" />
+            <Text as="h2" variant="headingMd">
+              Recent Activity
+            </Text>
+          </InlineStack>
+          <Button variant="plain" onClick={() => navigate("/app/analytics")}>
+            View all activity
+          </Button>
+        </InlineStack>
+
+        <BlockStack gap="200">
+          {items.map((item) => {
+            // Activity rows can be products OR collections (they share the
+            // GeneratedContent table). A Collection GID sent to the product
+            // route 404s — route by GID type instead.
+            const isProduct = item.productId.startsWith("gid://shopify/Product/");
+            const target = isProduct
+              ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
+              : "/app/collections";
+            const typeLabel =
+              item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
+            return (
+              <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="050">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      {item.productTitle}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {isProduct ? typeLabel : `Collection · ${typeLabel}`} · {timeAgo(item.updatedAt)}
+                    </Text>
+                  </BlockStack>
+                  <Button size="slim" onClick={() => navigate(target)}>
+                    View
+                  </Button>
+                </InlineStack>
+              </Box>
+            );
+          })}
+        </BlockStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
 function timeAgo(isoString) {
   const secs = Math.floor((Date.now() - new Date(isoString)) / 1000);
   if (secs < 60) return "just now";
@@ -287,15 +388,12 @@ export default function Dashboard() {
     isNewShop,
     plan,
     usageCount,
-    recentActivity,
     storeName,
-    blogsTotal,
-    blogsPublished,
-    blogsDraft,
     recentlyCompletedJob,
     shopDomain,
     embedConfirmed,
     geoNoteDismissed,
+    belowFold,
   } = useLoaderData();
   const navigate = useNavigate();
   const dismissGeoNote = useFetcher();
@@ -588,60 +686,17 @@ export default function Dashboard() {
           </BlockStack>
         </Box>
 
-        {/* ── Recent Activity ───────────────────────────────────────────── */}
-        {recentActivity.length > 0 && (
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ChartHistogramGrowthIcon} tone="info" />
-                  <Text as="h2" variant="headingMd">
-                    Recent Activity
-                  </Text>
-                </InlineStack>
-                <Button variant="plain" onClick={() => navigate("/app/analytics")}>
-                  View all activity
-                </Button>
-              </InlineStack>
-
-              <BlockStack gap="200">
-                {recentActivity.map((item) => {
-                  // Activity rows can be products OR collections (they share
-                  // the GeneratedContent table). A Collection GID sent to the
-                  // product route 404s — route by GID type instead.
-                  const isProduct = item.productId.startsWith("gid://shopify/Product/");
-                  const target = isProduct
-                    ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
-                    : "/app/collections";
-                  const typeLabel =
-                    item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
-                  return (
-                    <Box
-                      key={item.productId}
-                      padding="300"
-                      background="bg-surface-secondary"
-                      borderRadius="200"
-                    >
-                      <InlineStack align="space-between" blockAlign="center">
-                        <BlockStack gap="050">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            {item.productTitle}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {isProduct ? typeLabel : `Collection · ${typeLabel}`} · {timeAgo(item.updatedAt)}
-                          </Text>
-                        </BlockStack>
-                        <Button size="slim" onClick={() => navigate(target)}>
-                          View
-                        </Button>
-                      </InlineStack>
-                    </Box>
-                  );
-                })}
-              </BlockStack>
-            </BlockStack>
-          </Card>
-        )}
+        {/* ── Recent Activity ─────────────────────────────────────────────
+            Streamed: it is below the usage card, and its groupBy used to hold
+            the whole first paint. An empty list renders nothing, so the error
+            path (which resolves to []) simply hides the card. */}
+        <Suspense fallback={<RecentActivitySkeleton />}>
+          <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
+            {({ recentActivity }) =>
+              recentActivity.length > 0 && <RecentActivityCard items={recentActivity} navigate={navigate} />
+            }
+          </Await>
+        </Suspense>
 
         {/* Optimize CTA ─────────────────────────────────────────────── */}
         {!isNewShop && (
@@ -719,19 +774,33 @@ export default function Dashboard() {
                 <Text as="p" variant="bodySm" tone="subdued">
                   Write SEO-optimized blog posts in your brand voice in under 60 seconds.
                 </Text>
-                {blogsTotal > 0 && (
-                  <InlineStack gap="200">
-                    <Badge tone="success">{blogsPublished} published</Badge>
-                    {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
-                  </InlineStack>
-                )}
+                {/* Same streamed promise as Recent Activity. "Write a post" is
+                    there from the first paint; only the counts wait. */}
+                <Suspense fallback={<SkeletonBodyText lines={1} />}>
+                  <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
+                    {({ blogsTotal, blogsPublished, blogsDraft }) =>
+                      blogsTotal > 0 && (
+                        <InlineStack gap="200">
+                          <Badge tone="success">{blogsPublished} published</Badge>
+                          {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
+                        </InlineStack>
+                      )
+                    }
+                  </Await>
+                </Suspense>
                 <InlineStack gap="200">
                   <Button onClick={() => navigate("/app/blog")}>Write a post</Button>
-                  {blogsTotal > 0 && (
-                    <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                      View all ({blogsTotal})
-                    </Button>
-                  )}
+                  <Suspense fallback={<SkeletonBodyText lines={1} />}>
+                    <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
+                      {({ blogsTotal }) =>
+                        blogsTotal > 0 && (
+                          <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
+                            View all ({blogsTotal})
+                          </Button>
+                        )
+                      }
+                    </Await>
+                  </Suspense>
                 </InlineStack>
               </BlockStack>
             </Card>

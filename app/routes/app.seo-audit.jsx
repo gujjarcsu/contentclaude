@@ -27,7 +27,12 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const AUDIT_PAGE_SIZE = 50;
 const MAX_AUDIT_PRODUCTS = 500; // cap the catalog walk so a huge store cannot hang the scan
-const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit — leave headroom for DB + response
+// The catalog walk is streamed now, so it lives inside entry.server.jsx's
+// streamTimeout (15s, aborted at 16s) rather than inside a blocking loader that
+// could take 25s. 10s leaves room for a page that is already in flight plus its
+// one retry, so the table always arrives before the render is cut off. On a
+// healthy store ten pages take 2-5s and this never fires.
+const AUDIT_TIMEOUT_MS = 10_000;
 const AUDIT_RETRY_DELAY_MS = 500; // one backoff before a page is written off
 
 const AUDIT_PAGE_QUERY = `query getProducts($cursor: String) {
@@ -113,9 +118,7 @@ export const loader = async ({ request }) => {
     products.sort((a, b) => a.score - b.score); // worst first
 
     const totalScore =
-      products.length > 0
-        ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length)
-        : 0;
+      products.length > 0 ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length) : 0;
 
     // truncated: the scan did not cover the whole catalog — the product cap was
     // reached, the time budget ran out, or Shopify stopped answering. A large

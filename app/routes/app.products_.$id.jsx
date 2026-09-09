@@ -59,11 +59,29 @@ export async function loader({ request, params }) {
   const shop = session.shop;
   const productId = `gid://shopify/Product/${params.id}`;
 
+  // Phase 2 item 2.11 — the Admin round-trip used to be awaited on its own,
+  // ahead of seven DB reads that never needed it, and the content scorer was
+  // imported after them. None of the eight depend on the product, so they all
+  // start together and the page costs one slowest call instead of a network
+  // hop plus a batch plus a module load.
+  //
   // media (not the legacy images connection) — alt-text writes need MediaImage
   // GIDs (gid://shopify/MediaImage/...), which productUpdateMedia accepts.
   // Legacy ProductImage IDs are NOT valid for any 2026-04 media mutation.
-  const response = await admin.graphql(
-    `query getProduct($id: ID!) {
+  const [
+    productPayload,
+    existingContent,
+    brandVoice,
+    versions,
+    templates,
+    plan,
+    growthState,
+    publishWithoutReview,
+    { scoreContent },
+  ] = await Promise.all([
+    admin
+      .graphql(
+        `query getProduct($id: ID!) {
       product(id: $id) {
         id title handle status productType vendor
         description descriptionHtml
@@ -77,33 +95,30 @@ export async function loader({ request, params }) {
         tags
       }
     }`,
-    { variables: { id: productId } },
-  );
+        { variables: { id: productId } },
+      )
+      .then((r) => r.json()),
+    prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
+    prisma.brandVoice.findUnique({ where: { shop } }),
+    prisma.contentVersion.findMany({
+      where: { shop, productId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+    prisma.contentTemplate.findMany({
+      where: { shop },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      take: 50,
+    }),
+    getOrCreatePlan(shop),
+    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+    publishesWithoutReview(shop),
+    import("../utils/contentScorer.server.js"),
+  ]);
 
-  const { data } = await response.json();
-  if (!data.product) throw new Response("Product not found", { status: 404 });
-  const product = data.product;
+  const product = productPayload?.data?.product;
+  if (!product) throw new Response("Product not found", { status: 404 });
 
-  const [existingContent, brandVoice, versions, templates, plan, growthState, publishWithoutReview] =
-    await Promise.all([
-      prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
-      prisma.brandVoice.findUnique({ where: { shop } }),
-      prisma.contentVersion.findMany({
-        where: { shop, productId },
-        orderBy: { createdAt: "desc" },
-        take: 30,
-      }),
-      prisma.contentTemplate.findMany({
-        where: { shop },
-        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-        take: 50,
-      }),
-      getOrCreatePlan(shop),
-      prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
-      publishesWithoutReview(shop),
-    ]);
-
-  const { scoreContent } = await import("../utils/contentScorer.server.js");
   const contentMap = existingContent.reduce((acc, c) => {
     acc[c.contentType] = c;
     return acc;
@@ -969,7 +984,13 @@ export async function action({ request, params }) {
         return { error: "The AI returned nothing usable. Please retry — this did not use any generations." };
       }
 
-      return { success: true, variants: [variantA, variantB] };
+      // Phase 2 item 2.12 - the variant preview is the one place model output
+      // reached dangerouslySetInnerHTML unfiltered. Sanitize here, on the
+      // server, so the component renders something already safe.
+      const clean = (v) =>
+        v && typeof v.description === "string" ? { ...v, description: sanitizeHtml(v.description) } : v;
+
+      return { success: true, variants: [clean(variantA), clean(variantB)] };
     }
 
     // ── Save chosen A/B variant ───────────────────────────────────────────────
@@ -1920,6 +1941,11 @@ export default function ProductGeneratePage() {
                           {v.description && (
                             <Box padding="200" background="bg-surface-secondary" borderRadius="100">
                               <span
+                                // Phase 2 item 2.12 - sanitized in the action
+                                // before it is returned, not here. sanitizeHtml
+                                // lives in a .server module, and calling it from
+                                // the component pulls that module into the
+                                // client bundle.
                                 dangerouslySetInnerHTML={{
                                   __html:
                                     v.description.substring(0, 600) +
@@ -2015,7 +2041,7 @@ export default function ProductGeneratePage() {
                               </Badge>
                             </InlineStack>
                             <TextField
-                              label=""
+                              label="Product description"
                               labelHidden
                               value={editedDescription}
                               onChange={setEditedDescription}
@@ -2117,7 +2143,7 @@ export default function ProductGeneratePage() {
                           {rawMetaTitle && (
                             <BlockStack gap="100">
                               <TextField
-                                label=""
+                                label="Page title"
                                 labelHidden
                                 value={editedMetaTitle}
                                 onChange={setEditedMetaTitle}
@@ -2210,7 +2236,7 @@ export default function ProductGeneratePage() {
                           {rawMetaDescription && (
                             <BlockStack gap="100">
                               <TextField
-                                label=""
+                                label="Search description"
                                 labelHidden
                                 value={editedMetaDescription}
                                 onChange={setEditedMetaDescription}

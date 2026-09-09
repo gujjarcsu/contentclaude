@@ -85,16 +85,20 @@ export const loader = async ({ request }) => {
           }
         }`;
 
-  const [gqlResponse, plan, usageCount, metrics, productCountResp, publishWithoutReview] = await Promise.all([
-    admin.graphql(gqlQuery, { variables: { cursor } }),
+  // Phase 2 item 2.11 — the two Admin calls were already issued together, but
+  // their bodies were then READ one after the other, below the batch: the
+  // product-count parse could not start until the 50-product page had been
+  // fully parsed. Reading the body is part of the round-trip, so both reads
+  // now happen inside Promise.all.
+  const [gqlData, plan, usageCount, metrics, productCountData, publishWithoutReview] = await Promise.all([
+    admin.graphql(gqlQuery, { variables: { cursor } }).then((r) => r.json()),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     getContentMetrics(shop),
-    admin.graphql(`query { productsCount { count } }`),
+    admin.graphql(`query { productsCount { count } }`).then((r) => r.json()),
     publishesWithoutReview(shop),
   ]);
 
-  const gqlData = await gqlResponse.json();
   const { edges, pageInfo } = gqlData.data.products;
   const products = edges.map(({ node }) => ({
     id: node.id,
@@ -111,7 +115,6 @@ export const loader = async ({ request }) => {
     tags: node.tags || [],
   }));
 
-  const productCountData = await productCountResp.json();
   const totalStoreProducts = productCountData.data?.productsCount?.count ?? products.length;
 
   // Content status only for the products visible on THIS page — a bounded query

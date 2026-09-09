@@ -1988,3 +1988,60 @@ so a screen reader announced the raw character. They now read `Description: yes`
 tone is the decoration; the words are the message.
 
 13 assertions, including one that every badge is given a label by its caller.
+
+## 2.11 — Performance feel
+
+| Loader | Was | Is |
+|---|---|---|
+| SEO Audit | a `while` loop paginating 50 products at a time, **up to 25 seconds sequential** before first paint | page one awaited so the score renders; the rest of the catalogue and the table stream behind `Suspense`/`Await` |
+| Home | one `Promise.all` of ten, including two aggregates only needed below the fold | eight awaited, `recentActivity` and the blog counts streamed |
+| Products | two `.json()` bodies awaited serially after the batch | both parsed inside the batch |
+| Product page | a full Shopify round trip awaited **ahead of seven database reads that never needed it**, then a dynamic import after them | all nine in one batch |
+
+The audit also gained **backoff**: a failed page retries once after 500 ms, and if the retry fails the walk
+keeps what it has and reports `truncatedReason: "error"` rather than losing the whole audit to one bad
+page. Its timeout dropped from 25 s to 10 s, because the walk now runs inside the streaming budget rather
+than blocking the loader, and a 25 s budget would have been cut off mid-stream leaving a permanent
+skeleton.
+
+**One thing was reverted on review.** Returning a promise means the loader can no longer return
+`Response.json`, and 17 tests called `.json()` on the result. The first fix attached a non-enumerable
+`json()` to the returned object so the test would keep passing. That is production code carrying a shim
+to satisfy a test helper, which is the wrong way round. The shim is gone and the helper accepts both
+shapes.
+
+## 2.12 — Mobile and accessibility
+
+**Accessibility.** Four `TextField`s carried `label=""` with `labelHidden`, which gives a control **no
+accessible name at all** — three on the product page, one on Collections. They have real labels. The A/B
+variant preview was the one `dangerouslySetInnerHTML` on the product page that was **not** sanitised; it
+is sanitised in the action, server-side, because `sanitizeHtml` lives in a `.server` module and calling
+it from the component pulls that module into the client bundle. The build caught that attempt.
+
+Colour-only status is gone: the Review card's include/skip stripe, the Settings tone picker, and the SEO
+Audit table's bare `✓`/`✗` badges, which rendered roughly 400 times on a 100-product store with nothing
+for a screen reader to announce.
+
+**375px, and the measurement that could not be made.** Two harnesses are written and committed:
+`tools/proof/web-vitals.mjs` takes LCP, CLS and INP at p75 over ten loads with a 200 ms US-to-Sydney
+round trip emulated, and `tools/proof/mobile-375.mjs` screenshots twelve screens and fails if any scrolls
+horizontally, naming the widest offending element.
+
+**Neither produced a usable number, and the first run of each nearly shipped a false pass.** They
+reported `12 screens, 0 overflowing` and a complete LCP table of 3.9 to 5.2 seconds. Every screenshot was
+the same **"410 Gone"** page, and those LCP figures were the load time of that error page. Six
+byte-identical screenshots gave it away.
+
+Both harnesses now refuse to report rather than measure an error page. The corrected check reads through
+**Playwright frame handles**, not `iframe.contentDocument`: the app is cross-origin to the admin, so
+`contentDocument` is null and the obvious version would have silently fallen back to the admin's own
+text — passing on every broken run, which is the same class of mistake the guard exists to catch. The
+fixed guard was then watched failing on a real 410 before being trusted.
+
+The cause is the saved admin session no longer reliably completing Shopify's token exchange, and only a
+person can create a new one. Both runs are HUMAN-NEEDED item 5 with exact commands. The invalid baseline
+and the twelve screenshots of an error page were **deleted rather than kept**.
+
+One partial reading did land before the session degraded, on the deploy carrying increments 1-3: Home
+LCP p75 4012 ms, Products 2660 ms, Review 2344 ms; CLS 0 everywhere; INP 16-24 ms. That is one sample per
+screen, not the p75 over ten the brief asks for, and it is recorded as an indication, not a result.

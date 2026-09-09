@@ -56,7 +56,11 @@ async function land(query = `?host=${HOST}&id_token=tok&embedded=1&shop=${SHOP}`
     if (res instanceof Response && res.status >= 300 && res.status < 400) {
       return { redirected: true, to: res.headers.get("location") };
     }
-    return { redirected: false, data: await res.json() };
+    // Phase 2 item 2.11 - this loader returns a plain object now, not a
+    // Response: a Response body cannot carry the promise that streams the
+    // below-the-fold data. Production code should not grow a fake json() to
+    // keep a test helper happy, so the helper handles both shapes.
+    return { redirected: false, data: res instanceof Response ? await res.json() : res };
   } catch (e) {
     if (e instanceof Response) return { redirected: true, to: e.headers.get("location") };
     throw e;
@@ -65,7 +69,11 @@ async function land(query = `?host=${HOST}&id_token=tok&embedded=1&shop=${SHOP}`
 
 const withContent = () => getContentMetrics.mockResolvedValue({ publishedProducts: 4, draftProducts: 2 });
 const hasBrandVoice = () =>
-  prisma.brandVoice.findUnique.mockResolvedValue({ storeName: "A shop", targetAudience: "", sampleContent: "" });
+  prisma.brandVoice.findUnique.mockResolvedValue({
+    storeName: "A shop",
+    targetAudience: "",
+    sampleContent: "",
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
