@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
+import { Suspense } from "react";
+import { Await, useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   EmptyState,
@@ -15,12 +16,33 @@ import {
   ProgressBar,
   Banner,
   Spinner,
+  SkeletonBodyText,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import logger from "../utils/logger.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
+
+const AUDIT_PAGE_SIZE = 50;
+const MAX_AUDIT_PRODUCTS = 500; // cap the catalog walk so a huge store cannot hang the scan
+const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit — leave headroom for DB + response
+const AUDIT_RETRY_DELAY_MS = 500; // one backoff before a page is written off
+
+const AUDIT_PAGE_QUERY = `query getProducts($cursor: String) {
+  products(first: ${AUDIT_PAGE_SIZE}, after: $cursor, sortKey: TITLE) {
+    pageInfo { hasNextPage endCursor }
+    edges {
+      node {
+        id title handle
+        description
+        seo { title description }
+        images(first: 5) { edges { node { id url altText } } }
+      }
+    }
+  }
+}`;
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -30,109 +52,141 @@ export const loader = async ({ request }) => {
   const SIX_MONTHS_AGO = new Date();
   SIX_MONTHS_AGO.setMonth(SIX_MONTHS_AGO.getMonth() - 6);
 
-  // Paginate through the full catalog (cap at 500 products to avoid timeout)
-  const allEdges = [];
-  let cursor = null;
-  let hasNextPage = true;
-  const MAX_AUDIT_PRODUCTS = 500;
-  const AUDIT_START = Date.now();
-  const AUDIT_TIMEOUT_MS = 25_000; // 25s hard limit — leave headroom for DB + response
-
-  // Distinguish WHY the scan stopped early — a large store on a slow day must
-  // never see a partial audit presented as complete (requirement 2.1.4).
-  let stoppedByTimeout = false;
-
-  while (hasNextPage && allEdges.length < MAX_AUDIT_PRODUCTS) {
-    if (Date.now() - AUDIT_START > AUDIT_TIMEOUT_MS) {
-      stoppedByTimeout = true;
-      break;
+  // One page of the catalog, retried once after a short backoff. A single
+  // failed page used to abort the whole audit; now the caller decides whether
+  // to keep what it already has.
+  const fetchPage = async (cursor) => {
+    const attempt = async () => {
+      const response = await admin.graphql(AUDIT_PAGE_QUERY, { variables: { cursor } });
+      const { data } = await response.json();
+      return data?.products ?? null;
+    };
+    try {
+      return await attempt();
+    } catch (err) {
+      logger.warn({ shop, err: err?.message }, "seo audit page failed, retrying once");
+      await new Promise((resolve) => setTimeout(resolve, AUDIT_RETRY_DELAY_MS));
+      return attempt();
     }
-    const response = await admin.graphql(
-      `query getProducts($cursor: String) {
-        products(first: 50, after: $cursor, sortKey: TITLE) {
-          pageInfo { hasNextPage endCursor }
-          edges {
-            node {
-              id title handle
-              description
-              seo { title description }
-              images(first: 5) { edges { node { id url altText } } }
-            }
-          }
-        }
-      }`,
-      { variables: { cursor } },
-    );
-    const { data } = await response.json();
-    const page = data?.products;
-    allEdges.push(...(page?.edges ?? []));
-    hasNextPage = page?.pageInfo?.hasNextPage ?? false;
-    cursor = page?.pageInfo?.endCursor ?? null;
-  }
+  };
 
-  // Fetch DB content records so we can check freshness
-  const dbContent = await prisma.generatedContent.findMany({
-    where: { shop, contentType: "description" },
-    select: { productId: true, updatedAt: true, status: true },
-  });
+  const AUDIT_START = Date.now();
+
+  // Page one and the freshness records do not depend on each other, so they go
+  // out together. The DB read used to wait for the ENTIRE catalog walk first.
+  const [firstPage, dbContent] = await Promise.all([
+    fetchPage(null),
+    prisma.generatedContent.findMany({
+      where: { shop, contentType: "description" },
+      select: { productId: true, updatedAt: true, status: true },
+    }),
+  ]);
   const contentByProductId = new Map(dbContent.map((c) => [c.productId, c]));
 
-  const products = allEdges.map(({ node }) => {
-    const images = node.images.edges.map((e) => e.node);
-    const productData = {
-      description: node.description || "",
-      seoTitle: node.seo?.title || "",
-      seoDescription: node.seo?.description || "",
-      images,
-    };
-    const { score, checks } = calculateSeoScore(productData);
-    const dbRecord = contentByProductId.get(node.id);
-    const isStale =
-      dbRecord && dbRecord.status === "published" && new Date(dbRecord.updatedAt) < SIX_MONTHS_AGO;
+  // Everything the page renders, derived from however many edges we have.
+  // Called twice: once for page one (awaited, so the score paints) and once
+  // for the full catalog (streamed).
+  const summarize = (edges, { stoppedByTimeout, stoppedByError, hasNextPage }) => {
+    const products = edges.map(({ node }) => {
+      const images = node.images.edges.map((e) => e.node);
+      const productData = {
+        description: node.description || "",
+        seoTitle: node.seo?.title || "",
+        seoDescription: node.seo?.description || "",
+        images,
+      };
+      const { score, checks } = calculateSeoScore(productData);
+      const dbRecord = contentByProductId.get(node.id);
+      const isStale =
+        dbRecord && dbRecord.status === "published" && new Date(dbRecord.updatedAt) < SIX_MONTHS_AGO;
+      return {
+        id: node.id,
+        numericId: node.id.replace("gid://shopify/Product/", ""),
+        title: node.title,
+        score,
+        checks,
+        isStale,
+        lastUpdated: dbRecord?.updatedAt ?? null,
+      };
+    });
+
+    products.sort((a, b) => a.score - b.score); // worst first
+
+    const totalScore =
+      products.length > 0
+        ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length)
+        : 0;
+
+    // truncated: the scan did not cover the whole catalog — the product cap was
+    // reached, the time budget ran out, or Shopify stopped answering. A large
+    // store on a slow day must never see a partial audit presented as complete
+    // (requirement 2.1.4).
+    const truncatedReason = stoppedByError
+      ? "error"
+      : stoppedByTimeout && hasNextPage
+        ? "timeout"
+        : hasNextPage && edges.length >= MAX_AUDIT_PRODUCTS
+          ? "cap"
+          : null;
+
     return {
-      id: node.id,
-      numericId: node.id.replace("gid://shopify/Product/", ""),
-      title: node.title,
-      score,
-      checks,
-      isStale,
-      lastUpdated: dbRecord?.updatedAt ?? null,
+      products,
+      totalScore,
+      missingDesc: products.filter((p) => !p.checks.hasDescription).length,
+      missingMeta: products.filter((p) => !p.checks.hasMetaTitle).length,
+      // Distinguish: products with no images vs products with images but missing alt text
+      noImages: products.filter((p) => p.checks.noImages).length,
+      missingAltText: products.filter((p) => p.checks.missingAltText).length,
+      staleCount: products.filter((p) => p.isStale).length,
+      truncatedReason,
+      scannedCount: edges.length,
     };
-  });
+  };
 
-  products.sort((a, b) => a.score - b.score); // worst first
+  const firstEdges = firstPage?.edges ?? [];
 
-  const totalScore =
-    products.length > 0 ? Math.round(products.reduce((sum, p) => sum + p.score, 0) / products.length) : 0;
+  // The rest of the catalog is streamed: React Router sends the first-page
+  // score straight away and pushes this in when it lands. Nothing in here
+  // rejects — a page that fails twice ends the walk and the audit reports what
+  // it managed to read.
+  const rest = (async () => {
+    const allEdges = [...firstEdges];
+    let cursor = firstPage?.pageInfo?.endCursor ?? null;
+    let hasNextPage = firstPage?.pageInfo?.hasNextPage ?? false;
+    let stoppedByTimeout = false;
+    let stoppedByError = false;
 
-  const missingDesc = products.filter((p) => !p.checks.hasDescription).length;
-  const missingMeta = products.filter((p) => !p.checks.hasMetaTitle).length;
-  // Distinguish: products with no images vs products with images but missing alt text
-  const noImages = products.filter((p) => p.checks.noImages).length;
-  const missingAltText = products.filter((p) => p.checks.missingAltText).length;
-  const staleCount = products.filter((p) => p.isStale).length;
+    while (hasNextPage && allEdges.length < MAX_AUDIT_PRODUCTS) {
+      if (Date.now() - AUDIT_START > AUDIT_TIMEOUT_MS) {
+        stoppedByTimeout = true;
+        break;
+      }
+      let page;
+      try {
+        page = await fetchPage(cursor);
+      } catch (err) {
+        logger.error({ shop, err: err?.message }, "seo audit page failed after retry — keeping partial");
+        stoppedByError = true;
+        break;
+      }
+      if (!page) {
+        stoppedByError = true;
+        break;
+      }
+      allEdges.push(...(page.edges ?? []));
+      hasNextPage = page.pageInfo?.hasNextPage ?? false;
+      cursor = page.pageInfo?.endCursor ?? null;
+    }
 
-  // truncated: the scan did not cover the whole catalog — either the product
-  // cap was reached or the time budget ran out. hasMoreProducts is only known
-  // when the last page reported another page.
-  const truncatedReason =
-    stoppedByTimeout && hasNextPage
-      ? "timeout"
-      : hasNextPage && allEdges.length >= MAX_AUDIT_PRODUCTS
-        ? "cap"
-        : null;
+    return summarize(allEdges, { stoppedByTimeout, stoppedByError, hasNextPage });
+  })();
 
-  return Response.json({
-    products,
-    totalScore,
-    missingDesc,
-    missingMeta,
-    noImages,
-    missingAltText,
-    staleCount,
-    truncatedReason,
-    scannedCount: allEdges.length,
-  });
+  // Plain object (NOT Response.json) so React Router streams `rest`.
+  // The top-level fields are page one, which is what the first paint scores.
+  return {
+    ...summarize(firstEdges, { stoppedByTimeout: false, stoppedByError: false, hasNextPage: false }),
+    rest,
+  };
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -166,7 +220,35 @@ function CheckIcon({ pass, label }) {
   );
 }
 
+/**
+ * Phase 2 item 2.11 — the score paints from page one; the rest streams.
+ *
+ * The loader used to walk the whole catalog before returning anything, so a
+ * 500-product store stared at nothing for up to 25 seconds. Now page one is
+ * awaited (that is the score, the issue counts and the empty-state branch) and
+ * the remaining pages arrive behind <Await>, with the table as a skeleton until
+ * they do.
+ */
 export default function SeoAuditPage() {
+  const data = useLoaderData();
+  const loadingThisRoute = useRouteLoading();
+
+  if (loadingThisRoute) {
+    return <AppSkeleton title="SEO Audit" sections={2} layout="full" />;
+  }
+
+  return (
+    <Suspense fallback={<AuditBody data={data} pending />}>
+      {/* If the streamed walk throws, page one is still a real audit — show it
+          with an honest banner rather than replacing the screen with an error. */}
+      <Await resolve={data.rest} errorElement={<AuditBody data={data} scanFailed />}>
+        {(rest) => <AuditBody data={rest} />}
+      </Await>
+    </Suspense>
+  );
+}
+
+function AuditBody({ data, pending = false, scanFailed = false }) {
   const {
     products,
     totalScore,
@@ -177,16 +259,11 @@ export default function SeoAuditPage() {
     staleCount,
     truncatedReason,
     scannedCount,
-  } = useLoaderData();
+  } = data;
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const loadingThisRoute = useRouteLoading();
   const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading" || revalidator.state === "loading";
-
-  if (loadingThisRoute) {
-    return <AppSkeleton title="SEO Audit" sections={2} layout="full" />;
-  }
 
   const rows = products.map((p) => [
     <InlineStack gap="200" blockAlign="center" key={p.id}>
@@ -215,10 +292,14 @@ export default function SeoAuditPage() {
     ),
   ]);
 
+  const subtitle = pending
+    ? `Scored the first ${products.length} product${products.length !== 1 ? "s" : ""} — the rest of your catalog is still being read`
+    : `${products.length} product${products.length !== 1 ? "s" : ""} analyzed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`;
+
   return (
     <Page
       title="SEO Audit"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analyzed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`}
+      subtitle={subtitle}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: "Optimize store",
@@ -234,12 +315,21 @@ export default function SeoAuditPage() {
       ]}
     >
       <BlockStack gap="500">
+        {scanFailed && (
+          <Banner tone="warning" title="This is a partial audit">
+            <p>
+              {`Shopify stopped answering while the rest of your catalog was being read, so only the first ${scannedCount} product${scannedCount !== 1 ? "s" : ""} (sorted by title) were analyzed. Scores and counts below cover only that portion — refresh to try the rest again.`}
+            </p>
+          </Banner>
+        )}
         {truncatedReason && (
           <Banner tone="warning" title="This is a partial audit">
             <p>
               {truncatedReason === "timeout"
                 ? `The scan hit its time limit after ${scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.`
-                : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analyzed. Scores and counts below cover only the scanned portion.`}
+                : truncatedReason === "error"
+                  ? `Shopify stopped answering after ${scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Refresh to try the rest again.`
+                  : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analyzed. Scores and counts below cover only the scanned portion.`}
             </p>
           </Banner>
         )}
@@ -346,17 +436,30 @@ export default function SeoAuditPage() {
           </Layout>
         )}
 
-        {products.length > 0 && (
-          <Card padding="0">
-            <DataTable
-              columnContentTypes={["text", "numeric", "text", "text", "text", "text"]}
-              headings={["Product", "SEO Score", "Description", "Meta Title", "Meta Desc", "Alt Text"]}
-              rows={rows}
-              defaultSortDirection="ascending"
-              initialSortColumnIndex={1}
-            />
-          </Card>
-        )}
+        {products.length > 0 &&
+          (pending ? (
+            // The table is the expensive half of this page, so it is the half
+            // that waits. A skeleton the size of the table it replaces, not a
+            // bare spinner.
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">
+                  Product breakdown
+                </Text>
+                <SkeletonBodyText lines={12} />
+              </BlockStack>
+            </Card>
+          ) : (
+            <Card padding="0">
+              <DataTable
+                columnContentTypes={["text", "numeric", "text", "text", "text", "text"]}
+                headings={["Product", "SEO Score", "Description", "Meta Title", "Meta Desc", "Alt Text"]}
+                rows={rows}
+                defaultSortDirection="ascending"
+                initialSortColumnIndex={1}
+              />
+            </Card>
+          ))}
       </BlockStack>
     </Page>
   );

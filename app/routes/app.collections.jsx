@@ -457,7 +457,7 @@ export default function CollectionsPage() {
                             Generated Description
                           </Text>
                           <TextField
-                            label=""
+                            label="Collection description"
                             labelHidden
                             value={edited.description ?? generated.description ?? ""}
                             onChange={(v) => updateEdit(collection.id, "description", v)}

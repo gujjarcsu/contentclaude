@@ -11,7 +11,7 @@ and restarts both machines onto it.
 
 ## Open
 
-Four items, all with the owner. Every one needs an account or a console the
+Five items, all with the owner. Every one needs an account or a console the
 agent cannot reach. The code for each is shipped and degrades honestly without
 it.
 
@@ -65,6 +65,37 @@ take `directUrl`.
   **new Neon branch**, not production, run `npx prisma migrate status` against it, and count rows in
   `Shop` and `GeneratedContent`. Record the date and the row counts in `PROGRESS.md` so the next person
   knows it has been proven at least once.
+
+### 5. Re-run the two measurement harnesses with a fresh admin session (Phase 2 items 2.11 and 2.12)
+- **Why:** both harnesses are written, committed and working. Neither can produce a number, because the
+  saved Playwright session at `tests/e2e/.auth/shopify.json` does not reliably complete Shopify token
+  exchange any more: embedded routes answer **410 Gone** and never recover. Only a human can create a new
+  session, because `login-cdp.mjs` opens a browser for somebody to type the credentials and no agent
+  ever types them.
+- **What went wrong first, so it is not repeated:** the first run of each harness reported a full set of
+  confident results — `12 screens, 0 overflowing` and a complete LCP table. Every screenshot was the
+  same "410 Gone" page, and the LCP figures were the load time of that error page. Both harnesses now
+  refuse to report rather than measure an error page, and the check reads through Playwright frame
+  handles because the app is cross-origin to the admin and `iframe.contentDocument` is null.
+- **Steps:**
+  ```
+  node tools/proof/login-cdp.mjs          # a human logs in; writes tests/e2e/.auth/shopify.json
+
+  node tools/proof/web-vitals.mjs --label before    # against the CURRENT deploy
+  node tools/proof/mobile-375.mjs                   # 12 screens at 375px
+
+  # then, after the next deploy:
+  node tools/proof/web-vitals.mjs --label after
+  node tools/proof/web-vitals.mjs --compare
+  ```
+- **What to expect:** the harness emulates a 200 ms US-to-Sydney round trip, because measuring from
+  Sydney would flatter the app by the width of the Pacific. Targets are LCP p75 <= 2.5 s, CLS <= 0.1,
+  INP <= 200 ms. `mobile-375.mjs` exits non-zero if any screen scrolls horizontally and writes both the
+  screenshots and a `results.json` naming the widest offending element.
+- **The one partial reading I did get**, before the session degraded, on the deploy carrying increments
+  1-3: Home LCP p75 4012 ms, Products 2660 ms, Review 2344 ms, CLS 0 on all three, INP 16-24 ms. It is a
+  single sample per screen, not the p75-over-10 the brief asks for, and it is recorded as an indication
+  rather than a result.
 
 ## Done
 
