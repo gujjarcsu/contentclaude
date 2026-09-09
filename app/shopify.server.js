@@ -9,6 +9,7 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
 import { refreshOfflineToken } from "./utils/offlineToken.server.js";
+import { noteAfterAuth, trackShopAuth } from "./utils/installTracking.server.js";
 
 // Billing test mode: always on outside production (real charges off). In
 // production it's off — UNLESS explicitly overridden for pre-launch testing.
@@ -57,6 +58,15 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  hooks: {
+    // Fires when a NEW session is created for a shop (install, reinstall, or an
+    // offline-token re-exchange). Flags the shop so the install tracker below
+    // takes the DB path on this request — reinstalls are detected even when the
+    // request carries no attribution params. Must never throw.
+    afterAuth: async ({ session }) => {
+      noteAfterAuth(session?.shop);
+    },
+  },
   future: {
     // Shopify now rejects non-expiring offline access tokens (HTTP 403:
     // "Non-expiring access tokens are no longer accepted"). This flag makes
@@ -108,7 +118,7 @@ function shopFromRequest(request) {
 }
 
 const _rawAdmin = shopify.authenticate.admin.bind(shopify.authenticate);
-shopify.authenticate.admin = async (request) => {
+async function adminWithTokenRefresh(request) {
   try {
     return await _rawAdmin(request);
   } catch (err) {
@@ -120,6 +130,16 @@ shopify.authenticate.admin = async (request) => {
     }
     throw err;
   }
+}
+shopify.authenticate.admin = async (request) => {
+  const ctx = await adminWithTokenRefresh(request);
+  // Install-source tracking — the shop record (see installTracking.server.js).
+  // A brand-new install has no OAuth callback under managed installation: its
+  // first authenticated request IS the install, and this is the one place every
+  // authenticated admin request passes through. Never throws; the common
+  // request is a Set lookup, so the happy path stays untouched.
+  await trackShopAuth(request, ctx?.session?.shop);
+  return ctx;
 };
 
 export const authenticate = shopify.authenticate;

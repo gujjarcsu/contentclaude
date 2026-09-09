@@ -2,9 +2,10 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import logger from "../utils/logger.server";
 import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
+import { markShopUninstalled } from "../utils/installTracking.server.js";
 
 export const action = async ({ request }) => {
-  const { shop, topic } = await authenticate.webhook(request);
+  const { shop, topic, triggeredAt } = await authenticate.webhook(request);
 
   logger.info({ shop, topic }, "Webhook received: app/uninstalled");
 
@@ -21,6 +22,11 @@ export const action = async ({ request }) => {
     // The shop/redact GDPR webhook will be sent 48h later as a second chance.
     logger.error({ shop, err }, "Failed to delete shop data on uninstall");
   }
+
+  // The Shop row is intentionally NOT in GDPR_SHOP_MODELS: it survives uninstall
+  // with uninstalledAt set so installs/uninstalls/reinstalls stay countable. The
+  // shop/redact webhook (48h later) anonymises it.
+  await markShopUninstalled(shop, triggeredAt);
 
   return new Response();
 };

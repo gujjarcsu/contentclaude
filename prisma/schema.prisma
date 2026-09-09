@@ -232,3 +232,43 @@ model BlogPost {
   @@index([shop, status])
   @@index([shop, createdAt])
 }
+
+// The shop record — one row per shop that has ever authenticated. Created on
+// the FIRST authenticated request after install (token exchange) and never
+// deleted on uninstall (uninstalledAt is set instead) so installs, uninstalls
+// and reinstalls can be counted truthfully. Holds the App Store install
+// attribution Shopify appends to the install URL (surface_*), our own ?ref=
+// attribution for links on surfaces we own, and the HTTP referer.
+// shop/redact anonymises the row (shop → "redacted:<hash>", referer/detail
+// cleared) so aggregate install stats survive without identifying the store.
+model Shop {
+  id                   String    @id @default(cuid())
+  shop                 String    @unique
+  installedAt          DateTime  @default(now())
+  // "app_store:<surface_type>" | "ref:<ref>" | "utm:<utm_source>" |
+  // "unknown" (no attribution on the install request) |
+  // "pre_tracking" (shop was already installed before tracking shipped)
+  installSource        String    @default("unknown")
+  surfaceType          String?   // home | search | search_ad | category | collection | story | partners | app_details | app_group
+  surfaceDetail        String?   // search query / category title / section handle
+  surfaceIntraPosition String?
+  surfaceInterPosition String?
+  installRef           String?   // ?ref= on links we own (navaal.ai, Bilby, outreach)
+  utmSource            String?
+  utmMedium            String?
+  utmCampaign          String?
+  installReferer       String?   // HTTP referer of the first authenticated document request (origin+path only)
+  installLandingPath   String?   // path of that request
+  installCount         Int       @default(1)
+  // Reinstalls are counted here; the first-install attribution above is immutable.
+  reinstalledAt        DateTime? // latest reinstall (installedAt keeps the first install)
+  reinstallSource      String?   // same vocabulary as installSource, for the latest reinstall
+  reinstallReferer     String?
+  uninstalledAt        DateTime?
+  redactedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([installedAt])
+  @@index([installSource])
+}
