@@ -30,7 +30,7 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
-import { getContentMetrics } from "../utils/metrics.server.js";
+import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -98,6 +98,7 @@ export const loader = async ({ request }) => {
   const productCountData = await productCountResp.json();
   const totalStoreProducts = productCountData.data?.productsCount?.count ?? products.length;
 
+
   // Content status only for the products visible on THIS page — a bounded query
   // (≤ PAGE_SIZE rows) instead of loading every GeneratedContent row for the shop.
   // This is the fix for the unbounded findMany that did not scale past ~10k products.
@@ -116,11 +117,14 @@ export const loader = async ({ request }) => {
     contentMap[productId][contentType] = { status, updatedAt };
   });
 
-  // Store-wide coverage counts from a single aggregated source of truth
-  // (distinct products, never > total) — accurate across all pages, tiny query.
+  // Phase 2 item 2.1 - read, never recompute. This page used to derive
+  // "needs content" as total - published - draft, which undercounted every
+  // product that had a published description AND a draft meta title, because
+  // those were counted in both. The states are mutually exclusive now and
+  // sum to totalStoreProducts.
   const publishedProducts = metrics.publishedProducts;
   const draftProducts = metrics.draftProducts;
-  const noContentProducts = Math.max(0, totalStoreProducts - publishedProducts - draftProducts);
+  const noContentProducts = needsContentFrom(metrics, totalStoreProducts);
 
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
@@ -457,27 +461,39 @@ export default function ProductsPage() {
   return (
     <Page
       title="Products"
-      subtitle={`${totalStoreProducts} products · ${publishedProducts} optimised · ${noContentProducts} need content`}
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      subtitle={`${totalStoreProducts} products · ${publishedProducts} live · ${draftProducts} ready to review · ${noContentProducts} need content`}
+      backAction={{ content: "Home", onAction: () => navigate("/app") }}
+      /* Phase 2 item 2.3 — ONE bulk action, with ONE name.
+         There were six labels for this job on this page alone: "Generate All
+         (17)", "Quick Generate", "Generate {n} Products", "Generate for {n}
+         selected", a per-row "Generate" that only navigated, and "Start Bulk
+         Job" in the modal. Plus "Optimise N Products", "Fix All Missing
+         Content" and "Refresh Stale Content" on other screens.
+
+         It is now "Optimize store" everywhere, it always means the same thing —
+         generate for every product that needs content, save as drafts, go to
+         Review — and it is the page's PRIMARY action rather than a secondary
+         one, which is what it always was in the merchant's head.
+
+         Phase 2 item 2.7 — exactly one primary, chosen by state, never
+         disabled. With nothing to do it is not rendered at all. */
+      primaryAction={
+        noContentProducts > 0
+          ? {
+              content: `Optimize store (${noContentProducts})`,
+              onAction: () =>
+                entitlements?.bulkJobs ? setGenerateAllModal(true) : navigate("/app/plans"),
+            }
+          : undefined
+      }
       secondaryActions={[
-        {
-          content: "Review Drafts",
-          onAction: () => navigate("/app/review"),
-          disabled: draftProducts === 0,
-        },
-        {
-          content: entitlements?.bulkJobs
-            ? `Generate All (${totalStoreProducts})`
-            : `🔒 Generate All — Growth Plan`,
-          onAction: entitlements?.bulkJobs
-            ? () => setGenerateAllModal(true)
-            : () => navigate("/app/plans"),
-          disabled: false, // never disabled — non-entitled clicks redirect to /app/plans
-        },
-        {
-          content: "Bulk Jobs →",
-          onAction: () => navigate("/app/jobs"),
-        },
+        ...(draftProducts > 0
+          ? [{ content: `Review ${draftProducts} drafts`, onAction: () => navigate("/app/review") }]
+          : []),
+        // Phase 2 item 2.2 — these left the sidebar, so they need a way back in
+        // from the screen that absorbed them. Nothing became unreachable.
+        { content: "Collections", onAction: () => navigate("/app/collections") },
+        { content: "Activity", onAction: () => navigate("/app/jobs") },
       ]}
     >
       <BlockStack gap="500">
@@ -582,7 +598,7 @@ export default function ProductsPage() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="h2" variant="headingMd">
-                  Generate for {selectedItems.length} selected product{selectedItems.length > 1 ? "s" : ""}
+                  Optimize {selectedItems.length} selected product{selectedItems.length > 1 ? "s" : ""}
                 </Text>
                 <Button variant="plain" tone="critical" onClick={() => setSelectedItems([])}>
                   Clear selection
@@ -626,7 +642,7 @@ export default function ProductsPage() {
 
                   <InlineStack gap="300" blockAlign="center">
                     <Button variant="primary" onClick={handleBulkGenerate}>
-                      Generate {selectedItems.length} Product{selectedItems.length > 1 ? "s" : ""} →
+                      Optimize {selectedItems.length} product{selectedItems.length > 1 ? "s" : ""}
                     </Button>
                     <Text as="p" variant="bodySm" tone="subdued">
                       ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated · runs in background
@@ -664,7 +680,7 @@ export default function ProductsPage() {
             }
             promotedBulkActions={[
               {
-                content: `Generate for ${selectedItems.length} selected`,
+                content: `Optimize ${selectedItems.length} selected`,
                 onAction: handleBulkGenerate,
               },
             ]}
@@ -686,15 +702,14 @@ export default function ProductsPage() {
                   onClick={() => navigate(`/app/products/${numericId}`)}
                   shortcutActions={[
                     {
-                      content: "Quick Generate",
-                      onAction: () => {
-                        const gid = `gid://shopify/Product/${numericId}`;
-                        const fd = buildBulkFormData("generateSelected", [gid]);
-                        submit(fd, { method: "POST" });
-                      },
-                    },
-                    {
-                      content: "Edit Content",
+                      // Phase 2 item 2.3 - this used to be 'Quick Generate'
+                      // and it submitted a BULK job, so on Free and Starter
+                      // the most obvious button on the row answered 'Bulk
+                      // generation requires Growth'. It now opens the product
+                      // page, where a single generation is something every
+                      // plan can do. One action, because the row itself
+                      // already opens the same page.
+                      content: "Generate",
                       onAction: () => navigate(`/app/products/${numericId}`),
                     },
                   ]}
@@ -773,8 +788,8 @@ export default function ProductsPage() {
         <Modal
           open={generateAllModal}
           onClose={() => setGenerateAllModal(false)}
-          title={`Generate content for all ${totalStoreProducts} products?`}
-          primaryAction={{ content: "Start Bulk Job", onAction: handleGenerateAll }}
+          title={`Optimize ${noContentProducts} products?`}
+          primaryAction={{ content: "Optimize store", onAction: handleGenerateAll }}
           secondaryActions={[{ content: "Cancel", onAction: () => setGenerateAllModal(false) }]}
         >
           <Modal.Section>

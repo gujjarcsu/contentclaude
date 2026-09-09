@@ -11,6 +11,7 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
+import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ export const loader = async ({ request }) => {
 
   // productsCount shares the dashboard/analytics 5-min cache and runs in parallel
   // with the DB queries, so the loader isn't blocked on a serial Admin API call.
-  const [totalProducts, publishedCount, draftCount, plan, usageCount] = await Promise.all([
+  const [totalProducts, metrics, plan, usageCount] = await Promise.all([
     getCache(
       `productCount:${shop}`,
       async () => {
@@ -31,13 +32,18 @@ export const loader = async ({ request }) => {
       },
       300
     ),
-    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "published", productId: { startsWith: "gid://shopify/Product/" } } }),
-    prisma.generatedContent.count({ where: { shop, contentType: "description", status: "draft", productId: { startsWith: "gid://shopify/Product/" } } }),
+    getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
     prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
   ]);
 
-  const needsContent = Math.max(0, totalProducts - publishedCount - draftCount);
+  // Phase 2 item 2.1 - one definition of product state, shared with Home and
+  // Products. This used to count DESCRIPTION ROWS ONLY, which is why Optimise
+  // said 14 where Products said 12: a product with a meta title but no
+  // description read as needing content here and as having content there.
+  const publishedCount = metrics.publishedProducts;
+  const draftCount = metrics.draftProducts;
+  const needsContent = needsContentFrom(metrics, totalProducts);
   const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
@@ -60,7 +66,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
 
-  // Optimise Store uses bulk jobs — Growth+ feature
+  // Optimize store uses bulk jobs — Growth+ feature
   const bulkEnt = await checkEntitlement(shop, "bulkJobs");
   if (!bulkEnt.allowed) {
     return Response.json({
@@ -257,7 +263,7 @@ export default function OptimizePage() {
 
   if (loadingThisRoute) {
     return (
-      <SkeletonPage title="Optimise Store" primaryAction>
+      <SkeletonPage title="Optimize store" primaryAction>
         <BlockStack gap="400">
           <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={4} /></Box></Card>
           <Card><SkeletonDisplayText size="small" /><Box paddingBlockStart="400"><SkeletonBodyText lines={6} /></Box></Card>
@@ -268,7 +274,7 @@ export default function OptimizePage() {
 
   return (
     <Page
-      title="One-Click Store Optimisation"
+      title="Optimize store"
       subtitle="Generate AI content for products missing a description — or improve the descriptions you already have"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
@@ -327,7 +333,7 @@ export default function OptimizePage() {
           </Layout.Section>
         </Layout>
 
-        {/* Optimise panel */}
+        {/* Optimize panel */}
         {needsContent === 0 ? (
           <Banner tone="success" title="Your store is fully optimised!">
             <p>All {totalProducts} products have AI-generated content.</p>
@@ -336,14 +342,14 @@ export default function OptimizePage() {
           <Banner tone="warning" title="Monthly quota reached">
             <p>Upgrade your plan to generate more content this month.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/plans")}>View Plans →</Button>
+              <Button onClick={() => navigate("/app/plans")}>View plans</Button>
             </Box>
           </Banner>
         ) : (
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">
-                Optimise {canOptimize} product{canOptimize !== 1 ? "s" : ""}
+                Optimize {canOptimize} product{canOptimize !== 1 ? "s" : ""}
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
                 This will create a background bulk job for all {needsContent} products missing AI content.
@@ -373,7 +379,7 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
               >
-                {isSubmitting ? "Starting job..." : `Optimise ${canOptimize} Products →`}
+                {isSubmitting ? "Starting job..." : `Optimize store (${canOptimize})`}
               </Button>
             </BlockStack>
           </Card>
@@ -442,7 +448,7 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!enhDesc && !enhMeta)}
               >
-                {isSubmitting ? "Starting job..." : "Enhance Existing Descriptions →"}
+                {isSubmitting ? "Starting job..." : "Improve existing descriptions"}
               </Button>
             </BlockStack>
           </Card>
@@ -451,7 +457,7 @@ export default function OptimizePage() {
         {draftCount > 0 && (
           <Banner tone="info" title={`${draftCount} draft${draftCount !== 1 ? "s" : ""} waiting for review`}>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/review")}>Review & Publish →</Button>
+              <Button onClick={() => navigate("/app/review")}>Review drafts</Button>
             </Box>
           </Banner>
         )}

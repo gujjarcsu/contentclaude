@@ -183,7 +183,7 @@ export default function SeoAuditPage() {
       subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
-        content: "Fix All Missing Content",
+        content: "Optimize store",
         onAction: () => navigate("/app/optimize"),
       }}
       secondaryActions={[
@@ -222,7 +222,7 @@ export default function SeoAuditPage() {
           >
             <p>Refreshing old descriptions keeps your SEO rankings strong and content relevant.</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/optimize")}>Refresh Stale Content →</Button>
+              <Button onClick={() => navigate("/app/optimize")}>Optimize store</Button>
             </Box>
           </Banner>
         )}

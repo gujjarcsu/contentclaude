@@ -229,23 +229,29 @@ export default function App() {
           <div slot="logo" style={{ padding: "8px 16px" }}>
             <ContentClaudeBrand />
           </div>
-          {/* rel="home" fixes the app TITLE/name in the admin sidebar: without a
-              home link Shopify points the app name at "/", and _index used to send
-              a bare "/" to the login form (App Store 2.1.1). This routes the title
-              click to /app — the path the Dashboard link already proves works. */}
+          {/* Phase 2 item 2.2 — thirteen nav items became five.
+              Thirteen, not the twelve the brief counted: `Home` and `Dashboard`
+              both pointed at /app, so the sidebar offered the same destination
+              twice under two different words.
+
+              Home · Products · Review · Blog · Settings.
+
+              NOTHING IS DELETED. Every merged route still exists, still works,
+              and is still reachable from inside the app: Optimize is the primary
+              action on Products, Collections is a tab there, SEO Audit and
+              Results and Analytics are cards on Home, Jobs is reached from the
+              progress banner, and Plans is a section in Settings and the target
+              of every usage card. Removing the routes themselves is the owner's
+              call and waits for it.
+
+              rel="home" stays on the first item: without a home link Shopify
+              points the app title at "/", and a bare "/" used to reach the login
+              form (App Store rejection 2.1.1). */}
           <s-link href="/app" rel="home">Home</s-link>
-          <s-link href="/app">Dashboard</s-link>
           <s-link href="/app/products">Products</s-link>
-          <s-link href="/app/optimize">Optimise Store</s-link>
-          <s-link href="/app/review">Review &amp; Publish</s-link>
-          <s-link href="/app/seo-audit">SEO Audit</s-link>
-          <s-link href="/app/blog">Blog Generator</s-link>
-          <s-link href="/app/collections">Collections</s-link>
-          <s-link href="/app/results">Results</s-link>
-          <s-link href="/app/analytics">Analytics</s-link>
-          <s-link href="/app/jobs">Jobs</s-link>
+          <s-link href="/app/review">Review</s-link>
+          <s-link href="/app/blog">Blog</s-link>
           <s-link href="/app/settings">Settings</s-link>
-          <s-link href="/app/plans">Plans &amp; Billing</s-link>
         </s-app-nav>
         {/* Live job progress ticker. Phase 1 item 6: it polls only while a job
             is actually running, stops after two empty responses, and stays

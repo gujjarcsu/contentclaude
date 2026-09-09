@@ -18,7 +18,7 @@ import { useCallback } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
-import { getContentMetrics, coveragePct as calcCoveragePct } from "../utils/metrics.server.js";
+import { getContentMetrics, coveragePct as calcCoveragePct, needsContentFrom } from "../utils/metrics.server.js";
 import { getCache } from "../utils/cache.server.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -62,9 +62,12 @@ export const loader = async ({ request }) => {
     ),
   ]);
 
-  // Use distinct-product counts so coverage can never exceed 100%
+  // Phase 2 item 2.1 - the same mutually exclusive states every other screen
+  // reads. Coverage can never exceed 100% and the numbers cannot disagree with
+  // Home or Products for the same store.
   const published = metrics.publishedProducts;
   const draft = metrics.draftProducts;
+  const needsContent = needsContentFrom(metrics, totalProducts);
   const publishedPieces = metrics.publishedPieces;
   const coveragePct = calcCoveragePct(published, totalProducts);
 
@@ -90,9 +93,10 @@ export const loader = async ({ request }) => {
 
   return Response.json({
     totalProducts,
-    published,      // distinct products with ≥1 published field
-    draft,          // distinct products with ≥1 draft field
-    publishedPieces,// raw content-piece count for the "pieces" metric
+    published,      // products whose content is live
+    draft,          // products waiting for the merchant to review
+    needsContent,   // products with no AI content at all
+    publishedPieces,// raw content-piece count — a DIFFERENT metric to the above
     coveragePct,
     monthlyRows,
     completedJobs,
@@ -110,7 +114,7 @@ export const loader = async ({ request }) => {
 
 export default function AnalyticsPage() {
   const {
-    totalProducts, published, draft, publishedPieces, coveragePct,
+    totalProducts, published, draft, needsContent, publishedPieces, coveragePct,
     monthlyRows, completedJobs, failedJobs,
     plan, usageCount, daysRemaining, selectedMonth, currentMonth, availableMonths,
   } = useLoaderData();
@@ -153,7 +157,10 @@ export default function AnalyticsPage() {
                   {coveragePct}%
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {published} of {totalProducts} products optimised
+                  {published} of {totalProducts} products live
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {draft} ready to review · {needsContent} need content
                 </Text>
                 <ProgressBar progress={coveragePct} tone={coveragePct >= 50 ? "success" : "highlight"} size="small" />
                 <Text as="p" variant="bodySm" tone="subdued">
@@ -168,16 +175,16 @@ export default function AnalyticsPage() {
                 <Text as="h2" variant="headingMd">Products by Status</Text>
                 <BlockStack gap="100">
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Published (distinct products)</Text>
+                    <Text as="p" variant="bodySm">Live on your storefront</Text>
                     <Badge tone="success">{published}</Badge>
                   </InlineStack>
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Drafts (distinct products)</Text>
+                    <Text as="p" variant="bodySm">Ready to review</Text>
                     <Badge tone="info">{draft}</Badge>
                   </InlineStack>
                   <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">No AI content</Text>
-                    <Badge>{Math.max(0, totalProducts - published - draft)}</Badge>
+                    <Text as="p" variant="bodySm">Need content</Text>
+                    <Badge>{needsContent}</Badge>
                   </InlineStack>
                 </BlockStack>
               </BlockStack>

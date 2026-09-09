@@ -16,7 +16,7 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
-import { getContentMetrics } from "../utils/metrics.server.js";
+import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { BILLING_PLANS } from "../utils/billing-plans.js";
 import { isFeatureEnabled } from "../utils/featureFlags.server.js";
 
@@ -82,9 +82,13 @@ export const loader = async ({ request }) => {
     prisma.growthState.findUnique({ where: { shop }, select: { welcomeSeenAt: true, embedConfirmedAt: true } }),
   ]);
 
-  // Use distinct-product counts so coverage can never exceed 100%
+  // Phase 2 item 2.1 - one definition of product state, shared with Products
+  // and Optimize. These are mutually exclusive and, with needsContent, sum to
+  // totalProducts, so Home can never report a different number from Products
+  // for the same store.
   const generatedCount = metrics.publishedProducts;
   const draftCount = metrics.draftProducts;
+  const needsContentCount = needsContentFrom(metrics, totalProducts);
   const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
   const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
   const blogsTotal = blogsPublished + blogsDraft;
@@ -115,6 +119,7 @@ export const loader = async ({ request }) => {
     totalProducts,
     generatedCount,
     draftCount,
+    needsContentCount,
     activeJobCount,
     hasBrandVoice,
     isNewShop,
@@ -303,7 +308,7 @@ export default function Dashboard() {
                 size="large"
                 onClick={() => navigate("/app/products")}
               >
-                Generate Content →
+                Generate content
               </Button>
             )}
           </InlineStack>
@@ -368,7 +373,7 @@ export default function Dashboard() {
           <Layout.Section variant="oneThird">
             <StatCard
               icon={CheckCircle} iconColor="#1a7345"
-              label="Products Optimised" value={generatedCount}
+              label="Live on your storefront" value={generatedCount}
               subtext="Products with published AI content" tone="success"
             />
           </Layout.Section>
@@ -474,29 +479,32 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* ── Optimise CTA ─────────────────────────────────────────────── */}
+        {/* Optimize CTA ─────────────────────────────────────────────── */}
         {!isNewShop && (
           <Box padding="500" background="bg-surface-secondary" borderRadius="300">
             <InlineStack align="space-between" blockAlign="center" wrap={false}>
               <BlockStack gap="100">
                 <InlineStack gap="200" blockAlign="center">
                   <Sparkles aria-hidden="true" size={18} color="#6D7175" />
-                  <Text as="h2" variant="headingLg">Optimise Your Entire Store</Text>
+                  <Text as="h2" variant="headingLg">Optimize your store</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Generate AI content for every product missing a description — one click, runs in the background.
                 </Text>
               </BlockStack>
               <Button variant="primary" size="large" tone="success" onClick={() => navigate("/app/optimize")}>
-                Optimise Store →
+                Optimize store
               </Button>
             </InlineStack>
           </Box>
         )}
 
-        {/* ── Tools Row ────────────────────────────────────────────────── */}
-        {!isNewShop && (
-          <Layout>
+        {/* Tools row. Phase 2 item 2.2 - SEO Audit, Results and Analytics
+            left the sidebar, so this row is now the ONLY way to reach them.
+            It used to be hidden from new shops (`!isNewShop`), which made
+            three features undiscoverable at exactly the moment somebody is
+            exploring the app. Always shown. */}
+        <Layout>
             <Layout.Section variant="oneThird">
               <Card>
                 <BlockStack gap="300">
@@ -507,7 +515,7 @@ export default function Dashboard() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Scan your entire catalog for missing descriptions, meta tags, and alt text.
                   </Text>
-                  <Button onClick={() => navigate("/app/seo-audit")}>Run Audit →</Button>
+                  <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
                 </BlockStack>
               </Card>
             </Layout.Section>
@@ -521,7 +529,10 @@ export default function Dashboard() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Track generation activity and usage trends month by month.
                   </Text>
-                  <Button onClick={() => navigate("/app/analytics")}>View Analytics →</Button>
+                  <InlineStack gap="200">
+                    <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
+                    <Button variant="plain" onClick={() => navigate("/app/results")}>Results</Button>
+                  </InlineStack>
                 </BlockStack>
               </Card>
             </Layout.Section>
@@ -530,7 +541,7 @@ export default function Dashboard() {
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
                     <BookOpen aria-hidden="true" size={18} color="#2C6ECB" />
-                    <Text as="h2" variant="headingMd">Blog Generator</Text>
+                    <Text as="h2" variant="headingMd">Blog</Text>
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Write SEO-optimised blog posts in your brand voice in under 60 seconds.
@@ -542,7 +553,7 @@ export default function Dashboard() {
                     </InlineStack>
                   )}
                   <InlineStack gap="200">
-                    <Button onClick={() => navigate("/app/blog")}>Write a Post →</Button>
+                    <Button onClick={() => navigate("/app/blog")}>Write a post</Button>
                     {blogsTotal > 0 && (
                       <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
                         View all ({blogsTotal})
@@ -552,8 +563,7 @@ export default function Dashboard() {
                 </BlockStack>
               </Card>
             </Layout.Section>
-          </Layout>
-        )}
+        </Layout>
 
         {/* How Navaal works — value-communication + guidance (clean, collapsible) */}
         <Card>

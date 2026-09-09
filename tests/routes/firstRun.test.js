@@ -35,7 +35,12 @@ const { prisma, authenticate, getContentMetrics, getOrCreatePlan, getMonthlyUsag
 
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate, apiVersion: "2026-04" }));
-vi.mock("../../app/utils/metrics.server.js", () => ({ getContentMetrics }));
+vi.mock("../../app/utils/metrics.server.js", async () => {
+  // needsContentFrom is the real arithmetic — mocking it would let the loader
+  // pass with a wrong needs-content count. Only the query is faked.
+  const actual = await vi.importActual("../../app/utils/metrics.server.js");
+  return { ...actual, getContentMetrics };
+});
 vi.mock("../../app/utils/plans.server.js", () => ({ getOrCreatePlan, getMonthlyUsageCount }));
 vi.mock("../../app/utils/cache.server.js", () => ({ getCache: vi.fn(async (k, fn) => fn()) }));
 

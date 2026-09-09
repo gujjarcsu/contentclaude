@@ -1563,3 +1563,190 @@ fly secrets import -a contentclaude < s.env && rm s.env
 ```
 
 The direct host is the pooled host with `-pooler` removed. Never `fly secrets set` — Rule 0.
+
+---
+
+# PHASE 2 — MAKE IT SIMPLE
+
+## 2.13 — The fresh-store self-audit, done before any code was changed
+
+Every route file read in full and inventoried: each screen, each button, each number, each sentence.
+What follows is the finding, then the disposition, then one line of why.
+
+### What a brand-new merchant with an empty store actually sees today
+
+This is the part worth reading first, because it is worse than the item list suggests. Four screens, in
+the order a merchant meets them, on a store with 0 products and 0 content:
+
+| Screen | What it says |
+|---|---|
+| Home | `Total Products 0`, `Products Optimised 0`, `Drafts Pending Review 0` — with the subtitle **"All caught up!"** |
+| Products | `0 products · 0 optimised · 0 need content`, header action **`🔒 Generate All — Growth Plan`**, empty state **"Your store is all set!"** |
+| Optimise | a green success banner: **"Your store is fully optimised!"** / **"All 0 products have AI-generated content."** |
+| SEO Audit | a red **0 / 100** score and four red zeros, with a primary button **"Fix All Missing Content"** pointing back at the screen that just said everything was optimised |
+
+**Three screens congratulate a merchant who has done nothing, and the fourth tells them they are failing.**
+One root cause: `needsContent` is computed as `total − published − draft` with a `Math.max(0, …)` floor,
+so an empty store is arithmetically indistinguishable from a finished one. No route has a
+`totalProducts === 0` branch.
+
+That is not on the brief's list. It is fixed here (2.10) and listed, as 2.13 asks.
+
+### Navigation — 13 items, not 12
+
+The brief says twelve. There are **thirteen**, and two of them point at the same URL:
+
+| # | Label | href | Disposition |
+|---|---|---|---|
+| 1 | Home (`rel="home"`) | `/app` | **Keep** |
+| 2 | Dashboard | `/app` | **Delete** — identical destination to Home, different word |
+| 3 | Products | `/app/products` | **Keep** |
+| 4 | Optimise Store | `/app/optimize` | **Merge** into Products as the page primary action (2.3) |
+| 5 | Review & Publish | `/app/review` | **Keep**, renamed Review |
+| 6 | SEO Audit | `/app/seo-audit` | **Merge** — score card on Home, table via "View audit"; route stays |
+| 7 | Blog Generator | `/app/blog` | **Keep**, renamed Blog |
+| 8 | Collections | `/app/collections` | **Merge** into Products as a tab |
+| 9 | Results | `/app/results` | **Merge** into Home |
+| 10 | Analytics | `/app/analytics` | **Merge** into Home |
+| 11 | Jobs | `/app/jobs` | **Merge** — route kept, reached from the progress banner |
+| 12 | Settings | `/app/settings` | **Keep** |
+| 13 | Plans & Billing | `/app/plans` | **Merge** into Settings, and remain the target of every usage card |
+
+**Proposed five: Home · Products · Review · Blog · Settings.** This is the owner's decision, so **no route
+is deleted** until it is confirmed. Every merged route stays reachable by URL and by an in-page link.
+
+### Buttons — where the "one primary per page" rule stands today
+
+| Screen | Primary buttons | The problem |
+|---|---|---|
+| Home | **6 visible at once** for a new merchant | `Open theme editor →` renders **twice**, from two different components, same destination. The two real primaries (`Generate Content`, `Optimise Store`) are the ones *hidden* from new shops. |
+| Products | 4 sites | The `Page` has **no** `primaryAction`; the strongest call to action is a *secondary* header button, while the per-row button labelled `Generate` does not generate — it navigates. |
+| Optimise | 1 + a destructive modal | The card with the six-bullet pitch has a *default* button; the shorter card has the primary. |
+| Review | 3 sites, one **per product card** | A 50-product page renders 52 primary buttons. One of them, `✓ Approved`, is a green primary whose job is to **un**-approve. |
+| Jobs | 2 + page primary | |
+| Plans | **zero** | The purchase button is a hand-rolled `<button style>`; the only Polaris button with a tone on the page is **Cancel Subscription**. |
+| Analytics | **zero buttons at all** | A dead end: nothing on the screen leads anywhere. |
+
+**Disabled primaries** (the brief says never render one): Review ×2, product page ×3.
+
+### Six names for one action
+
+`Generate All (17)` · `Quick Generate` · `Generate {n} Products →` · `Generate for {n} selected` ·
+`Generate` (which navigates) · `Start Bulk Job` — on **one screen**. Plus `Optimise {n} Products →`,
+`Fix All Missing Content`, `Refresh Stale Content →` and `Enhance Existing Descriptions →` elsewhere, of
+which `Fix All Missing Content` and `Refresh Stale Content →` are two different labels for **the same
+navigation to the same page**.
+
+**Disposition: one name, "Optimize store".** Merge all of the above. `Quick Generate` routes to the
+product page rather than submitting a bulk job, because on Free and Starter it currently answers the most
+obvious button on the screen with "Bulk generation requires Growth".
+
+### Numbers — five different counting bases
+
+| Basis | Where | Counts |
+|---|---|---|
+| Shopify `productsCount` | Home, Products, Optimise | products |
+| `getContentMetrics` | Home, Products, Analytics | distinct products, any content type |
+| `generatedContent.count` filtered to `contentType: "description"` | Optimise | **rows**, description only |
+| `contentMap` over the visible page | Products tabs | products, **current page only** |
+| A live Shopify GraphQL scan with a 50-character threshold | SEO Audit | products, its own definition |
+
+Consequences found: a product with a meta title and no description is *optimised* on Home and *needs
+content* on Optimise. The Products page shows `Drafts to Review: 120` in a stat card directly above a tab
+reading `Draft (3)`. Products fetches the store count **uncached** while Home caches it for five minutes,
+so the two disagree for up to five minutes after any change. And `coveragePct` on Optimise is
+hand-rolled without the clamp the shared helper applies, so it can print over 100%.
+
+**Disposition: one definition (2.1), done.** Every screen reads it; a guard test forbids a screen from
+counting for itself or re-deriving needs-content.
+
+### Marketing inside the app
+
+The value proposition is explained to a merchant who has already installed **three times on the Home
+screen alone**: the GeoValueBanner, the four-step onboarding checklist, and a "How Navaal works" card.
+`GeoValueBanner` renders on **six routes, seven times** — twice on Results alone — so a merchant going
+Home → Blog → Results → SEO Audit sees the same gradient strip four times running.
+
+Unverifiable claims found, quoted: "raises it to a **world-class standard**", "Refreshing old descriptions
+**keeps your SEO rankings strong**", "**Longer posts rank better** for competitive topics", "Aim for
+800–1500 words **for ideal search visibility**", "That's the difference between being found and being
+cited."
+
+Two worse than unverifiable:
+
+- **`app.blog.posts.jsx:286` promises a feature that does not exist**: "Repurpose posts into social media
+  captions with the Blog Generator." The Blog Generator has no such feature.
+- **`GeoValueBanner.jsx:10-17` documents, in its own header comment, that its claims are unsupported** —
+  that Google deprecated FAQ rich results on 7 May 2026 and that evidence for JSON-LD-only markup helping
+  AI citation "is thin" — and the file then ships those claims on seven screens.
+
+**Disposition: delete both components, replace with one dismissible Polaris `Banner` on Home (2.4).**
+Delete every claim above.
+
+### Copy
+
+Spelling is genuinely split, and worse than the brief's count: **"Optimis-" 20 user-visible, "Optimiz-"
+9**, and the same metric is spelled both ways on adjacent screens — Results says `Products optimized`
+while Analytics says `products optimised`. The route is `/app/optimize` while every visible label says
+`Optimise`. **Disposition: US English throughout (2.9), and the listing follows (HUMAN-NEEDED).**
+
+Jargon shown to merchants, all confirmed present: `Bulk Jobs`, `Autopilot`, `A/B variant testing`, `GEO`,
+`llms.txt` (4 uses, never defined), `JSON-LD`, `FAQPage`, `structured data`, `answer-first`,
+`Voice Override`, `prorated`, `SLA support`, `Edit HTML`. Two the brief did not list and that are worse
+than the ones it did:
+
+- **`(distinct products)`** — database vocabulary, rendered verbatim in a merchant dashboard.
+- **`Requires the products/create webhook to be registered in your Shopify app.`** — a raw Shopify webhook
+  topic string as help text on a checkbox the merchant is asked to tick.
+
+"Enhance mode", "Product #123456" and raw GIDs were checked and are **not** present in user-visible copy.
+Jobs does show `Product #{numericId}` as a button label, which is the same failure by another route.
+
+### Non-Polaris chrome
+
+| Where | What |
+|---|---|
+| `GeoValueBanner` | two gradients, a custom shadow, a CSS-grid div, glassmorphism sub-cards, typography overrides inside Polaris `Text`, `#8fd3ff` four times. Contains no `Card` at all. |
+| `app.jsx` ticker | a `role="button"` div with a `<style>` element injected into the DOM, an animated gradient, a **fixed 260px** progress track, a pulsing ⚡ |
+| `app.plans.jsx` | the purchase button is a raw `<button type="submit" style>`, not disabled while submitting so it is **double-submittable**; two absolutely-positioned ribbons that **collide** on the Growth card when Growth is current |
+| `app.settings.jsx` | nine raw `<button>` tone cards in a CSS grid, selection shown by colour alone |
+| `UpgradePrompt` | `2px solid #E1A500` wrapper around a Polaris `Box`, giving a visible double corner; `*-hover` tokens used as resting backgrounds |
+| `app.blog.jsx` | a `<style>` element with fifteen hand-rolled typography rules competing with Polaris; `dangerouslySetInnerHTML` unsanitised |
+| `app.results.jsx` | a CSS-grid div with no `data-cc-stat-grid` hook, so the mobile breakpoint never applies to it |
+
+`lucide-react`: **10 files, 24 imports, 18 unique icons**, every one sized and coloured by hand. Four
+audited screens already use no icons at all, so the dependency is not load-bearing.
+
+`mobile.css` is **159 lines, not ~700** — the brief's line references do not exist. It carries **21
+`!important`**, nine of them against private `.Polaris-*` internals, one of which is outside any media
+query and therefore overrides Polaris at every viewport. The global 44px tap target is scoped to
+`≤768px` and is **immediately undone** for every `size="slim"` button by a 36px rule three lines later.
+Two `data-cc-*` selectors are dead: the markup they target no longer carries the attribute.
+
+### Things a first-time merchant would trip on, not on the brief's list
+
+1. **"All 0 products have AI-generated content."** in a green success banner — covered above.
+2. **`Generate All (0)` stays clickable on an empty store** and routes to the pricing page.
+3. **A 0-product store sees `EmptyState heading="Your store is all set!"`** — congratulated for an empty
+   catalogue.
+4. **Analytics has no empty state and no buttons.** Every card renders zeros, and there is nowhere to go.
+5. **`Optimise` has no primary action at all for an empty store** — the only way out is the back link.
+6. **Home hides SEO Audit, Analytics and Blog from new merchants** (`isNewShop` gates the whole tools
+   row), so the features are undiscoverable exactly when someone is exploring.
+7. **`isNewShop` is computed from content rows, not products**, so a 500-product store with no content is
+   "new" and a 0-product store with one draft is not.
+8. **Delete has no confirmation** in three places: a content template, a blog post, and a subscription
+   cancellation.
+9. **The blog "recent post" row is a `Box` with `onClick`** — no `role`, no `tabIndex`, and the
+   `cursor: pointer` is silently dropped because Polaris `Box` does not forward `style`. Not reachable by
+   keyboard, no hover affordance.
+10. **`Upgrade to unlock →` in Settings uses `window.location.href`** — a hard page load inside an
+    embedded iframe.
+11. **Results hides its own before/after score unless the delta is at least 8 points.** The code comment
+    says a smaller delta "would undersell the real gain". The screen shows the number only when it
+    flatters the app.
+12. **The SEO Audit `✓`/`✗` badges are bare glyphs** with no text and no `accessibilityLabel`, rendered
+    in four of six columns — roughly 400 of them on a 100-product store.
+
+Items 1 to 7 are fixed in this phase. 8 to 12 are fixed in this phase. All are listed here because 2.13
+asks for anything a first-time merchant would trip on that the brief did not name.
