@@ -25,7 +25,7 @@ import logger from "../utils/logger.server.js";
 import { calculateSeoScore } from "../utils/seo.server.js";
 import { calculateGeoScore } from "../utils/geo.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
-import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { getOrCreatePlan, getMonthlyUsageCount, remainingGenerations, sliceToQuota, withGenerationCredit } from "../utils/plans.server.js";
 import { GeoValueBanner } from "../components/GeoValueBanner";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -210,58 +210,73 @@ export const action = async ({ request }) => {
       return Response.json({ demoDone: true, content: existing.generatedContent.slice(0, 600), geoAfter: after });
     }
 
-    const gate = await tryConsumeGeneration(shop, "description", productId);
-    if (!gate.allowed) {
-      return Response.json({ limitReached: true, error: "You're out of free generations — upgrade to continue." });
-    }
-
-    // Fetch full product + brand voice, generate a real piece.
-    const [{ generateProductContent }, brandVoice, resp] = await Promise.all([
-      import("../utils/ai.server.js"),
-      prisma.brandVoice.findUnique({ where: { shop } }),
-      admin.graphql(
-        `query($id: ID!){ product(id:$id){ id title productType vendor description descriptionHtml
-          tags seo{title description} featuredMedia{preview{image{url}}}
-          media(first:4){edges{node{mediaContentType ... on MediaImage{image{url}}}}}
-          variants(first:5){edges{node{title price}}} } }`,
-        { variables: { id: productId } }
-      ),
-    ]);
-    const { data } = await resp.json();
-    const node = data?.product;
-    if (!node) return Response.json({ error: "Product not found." }, { status: 404 });
-
-    const product = {
-      title: node.title,
-      productType: node.productType,
-      vendor: node.vendor,
-      description: node.description,
-      descriptionHtml: node.descriptionHtml,
-      images: (node.media?.edges ?? [])
-        .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
-        .map((e) => ({ url: e.node.image.url })),
-      imageUrl: node.featuredMedia?.preview?.image?.url || "",
-      variants: (node.variants?.edges ?? []).map((e) => e.node),
-      tags: node.tags || [],
-      seoTitle: node.seo?.title || "",
-      seoDescription: node.seo?.description || "",
-    };
-
-    let generated;
+    // Phase 0 item 5 — the credit is refunded on any failure or empty draft.
+    // This is the merchant's FIRST impression of the app: charging one of 25
+    // free generations for a timeout would be the worst possible place to do it.
+    let outcome;
     try {
-      generated = await generateProductContent(product, brandVoice || {}, ["description", "metaTitle", "metaDescription", "faq"]);
+      outcome = await withGenerationCredit(
+        shop,
+        { contentType: "description", productId },
+        async () => {
+          const [{ generateProductContent }, brandVoice, resp] = await Promise.all([
+            import("../utils/ai.server.js"),
+            prisma.brandVoice.findUnique({ where: { shop } }),
+            admin.graphql(
+              `query($id: ID!){ product(id:$id){ id title productType vendor description descriptionHtml
+                tags seo{title description} featuredMedia{preview{image{url}}}
+                media(first:4){edges{node{mediaContentType ... on MediaImage{image{url}}}}}
+                variants(first:5){edges{node{title price}}} } }`,
+              { variables: { id: productId } }
+            ),
+          ]);
+          const { data } = await resp.json();
+          const node = data?.product;
+          if (!node) return { notFound: true };
+
+          const product = {
+            title: node.title,
+            productType: node.productType,
+            vendor: node.vendor,
+            description: node.description,
+            descriptionHtml: node.descriptionHtml,
+            images: (node.media?.edges ?? [])
+              .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
+              .map((e) => ({ url: e.node.image.url })),
+            imageUrl: node.featuredMedia?.preview?.image?.url || "",
+            variants: (node.variants?.edges ?? []).map((e) => e.node),
+            tags: node.tags || [],
+            seoTitle: node.seo?.title || "",
+            seoDescription: node.seo?.description || "",
+          };
+
+          const generated = await generateProductContent(product, brandVoice || {}, [
+            "description", "metaTitle", "metaDescription", "faq",
+          ]);
+          if (!generated?.description?.trim()) return { empty: true };
+          return { node, product, generated };
+        },
+        // A product that vanished, or an empty draft, both mean "no content" —
+        // refund either way.
+        { isEmpty: (r) => !r || r.notFound || r.empty || !r.generated },
+      );
     } catch (err) {
       return Response.json({ error: `Generation failed: ${err.message}` }, { status: 502 });
     }
 
-    // Empty draft is a failure, not a success — surface it so the UI can retry
-    // instead of silently sticking on a "preparing" state.
-    if (!generated.description || !generated.description.trim()) {
-      return Response.json(
-        { error: "The AI returned an empty draft. Please retry." },
-        { status: 502 }
-      );
+    if (!outcome.allowed) {
+      return Response.json({ limitReached: true, error: "You're out of free generations — upgrade to continue." });
     }
+    if (outcome.result?.notFound) {
+      return Response.json({ error: "Product not found." }, { status: 404 });
+    }
+    if (outcome.refunded) {
+      // Empty draft is a failure, not a success — surface it so the UI can retry
+      // instead of silently sticking on a "preparing" state.
+      return Response.json({ error: "The AI returned an empty draft. Please retry — this did not use a generation." }, { status: 502 });
+    }
+
+    const { node, product, generated } = outcome.result;
 
     await prisma.generatedContent.upsert({
       where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
@@ -307,8 +322,14 @@ export const action = async ({ request }) => {
       cursor = pg.pageInfo.endCursor;
     }
     if (ids.length === 0) return redirect(`/app/products?${authParamString(request)}`);
+    // Phase 0 item 4 — enqueue only what the quota can pay for.
+    const remainingHere = await remainingGenerations(shop);
+    const { targetIds: runIds, quotaSkipped } = sliceToQuota(ids, remainingHere);
+    if (runIds.length === 0) {
+      return Response.json({ limitReached: true, error: "You're out of free generations — upgrade to continue." });
+    }
     const job = await prisma.generationJob.create({
-      data: { shop, status: "queued", totalProducts: ids.length, productIds: JSON.stringify(ids), contentTypes: "description,metaTitle,metaDescription", autoPublish: false },
+      data: { shop, status: "queued", totalProducts: runIds.length, productIds: JSON.stringify(runIds), contentTypes: "description,metaTitle,metaDescription", autoPublish: false, quotaSkipped },
     });
     try {
       await enqueueGenerationJob(job.id);

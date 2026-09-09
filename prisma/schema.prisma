@@ -267,6 +267,14 @@ model Shop {
   reinstallReferer     String?
   uninstalledAt        DateTime?
   redactedAt           DateTime?
+  // ── Phase 0 item 10: state that must SURVIVE uninstall, or a merchant can
+  // reset both the free allowance and the 7-day trial on demand by
+  // uninstalling and reinstalling (Plan and UsageRecord are deleted; this row
+  // is not). Numbers and timestamps only — nothing here identifies a customer,
+  // and shop/redact anonymises this row like every other column.
+  trialUsedAt          DateTime? // first time this shop held a paid subscription; the next subscribe sends trialDays 0
+  usageMonth           String?   // "YYYY-MM" that usageCarryover belongs to
+  usageCarryover       Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
   // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).
   // Stamped first-writer-wins (updateMany where null) by the server at the moment the thing
   // happened; recordReinstall nulls them (the uninstall deleted the content).

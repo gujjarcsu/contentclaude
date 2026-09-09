@@ -204,6 +204,201 @@ export async function refundGeneration(shop, { productId = null, contentType } =
 }
 
 /**
+ * Phase 0 item 5 — a merchant is NEVER charged a credit for a generation they
+ * did not get.
+ *
+ * Every interactive path used to consume the credit and then call the model:
+ * a 45 s timeout, a 5xx, an open circuit breaker or an empty completion ate the
+ * credit with nothing to show for it. `refundGeneration` existed but was only
+ * used for the second A/B credit.
+ *
+ * Wrap the work instead. The credit is taken first (so the quota gate stays
+ * atomic and two tabs cannot both slip past the limit) and given back on any
+ * throw, and on any result the caller declares empty.
+ *
+ * @param {string} shop
+ * @param {{contentType: string, productId?: string|null}} key  what is being charged
+ * @param {(gate: object) => Promise<any>} work  runs only when a credit was taken
+ * @param {{isEmpty?: (result:any) => boolean}} [opts]
+ *   isEmpty decides whether the work produced nothing usable; default: falsy,
+ *   or an object with no truthy own values.
+ * @returns {Promise<{allowed:boolean, gate:object, result?:any, refunded?:boolean}>}
+ *   allowed:false → quota exhausted, nothing was charged and `work` never ran.
+ *   refunded:true → the work produced nothing and the credit was returned.
+ */
+export async function withGenerationCredit(shop, { contentType, productId = null }, work, { isEmpty } = {}) {
+  const gate = await tryConsumeGeneration(shop, contentType, productId);
+  if (!gate.allowed) return { allowed: false, gate };
+
+  const empty =
+    isEmpty ??
+    ((r) => {
+      if (!r) return true;
+      if (typeof r === "string") return r.trim() === "";
+      if (typeof r === "object") return !Object.values(r).some((v) => (typeof v === "string" ? v.trim() : v));
+      return false;
+    });
+
+  let result;
+  try {
+    result = await work(gate);
+  } catch (err) {
+    await refundGeneration(shop, { productId, contentType }).catch(() => {});
+    logger.info(
+      { shop, productId, contentType, err: err?.message, event: "generation_credit_refunded" },
+      "Generation failed — credit refunded",
+    );
+    throw err;
+  }
+
+  if (empty(result)) {
+    await refundGeneration(shop, { productId, contentType }).catch(() => {});
+    logger.info(
+      { shop, productId, contentType, event: "generation_credit_refunded_empty" },
+      "Generation produced nothing usable — credit refunded",
+    );
+    return { allowed: true, gate, result, refunded: true };
+  }
+
+  return { allowed: true, gate, result, refunded: false };
+}
+
+/**
+ * Phase 0 item 4 — a bulk job may only contain work the quota can pay for.
+ *
+ * Both bulk entry points enqueued every matching product id (up to 20,000)
+ * while the UI beside the button said "your quota covers N". The processor then
+ * called the model for each one and only afterwards discovered it had no credit:
+ * a Growth merchant with 5,000 products bought 4,800 discarded generations and a
+ * job that logged "limit reached" 4,800 times over 24 hours.
+ *
+ * Slice at creation and record what was left out, so the count is disclosed
+ * before the run rather than discovered as failures during it. Pure.
+ *
+ * @param {string[]} ids   every product the merchant asked for
+ * @param {number} remaining  generations left this month
+ * @returns {{targetIds: string[], quotaSkipped: number}}
+ */
+export function sliceToQuota(ids, remaining) {
+  const capped = Math.max(0, Number.isFinite(remaining) ? remaining : 0);
+  const targetIds = ids.slice(0, capped);
+  return { targetIds, quotaSkipped: Math.max(0, ids.length - targetIds.length) };
+}
+
+/**
+ * Uncached remaining-generations count. `canGenerate` caches for 60 s, which is
+ * right for page loads but wrong inside a bulk run: the loop must see credits
+ * it has itself just consumed. Phase 0 item 4 uses this for the cheap check
+ * before each (expensive) model call.
+ * @returns {Promise<number>} 0 when the plan is not active
+ */
+export async function remainingGenerations(shop) {
+  const month = new Date().toISOString().slice(0, 7);
+  const [plan, usageCount] = await Promise.all([
+    prisma.plan.findUnique({ where: { shop } }),
+    prisma.usageRecord.count({ where: { shop, month } }),
+  ]);
+  if (!plan || plan.status !== "active") return 0;
+  return Math.max(0, plan.monthlyLimit - usageCount);
+}
+
+/**
+ * Phase 0 item 10 — a trial is once per shop, for the life of the shop.
+ *
+ * `trialDays: 7` is baked into every plan in the billing config, so
+ * subscribe → cancel → resubscribe granted an unlimited series of free trials.
+ * The Plan row cannot record that: it is deleted on uninstall. The Shop row
+ * survives uninstall (that is its whole purpose), so the flag lives there.
+ * First-writer-wins; never reset by a reinstall.
+ */
+export async function markTrialUsed(shop, trialEndsAt = null) {
+  try {
+    await prisma.shop.updateMany({
+      where: { shop, trialUsedAt: null },
+      data: { trialUsedAt: new Date() },
+    });
+    if (trialEndsAt) {
+      await prisma.plan.updateMany({ where: { shop }, data: { trialEndsAt } });
+    }
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "markTrialUsed failed (non-fatal)");
+  }
+}
+
+/** Has this shop ever started a trial? Used to send trialDays: 0 the next time. */
+export async function hasUsedTrial(shop) {
+  try {
+    const row = await prisma.shop.findUnique({ where: { shop }, select: { trialUsedAt: true } });
+    return !!row?.trialUsedAt;
+  } catch (err) {
+    // Unknown → assume used. Wrongly charging a second trial is a revenue leak;
+    // wrongly withholding one is visible and recoverable by support.
+    logger.warn({ shop, err: err?.message }, "hasUsedTrial lookup failed — assuming the trial was used");
+    return true;
+  }
+}
+
+/**
+ * Phase 0 item 10 — the monthly usage count must survive uninstall.
+ *
+ * Uninstall deletes Plan and every UsageRecord, so uninstall + reinstall handed
+ * out a fresh 25 free generations on demand. Called from the uninstall handler
+ * BEFORE the deletion transaction, it copies this month's count onto the Shop
+ * row, which is not deleted. A number, not content — nothing here identifies a
+ * customer, so it is safe to keep (and shop/redact anonymises the row anyway).
+ * Never throws.
+ */
+export async function captureUsageCarryover(shop) {
+  const month = new Date().toISOString().slice(0, 7);
+  try {
+    const used = await prisma.usageRecord.count({ where: { shop, month } });
+    await prisma.shop.updateMany({ where: { shop }, data: { usageMonth: month, usageCarryover: used } });
+    logger.info({ shop, month, used, event: "usage_carryover_captured" }, "Usage carried over for a possible reinstall");
+    return used;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "captureUsageCarryover failed (non-fatal)");
+    return 0;
+  }
+}
+
+/**
+ * Restore the carried-over usage on reinstall, so the free allowance is monthly
+ * rather than per-install. Only applies within the SAME calendar month — a new
+ * month is a genuinely fresh allowance. Idempotent: it tops the month up to the
+ * carried figure rather than adding to it. Never throws.
+ */
+export async function restoreUsageCarryover(shop) {
+  const month = new Date().toISOString().slice(0, 7);
+  try {
+    const row = await prisma.shop.findUnique({
+      where: { shop },
+      select: { usageMonth: true, usageCarryover: true },
+    });
+    if (!row || row.usageMonth !== month || !row.usageCarryover) return 0;
+
+    const present = await prisma.usageRecord.count({ where: { shop, month } });
+    const missing = row.usageCarryover - present;
+    if (missing <= 0) return 0;
+
+    await prisma.usageRecord.createMany({
+      data: Array.from({ length: missing }, () => ({
+        shop,
+        month,
+        contentType: "carryover",
+        productId: null,
+        tokensUsed: 0,
+      })),
+    });
+    await invalidateCache(`canGenerate:${shop}:${month}`);
+    logger.info({ shop, month, restored: missing, event: "usage_carryover_restored" }, "Reinstall did not reset this month's usage");
+    return missing;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "restoreUsageCarryover failed (non-fatal)");
+    return 0;
+  }
+}
+
+/**
  * Sync the active Shopify subscription into our Plan table.
  * Called from Plans page loader and subscription webhook.
  */
@@ -235,7 +430,10 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
             : null,
         },
       });
-      await invalidateCache(`plan:${shop}`);
+      // The shop has now held a paid subscription, so its one trial is spent
+      // (item 10 — otherwise cancel + resubscribe grants another).
+      await markTrialUsed(shop, activeSub.trialEndsAt ? new Date(activeSub.trialEndsAt) : null);
+      await invalidatePlanCaches(shop);
       return;
     }
   }
@@ -266,5 +464,20 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
       monthlyLimit: FREE_PLAN.monthlyLimit,
     },
   });
+  await invalidatePlanCaches(shop);
+}
+
+/**
+ * Bust BOTH per-shop plan caches.
+ *
+ * Phase 0 item 8: syncBillingToPlan only dropped `plan:<shop>`, but the
+ * generation gate reads `canGenerate:<shop>:<month>` — which caches
+ * `{allowed:false, remaining:0}` for 60 s. A merchant who upgraded because they
+ * hit the limit was still told "limit reached" for up to a minute after paying,
+ * on the one screen where that message is most damaging.
+ */
+export async function invalidatePlanCaches(shop) {
+  const month = new Date().toISOString().slice(0, 7);
   await invalidateCache(`plan:${shop}`);
+  await invalidateCache(`canGenerate:${shop}:${month}`);
 }

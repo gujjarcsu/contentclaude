@@ -24,7 +24,7 @@ vi.mock("../../app/db.server.js", () => ({
     generationJob: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })) },
     session: { findFirst: vi.fn() },
     brandVoice: { findUnique: vi.fn() },
-    generatedContent: { findMany: vi.fn(), upsert: vi.fn() },
+    generatedContent: { findMany: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })), update: vi.fn(() => Promise.resolve({})) },
     collectionVoice: { findMany: vi.fn() },
   },
 }));
@@ -36,6 +36,14 @@ vi.mock("../../app/utils/ai.server.js", () => ({
 
 vi.mock("../../app/utils/plans.server.js", () => ({
   tryConsumeGeneration: vi.fn(() => Promise.resolve({ allowed: true })),
+  remainingGenerations: vi.fn(() => Promise.resolve(999)),
+  sliceToQuota: (ids, remaining) => ({ targetIds: ids.slice(0, Math.max(0, remaining)), quotaSkipped: Math.max(0, ids.length - Math.max(0, remaining)) }),
+  withGenerationCredit: vi.fn(async (shop, key, work, opts) => {
+    const gate = { allowed: true, remaining: 10 };
+    const result = await work(gate);
+    const isEmpty = opts?.isEmpty ?? ((r) => !r);
+    return { allowed: true, gate, result, refunded: !!isEmpty(result) };
+  }),
 }));
 
 vi.mock("../../app/utils/errorMonitoring.server.js", () => ({
@@ -59,6 +67,17 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 
 vi.mock("../../app/shopify.server.js", () => ({
   apiVersion: "2026-04",
+}));
+
+// The FAQ metafield definition check (auto-publish jobs only) goes through
+// getCache, whose real implementation reaches for Redis — under fake timers that
+// connection attempt never settles and the whole run hangs.
+vi.mock("../../app/utils/cache.server.js", () => ({
+  getCache: vi.fn(async (k, supplier) => supplier()),
+  setCache: vi.fn(async () => {}),
+  invalidateCache: vi.fn(async () => {}),
+  invalidateCachePattern: vi.fn(async () => {}),
+  getRedis: async () => null,
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -376,4 +395,245 @@ describe("enhance mode (mode: 'enhance')", () => {
     expect(typesArg).toEqual(["metaTitle", "metaDescription"]);
     expect(prisma.generatedContent.upsert).toHaveBeenCalledTimes(2);
   });
+});
+
+// ─── Phase 0 group 0.B — the bulk run costs the merchant only what it delivers ─
+
+describe("item 4 — the model is never called without a credit to pay for it", () => {
+  function baseJob(overrides = {}) {
+    return {
+      id: "jobQ",
+      shop: "test.myshopify.com",
+      status: "queued",
+      productIds: JSON.stringify(["gid://shopify/Product/1", "gid://shopify/Product/2", "gid://shopify/Product/3"]),
+      contentTypes: "description",
+      mode: "generate",
+      autoPublish: false,
+      totalProducts: 3,
+      ...overrides,
+    };
+  }
+  function primeJob(prisma, job) {
+    prisma.generationJob.findUnique.mockResolvedValueOnce(job).mockResolvedValue({ status: "processing" });
+    prisma.generationJob.update.mockResolvedValue({});
+    prisma.session.findFirst.mockResolvedValue({ shop: job.shop, accessToken: "tok" });
+    prisma.brandVoice.findUnique.mockResolvedValue({ shop: job.shop, storeName: "Test", brandTone: "professional" });
+    prisma.generatedContent.findMany.mockResolvedValue([]);
+    prisma.collectionVoice.findMany.mockResolvedValue([]);
+    prisma.generatedContent.upsert.mockResolvedValue({});
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  it("stops before the first model call when the month is already spent, and records the skip", async () => {
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent } = await import("../../app/utils/ai.server.js");
+    const { remainingGenerations, tryConsumeGeneration } = await import("../../app/utils/plans.server.js");
+
+    primeJob(prisma, baseJob());
+    remainingGenerations.mockResolvedValue(0);
+
+    const p = processBulkJob("jobQ");
+    await vi.runAllTimersAsync();
+    await p;
+
+    // The expensive call never happened, and no credit was taken.
+    expect(generateProductContent).not.toHaveBeenCalled();
+    expect(tryConsumeGeneration).not.toHaveBeenCalled();
+    // All three products are recorded as skipped, in ONE write.
+    const skipWrites = prisma.generationJob.update.mock.calls.filter(
+      ([arg]) => arg?.data?.quotaSkipped?.increment !== undefined,
+    );
+    expect(skipWrites).toHaveLength(1);
+    expect(skipWrites[0][0].data.quotaSkipped.increment).toBe(3);
+  });
+
+  it("runs what the quota covers, then stops and records only the remainder", async () => {
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent } = await import("../../app/utils/ai.server.js");
+    const { remainingGenerations } = await import("../../app/utils/plans.server.js");
+
+    primeJob(prisma, baseJob());
+    mockFetch.mockResolvedValue(
+      makeJsonResponse({
+        data: {
+          product: {
+            id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
+            descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
+            variants: { edges: [] }, tags: [], collections: { edges: [] },
+          },
+        },
+      }),
+    );
+    generateProductContent.mockResolvedValue({ description: "<p>new</p>" });
+    // One credit for the first product, none after it is spent.
+    remainingGenerations.mockResolvedValueOnce(1).mockResolvedValue(0);
+
+    const p = processBulkJob("jobQ");
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(generateProductContent).toHaveBeenCalledTimes(1);
+    const skipWrites = prisma.generationJob.update.mock.calls.filter(
+      ([arg]) => arg?.data?.quotaSkipped?.increment !== undefined,
+    );
+    expect(skipWrites).toHaveLength(1);
+    expect(skipWrites[0][0].data.quotaSkipped.increment).toBe(2);
+  });
+});
+
+describe("item 6 — an empty completion is not charged", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  it("does not consume a credit, and does not count the product as completed", async () => {
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent } = await import("../../app/utils/ai.server.js");
+    const { tryConsumeGeneration, remainingGenerations } = await import("../../app/utils/plans.server.js");
+
+    prisma.generationJob.findUnique
+      .mockResolvedValueOnce({
+        id: "jobEmpty", shop: "test.myshopify.com", status: "queued",
+        productIds: JSON.stringify(["gid://shopify/Product/1"]),
+        contentTypes: "description", mode: "generate", autoPublish: false, totalProducts: 1,
+      })
+      .mockResolvedValue({ status: "processing" });
+    prisma.generationJob.update.mockResolvedValue({});
+    prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
+    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "T" });
+    prisma.generatedContent.findMany.mockResolvedValue([]);
+    prisma.collectionVoice.findMany.mockResolvedValue([]);
+    remainingGenerations.mockResolvedValue(999);
+    mockFetch.mockResolvedValue(
+      makeJsonResponse({
+        data: {
+          product: {
+            id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
+            descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
+            variants: { edges: [] }, tags: [], collections: { edges: [] },
+          },
+        },
+      }),
+    );
+    // The exact failure: the model answers, but nothing usable is extracted.
+    generateProductContent.mockResolvedValue({});
+
+    const p = processBulkJob("jobEmpty");
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(tryConsumeGeneration).not.toHaveBeenCalled();
+    expect(prisma.generatedContent.upsert).not.toHaveBeenCalled();
+    // Counted as failed with a reason that says plainly it was not charged.
+    const withErrorLog = prisma.generationJob.update.mock.calls
+      .map(([arg]) => arg?.data?.errorLog)
+      .filter(Boolean);
+    expect(withErrorLog.join(" ")).toMatch(/\[NO CHARGE\]/);
+    const failedWrites = prisma.generationJob.update.mock.calls.filter(
+      ([arg]) => arg?.data?.failedProducts?.increment,
+    );
+    expect(failedWrites.length).toBeGreaterThan(0);
+  });
+});
+
+describe("item 9 — auto-publish claims published only when Shopify accepted", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  async function runAutoPublish(publishResponses) {
+    const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
+    const prisma = (await import("../../app/db.server.js")).default;
+    const { generateProductContent } = await import("../../app/utils/ai.server.js");
+    const { remainingGenerations } = await import("../../app/utils/plans.server.js");
+
+    prisma.generationJob.findUnique
+      .mockResolvedValueOnce({
+        id: "jobPub", shop: "test.myshopify.com", status: "queued",
+        productIds: JSON.stringify(["gid://shopify/Product/1"]),
+        contentTypes: "description", mode: "generate", autoPublish: true, totalProducts: 1,
+      })
+      .mockResolvedValue({ status: "processing" });
+    prisma.generationJob.update.mockResolvedValue({});
+    prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
+    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "T" });
+    prisma.generatedContent.findMany.mockResolvedValue([]);
+    prisma.collectionVoice.findMany.mockResolvedValue([]);
+    prisma.generatedContent.upsert.mockResolvedValue({});
+    remainingGenerations.mockResolvedValue(999);
+    generateProductContent.mockResolvedValue({ description: "<p>new</p>" });
+
+    const product = {
+      id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
+      descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
+      variants: { edges: [] }, tags: [], collections: { edges: [] },
+    };
+    let publishCall = 0;
+    mockFetch.mockImplementation(async (_url, opts) => {
+      const body = JSON.parse(opts.body);
+      if (body.query.includes("query getProduct")) return makeJsonResponse({ data: { product } });
+      if (body.query.includes("productUpdate")) {
+        const r = publishResponses[Math.min(publishCall, publishResponses.length - 1)];
+        publishCall++;
+        return makeJsonResponse(r);
+      }
+      return makeJsonResponse({ data: {} });
+    });
+
+    // publishProductWithRetry schedules its backoff sleeps only as earlier
+    // promises resolve, so one drain is not enough for the retrying paths.
+    // publishProductWithRetry schedules its backoff sleeps only as earlier
+    // fetch promises resolve, so draining "all timers" once (or in a tight
+    // loop) returns while the chain is still between ticks. Advancing virtual
+    // time in steps yields to the microtask queue between each step.
+    const p = processBulkJob("jobPub");
+    let settled = false;
+    p.then(() => { settled = true; }, () => { settled = true; });
+    for (let i = 0; i < 500 && !settled; i++) await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    return prisma;
+  }
+
+  it("leaves the rows as drafts when Shopify throttles the update", async () => {
+    const prisma = await runAutoPublish([
+      { data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] },
+    ]);
+    // Saved as a draft…
+    const savedStatuses = prisma.generatedContent.upsert.mock.calls.map(([a]) => a.update.status);
+    expect(savedStatuses.every((s) => s === "draft")).toBe(true);
+    // …and NEVER promoted, because Shopify never accepted the write.
+    const promotions = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published",
+    );
+    expect(promotions).toHaveLength(0);
+  }, 30000);
+
+  it("leaves the rows as drafts on a top-level GraphQL error with data null", async () => {
+    const prisma = await runAutoPublish([
+      { data: null, errors: [{ message: "Field 'productUpdate' doesn't exist on type 'Mutation'" }] },
+    ]);
+    const promotions = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published",
+    );
+    expect(promotions).toHaveLength(0);
+  }, 30000);
+
+  it("promotes the rows to published when Shopify accepts the update", async () => {
+    const prisma = await runAutoPublish([
+      { data: { productUpdate: { product: { id: "gid://shopify/Product/1" }, userErrors: [] } } },
+    ]);
+    const promotions = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published",
+    );
+    expect(promotions).toHaveLength(1);
+  }, 30000);
 });

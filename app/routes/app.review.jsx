@@ -22,7 +22,7 @@ import pLimit from "p-limit";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
-import { readMutationResult } from "../utils/adminGraphql.server.js";
+import { readMutationResult, publishProductWithRetry } from "../utils/adminGraphql.server.js";
 import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest";
@@ -30,9 +30,9 @@ import { EmbedSetupCard } from "../components/EmbedSetupCard";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
+// The retry/result-checking itself now lives in adminGraphql.server.js so the
+// bulk processor runs the identical code path (Phase 0 item 9).
 const PUBLISH_CONCURRENCY = 3;
-const PUBLISH_MAX_RETRIES = 3;
-const PUBLISH_BACKOFF_BASE_MS = 2000;
 
 const METAFIELDS_SET_MUTATION = `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
   metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message } }
@@ -57,65 +57,6 @@ async function writeFaqMetafield(admin, metafieldInput, { shop, productId } = {}
     logger.warn({ shop, productId, err: err.message }, "FAQ metafieldsSet threw during bulk review publish");
     return false;
   }
-}
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// productUpdate's `input` argument is deprecated in 2026-04 — use `product`
-// with ProductUpdateInput (same field shape: id, descriptionHtml, seo).
-const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($product: ProductUpdateInput!) {
-  productUpdate(product: $product) {
-    product { id }
-    userErrors { field message }
-  }
-}`;
-
-// Mirrors bulkProcessor.publishToShopify: honour Retry-After on 429 and the
-// GraphQL THROTTLED extension code, with exponential backoff (base 2s, 3 retries).
-async function publishProductWithRetry(admin, productId, input, attempt = 0) {
-  let res;
-  try {
-    res = await admin.graphql(PRODUCT_UPDATE_MUTATION, { variables: { product: input } });
-  } catch (err) {
-    if (attempt < PUBLISH_MAX_RETRIES) {
-      await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** attempt);
-      return publishProductWithRetry(admin, productId, input, attempt + 1);
-    }
-    return { productId, ok: false, error: err.message };
-  }
-
-  if (res.status === 429 && attempt < PUBLISH_MAX_RETRIES) {
-    const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
-    await sleep(Math.max(retryAfter * 1000, PUBLISH_BACKOFF_BASE_MS));
-    return publishProductWithRetry(admin, productId, input, attempt + 1);
-  }
-
-  let json;
-  try {
-    json = await res.json();
-  } catch {
-    return { productId, ok: false, error: `Invalid response (HTTP ${res.status})` };
-  }
-
-  if (json?.errors?.[0]?.extensions?.code === "THROTTLED" && attempt < PUBLISH_MAX_RETRIES) {
-    await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** (attempt + 1));
-    return publishProductWithRetry(admin, productId, input, attempt + 1);
-  }
-
-  // Non-throttle top-level errors (removed field, invalid id, access denied)
-  // MUST fail the publish — with data null the userErrors check below sees []
-  // and would otherwise report success for a write that never happened.
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
-    return { productId, ok: false, error: json.errors.map((e) => e.message).join("; ") };
-  }
-
-  const userErrors = json?.data?.productUpdate?.userErrors ?? [];
-  if (userErrors.length > 0) {
-    return { productId, ok: false, error: userErrors.map((e) => e.message).join("; ") };
-  }
-  if (!json?.data?.productUpdate) {
-    return { productId, ok: false, error: "Shopify returned no result for this update." };
-  }
-  return { productId, ok: true };
 }
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -327,7 +268,7 @@ export const action = async ({ request }) => {
             if (content.metaTitle) input.seo.title = content.metaTitle;
             if (content.metaDescription) input.seo.description = content.metaDescription;
           }
-          const result = await publishProductWithRetry(admin, productId, input);
+          const result = await publishProductWithRetry((q, o) => admin.graphql(q, o), productId, input);
           // On success, write the FAQ JSON-LD metafield so the storefront emits
           // FAQPage schema (the AI-search/GEO promise) — not just for single-product
           // publishes, but for this bulk review flow too.

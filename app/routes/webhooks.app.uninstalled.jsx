@@ -5,6 +5,7 @@ import db from "../db.server";
 import logger from "../utils/logger.server";
 import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 import { markShopUninstalled } from "../utils/installTracking.server.js";
+import { captureUsageCarryover } from "../utils/plans.server.js";
 
 // Shopify may deliver a webhook more than once and retries failed deliveries
 // for hours. A delivery TRIGGERED before the shop's latest reinstall describes
@@ -36,6 +37,11 @@ export const action = async ({ request }) => {
     logger.warn({ shop, triggeredAt, event: "uninstall_delivery_stale" }, "Stale app/uninstalled delivery (triggered before the latest reinstall) — ignored");
     return new Response();
   }
+
+  // Phase 0 item 10 — record this month's generation count BEFORE the delete
+  // wipes UsageRecord and Plan. Without it, uninstall + reinstall handed out a
+  // fresh 25 free generations on demand. A number only; nothing identifying.
+  await captureUsageCarryover(shop);
 
   try {
     await db.$transaction(async (tx) => {

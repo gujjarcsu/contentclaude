@@ -89,8 +89,23 @@ export const action = async ({ request }) => {
     const errorLog = job.errorLog ? JSON.parse(job.errorLog) : [];
     retryIds = errorLog.map((e) => e.productId).filter((id) => id && id !== "N/A");
   } else {
+    // Phase 0 item 7 — resume from what was actually WRITTEN, not from a counter.
+    //
+    // `allIds.slice(job.completedProducts)` ignored failedProducts entirely: in
+    // a run over 5 products where #2 and #4 failed, completedProducts is 3, so
+    // the resume restarted at index 3 — regenerating #4 and #5, one of which had
+    // already succeeded, and charging the merchant for it a second time.
+    // Every successful product leaves a GeneratedContent row touched after the
+    // run began, so those rows are the honest record of what is done.
     const allIds = JSON.parse(job.productIds || "[]");
-    retryIds = allIds.slice(job.completedProducts);
+    const since = job.startedAt ?? job.createdAt;
+    const doneRows = await prisma.generatedContent.findMany({
+      where: { shop, updatedAt: { gte: since } },
+      select: { productId: true },
+      distinct: ["productId"],
+    });
+    const done = new Set(doneRows.map((r) => r.productId));
+    retryIds = allIds.filter((id) => !done.has(id));
   }
 
   if (retryIds.length === 0) {

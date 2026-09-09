@@ -10,7 +10,7 @@ import { authenticate } from "../shopify.server";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
-import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
+import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, hasUsedTrial } from "../utils/plans.server";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -69,6 +69,13 @@ export const action = async ({ request }) => {
     // subscribe path needs it (test-vs-real must be decided before the sub
     // exists); cancel reads the sub's real test flag instead.
     const isTest = await resolveBillingTest(admin, session.shop);
+    // Phase 0 item 10 — the 7-day trial is once per shop, for the life of the
+    // shop. trialDays: 7 is baked into every plan in the billing config, so
+    // subscribe → cancel → resubscribe granted an unlimited series of free
+    // trials, and uninstall → reinstall did the same. The flag lives on the Shop
+    // row (Plan is deleted on uninstall); passing 0 overrides the config for
+    // this request only.
+    const trialSpent = await hasUsedTrial(session.shop);
     // billing.request() internally throws a redirect Response to Shopify's
     // approval screen. Any non-redirect throw (Shopify userErrors, network
     // failures, bad returnUrl) must be caught and returned as a user-facing
@@ -77,6 +84,7 @@ export const action = async ({ request }) => {
       await billing.request({
         plan: planKey,
         isTest,
+        ...(trialSpent ? { trialDays: 0 } : {}),
         // Return to a PUBLIC backend callback (no session cookie needed), NOT
         // straight to /app/plans. After approval Shopify does a top-level
         // redirect here with no embedded context; /app/plans would fail auth

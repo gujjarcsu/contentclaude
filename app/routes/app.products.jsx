@@ -28,7 +28,7 @@ import { useState, useCallback, useMemo } from "react";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
+import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
@@ -198,14 +198,22 @@ export const action = async ({ request }) => {
     }
     if (allIds.length === 0) return { error: "No products found in your store." };
 
+    // Phase 0 item 4 — enqueue only what the quota can pay for; record the rest.
+    const remainingAll = await remainingGenerations(shop);
+    const { targetIds: runAllIds, quotaSkipped: skippedAll } = sliceToQuota(allIds, remainingAll);
+    if (runAllIds.length === 0) {
+      return { error: "You have no generations left this month, so there is nothing to run.", limitReached: true };
+    }
+
     const job = await prisma.generationJob.create({
       data: {
         shop,
         status: "queued",
-        totalProducts: allIds.length,
-        productIds: JSON.stringify(allIds),
+        totalProducts: runAllIds.length,
+        productIds: JSON.stringify(runAllIds),
         contentTypes: contentTypes.join(","),
         autoPublish,
+        quotaSkipped: skippedAll,
       },
     });
     try {
@@ -227,14 +235,22 @@ export const action = async ({ request }) => {
   }
   if (selectedIds.length === 0) return { error: "No products selected." };
 
+  // Phase 0 item 4 — same rule for an explicit selection.
+  const remainingSel = await remainingGenerations(shop);
+  const { targetIds: runSelIds, quotaSkipped: skippedSel } = sliceToQuota(selectedIds, remainingSel);
+  if (runSelIds.length === 0) {
+    return { error: "You have no generations left this month, so there is nothing to run.", limitReached: true };
+  }
+
   const job = await prisma.generationJob.create({
     data: {
       shop,
       status: "queued",
-      totalProducts: selectedIds.length,
-      productIds: JSON.stringify(selectedIds),
+      totalProducts: runSelIds.length,
+      productIds: JSON.stringify(runSelIds),
       contentTypes: contentTypes.join(","),
       autoPublish,
+      quotaSkipped: skippedSel,
     },
   });
   try {

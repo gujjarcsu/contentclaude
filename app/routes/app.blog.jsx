@@ -22,7 +22,7 @@ import { useState, useEffect, useRef } from "react";
 import { BookOpen, FileText, CheckCircle2, Lightbulb } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { tryConsumeGeneration, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 import { GeoValueBanner } from "../components/GeoValueBanner";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -84,27 +84,49 @@ export const action = async ({ request }) => {
 
     if (!topic) return Response.json({ error: "Topic is required." }, { status: 400 });
 
-    // Check and consume a generation credit (contentType "blog")
-    const gate = await tryConsumeGeneration(shop, "blog", null);
-    if (!gate.allowed) {
+    // Phase 0 item 5 — take the credit, but give it back if the post never
+    // arrives. A 45 s timeout or an open circuit breaker used to cost the
+    // merchant a generation and produce nothing at all.
+    let outcome;
+    try {
+      outcome = await withGenerationCredit(
+        shop,
+        { contentType: "blog", productId: null },
+        async () => {
+          const [{ generateBlogPost }, { getCache }] = await Promise.all([
+            import("../utils/ai.server.js"),
+            import("../utils/cache.server.js"),
+          ]);
+          const brandVoice = await getCache(
+            `bv:${shop}`,
+            () => prisma.brandVoice.findUnique({ where: { shop } }),
+            300
+          );
+          return generateBlogPost(topic, brandVoice, { keywords, length, instructions });
+        },
+        { isEmpty: (r) => !r?.content?.trim() },
+      );
+    } catch (err) {
+      return Response.json(
+        { error: `We couldn't write this post: ${err.message}. This did not use a generation.` },
+        { status: 502 },
+      );
+    }
+
+    if (!outcome.allowed) {
       return Response.json({
         error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
         limitReached: true,
       }, { status: 429 });
     }
-
-    const [{ generateBlogPost }, { getCache }] = await Promise.all([
-      import("../utils/ai.server.js"),
-      import("../utils/cache.server.js"),
-    ]);
-
-    const brandVoice = await getCache(
-      `bv:${shop}`,
-      () => prisma.brandVoice.findUnique({ where: { shop } }),
-      300
-    );
-
-    const generated = await generateBlogPost(topic, brandVoice, { keywords, length, instructions });
+    if (outcome.refunded) {
+      return Response.json(
+        { error: "The AI returned an empty post. Please retry — this did not use a generation." },
+        { status: 502 },
+      );
+    }
+    const gate = outcome.gate;
+    const generated = outcome.result;
 
     // Save to BlogPost table
     const wordCount = (generated.content || "").split(/\s+/).filter(Boolean).length;

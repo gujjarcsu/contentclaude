@@ -170,7 +170,7 @@ export async function action({ request, params }) {
   // Dynamic imports keep server-only modules out of the client bundle
   const [
     { generateProductContent, generateAltText, enhanceExistingContent },
-    { tryConsumeGeneration, checkEntitlement, refundGeneration },
+    { tryConsumeGeneration, checkEntitlement, refundGeneration, withGenerationCredit },
     { checkRateLimit },
     { getCache },
   ] = await Promise.all([
@@ -191,44 +191,58 @@ export async function action({ request, params }) {
     );
     if (contentTypes.length === 0) return { error: "Select at least one content type to enhance." };
 
-    const gate = await tryConsumeGeneration(shop, contentTypes[0], productId);
-    if (!gate.allowed) {
-      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
-    }
-
-    const [productResponse, brandVoice] = await Promise.all([
-      admin.graphql(
-        `query getProduct($id: ID!) {
-          product(id: $id) {
-            title productType vendor description descriptionHtml
-            seo { title description }
-            images(first: 4) { edges { node { url } } }
-            tags
-          }
-        }`,
-        { variables: { id: productId } }
-      ),
-      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-    ]);
-    const { data: pd } = await productResponse.json();
-    const p = pd.product;
     const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
 
-    const generated = await enhanceExistingContent(
-      {
-        title: p.title,
-        productType: p.productType,
-        description: p.description,
-        descriptionHtml: p.descriptionHtml,
-        seoTitle: p.seo?.title || "",
-        seoDescription: p.seo?.description || "",
-        images: (p.images?.edges || []).map((e) => e.node),
-        tags: p.tags,
+    // Phase 0 item 5 — refund the credit on any failure or empty result.
+    const enhanceOutcome = await withGenerationCredit(
+      shop,
+      { contentType: contentTypes[0], productId },
+      async () => {
+        const [productResponse, brandVoice] = await Promise.all([
+          admin.graphql(
+            `query getProduct($id: ID!) {
+              product(id: $id) {
+                title productType vendor description descriptionHtml
+                seo { title description }
+                images(first: 4) { edges { node { url } } }
+                tags
+              }
+            }`,
+            { variables: { id: productId } }
+          ),
+          getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+        ]);
+        const { data: pd } = await productResponse.json();
+        const p = pd?.product;
+        if (!p) return null;
+
+        const generated = await enhanceExistingContent(
+          {
+            title: p.title,
+            productType: p.productType,
+            description: p.description,
+            descriptionHtml: p.descriptionHtml,
+            seoTitle: p.seo?.title || "",
+            seoDescription: p.seo?.description || "",
+            images: (p.images?.edges || []).map((e) => e.node),
+            tags: p.tags,
+          },
+          brandVoice,
+          contentTypes,
+          { keywords: targetKeywords }
+        );
+        return { p, generated };
       },
-      brandVoice,
-      contentTypes,
-      { keywords: targetKeywords }
+      { isEmpty: (r) => !r?.generated || !contentTypes.some((t) => r.generated[t]) },
     );
+
+    if (!enhanceOutcome.allowed) {
+      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
+    }
+    if (enhanceOutcome.refunded) {
+      return { error: "The AI returned nothing to enhance. Please retry — this did not use a generation." };
+    }
+    const { p, generated } = enhanceOutcome.result;
 
     const typesToSave = contentTypes.filter((t) => generated[t]);
     const existing = await prisma.generatedContent.findMany({
@@ -276,60 +290,88 @@ export async function action({ request, params }) {
         limitReached: true,
       };
     }
+    // Phase 0 item 5 — the credit above is given back on any failure or empty
+    // output between here and the point the content is saved. A 45 s timeout, a
+    // 5xx or an open circuit breaker used to eat it silently.
+    const refundThisGeneration = () =>
+      refundGeneration(shop, { productId, contentType: primaryContentType }).catch(() => {});
 
-    const productResponse = await admin.graphql(
-      `query getProduct($id: ID!) {
-        product(id: $id) {
-          title productType vendor description descriptionHtml
-          seo { title description }
-          featuredImage { url }
-          media(first: ${MAX_ALT_TEXT_IMAGES}) {
-            pageInfo { hasNextPage }
-            edges { node { id mediaContentType ... on MediaImage { image { url altText } } } }
+    let product, productImages, brandVoice, recentTitles;
+    try {
+      const productResponse = await admin.graphql(
+        `query getProduct($id: ID!) {
+          product(id: $id) {
+            title productType vendor description descriptionHtml
+            seo { title description }
+            featuredImage { url }
+            media(first: ${MAX_ALT_TEXT_IMAGES}) {
+              pageInfo { hasNextPage }
+              edges { node { id mediaContentType ... on MediaImage { image { url altText } } } }
+            }
+            variants(first: 10) { edges { node { title price } } }
+            tags
           }
-          variants(first: 10) { edges { node { title price } } }
-          tags
-        }
-      }`,
-      { variables: { id: productId } }
-    );
-    const { data: productData } = await productResponse.json();
-    const product = productData.product;
-    const productImages = mediaToImages(product.media);
+        }`,
+        { variables: { id: productId } }
+      );
+      const { data: productData } = await productResponse.json();
+      product = productData?.product;
+      if (!product) {
+        await refundThisGeneration();
+        return { error: "This product no longer exists in your store. This did not use a generation." };
+      }
+      productImages = mediaToImages(product.media);
 
-    const [brandVoice, recentContent] = await Promise.all([
-      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-      prisma.generatedContent.findMany({
-        where: { shop, contentType: "description", NOT: { productId } },
-        select: { productTitle: true },
-        orderBy: { updatedAt: "desc" },
-        take: 10,
-      }),
-    ]);
-    const recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
+      const [bv, recentContent] = await Promise.all([
+        getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+        prisma.generatedContent.findMany({
+          where: { shop, contentType: "description", NOT: { productId } },
+          select: { productTitle: true },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+        }),
+      ]);
+      brandVoice = bv;
+      recentTitles = recentContent.map((r) => r.productTitle).filter(Boolean);
+    } catch (err) {
+      await refundThisGeneration();
+      throw err;
+    }
 
     let generated = {};
     let autoPublishFailed = false;
     if (contentTypes.length > 0) {
-      generated = await generateProductContent(
-        {
-          title: product.title,
-          productType: product.productType,
-          vendor: product.vendor,
-          description: product.description,
-          descriptionHtml: product.descriptionHtml,
-          imageUrl: product.featuredImage?.url || "",
-          images: productImages,
-          variants: product.variants.edges.map((e) => e.node),
-          tags: product.tags,
-        },
-        brandVoice,
-        contentTypes,
-        { keywords: targetKeywords, length: contentLength, recentTitles }
-      );
+      try {
+        generated = await generateProductContent(
+          {
+            title: product.title,
+            productType: product.productType,
+            vendor: product.vendor,
+            description: product.description,
+            descriptionHtml: product.descriptionHtml,
+            imageUrl: product.featuredImage?.url || "",
+            images: productImages,
+            variants: product.variants.edges.map((e) => e.node),
+            tags: product.tags,
+          },
+          brandVoice,
+          contentTypes,
+          { keywords: targetKeywords, length: contentLength, recentTitles }
+        );
+      } catch (err) {
+        await refundThisGeneration();
+        throw err;
+      }
 
       const finalStatus = autoPublish ? "published" : "draft";
       const typesToSave = contentTypes.filter((t) => generated[t]);
+
+      // Nothing usable came back. Without this the credit was spent on an empty
+      // response and the merchant saw a "success" with no content.
+      if (typesToSave.length === 0 && !doAltText) {
+        await refundThisGeneration();
+        return { error: "The AI returned nothing usable. Please retry — this did not use a generation." };
+      }
 
       // Snapshot existing content into version history before overwriting
       const existing = await prisma.generatedContent.findMany({
@@ -466,6 +508,16 @@ export async function action({ request, params }) {
     const altTextApplied = altTextResults.filter((r) => !r.error).length;
     const altTextFailed = altTextResults.length - altTextApplied;
     const hasMoreImages = product.media?.pageInfo?.hasNextPage ?? false;
+
+    // Phase 0 item 5, alt-text-only run: the credit was charged as "altText"
+    // and nothing reached a single image. Give it back.
+    if (contentTypes.length === 0 && doAltText && altTextApplied === 0) {
+      await refundThisGeneration();
+      return {
+        error: "Alt text could not be applied to any image. Please try again — this did not use a generation.",
+        altTextResults,
+      };
+    }
 
     const messageParts = [];
     if (contentTypes.length > 0) {
@@ -698,43 +750,67 @@ export async function action({ request, params }) {
       return { error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.", limitReached: true };
     }
 
-    const [productResp, brandVoice] = await Promise.all([
-      admin.graphql(
-        `query getProduct($id: ID!) {
-          product(id: $id) {
-            title productType vendor description descriptionHtml
-            seo { title description }
-            featuredImage { url }
-            images(first: 4) { edges { node { url } } }
-            variants(first: 10) { edges { node { title price } } }
-            tags
-          }
-        }`,
-        { variables: { id: productId } }
-      ),
-      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
-    ]);
-    const { data: pd } = await productResp.json();
-    const p = pd.product;
-    const targetKeywords = (formData.get("targetKeywords") || "").trim();
-    const productData = {
-      title: p.title, productType: p.productType, vendor: p.vendor,
-      description: p.description, descriptionHtml: p.descriptionHtml,
-      imageUrl: p.featuredImage?.url || "",
-      images: (p.images?.edges || []).map((e) => e.node),
-      variants: p.variants.edges.map((e) => e.node),
-      tags: p.tags,
+    // Phase 0 item 5 — BOTH credits come back if the pair never arrives.
+    const refundBoth = async () => {
+      await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
+      await refundGeneration(shop, { productId, contentType: contentTypes[0] }).catch(() => {});
     };
-    const baseOptions = { keywords: targetKeywords, length: "standard" };
 
-    // Run both variants in parallel — 2 API credits but merchant gets a real choice
-    const [variantA, variantB] = await Promise.all([
-      generateProductContent(productData, brandVoice, contentTypes, baseOptions),
-      generateProductContent(productData, brandVoice, contentTypes, {
-        ...baseOptions,
-        variantHint: "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
-      }),
-    ]);
+    let variantA, variantB;
+    try {
+      const [productResp, brandVoice] = await Promise.all([
+        admin.graphql(
+          `query getProduct($id: ID!) {
+            product(id: $id) {
+              title productType vendor description descriptionHtml
+              seo { title description }
+              featuredImage { url }
+              images(first: 4) { edges { node { url } } }
+              variants(first: 10) { edges { node { title price } } }
+              tags
+            }
+          }`,
+          { variables: { id: productId } }
+        ),
+        getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+      ]);
+      const { data: pd } = await productResp.json();
+      const p = pd?.product;
+      if (!p) {
+        await refundBoth();
+        return { error: "This product no longer exists in your store. This did not use any generations." };
+      }
+      const targetKeywords = (formData.get("targetKeywords") || "").trim();
+      const productData = {
+        title: p.title, productType: p.productType, vendor: p.vendor,
+        description: p.description, descriptionHtml: p.descriptionHtml,
+        imageUrl: p.featuredImage?.url || "",
+        images: (p.images?.edges || []).map((e) => e.node),
+        variants: p.variants.edges.map((e) => e.node),
+        tags: p.tags,
+      };
+      const baseOptions = { keywords: targetKeywords, length: "standard" };
+
+      // Run both variants in parallel — 2 API credits but merchant gets a real choice
+      [variantA, variantB] = await Promise.all([
+        generateProductContent(productData, brandVoice, contentTypes, baseOptions),
+        generateProductContent(productData, brandVoice, contentTypes, {
+          ...baseOptions,
+          variantHint: "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
+        }),
+      ]);
+    } catch (err) {
+      await refundBoth();
+      throw err;
+    }
+
+    // Neither option usable → the merchant has nothing to choose between.
+    const usable = (v) => v && contentTypes.some((t) => v[t]);
+    if (!usable(variantA) && !usable(variantB)) {
+      await refundBoth();
+      return { error: "The AI returned nothing usable. Please retry — this did not use any generations." };
+    }
+
     return { success: true, variants: [variantA, variantB] };
   }
 

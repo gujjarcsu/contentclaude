@@ -2,7 +2,8 @@ import prisma from "../db.server.js";
 import { generateProductContent, enhanceExistingContent } from "./ai.server.js";
 import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
-import { tryConsumeGeneration } from "./plans.server.js";
+import { tryConsumeGeneration, remainingGenerations } from "./plans.server.js";
+import { publishProductWithRetry } from "./adminGraphql.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "./seo.server.js";
@@ -136,6 +137,27 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         return; // never touch the status the merchant set
       }
 
+      // ── Phase 0 item 4: never call the model without a credit to pay for it ──
+      // The job is already sliced to the quota at creation, but a month can also
+      // run out mid-run (a second job, an interactive generation, a downgrade).
+      // This is a cheap COUNT, not a consume, and it happens BEFORE the
+      // expensive call — previously the model ran first and the job then logged
+      // "limit reached" once per remaining product, for thousands of products.
+      const creditsLeft = await remainingGenerations(job.shop);
+      if (creditsLeft <= 0) {
+        const notRun = productIds.length - i;
+        await flushCounters(true);
+        await prisma.generationJob.update({
+          where: { id: jobId },
+          data: { quotaSkipped: { increment: notRun } },
+        });
+        jobLogger.info(
+          { shop: job.shop, skipped: notRun, event: "bulk_quota_exhausted" },
+          "Monthly quota reached — remaining products recorded as skipped, job finishing"
+        );
+        break;
+      }
+
       try {
         await keepTokenFresh(); // refresh the offline token before it lapses mid-run
         const product = await fetchShopifyProduct(session, productId);
@@ -232,6 +254,22 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           throw genErr; // re-throw unexpected errors to outer catch
         }
 
+        // ── Phase 0 item 6: an empty completion is not a generation ──────
+        // The credit used to be taken here regardless, then `generatedTypes`
+        // came out empty, `saveOps` was an empty array, nothing was written —
+        // and the product still counted as COMPLETED. The merchant paid a
+        // credit for a row that does not exist.
+        const generatedTypes = contentTypes.filter((t) => generated?.[t]);
+        if (generatedTypes.length === 0) {
+          jobLogger.warn({ shop: job.shop, productId }, "AI returned no usable content — skipping without credit charge");
+          if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
+            errorLog.push({ productId, error: "[NO CHARGE] The AI returned no usable content for this product." });
+          failedCount++;
+          pendingFailed++;
+          await flushCounters();
+          continue;
+        }
+
         // ── CREDIT CONSUMED ONLY AFTER SUCCESSFUL GENERATION ─────────────
         const gate = await tryConsumeGeneration(job.shop, job.contentTypes, productId);
         if (!gate.allowed) {
@@ -247,8 +285,11 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         }
 
         // ── SAVE CONTENT ──────────────────────────────────────────────────
-        const finalStatus = job.autoPublish ? "published" : "draft";
-        const generatedTypes = contentTypes.filter((t) => generated[t]);
+        // Saved as a draft first even on an auto-publish job: the row is only
+        // promoted to "published" once Shopify has actually accepted the write
+        // (Phase 0 item 9). Claiming "published" before the mutation is checked
+        // is how throttled updates were reported as successes.
+        const finalStatus = "draft";
 
         const saveOps = generatedTypes.map((type) => {
           const originalContent =
@@ -263,7 +304,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         });
         await Promise.all(saveOps);
 
-        if (job.autoPublish && generatedTypes.length > 0) {
+        if (job.autoPublish) {
           const input = { id: productId };
           if (generated.description) input.descriptionHtml = generated.description;
           if (generated.metaTitle || generated.metaDescription) {
@@ -271,17 +312,41 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
             if (generated.metaTitle) input.seo.title = generated.metaTitle;
             if (generated.metaDescription) input.seo.description = generated.metaDescription;
           }
-          if (Object.keys(input).length > 1) {
-            await publishToShopify(session, productId, input);
+
+          // Phase 0 item 9 — the SAME publish helper the review screen uses.
+          // The old local copy read `data.errors`, which is never populated for
+          // a top-level GraphQL error, so a THROTTLED or rejected update was
+          // reported as a successful publish: the row said "published", the
+          // credit was spent, and Shopify was never touched.
+          let published = Object.keys(input).length === 1; // nothing to publish → nothing to fail
+          if (!published) {
+            const pub = await publishProductWithRetry(shopifyGraphql(session), productId, input);
+            published = pub.ok;
+            if (!pub.ok) {
+              jobLogger.warn(
+                { shop: job.shop, productId, throttled: !!pub.throttled, err: pub.error },
+                "Auto-publish failed — content stays a draft"
+              );
+              if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
+                errorLog.push({ productId, error: `Saved as a draft — publishing to Shopify failed: ${pub.error}` });
+            }
           }
+
+          // Only now, with Shopify's acceptance in hand, may the rows claim to
+          // be published.
+          if (published) {
+            await prisma.generatedContent.updateMany({
+              where: { shop: job.shop, productId, contentType: { in: generatedTypes }, status: "draft" },
+              data: { status: "published" },
+            });
+          }
+
           // Write the FAQ JSON-LD metafield so the storefront emits FAQPage schema
-          // (the AI-search/GEO promise) for auto-published products too. The
-          // "faq" generatedContent row was already upserted as `finalStatus`
-          // (e.g. "published") above in saveOps, before we knew whether this
-          // write would actually succeed on Shopify's side — if it fails, we
-          // must downgrade that row back to "draft" so the Products list stops
-          // showing a false "FAQ ✓" for a metafield that was never written.
-          if (generated.faq) {
+          // (the AI-search/GEO promise) for auto-published products too. The FAQ
+          // row is only promoted with the rest above, and is put back to draft
+          // here if the metafield write fails, so the Products list never shows
+          // a "FAQ ✓" for a metafield that was never written.
+          if (published && generated.faq) {
             await setFaqMetafield(session, productId, generated.faq).catch(async (err) => {
               jobLogger.warn(
                 { shop: job.shop, productId, err: err.message },
@@ -356,6 +421,25 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 const MAX_SHOPIFY_RETRIES = 4;
 const SHOPIFY_BACKOFF_BASE_MS = 2_000;
 
+/**
+ * An `admin.graphql`-shaped caller backed by the worker's offline session, so
+ * shared helpers written against the admin context (publishProductWithRetry,
+ * readMutationResult) work identically here. The worker has no admin context —
+ * it runs outside any request — which is why it grew its own copies in the
+ * first place.
+ */
+function shopifyGraphql(session) {
+  return (query, opts = {}) =>
+    fetch(`https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken,
+      },
+      body: JSON.stringify({ query, variables: opts.variables }),
+    });
+}
+
 async function fetchShopifyProduct(session, productId, attempt = 0) {
   let res;
   try {
@@ -418,9 +502,14 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
     throw new Error(`Shopify GraphQL error ${res.status} fetching product ${productId}`);
   }
 
-  const { data } = await res.json();
+  // Phase 0 item 9 — top-level GraphQL `errors` sit BESIDE `data`, never inside
+  // it, so the old `data?.errors` check never fired: a throttled read looked
+  // like "product not found" and the product was recorded as a failure with a
+  // misleading reason instead of being retried.
+  const body = await res.json();
+  const topLevelErrors = Array.isArray(body?.errors) ? body.errors : [];
 
-  if (data?.errors?.[0]?.extensions?.code === "THROTTLED") {
+  if (topLevelErrors.some((e) => e?.extensions?.code === "THROTTLED")) {
     if (attempt < MAX_SHOPIFY_RETRIES) {
       const delay = SHOPIFY_BACKOFF_BASE_MS * Math.pow(2, attempt + 1);
       logger.warn({ productId, attempt }, "Shopify GraphQL throttled — backing off");
@@ -430,7 +519,11 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
     throw new Error("Shopify GraphQL throttle error after max retries");
   }
 
-  return data?.product ?? null;
+  if (topLevelErrors.length > 0 && !body?.data?.product) {
+    throw new Error(`Shopify GraphQL error fetching product: ${topLevelErrors.map((e) => e.message).join("; ")}`);
+  }
+
+  return body?.data?.product ?? null;
 }
 
 // Write the product's FAQ JSON-LD metafield (contentclaude/faq_schema) so the
@@ -474,74 +567,8 @@ async function setFaqMetafield(session, productId, faqContent) {
   }
 }
 
-async function publishToShopify(session, productId, input, attempt = 0) {
-  const MAX_RETRIES = 3;
-
-  let res;
-  try {
-    res = await fetch(
-      `https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": session.accessToken,
-        },
-        body: JSON.stringify({
-          // `input` arg is deprecated in 2026-04 — `product` takes the same shape
-          query: `mutation updateProduct($product: ProductUpdateInput!) {
-            productUpdate(product: $product) {
-              product { id }
-              userErrors { field message }
-            }
-          }`,
-          variables: { product: input },
-        }),
-      }
-    );
-  } catch (networkErr) {
-    if (attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, SHOPIFY_BACKOFF_BASE_MS * Math.pow(2, attempt)));
-      return publishToShopify(session, productId, input, attempt + 1);
-    }
-    throw networkErr;
-  }
-
-  if (res.status === 401 && attempt < MAX_RETRIES) {
-    // Offline token lapsed mid-run — refresh it and retry the publish.
-    const r = await refreshOfflineToken(session.shop);
-    if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
-    logger.warn({ productId, attempt }, "Shopify 401 on publish — refreshed token, retrying");
-    return publishToShopify(session, productId, input, attempt + 1);
-  }
-
-  if (res.status === 429) {
-    if (attempt < MAX_RETRIES) {
-      const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
-      logger.warn({ productId, attempt }, "Shopify 429 on publish — backing off");
-      await new Promise((r) => setTimeout(r, Math.max(retryAfter * 1000, SHOPIFY_BACKOFF_BASE_MS)));
-      return publishToShopify(session, productId, input, attempt + 1);
-    }
-    throw new Error(`Shopify rate limit exceeded publishing product ${productId}`);
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Shopify publish error ${res.status}: ${body}`);
-  }
-
-  const { data } = await res.json();
-
-  if (data?.errors?.[0]?.extensions?.code === "THROTTLED") {
-    if (attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, SHOPIFY_BACKOFF_BASE_MS * Math.pow(2, attempt + 1)));
-      return publishToShopify(session, productId, input, attempt + 1);
-    }
-    throw new Error("Shopify GraphQL throttle error during publish");
-  }
-
-  const errors = data?.productUpdate?.userErrors ?? [];
-  if (errors.length > 0) {
-    throw new Error(errors.map((e) => e.message).join("; "));
-  }
-}
+// publishToShopify was deleted here (Phase 0 item 9). It was a second copy of
+// the publish logic whose result check read `data?.errors`, which is never set
+// for a top-level GraphQL error, so THROTTLED and rejected updates were
+// reported as successful publishes. The one shared implementation now lives in
+// adminGraphql.server.js and is used by both this worker and the review screen.

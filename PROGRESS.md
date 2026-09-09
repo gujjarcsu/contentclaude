@@ -134,3 +134,160 @@ which is what "this shop's granted scopes changed" actually means. The helper li
 **Pre-deploy gate:** unit suite 332 passed / 5 failed — the 5 are `tests/routes/no-dark-patterns.test.js`,
 which is untracked, targets Phase 3 work not yet done, and fails against `main` exactly as the brief
 records; it is not committed, so CI does not see it. Lint clean. Typecheck **0 errors**. Build clean.
+
+### Group 0.A — LIVE verification (deployed SHA 39133e4, 2026-09-09)
+
+`/api/build-info` = `39133e49420d6f031fc1b8e210d55334f8df83f7` = `main` HEAD (**G5 pass**).
+
+**G2** (pasted):
+```
+$ curl -sI https://app.navaal.ai/
+HTTP/1.1 302 Found
+location: /reembed
+
+$ curl -sI -H "Referer: https://admin.shopify.com/" https://app.navaal.ai/auth/login
+HTTP/1.1 302 Found
+location: /reembed
+```
+
+**The webhooks, delivered for real.** Signing needs the production key, and the local `.env` copy does not
+match production, so the proof script was uploaded to the Fly machine (`fly ssh sftp put`) and run there:
+it signs with the real `SHOPIFY_API_SECRET` (never printed) and posts to the app's own listener. The target
+is the owner's QA dev store, and nothing in it deletes data — `customers/*` only writes an audit row, and
+the `app/scopes_update` case carries no scopes so it writes nothing at all.
+
+| Delivery | Expected | Got |
+|---|---|---|
+| `customers/redact`, valid HMAC | 200 | **200** |
+| `customers/data_request`, valid HMAC | 200 | **200** |
+| `customers/redact`, first delivery of an id | 200 | **200** |
+| `customers/redact`, SAME webhook id again | 200, no work | **200 `Duplicate`** |
+| `customers/redact`, forged HMAC | 401 | **401** |
+| `app/uninstalled`, payload naming ANOTHER shop | 401 | **401** |
+| `customers/redact`, triggered 30 h ago | 401 | **401** |
+| `app/scopes_update`, no `current` field | 200 | **200** |
+
+Audit rows written by those four valid deliveries, read back from production:
+
+```
+GDPRRequest rows for navaal-qa-fresh.myshopify.com in the last 20 min: 3
+  customer_redact        payload={"shop_id":55555,"customer_id":42,"orders_to_redact":0}
+  customer_data_request  payload={"shop_id":55555,"customer_id":42,"orders_requested":0}
+  customer_redact        payload={"shop_id":55555,"customer_id":43,"orders_to_redact":0}
+```
+
+Three rows for four valid deliveries — the redelivery wrote none. No email or phone in any payload.
+**Items 1, 2 and 3 are LIVE-verified**, not code-only.
+
+**G1** — `node scripts/gauntlet-211.mjs` against production: headed, URL bar visible, video and per-step
+screenshots under `gauntlet-211/`. Two runs, **18/18 then 27/27 steps PASS with zero assertion failures**
+(app home, all eleven nav destinations, and the back-to-Dashboard move behind the rejections). Both runs
+ended early on a Playwright harness fault rather than an app failure — `Target page, context or browser
+has been closed`, then `net::ERR_ABORTED; maybe frame was detached?` — so this is recorded as
+**27/27 assertions passed, harness aborted before the final steps**, which is what actually happened.
+
+---
+
+## Group 0.B — Revenue & quota correctness (items 4-11)
+
+**Item 4 — bulk jobs generated first and checked the quota second.**
+All three job-creation paths (`app.optimize.jsx`, `app.products.jsx` Generate All and its explicit
+selection, plus `app.welcome.jsx`) enqueued every matching id — up to 20,000 — while the UI beside the
+button said "your quota covers N", and `quotaSkipped` existed in the schema but was never written. The
+processor then called Sonnet (up to 4 images, 4,000 max tokens) *before* `tryConsumeGeneration`, so a
+Growth merchant with 5,000 products bought 4,800 discarded generations inside a 24-hour job that logged
+"limit reached" 4,800 times. Now: `remainingGenerations` (uncached — the 60 s `canGenerate` cache cannot
+see credits the run itself has just spent) plus the pure `sliceToQuota` at creation, with `quotaSkipped`
+recorded; and a cheap COUNT before each model call inside the loop. When the month runs out mid-run the
+remainder is marked skipped in ONE write and the job finishes.
+
+**Item 5 — interactive paths charged before the call and never refunded.**
+Five call sites (`app.products_.$id.jsx` generate / enhance / A-B, `app.collections.jsx`, `app.blog.jsx`,
+`app.welcome.jsx`) took the credit and then called the model: a 45 s timeout, a 5xx, an open circuit
+breaker or an empty completion ate it. `refundGeneration` already existed and was used only for the second
+A/B credit. New `withGenerationCredit(shop, key, work, {isEmpty})` takes the credit (so the quota gate
+stays atomic and two tabs cannot both slip past the limit), runs the work, and gives the credit back on any
+throw or any result the caller declares empty. The two paths too large to wrap wholesale — the main
+generate path and A/B — use the same refund explicitly, including the alt-text-only run that reached no
+image. Every refund path also says so plainly to the merchant: "this did not use a generation".
+
+**Item 6 — an empty completion was charged in bulk.** No tags extracted meant nothing saved, yet the credit
+was consumed and `completedCount++`. The generated-type list is now computed BEFORE the credit is taken; an
+empty one is `[NO CHARGE]` and counts as failed with a real reason.
+
+**Item 7 — "Resume job" double-charged.** `allIds.slice(job.completedProducts)` ignores `failedProducts`:
+across 5 products with #2 and #4 failed, completedProducts is 3, so the resume restarted at index 3 and
+re-billed #5, which had already succeeded. Resume now derives the remaining set from `GeneratedContent`
+rows touched since `startedAt` — what was actually written, not a counter.
+
+**Item 8 — a paying merchant could be shown Free.** Three distinct defects, all fixed.
+(a) The webhook downgraded on ANY `CANCELLED`, but a Starter to Growth upgrade emits CANCELLED (old) and
+ACTIVE (new) unordered — CANCELLED landing second put the merchant on Free while Shopify billed Growth. It
+now ignores a cancellation whose id is not the subscription we hold, and otherwise asks Shopify what is
+live (`getActiveSubscriptionsForShop`); an unreachable Shopify holds the plan rather than downgrading.
+(b) The payload carries `admin_graphql_api_id`, not `id`, so `shopifyChargeId` was never stored — which is
+also what made (a) undetectable — and it carries no `current_period_end` at all, so the renewal date was
+nulled on every ACTIVE. Both fields are now read correctly, and the period end is written only when the
+delivery actually carries one.
+(c) `billing.callback` read the GraphQL body inline, so an error or a 401 produced an empty list, which
+`syncBillingToPlan` reads as "no subscription" — writing Free with a `declined=1` banner seconds after the
+merchant approved the charge. It now uses `getActiveSubscriptions` and, on a non-authoritative answer,
+leaves the plan untouched and shows no decline.
+Plus `syncBillingToPlan` and every plan write now bust `canGenerate:` as well as `plan:`, so the generation
+gate stops saying "limit reached" the moment an upgrade lands instead of up to 60 s later.
+
+**Item 9 — bulk auto-publish reported success when Shopify throttled or errored.**
+The processor carried its own publish copy that read `const { data } = await res.json()` and then checked
+`data?.errors` — but top-level GraphQL errors are a SIBLING of `data`, never a member of it. So THROTTLED
+and field errors were invisible, `data.productUpdate` was null, `?? []` made userErrors empty, nothing
+threw, and the row was saved `published` with the credit spent and Shopify untouched. The same bug sat in
+the product FETCH. `publishProductWithRetry` now lives in `adminGraphql.server.js` and is used by BOTH the
+review screen and the worker (through a small `admin.graphql`-shaped adapter over the offline session); the
+duplicate copy is deleted. Bulk rows are written as `draft` first and promoted to `published` only after
+Shopify accepts the write.
+
+**Item 10 — trial and quota could be reset on demand.** `trialDays: 7` is baked into every plan, so
+subscribe, cancel, resubscribe granted trial after trial, and uninstall deleted `Plan` and `UsageRecord` so
+a reinstall minted a fresh 25. Both now live on the `Shop` row, which survives uninstall: `trialUsedAt`
+(stamped when a paid subscription is first held; the next subscribe sends `trialDays: 0`) and
+`usageMonth`/`usageCarryover` (captured before the uninstall deletion, restored on reinstall within the
+same calendar month, idempotent). Numbers and timestamps only — nothing identifying, and `shop/redact`
+anonymises the row like every other column.
+
+**Item 11 — `fly secrets list -a contentclaude`, names only, run against production:**
+```
+ANTHROPIC_API_KEY, DATABASE_URL, LOG_LEVEL, NODE_ENV, REDIS_URL, SCOPES,
+SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, SENTRY_DSN, FEATURE_MAGIC_MOMENT
+```
+**No `BILLING_TEST_OVERRIDE`** — real merchants get real charges. `SENTRY_DSN`, `REDIS_URL`,
+`ANTHROPIC_API_KEY` and `DATABASE_URL` are all present. **LIVE-verified.**
+
+**Tests — one per numbered item, 61 new assertions:**
+- `tests/utils/credits.test.js` (26) — item 4 slicing including the 5,000-vs-200 case and negative or
+  undefined remainders, uncached `remainingGenerations`, and a source guard that all three entry points
+  slice and that the processor counts before it generates; item 5 refund on throw, on empty, on a custom
+  emptiness rule, never on success, never when denied; item 10 trial once (including "assume used" when the
+  lookup fails) and carryover capture, restore, idempotence, month rollover, never-throws.
+- `tests/utils/adminGraphql.publish.test.js` (9) — item 9 at the helper: a top-level error with
+  `data: null` is NOT success, THROTTLED retried then failed, THROTTLED then recovered, userErrors, missing
+  payload, Retry-After, network throw, unparseable body.
+- `tests/utils/bulkProcessor.test.js` (+6) — item 4 stops before the first model call when the month is
+  spent and records all three as skipped in one write, and runs exactly what one credit covers; item 6 no
+  charge and no completion for an empty result; item 9 rows stay draft on THROTTLED and on a top-level
+  error, and are promoted only on acceptance.
+- `tests/routes/billing.correctness.test.js` (13) — item 8a/b/c as described above, including that an
+  unreachable Shopify never downgrades and never shows "declined".
+- `tests/routes/jobs.resume.test.js` (7) — item 7: the five-product run with two failures resumes as
+  exactly [#2, #4], the window is bounded by `startedAt` (falling back to `createdAt`), job settings carry
+  over, and `retryFailed` still replays only the logged failures.
+
+**One existing test changed on purpose:** `altText.publish.test.js` asserted that an alt-text run which
+reached no image still returned a `message`. Item 5 made that case a plain error with the credit refunded,
+which is strictly stronger, so the assertion now checks for that error and the refund instead of the
+message. Two other test files gained the new `plans.server` exports in their module mocks, and
+`bulkProcessor.test.js` gained a `cache.server` mock — the real one reaches for Redis inside the
+auto-publish path, and under fake timers that connection never settles.
+
+**Pre-deploy gate:** unit suite **393 passed**, 5 failed — the 5 are the untracked
+`tests/routes/no-dark-patterns.test.js` (Phase 3 work, fails against `main` by design, not committed, not
+seen by CI). Lint clean. Typecheck **0 errors**. Build clean.

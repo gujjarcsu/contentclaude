@@ -9,7 +9,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { enqueueGenerationJob } from "../queues/generationQueue.server";
 import { FREE_PLAN } from "../utils/billing-plans.js";
-import { checkEntitlement } from "../utils/plans.server.js";
+import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -148,15 +148,29 @@ export const action = async ({ request }) => {
     });
   }
 
+  // Phase 0 item 4 — only enqueue what the quota can actually pay for. The
+  // count beside the button already promises this ("your quota covers N"); the
+  // job used to take every id anyway and burn the model on work it could not
+  // credit.
+  const remaining = await remainingGenerations(shop);
+  const { targetIds: runIds, quotaSkipped } = sliceToQuota(targetIds, remaining);
+  if (runIds.length === 0) {
+    return Response.json({
+      error: `You have no generations left this month, so there is nothing to run. ${targetIds.length} product${targetIds.length === 1 ? "" : "s"} are waiting.`,
+      limitReached: true,
+    });
+  }
+
   const job = await prisma.generationJob.create({
     data: {
       shop,
       status: "queued",
-      totalProducts: targetIds.length,
-      productIds: JSON.stringify(targetIds),
+      totalProducts: runIds.length,
+      productIds: JSON.stringify(runIds),
       contentTypes: contentTypes.join(","),
       mode,
       autoPublish,
+      quotaSkipped,
     },
   });
 

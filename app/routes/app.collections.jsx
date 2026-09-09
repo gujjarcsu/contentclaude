@@ -84,7 +84,7 @@ export const action = async ({ request }) => {
     const collectionDescription = formData.get("collectionDescription") || "";
     const productsCount = formData.get("productsCount") || "";
 
-    const [{ generateCollectionDescription }, { getCache }, { tryConsumeGeneration }, { checkRateLimit }] = await Promise.all([
+    const [{ generateCollectionDescription }, { getCache }, { withGenerationCredit }, { checkRateLimit }] = await Promise.all([
       import("../utils/ai.server.js"),
       import("../utils/cache.server.js"),
       import("../utils/plans.server.js"),
@@ -98,24 +98,41 @@ export const action = async ({ request }) => {
     if (!rl.allowed) {
       return Response.json({ error: "You're generating too fast. Please wait a moment before trying again." });
     }
-    const gate = await tryConsumeGeneration(shop, "description", collectionId);
-    if (!gate.allowed) {
+
+    // Phase 0 item 5 — the credit comes back if the generation fails or returns
+    // nothing usable.
+    let outcome;
+    try {
+      outcome = await withGenerationCredit(shop, { contentType: "description", productId: collectionId }, async () => {
+        const brandVoice = await getCache(
+          `bv:${shop}`,
+          () => prisma.brandVoice.findUnique({ where: { shop } }),
+          300
+        );
+        return generateCollectionDescription(
+          { id: collectionId, title: collectionTitle, description: collectionDescription, productsCount },
+          brandVoice
+        );
+      });
+    } catch (err) {
+      return Response.json(
+        { error: `We couldn't write this collection: ${err.message}. This did not use a generation.` },
+        { status: 502 },
+      );
+    }
+    if (!outcome.allowed) {
       return Response.json({
         error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
         limitReached: true,
       });
     }
-
-    const brandVoice = await getCache(
-      `bv:${shop}`,
-      () => prisma.brandVoice.findUnique({ where: { shop } }),
-      300
-    );
-
-    const generated = await generateCollectionDescription(
-      { id: collectionId, title: collectionTitle, description: collectionDescription, productsCount },
-      brandVoice
-    );
+    if (outcome.refunded) {
+      return Response.json(
+        { error: "The AI returned nothing for this collection. Please retry — this did not use a generation." },
+        { status: 502 },
+      );
+    }
+    const generated = outcome.result;
 
     // Save to DB
     await Promise.all(

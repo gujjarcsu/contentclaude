@@ -60,3 +60,42 @@ export async function getActiveSubscriptions(graphql) {
     return { ok: false, subs: [], reason: err?.message ?? "threw" };
   }
 }
+
+/**
+ * The same authoritative lookup, for callers with NO admin context: the
+ * subscriptions webhook and the public billing callback. Uses the shop's
+ * offline token.
+ *
+ * Phase 0 item 8 — the webhook needs this because a Starter → Growth upgrade
+ * emits CANCELLED (the old subscription) and ACTIVE (the new one) with no
+ * ordering guarantee. Acting on the CANCELLED alone drops a paying merchant to
+ * Free while Shopify keeps billing them; the only safe answer is to ask Shopify
+ * what is live right now.
+ *
+ * @returns {Promise<{ok: boolean, subs: object[], reason?: string}>}
+ *   ok:false means "no authoritative answer" — callers MUST hold the current
+ *   plan rather than downgrade.
+ */
+export async function getActiveSubscriptionsForShop(shop) {
+  try {
+    const [{ getFreshOfflineSession }, { apiVersion }] = await Promise.all([
+      import("./offlineToken.server.js"),
+      import("../shopify.server.js"),
+    ]);
+    const session = await getFreshOfflineSession(shop);
+    if (!session?.accessToken) return { ok: false, subs: [], reason: "no_offline_session" };
+
+    return await getActiveSubscriptions((query) =>
+      fetch(`https://${shop}/admin/api/${apiVersion}/graphql.json`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": session.accessToken,
+        },
+        body: JSON.stringify({ query }),
+      }),
+    );
+  } catch (err) {
+    return { ok: false, subs: [], reason: err?.message ?? "threw" };
+  }
+}

@@ -35,6 +35,14 @@ vi.mock("../../app/utils/plans.server.js", () => ({
   tryConsumeGeneration: vi.fn(() => Promise.resolve({ allowed: true })),
   checkEntitlement: (...a) => checkEntitlement(...a),
   refundGeneration: vi.fn(() => Promise.resolve()),
+  remainingGenerations: vi.fn(() => Promise.resolve(999)),
+  sliceToQuota: (ids, remaining) => ({ targetIds: ids.slice(0, Math.max(0, remaining)), quotaSkipped: Math.max(0, ids.length - Math.max(0, remaining)) }),
+  withGenerationCredit: vi.fn(async (shop, key, work, opts) => {
+    const gate = { allowed: true, remaining: 10 };
+    const result = await work(gate);
+    const isEmpty = opts?.isEmpty ?? ((r) => !r);
+    return { allowed: true, gate, result, refunded: !!isEmpty(result) };
+  }),
 }));
 
 vi.mock("../../app/utils/rateLimit.server.js", () => ({ checkRateLimit: vi.fn(() => Promise.resolve({ allowed: true })) }));

@@ -40,6 +40,14 @@ vi.mock("../../app/utils/plans.server.js", () => ({
   tryConsumeGeneration: vi.fn(() => Promise.resolve({ allowed: true })),
   checkEntitlement: vi.fn(() => Promise.resolve({ allowed: true })),
   refundGeneration: vi.fn(() => Promise.resolve()),
+  remainingGenerations: vi.fn(() => Promise.resolve(999)),
+  sliceToQuota: (ids, remaining) => ({ targetIds: ids.slice(0, Math.max(0, remaining)), quotaSkipped: Math.max(0, ids.length - Math.max(0, remaining)) }),
+  withGenerationCredit: vi.fn(async (shop, key, work, opts) => {
+    const gate = { allowed: true, remaining: 10 };
+    const result = await work(gate);
+    const isEmpty = opts?.isEmpty ?? ((r) => !r);
+    return { allowed: true, gate, result, refunded: !!isEmpty(result) };
+  }),
 }));
 
 vi.mock("../../app/utils/rateLimit.server.js", () => ({
@@ -122,9 +130,16 @@ describe("P0-1: alt text publish honesty", () => {
     expect(result.altTextResults.length).toBeGreaterThan(0);
     // Every image failed — every result row must carry an error
     expect(result.altTextResults.every((r) => r.error)).toBe(true);
-    // And the summary must not claim any image was applied
-    expect(result.message).not.toMatch(/applied to [1-9]/i);
+    // And nothing may claim success or that any image was applied.
+    expect(result.success).not.toBe(true);
+    expect(result.message ?? "").not.toMatch(/applied to [1-9]/i);
     expect(result.altTextApplied ?? 0).toBe(0);
+    // Phase 0 item 5 strengthened this: an alt-text-only run that reached no
+    // image at all is now a plain error AND the credit is refunded, rather than
+    // a "success" carrying zero applied images.
+    expect(result.error).toMatch(/did not use a generation/i);
+    const { refundGeneration } = await import("../../app/utils/plans.server.js");
+    expect(refundGeneration).toHaveBeenCalled();
   });
 
   it("uses a mutation that exists in Admin API 2026-04 (not productImageUpdate)", async () => {

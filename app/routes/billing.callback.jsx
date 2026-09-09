@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import { apiVersion } from "../shopify.server";
 import { getFreshOfflineSession } from "../utils/offlineToken.server.js";
 import { syncBillingToPlan } from "../utils/plans.server";
+import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { invalidateCache } from "../utils/cache.server.js";
 import logger from "../utils/logger.server";
 
@@ -46,34 +47,33 @@ export const loader = async ({ request }) => {
     const session = await getFreshOfflineSession(shop);
     if (!session?.accessToken) throw new Error("no offline session for shop");
 
-    const res = await fetch(
-      `https://${shop}/admin/api/${apiVersion}/graphql.json`,
-      {
+    // Phase 0 item 8c — this used to read the GraphQL body inline, so a
+    // GraphQL error, a 401, or any partial response produced an EMPTY list,
+    // which syncBillingToPlan reads as "no subscription" and writes Free — with
+    // a "declined" banner — seconds after the merchant approved the charge.
+    // getActiveSubscriptions distinguishes "authoritatively none" from "could
+    // not tell", and only the former may change a plan.
+    const { ok, subs, reason } = await getActiveSubscriptions((query) =>
+      fetch(`https://${shop}/admin/api/${apiVersion}/graphql.json`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Shopify-Access-Token": session.accessToken,
         },
-        body: JSON.stringify({
-          query: `#graphql
-            query BillingCallbackSubs {
-              currentAppInstallation {
-                activeSubscriptions { id name status createdAt currentPeriodEnd }
-              }
-            }`,
-        }),
-      }
+        body: JSON.stringify({ query }),
+      }),
     );
-    const body = await res.json();
-    const subs = (body?.data?.currentAppInstallation?.activeSubscriptions ?? []).map((s) => ({
-      id: s.id,
-      name: s.name,
-      status: s.status,
-      currentPeriodEnd: s.currentPeriodEnd,
-    }));
+
+    if (!ok) {
+      // Do NOT touch the plan. The app_subscriptions/update webhook and the
+      // Plans reconcile are the authoritative backstops; send the merchant back
+      // into the app without a false "declined".
+      logger.warn({ shop, chargeId, reason }, "Billing callback could not read subscription state — plan left untouched");
+      return redirect(adminPlansUrl(shop, "billing_error=1"));
+    }
 
     // Update the DB to match Shopify. syncBillingToPlan promotes the ACTIVE
-    // subscription's plan, or downgrades to Free when there is no active one.
+    // subscription's plan, or downgrades to Free when there is genuinely none.
     await syncBillingToPlan(shop, subs);
     const month = new Date().toISOString().slice(0, 7);
     await invalidateCache(`plan:${shop}`);

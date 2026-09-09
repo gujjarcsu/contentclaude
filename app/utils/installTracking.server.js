@@ -249,6 +249,16 @@ async function recordReinstall(existing, sig) {
       { shop: existing.shop, event: "shop_reinstalled", reinstallSource: row?.reinstallSource, installCount: row?.installCount },
       "Shop reinstalled — source tracked"
     );
+    // Phase 0 item 10 — the free allowance is monthly, not per install. The
+    // uninstall deleted every UsageRecord, so a reinstall used to mint a fresh
+    // 25 on demand; put this month's captured count back. Same calendar month
+    // only (a new month is a genuinely fresh allowance), and never fatal.
+    try {
+      const { restoreUsageCarryover } = await import("./plans.server.js");
+      await restoreUsageCarryover(existing.shop);
+    } catch (err) {
+      logger.warn({ shop: existing.shop, err: err?.message }, "usage carryover restore failed (non-fatal)");
+    }
   }
   return row;
 }
