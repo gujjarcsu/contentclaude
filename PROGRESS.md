@@ -809,3 +809,41 @@ not deploy on its first push. The cause was mine: `npm run lint` uses `--cache`,
 pass. Every pre-commit lint after that cleared the cache first, and the follow-up commit (`0ae81e9`) fixed
 the three and turned one of them — an unused test helper — into a real assertion that an unsigned billing
 callback performs no lookup.
+
+---
+
+## Owner confirmations, 2026-09-09 (after the Phase 0 ledger)
+
+**Item 11 — the secret inventory, confirmed by the owner.** `fly secrets list -a contentclaude`, names
+only, agrees exactly with what was read from production during group 0.B:
+
+```
+ANTHROPIC_API_KEY, DATABASE_URL, LOG_LEVEL, NODE_ENV, REDIS_URL, SCOPES,
+SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, SENTRY_DSN, FEATURE_MAGIC_MOMENT
+```
+
+- **No `BILLING_TEST_OVERRIDE`.** Real merchants get real charges. This is the one that matters most:
+  had it been present, every subscription created in production would have been a $0 test charge.
+- `SENTRY_DSN`, `REDIS_URL`, `ANTHROPIC_API_KEY` and `DATABASE_URL` are all present, so nothing the app
+  depends on is missing.
+- **`FEATURE_MAGIC_MOMENT` stays for now, deliberately.** It gates `app/routes/app.welcome.jsx`, which
+  Phase 3 item 3.1 retires along with `app.setup.jsx`. Removing the secret before that route is gone
+  would send every brand-new shop down the fallback path mid-Phase-0 for no benefit. The secret goes
+  when the route does, in the same change, so there is never a window where one exists without the
+  other. Item 11 remains **LIVE-verified**.
+
+**Item 25 — the Sentry alert rule now exists.** The owner created it and the deliberate test error
+produced an email, so a new issue reaches a human rather than sitting in a dashboard nobody opens. That
+closes the last dependency on item 25: the code half (eager `Sentry.init` at boot, the exported
+`handleError`, the `unhandledRejection` and `uncaughtException` handlers, and `release: GIT_SHA` tagging)
+shipped in `8665a25`, and the notification half is now live too.
+
+**Item 25 is therefore no longer code-only.** Its ledger row above says "code-only; alert rule is
+HUMAN-NEEDED #5"; with the rule created and a test email received, the item is complete end to end. The
+`HUMAN-NEEDED.md` entry has moved from Open to Done rather than being deleted, so the record of what was
+required survives.
+
+**HUMAN-NEEDED now stands at four open items**, none of them Phase 0 blockers except one: item 4, raising
+`connection_limit` from 1 to 5. That is the only Phase 0 finding still visibly wrong in production — the
+startup warning is in the logs on every boot — and it needs a human because the new value contains the
+database password.
