@@ -42,6 +42,24 @@ kill_timeout = "60s"
   NODE_ENV = "production"
   LOG_LEVEL = "info"
   PORT = "3000"
+  # `prisma migrate deploy` takes a Postgres ADVISORY LOCK before it does
+  # anything. Advisory locks are per-connection, and DATABASE_URL points at
+  # Neon's pgbouncer in transaction mode, where a connection is not sticky — so
+  # the lock can never be acquired and the release command failed with
+  # "P1002 ... Timed out trying to acquire a postgres advisory lock", which
+  # aborted the whole deploy. (db push never took the lock, which is why this
+  # only appeared when the release command changed.)
+  #
+  # The lock exists to stop two migration runs racing. Nothing here can race:
+  # CI serialises deploys with `concurrency: deploy-group`, and Fly runs exactly
+  # one release command per deploy.
+  #
+  # The PROPER fix is a `directUrl` on the datasource pointing at Neon's
+  # unpooled endpoint, which is what Prisma and Neon both document. That needs a
+  # DIRECT_URL secret containing the database password — HUMAN-NEEDED. Until
+  # then this unblocks deploys, and it is genuinely safe while there are no
+  # pending migrations, because the command is then a read of _prisma_migrations.
+  PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK = "true"
 
 # HTTP belongs to the web group only. Without `processes` here, Fly would try to
 # route traffic to the worker and its health check would fail forever.
