@@ -54,3 +54,8 @@ gauntlet-freshstore/
 reviewer-frames/
 proof-items12/
 proof-items345/
+
+# Phase 3 will write and commit this. It targets work not yet done, so it FAILS
+# against main by design — and typecheck/tests are blocking in CI now, so an
+# accidental `git add -A` sweeping it in would block every deploy.
+tests/routes/no-dark-patterns.test.js
