@@ -12,6 +12,7 @@
 
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
+import { RUNS_JOBS, PROCESS_ROLE, MACHINE_ID, REGION } from "./processRole.server.js";
 
 // Refuse to boot if NODE_ENV is unset — billing test mode, cookie security and
 // other safety branches depend on it, so an unset value is unsafe to run with.
@@ -179,24 +180,32 @@ export const startupPromise = (async () => {
 
   runStartupChecks();
 
-  try {
-    await recoverStuckJobs();
-  } catch (err) {
-    // Startup recovery is best-effort — never crash the server
-    logger.error({ err }, "Startup job recovery failed");
+  if (RUNS_JOBS) {
+    try {
+      await recoverStuckJobs();
+    } catch (err) {
+      // Startup recovery is best-effort — never crash the server
+      logger.error({ err }, "Startup job recovery failed");
+    }
   }
 
   // Phase 0 item 12 — and keep checking. Running this only at boot meant a job
   // stranded by a crash stayed "Processing…" until the next deploy, holding the
   // shop's in-flight slot the whole time. unref() so the timer never keeps the
   // process alive during shutdown.
-  const recoveryTimer = setInterval(() => {
-    recoverStuckJobs().catch((err) => logger.error({ err }, "Periodic job recovery failed"));
-  }, RECOVERY_INTERVAL_MS);
-  recoveryTimer.unref?.();
+  //
+  // Phase 1 item 2 — this belongs to whichever process runs jobs. Every web
+  // machine doing it would mean N machines racing to mark the same job failed,
+  // and the guarded write makes that harmless but pointless.
+  if (RUNS_JOBS) {
+    const recoveryTimer = setInterval(() => {
+      recoverStuckJobs().catch((err) => logger.error({ err }, "Periodic job recovery failed"));
+    }, RECOVERY_INTERVAL_MS);
+    recoveryTimer.unref?.();
+  }
 
-  // Start BullMQ worker if Redis is configured
-  if (process.env.REDIS_URL) {
+  // Start the BullMQ worker — only in the process whose job that is.
+  if (process.env.REDIS_URL && RUNS_JOBS) {
     try {
       const { startWorker } = await import("../queues/generationQueue.server.js");
       await startWorker();
@@ -204,6 +213,11 @@ export const startupPromise = (async () => {
       logger.error({ err }, "Failed to start BullMQ worker");
     }
   }
+
+  logger.info(
+    { role: PROCESS_ROLE, machine: MACHINE_ID, region: REGION, runsJobs: RUNS_JOBS },
+    "Startup complete"
+  );
 })();
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────

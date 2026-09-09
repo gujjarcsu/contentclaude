@@ -24,27 +24,64 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
 # to be running, mid-product. 60 s covers that drain with room to spare.
 kill_timeout = "60s"
 
+# ── Process groups (Phase 1 item 2) ──────────────────────────────────────────
+# One process used to serve the admin AND run the BullMQ worker. So a web deploy
+# killed whatever bulk job was running; a long generation competed with page
+# loads for the same CPU and the same database connections; and the worker could
+# only ever live where the web server lived.
+#
+# `web` serves HTTP. `worker` runs jobs and nothing else — no HTTP server, no
+# React. They are separate machines, so deploying the web app no longer touches
+# a running job, and the worker can be sized for the work it actually does.
+# Which process a machine is comes from FLY_PROCESS_GROUP (app/utils/processRole.server.js).
+[processes]
+  web = "npm run start"
+  worker = "node worker.js"
+
 [env]
   NODE_ENV = "production"
   LOG_LEVEL = "info"
   PORT = "3000"
 
+# HTTP belongs to the web group only. Without `processes` here, Fly would try to
+# route traffic to the worker and its health check would fail forever.
 [http_service]
   internal_port = 3000
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 1
+  processes = ["web"]
 
   [http_service.concurrency]
     type = "connections"
     hard_limit = 100
     soft_limit = 80
 
+# The web machines stay small; they serve pages and hand work to the queue.
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"
+  processes = ["web"]
 
+# The worker is the one doing real work: model calls with up to four images
+# inlined, JSON parsing, and Prisma writes for thousands of products. It gets
+# more CPU and double the memory, and it is NEVER auto-stopped — a stopped
+# worker is a queue nobody drains.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"
+  processes = ["worker"]
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  # Somewhere to spill to rather than being OOM-killed mid-job. A bulk run holds
+  # a product, its images and the model response at once, and an OOM kill takes
+  # the whole run with it.
+  swap_size_mb = 512
+
+# The health check is an HTTP check, so it only applies to the process that
+# serves HTTP. The worker has no port to check; its liveness is the Redis
+# heartbeat that /api/health?deep=1 reads (Phase 1 item 2).
 [checks]
   [checks.health]
     grace_period = "10s"
@@ -54,3 +91,4 @@ kill_timeout = "60s"
     port = 3000
     timeout = "5s"
     type = "http"
+    processes = ["web"]

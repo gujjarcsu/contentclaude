@@ -18,6 +18,8 @@
 import { Queue, Worker } from "bullmq";
 import logger from "../utils/logger.server.js";
 import prisma from "../db.server.js";
+import { RUNS_JOBS, PROCESS_ROLE, MACHINE_ID, REGION } from "../utils/processRole.server.js";
+import { getRedis } from "../utils/cache.server.js";
 
 const QUEUE_NAME = "content-generation";
 const REDIS_URL = process.env.REDIS_URL;
@@ -41,6 +43,34 @@ const redisConnection = enqueueConnection;
 
 /** How long we are willing to wait for Redis before falling back to inline. */
 const ENQUEUE_TIMEOUT_MS = 5_000;
+
+// ── Worker liveness across processes (Phase 1 item 2) ────────────────────────
+// Once web and worker are separate machines, a web process cannot ask the worker
+// whether it is running — `_worker.isRunning()` is only true in the worker's own
+// process. So the worker writes a heartbeat to Redis and anything can read it.
+// This is a better signal than the in-process check ever was: it proves the
+// worker is alive AND that it can still reach Redis, which is what actually has
+// to be true for a job to run.
+const HEARTBEAT_KEY = "worker:heartbeat";
+const HEARTBEAT_INTERVAL_MS = 30_000;
+/** Older than this and we call the worker dead. Two missed beats plus slack. */
+const HEARTBEAT_STALE_MS = 90_000;
+let _heartbeatTimer = null;
+
+async function writeHeartbeat() {
+  try {
+    const redis = await getRedis();
+    if (!redis) return;
+    await redis.set(
+      HEARTBEAT_KEY,
+      JSON.stringify({ at: Date.now(), machine: MACHINE_ID, region: REGION, role: PROCESS_ROLE }),
+      "EX",
+      Math.ceil(HEARTBEAT_STALE_MS / 1000),
+    );
+  } catch (err) {
+    logger.warn({ err: err.message }, "Worker heartbeat write failed");
+  }
+}
 
 let _queue = null;
 let _worker = null;
@@ -84,6 +114,15 @@ export function isQueueAvailable() {
  */
 export async function startWorker() {
   if (!redisConnection || _workerStarted) return;
+  // Phase 1 item 2 — only the process whose job it is runs the worker. A web
+  // machine that started one would compete with itself for the database pool and
+  // would die mid-job on the next web deploy, which is the whole reason for the
+  // split. enqueueGenerationJob used to call this, so before the split every web
+  // process became a worker the first time anyone pressed a button.
+  if (!RUNS_JOBS) {
+    logger.debug({ role: PROCESS_ROLE }, "Not the worker process — not starting the BullMQ worker");
+    return;
+  }
   _workerStarted = true;
 
   // Dynamic import to avoid circular dep at module load time
@@ -151,7 +190,12 @@ export async function startWorker() {
   });
 
   const concurrency = parseInt(process.env.BULLMQ_CONCURRENCY || "3", 10);
-  logger.info({ concurrency }, "BullMQ worker started");
+  logger.info({ concurrency, role: PROCESS_ROLE, machine: MACHINE_ID, region: REGION }, "BullMQ worker started");
+
+  // Announce liveness so the web machines can see it (see HEARTBEAT_KEY above).
+  await writeHeartbeat();
+  _heartbeatTimer = setInterval(() => { void writeHeartbeat(); }, HEARTBEAT_INTERVAL_MS);
+  _heartbeatTimer.unref?.();
 }
 
 /**
@@ -185,6 +229,8 @@ export async function enqueueGenerationJob(jobId) {
       // on a spinner, so five seconds is the whole budget before we fall back.
       await Promise.race([
         (async () => {
+          // Only ever a no-op on a web machine now (Phase 1 item 2); kept so a
+          // single-process local dev run still starts its worker on demand.
           await startWorker();
           await queue.add("process-bulk", { jobId, shop }, { jobId });
         })(),
@@ -223,20 +269,57 @@ export async function enqueueGenerationJob(jobId) {
  */
 export async function getQueueHealth({ timeoutMs = 2_000 } = {}) {
   if (!redisConnection) {
-    return { configured: false, workerRunning: false, counts: null, error: "REDIS_URL not set" };
+    return { configured: false, workerRunning: false, worker: null, counts: null, error: "REDIS_URL not set" };
   }
-  const workerRunning = !!_worker && typeof _worker.isRunning === "function" ? _worker.isRunning() : !!_worker;
+
+  // Phase 1 item 2 — read the worker's heartbeat rather than asking this
+  // process about itself. On a web machine the in-process worker is (correctly)
+  // absent, so `_worker.isRunning()` would report a dead worker on every web
+  // machine the moment the split landed. The heartbeat also proves the worker
+  // can still reach Redis, which is what has to be true for a job to run at all.
+  let worker = null;
+  let workerRunning = false;
+  let error = null;
+
+  try {
+    const redis = await getRedis();
+    if (!redis) {
+      error = "redis unavailable";
+    } else {
+      const raw = await Promise.race([
+        redis.get(HEARTBEAT_KEY),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
+      ]);
+      if (raw) {
+        const beat = JSON.parse(raw);
+        const ageMs = Date.now() - Number(beat.at || 0);
+        workerRunning = ageMs <= HEARTBEAT_STALE_MS;
+        worker = { machine: beat.machine, region: beat.region, ageMs, stale: !workerRunning };
+      }
+    }
+  } catch (err) {
+    error = err.message;
+  }
+
+  // In the worker's own process, trust what it can see directly as well — that
+  // covers the window between boot and the first heartbeat.
+  if (RUNS_JOBS && _worker) {
+    const live = typeof _worker.isRunning === "function" ? _worker.isRunning() : true;
+    workerRunning = workerRunning || live;
+    worker = worker ?? { machine: MACHINE_ID, region: REGION, ageMs: 0, stale: false };
+  }
+
   const queue = getQueue();
-  if (!queue) return { configured: true, workerRunning, counts: null, error: "queue unavailable" };
+  if (!queue) return { configured: true, workerRunning, worker, counts: null, error: error ?? "queue unavailable" };
 
   try {
     const counts = await Promise.race([
       queue.getJobCounts("wait", "active", "delayed", "failed", "completed"),
       new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
     ]);
-    return { configured: true, workerRunning, counts, error: null };
+    return { configured: true, workerRunning, worker, counts, error };
   } catch (err) {
-    return { configured: true, workerRunning, counts: null, error: err.message };
+    return { configured: true, workerRunning, worker, counts: null, error: err.message };
   }
 }
 
