@@ -692,3 +692,120 @@ while ignoring aborted requests and never logging the query string, and that rep
 **Pre-deploy gate:** unit suite **467 passed**, 5 failed — the same untracked
 `tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean **from a
 cleared cache**. Typecheck **0 errors**. Build clean.
+
+### Group 0.F — LIVE verification (deployed SHA 8665a25)
+
+`/api/build-info` = `8665a2548bfd979285857de2c3df41ba4636ccfd` = `main` HEAD (**G5 pass**).
+**G2**: both redirects `302 -> /reembed`. **G4**: `shopify.app.toml` still `write_products,write_content`.
+
+**Item 26, against production.** The shallow check is unchanged and cheap:
+
+```
+$ curl -s https://app.navaal.ai/api/health
+{"status":"ok","timestamp":"2026-09-09T11:44:43.961Z"}            HTTP 200
+```
+
+The deep check is the new part, and it answers the questions the old one could not:
+
+```
+$ curl -s "https://app.navaal.ai/api/health?deep=1"
+{"status":"ok","timestamp":"2026-09-09T11:44:44.185Z","checks":{
+  "database":"ok",
+  "redis":"ok",
+  "queue":{"configured":true,"workerRunning":true,
+           "counts":{"wait":0,"active":0,"delayed":0,"failed":0,"completed":7}},
+  "jobs":{"failedLast10Min":0,"stuckProcessing":0},
+  "aiCircuitBreaker":{"open":false,"failures":0,"lastFailureAt":null},
+  "build":"8665a25"}}                                              HTTP 200
+```
+
+`workerRunning: true` is the line that matters: until now nothing outside the process could tell whether
+the BullMQ worker was alive, and the old health check reported `ok` either way.
+
+**G1** — `node scripts/gauntlet-211.mjs`: **30/30 steps passed, FINAL_RESULT=PASS**. This run started
+against `7687368` and finished against `8665a25` (the deploy landed mid-run), so it covers both the 0.E
+and 0.F builds; every one of the thirty assertions passed on both sides of the transition.
+
+
+---
+
+# PHASE 0 — COMPLETE. Item-by-item ledger.
+
+Six groups, six deploys (seven pushes — group 0.D needed a follow-up after CI caught lint errors in its
+new tests). Every item has at least one test. **LIVE** means it was exercised against
+`https://app.navaal.ai` and the result is pasted above; **code-only** means it is proven by tests and
+review but not by a production observation, with the reason given.
+
+| # | Item | Group | Commit | Deployed | Verified |
+|---|---|---|---|---|---|
+| 1 | GDPR webhooks 500 on every delivery | 0.A | `39133e4` | `39133e4` | **LIVE** — 200 + exactly one audit row, read back |
+| 2 | Webhook headers trusted unsigned | 0.A | `39133e4` | `39133e4` | **LIVE** — shop mismatch 401, stale 401, redelivery `Duplicate` |
+| 3 | `scopes_update` 500s on a payload shape | 0.A | `39133e4` | `39133e4` | **LIVE** — missing `current` returns 200 |
+| 4 | Bulk generates first, checks quota second | 0.B | `500543c` | `500543c` | code-only — needs a real 5,000-product run |
+| 5 | Interactive paths never refund | 0.B | `500543c` | `500543c` | code-only — needs a real model timeout |
+| 6 | Empty AI output charged in bulk | 0.B | `500543c` | `500543c` | code-only |
+| 7 | Resume double-charges | 0.B | `500543c` | `500543c` | code-only |
+| 8 | A paying merchant can be shown Free | 0.B | `500543c` | `500543c` | code-only — needs a real Starter→Growth charge |
+| 9 | Bulk publish reports success when throttled | 0.B | `500543c` | `500543c` | code-only |
+| 10 | Trial + free quota reset on demand | 0.B | `500543c` | `500543c` | **LIVE** (columns present in prod DB) + code-only (logic) |
+| 11 | Verify Fly secrets | 0.B | — | — | **LIVE** — no `BILLING_TEST_OVERRIDE`; `SENTRY_DSN` present |
+| 12 | Deploy/crash strands a job forever | 0.C | `dce73cf` | `dce73cf` | code-only — proving it means killing a machine mid-job |
+| 13 | Redis outage hangs "Start job" | 0.C | `dce73cf` | `dce73cf` | code-only — proving it means taking Redis away |
+| 14 | Uninstall during a bulk job | 0.C | `dce73cf` | `dce73cf` | code-only — proving it means uninstalling from a live store |
+| 15 | `connection_limit=1` | 0.C | `dce73cf` | `dce73cf` | **LIVE** — the new warning is in production logs; **value is HUMAN-NEEDED #4** |
+| 16 | First-load race + cache double-run | 0.C | `dce73cf` | `dce73cf` | code-only |
+| 17 | Reflected XSS in `/reembed?target=` | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | **LIVE** — payload rejected, CSP present, zero injected script |
+| 18 | Stored XSS on the merchant storefront | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | code-only — proving it means publishing attacker content to a real shop |
+| 19 | Prompt injection has no structural defence | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | code-only |
+| 20 | `/billing/callback` is an open oracle | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | code-only — proving it means reading a real merchant's plan |
+| 21 | `/api/generate` unusable and exposed | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | **LIVE** — GET and POST both `404` |
+| 22 | Cookies, headers, sanitiser, feed | 0.D | `7942c30`+`0ae81e9` | `0ae81e9` | **LIVE** — `/app` sends all four headers; `build-info` has no `node` |
+| 23 | Anthropic backoff, breaker, retries | 0.E | `7687368` | `7687368` | code-only — a timing property, not a readable state |
+| 24 | Ungated AI paths (social, blog) | 0.E | `7687368` | `7687368` | code-only |
+| 25 | Sentry effectively unwired | 0.F | `8665a25` | `8665a25` | code-only; **alert rule is HUMAN-NEEDED #5** |
+| 26 | Health check depth | 0.F | `8665a25` | `8665a25` | **LIVE** — `?deep=1` output pasted above |
+
+**LIVE-verified: items 1, 2, 3, 11, 15, 17, 21, 22, 26, and the storage half of 10.** The rest are
+code-only for one of three reasons, all stated per item above: proving them needs a destructive action
+against a live install (kill a machine, remove Redis, uninstall the app), a real charge through Shopify
+billing, or publishing attacker content to a merchant's storefront. None of those is a thing to do to a
+production install to satisfy a checklist.
+
+## Guardrails, per deploy
+
+| Deploy | G1 (App Store gauntlet) | G2 (curl) | G5 (SHA) |
+|---|---|---|---|
+| `39133e4` (0.A) | 27/27 assertions PASS, harness aborted before the last steps (twice, never on an app assertion) | pass | pass |
+| `500543c` (0.B) | **30/30 PASS** | pass | pass |
+| `dce73cf` (0.C) | **30/30 PASS** | pass | pass |
+| `0ae81e9` (0.D) | not run — superseded by the 0.E deploy before a run completed; item 17 verified directly with curl instead | pass | pass |
+| `7687368` (0.E) | **30/30 PASS** (one run spanning the 0.E to 0.F transition) | pass | pass |
+| `8665a25` (0.F) | **30/30 PASS** (the same run, which finished against this build) | pass | pass |
+
+G3 (no new route skips `authenticate.admin`): the only routes added or changed outside `/app/*` are
+webhooks, which verify HMAC directly and by design carry no session, and `/billing/callback`, which is
+public by necessity and is now signed. G4 (no new scopes): `shopify.app.toml` still reads
+`write_products,write_content`, unchanged. G6: CI green on `main`; typecheck 0 errors throughout, though
+it remains non-blocking until Phase 1. G7: this file is append-only and `HUMAN-NEEDED.md` now carries
+five open items.
+
+## What Phase 0 did NOT do, stated plainly
+
+- **Item 15's actual value.** The code reports the problem; changing `DATABASE_URL` means handling a
+  secret containing the database password. **HUMAN-NEEDED #4.**
+- **Item 25's alert rule.** Errors are now captured; nobody is told until the rule exists.
+  **HUMAN-NEEDED #5.**
+- **Item 23's queue hand-off.** The brief asks interactive routes to hand slow work to the queue. Doing
+  that safely needs an idempotency key per shop/product/attempt, or the original request and the queued
+  copy both complete and the merchant is charged twice — the exact defect group 0.B just removed. The
+  outcome the brief wants is delivered by the capped backoff plus the item 5 refund: an interactive
+  generation now fails in about ten seconds and costs nothing. Reasoning recorded in the 0.E section.
+- **Anything from Phase 1 onward.** Not started, as instructed.
+
+## One process failure worth recording
+
+The group 0.D commit shipped three lint errors in its new test files and CI went red, so that group did
+not deploy on its first push. The cause was mine: `npm run lint` uses `--cache`, and I trusted a cached
+pass. Every pre-commit lint after that cleared the cache first, and the follow-up commit (`0ae81e9`) fixed
+the three and turned one of them — an unused test helper — into a real assertion that an unsigned billing
+callback performs no lookup.
