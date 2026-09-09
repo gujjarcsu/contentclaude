@@ -116,8 +116,6 @@ export function runStartupChecks() {
   if (extraScopes.length > 0) {
     warnings.push(`SCOPES contains scopes this app never uses: ${extraScopes.join(", ")} — remove them (over-broad scopes are an App Store rejection risk, requirement 3.2)`);
   }
-  // /api/generate is HMAC-only (per-shop, keyed on the offline access token) —
-  // no global token to configure. CONTENTCLAUDE_API_TOKEN can be unset.
   if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
     warnings.push("SENTRY_DSN not set — runtime errors will not be captured by Sentry");
   }

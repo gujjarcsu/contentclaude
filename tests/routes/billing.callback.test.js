@@ -35,9 +35,20 @@ vi.mock("../../app/utils/logger.server", () => ({
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+process.env.SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || "shpss_test_secret";
+const { signShopCallback } = await import("../../app/utils/signedUrl.server.js");
 const { loader } = await import("../../app/routes/billing.callback.jsx");
 
-const run = (qs) => loader({ request: new Request(`https://app.navaal.ai/billing/callback?${qs}`) });
+// Phase 0 item 20 — the callback is public, so the link we issue is signed
+// for one shop with an expiry. The tests sign the same way the Plans page
+// does; an unsigned link is covered by its own case below.
+const signed = (qs) => {
+  const shop = new URLSearchParams(qs).get("shop") || "";
+  const { sig, exp } = signShopCallback(shop);
+  return `${qs}&sig=${encodeURIComponent(sig)}&exp=${encodeURIComponent(exp)}`;
+};
+const run = (qs) => loader({ request: new Request(`https://app.navaal.ai/billing/callback?${signed(qs)}`) });
+const runRaw = (qs) => loader({ request: new Request(`https://app.navaal.ai/billing/callback?${qs}`) });
 const gqlResponse = (subs) => ({
   json: async () => ({ data: { currentAppInstallation: { activeSubscriptions: subs } } }),
 });

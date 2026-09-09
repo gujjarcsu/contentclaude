@@ -14,14 +14,21 @@
   Add block > "FAQ (Navaal)". Placed manually (not an app embed) since app
   embeds can't be positioned within the page flow.
 {%- endcomment -%}
+{%- comment -%}
+  Phase 0 item 18: every interpolation here is | escape'd. Liquid does NOT
+  auto-escape, and this content is AI-generated, so an unescaped {{ }} here is
+  stored XSS on the MERCHANT's storefront against THEIR customers. The app also
+  strips markup from FAQ text before storing it (app/utils/text.js toPlainText);
+  this is the second lock, on the side the merchant actually ships.
+{%- endcomment -%}
 {%- assign faq = product.metafields.contentclaude.faq_schema.value -%}
 {%- if faq.mainEntity and faq.mainEntity.size > 0 -%}
   <div class="navaal-faq" {{ block.shopify_attributes }}>
-    <h2 class="navaal-faq__title">{{ block.settings.heading | default: "Frequently asked questions" }}</h2>
+    <h2 class="navaal-faq__title">{{ block.settings.heading | default: "Frequently asked questions" | escape }}</h2>
     {%- for qa in faq.mainEntity -%}
       <details class="navaal-faq__item"{% if forloop.first %} open{% endif %}>
-        <summary class="navaal-faq__question">{{ qa.name }}</summary>
-        <div class="navaal-faq__answer">{{ qa.acceptedAnswer.text }}</div>
+        <summary class="navaal-faq__question">{{ qa.name | escape }}</summary>
+        <div class="navaal-faq__answer">{{ qa.acceptedAnswer.text | escape }}</div>
       </details>
     {%- endfor -%}
   </div>

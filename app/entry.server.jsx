@@ -31,7 +31,7 @@ export default async function handleRequest(
     if (shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {
       responseHeaders.append(
         "Set-Cookie",
-        `navaal_shop=${shop.toLowerCase()}; Path=/; Max-Age=2592000; Secure; SameSite=None; Partitioned`
+        `navaal_shop=${shop.toLowerCase()}; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=None; Partitioned`
       );
     }
   } catch {

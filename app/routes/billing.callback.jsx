@@ -3,6 +3,7 @@ import { apiVersion } from "../shopify.server";
 import { getFreshOfflineSession } from "../utils/offlineToken.server.js";
 import { syncBillingToPlan } from "../utils/plans.server";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
+import { verifyShopCallback } from "../utils/signedUrl.server.js";
 import { invalidateCache } from "../utils/cache.server.js";
 import logger from "../utils/logger.server";
 
@@ -40,6 +41,26 @@ export const loader = async ({ request }) => {
   if (!SHOP_RE.test(shop)) {
     logger.warn({ shop, chargeId }, "Billing callback without a valid shop param");
     return redirect(`https://admin.shopify.com/apps/${APP_HANDLE}`);
+  }
+
+  // Phase 0 item 20 — this route is PUBLIC and, given only ?shop=, it used the
+  // shop's offline token to read that shop's subscription state and write the
+  // result: an unauthenticated oracle for any installed merchant's plan, a way
+  // to burn their Admin API budget, and a cache-busting lever. The link we issue
+  // is now signed for one shop with an expiry.
+  //
+  // An unsigned or stale link is NOT a dead end: the merchant may have started
+  // an upgrade before this shipped, or simply taken too long on Shopify's
+  // approval screen. We refuse to do the lookup — which is the part that was
+  // abusable — and send them into the app instead. The subscriptions webhook and
+  // the Plans reconcile both correct the plan within seconds either way.
+  const signature = verifyShopCallback(shop, {
+    sig: url.searchParams.get("sig"),
+    exp: url.searchParams.get("exp"),
+  });
+  if (!signature.ok) {
+    logger.warn({ shop, chargeId, reason: signature.reason }, "Billing callback without a valid signature — no lookup performed");
+    return redirect(adminPlansUrl(shop, "billing_error=1"));
   }
 
   try {

@@ -34,6 +34,7 @@ import logger from "../utils/logger.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
+import { sanitizeHtml } from "../utils/ai.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
 import { normalizeAltTextResults } from "../utils/altText.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -121,7 +122,11 @@ export async function loader({ request, params }) {
       productType: product.productType,
       vendor: product.vendor,
       description: product.description || "",
-      descriptionHtml: product.descriptionHtml || "",
+      // Phase 0 item 22 — this string is rendered with dangerouslySetInnerHTML
+      // in the "current content" preview. It comes from Shopify, so it is
+      // whatever anyone with staff access (or a previously injected generation)
+      // put on the product. Same allowlist as generated content.
+      descriptionHtml: sanitizeHtml(product.descriptionHtml || ""),
       seoTitle: product.seo?.title || "",
       seoDescription: product.seo?.description || "",
       imageUrl: product.featuredImage?.url || "",

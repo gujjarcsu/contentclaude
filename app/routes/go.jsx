@@ -27,7 +27,7 @@ export const loader = async ({ request }) => {
     dest.searchParams.set("ref", ref);
     headers.append(
       "Set-Cookie",
-      `${REF_COOKIE}=${encodeURIComponent(ref)}; Path=/; Max-Age=${REF_COOKIE_MAX_AGE}; Secure; SameSite=None`
+      `${REF_COOKIE}=${encodeURIComponent(ref)}; Path=/; Max-Age=${REF_COOKIE_MAX_AGE}; Secure; HttpOnly; SameSite=None`
     );
   }
   logger.info({ event: "install_link_click", ref: ref || null, ok: !!ref }, "install link click");

@@ -36,7 +36,7 @@ export async function renderLlmsTxt(shop, { full = false } = {}) {
       const resp = await admin.graphql(
         `query llmsCatalog {
           shop { name primaryDomain { url } }
-          products(first: 100, query: "status:active", sortKey: TITLE) {
+          products(first: 100, query: "status:active AND published_status:published", sortKey: TITLE) {
             edges { node { title handle onlineStoreUrl description productType vendor } }
           }
           collections(first: 25, sortKey: TITLE) {

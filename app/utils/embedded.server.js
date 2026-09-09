@@ -93,6 +93,38 @@ function cookieValue(request, name) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/**
+ * Phase 0 item 17 — `?target=` is attacker-controlled and lands in THREE places
+ * on this page: a fully-qualified admin URL, an absolute app URL, and a JS
+ * string literal inside an inline <script>. Only in-app paths are ever
+ * legitimate, so anything else falls back to /app. Pure.
+ */
+const SAFE_TARGET_RE = /^\/app(?:\/[A-Za-z0-9._-]+)*\/?$/;
+export function safeTarget(raw, fallback = "/app") {
+  if (typeof raw !== "string" || raw === "") return fallback;
+  // Reject anything that could leave the path or break out of a literal:
+  // a scheme, a protocol-relative "//host", a backslash, quotes, angle
+  // brackets, whitespace, or a traversal.
+  if (/[\\<>"'`\s]/.test(raw) || raw.startsWith("//") || raw.includes("..")) return fallback;
+  return SAFE_TARGET_RE.test(raw) ? raw : fallback;
+}
+
+/**
+ * Serialise a value for embedding inside an inline <script>.
+ *
+ * JSON.stringify alone is NOT safe here: it does not escape `</script>`, so a
+ * string containing that sequence closes the block and everything after it is
+ * parsed as HTML. Escaping the angle brackets — plus the two line separators
+ * JSON leaves raw, which are newlines to a JS parser — closes that hole.
+ */
+export function jsonForScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 export function renderReembedPage(request, targetPath = "/app") {
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const url = new URL(request.url);
@@ -101,7 +133,8 @@ export function renderReembedPage(request, targetPath = "/app") {
     const v = url.searchParams.get(k);
     if (v) params.set(k, v);
   }
-  const target = url.searchParams.get("target") || targetPath;
+  // Whitelisted: an in-app path or nothing (item 17).
+  const target = safeTarget(url.searchParams.get("target"), safeTarget(targetPath));
 
   // Resolve the shop from the strongest signal available:
   //   host param  →  shop param  →  the persisted partitioned cookie.
@@ -128,10 +161,20 @@ export function renderReembedPage(request, targetPath = "/app") {
   const ancestors = validShop
     ? `https://${validShop} https://admin.shopify.com`
     : "https://admin.shopify.com https://*.myshopify.com";
+  // This page carries an inline <script>, so it needs a script-src of its own —
+  // the global entry.server header only applies to rendered document responses,
+  // and frame-ancestors alone does nothing to stop injected script (item 17).
+  // 'unsafe-inline' is required for the bootstrap block below; the whitelisted
+  // target plus jsonForScript are what keep attacker input out of it.
   const headers = new Headers({
     "content-type": "text/html;charset=utf-8",
     "cache-control": "no-store",
-    "content-security-policy": `frame-ancestors ${ancestors};`,
+    "content-security-policy":
+      `frame-ancestors ${ancestors}; ` +
+      "script-src 'self' 'unsafe-inline' https://cdn.shopify.com; " +
+      "object-src 'none'; base-uri 'none';",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
   });
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -139,10 +182,10 @@ export function renderReembedPage(request, targetPath = "/app") {
 </head><body>
 <script>
 (function(){
-  var adminDest = ${JSON.stringify(adminDest)};
-  var handle = ${JSON.stringify(APP_HANDLE)};
-  var target = ${JSON.stringify(target)};
-  var appFallback = ${JSON.stringify(appFallback)};
+  var adminDest = ${jsonForScript(adminDest)};
+  var handle = ${jsonForScript(APP_HANDLE)};
+  var target = ${jsonForScript(target)};
+  var appFallback = ${jsonForScript(appFallback)};
   function fromShop(shop){ return shop ? "https://admin.shopify.com/store/" + String(shop).replace(".myshopify.com","") + "/apps/" + handle + target : null; }
   function go(dest){ if(dest){ try { window.open(dest, "_top"); } catch(e){} } }
   // Known server-side → go immediately to the fully-qualified admin url.

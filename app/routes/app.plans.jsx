@@ -11,6 +11,7 @@ import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
 import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan, hasUsedTrial } from "../utils/plans.server";
+import { signShopCallback } from "../utils/signedUrl.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
@@ -76,6 +77,7 @@ export const action = async ({ request }) => {
     // row (Plan is deleted on uninstall); passing 0 overrides the config for
     // this request only.
     const trialSpent = await hasUsedTrial(session.shop);
+    const callbackSig = signShopCallback(session.shop);
     // billing.request() internally throws a redirect Response to Shopify's
     // approval screen. Any non-redirect throw (Shopify userErrors, network
     // failures, bad returnUrl) must be caught and returned as a user-facing
@@ -91,7 +93,11 @@ export const action = async ({ request }) => {
         // and dump the merchant on /auth/login (App Store 1.2.2 rejection).
         // The callback records the plan via the shop's offline token, then
         // 302s back INTO the embedded admin. Shopify appends &charge_id=…
-        returnUrl: `${process.env.SHOPIFY_APP_URL}/billing/callback?shop=${encodeURIComponent(session.shop)}`,
+        // Signed (Phase 0 item 20): /billing/callback is public and reads the
+        // shop's subscription state, so the link must prove WE issued it for
+        // THIS shop, and must stop working after a few hours.
+        returnUrl: `${process.env.SHOPIFY_APP_URL}/billing/callback?shop=${encodeURIComponent(session.shop)}` +
+          `&sig=${encodeURIComponent(callbackSig.sig)}&exp=${encodeURIComponent(callbackSig.exp)}`,
       });
     } catch (err) {
       // On success, billing.request THROWS a 401 Response whose

@@ -497,23 +497,6 @@ export default function SettingsPage() {
                   </BlockStack>
                 </Card>
 
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Flow Integration</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Trigger content generation from Shopify Flow:
-                    </Text>
-                    <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                      <Text as="p" variant="bodySm">POST /api/generate</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Headers: X-Shop-Domain · X-ContentClaude-Timestamp · X-ContentClaude-Signature (per-shop HMAC)
-                      </Text>
-                    </Box>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Contact hello@navaal.ai for the signing guide.
-                    </Text>
-                  </BlockStack>
-                </Card>
               </BlockStack>
             </Layout.Section>
           </Layout>

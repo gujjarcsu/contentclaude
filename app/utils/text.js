@@ -38,3 +38,41 @@ export function decodeHtmlEntities(input) {
   }
   return out;
 }
+
+/** Shopify's own limits, and what the prompts already ask the model for. */
+export const META_TITLE_MAX = 60;
+export const META_DESCRIPTION_MAX = 155;
+
+/**
+ * Phase 0 item 18 — the plain-text fields are PLAIN TEXT. Make them so.
+ *
+ * The pipeline was extractTag -> sanitizeHtml -> decodeHtmlEntities. The
+ * sanitiser leaves "&lt;script&gt;" alone, correctly, because it is text and
+ * not a tag — and then the decode turns it back into "<script>". That string is
+ * stored, written to Shopify, and rendered on the merchant's storefront by the
+ * FAQ theme block: stored XSS on THEIR domain, against THEIR customers.
+ *
+ * So: decode first (a meta title should read "Kids & Teens", not
+ * "Kids &amp; Teens"), then strip anything that looks like markup, then collapse
+ * the whitespace that leaves behind. The order matters — stripping before
+ * decoding would let exactly one round of escaping survive.
+ *
+ * @param {string} input
+ * @param {number} [maxLength] hard cap applied last. Shopify truncates anyway;
+ *   doing it here means the merchant reviews what will actually be published.
+ */
+export function toPlainText(input, maxLength = 0) {
+  if (typeof input !== "string") return "";
+  let out = decodeHtmlEntities(input);
+  // Repeat until stable: "<<b>script>" leaves "<script>" after a single pass.
+  for (let pass = 0; pass < 3; pass++) {
+    const before = out;
+    out = out.replace(/<[^>]*>/g, "");
+    if (out === before) break;
+  }
+  // A surviving angle bracket cannot be markup by now, but it can still confuse
+  // a consumer that concatenates into HTML — leave nothing to interpret.
+  out = out.replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
+  if (maxLength > 0 && out.length > maxLength) out = out.slice(0, maxLength).trimEnd();
+  return out;
+}

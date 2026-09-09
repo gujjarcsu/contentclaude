@@ -1,4 +1,5 @@
 // SEO utility functions — server-only
+import { toPlainText } from "./text.js";
 
 /**
  * Parse FAQ text (Q: / A: format) into an array of question/answer pairs.
@@ -30,10 +31,17 @@ export function faqToJsonLd(faqText) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    // Phase 0 item 18 — this object is JSON.stringify'd into a product
+    // metafield and printed by the theme into a
+    // <script type="application/ld+json"> block on the merchant's storefront.
+    // Liquid's `json` filter escapes for JSON, not for HTML, so a `</script>`
+    // inside a string would close that block early and everything after it
+    // would be parsed as markup. Plain-text normalisation removes the angle
+    // brackets outright, so there is nothing left to close it with.
     mainEntity: pairs.map(({ question, answer }) => ({
       "@type": "Question",
-      name: question,
-      acceptedAnswer: { "@type": "Answer", text: answer },
+      name: toPlainText(question),
+      acceptedAnswer: { "@type": "Answer", text: toPlainText(answer) },
     })),
   };
 }

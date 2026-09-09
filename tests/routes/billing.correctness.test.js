@@ -204,9 +204,17 @@ describe("item 8c — the billing callback never writes Free on an unreadable an
   vi.mock("../../app/shopify.server", () => ({ apiVersion: "2026-04" }));
 
   const run = async () => {
-    const { loader } = await import("../../app/routes/billing.callback.jsx");
+    const [{ loader }, { signShopCallback }] = await Promise.all([
+      import("../../app/routes/billing.callback.jsx"),
+      import("../../app/utils/signedUrl.server.js"),
+    ]);
+    // Phase 0 item 20 — the callback only acts on a link it issued itself.
+    const { sig, exp } = signShopCallback(SHOP);
     return loader({
-      request: new Request(`https://app.navaal.ai/billing/callback?shop=${SHOP}&charge_id=999`),
+      request: new Request(
+        `https://app.navaal.ai/billing/callback?shop=${SHOP}&charge_id=999` +
+          `&sig=${encodeURIComponent(sig)}&exp=${encodeURIComponent(exp)}`,
+      ),
     });
   };
 

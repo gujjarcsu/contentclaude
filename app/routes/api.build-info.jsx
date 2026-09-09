@@ -17,7 +17,6 @@ export const loader = () => {
       sha: process.env.GIT_SHA || "unknown",
       shortSha: (process.env.GIT_SHA || "unknown").slice(0, 7),
       startedAt,
-      node: process.version,
       env: process.env.NODE_ENV || "unknown",
     },
     { headers: { "Cache-Control": "no-store" } }

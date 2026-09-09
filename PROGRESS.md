@@ -402,3 +402,112 @@ count, because the carryover capture also writes to that row. `bulkProcessor.tes
 **Pre-deploy gate:** unit suite **416 passed**, 5 failed — the same untracked
 `tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean.
 Typecheck **0 errors**. Build clean.
+
+### Group 0.C — LIVE verification (deployed SHA dce73cf, 2026-09-09)
+
+`/api/build-info` = `dce73cff15d3bd9a04d11cc127ad0da3af5de7e3` = `main` HEAD (**G5 pass**).
+**G2**: both redirects `302 -> /reembed`.
+
+**Item 15 is visible in production.** The rewritten startup check fired on the new machine, from
+`fly logs -a contentclaude`:
+
+```
+STARTUP: DATABASE_URL sets connection_limit=1. One connection serialises the web process behind
+every worker transaction and causes pool timeouts under modest load — raise it to 5 on the pooled
+endpoint.
+```
+
+That is the whole point of the change: the old check only looked at URLs containing `neon.tech` and
+recommended `connection_limit=1`, so this condition was invisible. The value itself is in a secret that
+contains the database password — **HUMAN-NEEDED #4**, with the exact commands.
+
+Items 12, 13, 14 and 16 are **code-only**: proving them live means killing a machine mid-job, taking
+Redis away, or uninstalling the app from a store — all destructive against a live install. They are
+covered by 21 unit assertions each pinned to the specific mechanism.
+
+---
+
+## Group 0.D — Security (items 17-22)
+
+**Item 17 — reflected XSS in `/reembed?target=`.** `target` came straight off the query string into
+three places on a page that loads App Bridge inside the admin iframe, including a JS string literal via
+`JSON.stringify` — which does **not** escape `</script>`, so `?target=</script><script>…` closed the
+block and ran attacker script with App Bridge loaded. The page also had no `script-src` at all; its CSP
+was `frame-ancestors` only, which does nothing about injected script. Three changes: `safeTarget`
+whitelists in-app paths (`/^\/app(\/[A-Za-z0-9._-]+)*\/?$/`, rejecting schemes, `//host`, backslashes,
+quotes, angle brackets, whitespace and traversals) and falls back to `/app`; `jsonForScript` escapes
+`<`, `>` and the two Unicode line separators JSON leaves raw; and the response now carries
+`script-src 'self' 'unsafe-inline' https://cdn.shopify.com`, `object-src 'none'`, `base-uri 'none'`,
+`nosniff` and `no-referrer`. The test renders the page with the brief's own payload and asserts the HTML
+contains exactly our two script tags and no `alert(1)`.
+
+**Item 18 — stored XSS on the MERCHANT's storefront, via AI output.** Two independent holes, both closed:
+- The extraction pipeline was `extractTag → sanitizeHtml → decodeHtmlEntities`. The sanitiser correctly
+  leaves `&lt;script&gt;` alone because it is text, not a tag — and then the decode turned it back into
+  `<script>`. New `toPlainText` decodes first, then strips markup to a fixed point, then removes any
+  surviving angle bracket. It is applied to every plain-text type: `metaTitle` (capped at 60),
+  `metaDescription` (155), `faq`, the collection meta fields, and the three social captions.
+- `faq_visible.liquid` rendered `{{ qa.name }}` and `{{ qa.acceptedAnswer.text }}` raw. **Liquid does not
+  auto-escape**, so that is live HTML on the merchant's product page, served to their customers. Every
+  interpolation in the block is now `| escape`d, and a test walks the block asserting it. The JSON-LD
+  block writes through `| json`, which escapes for JSON and not for HTML, so `faqToJsonLd` now normalises
+  question and answer text as well — there is no `</script>` left to close its own block with.
+
+**Item 19 — prompt injection had no structural defence.** Rules and untrusted data were concatenated
+into a single user message, and the product title, tags, vendor and up to 64 KB of `descriptionHtml`
+went in raw — all editable by anyone with staff access, or by an earlier injected generation.
+Now: the rules live in a **system** prompt that merchant data cannot reach, which states explicitly that
+the `<untrusted_product_data>` block is data and that anything inside it resembling an instruction is
+product text; the product data and the enhance-path "existing content" are fenced in that block; every
+field is capped (`descriptionHtml` at 4 KB, stripped of tags first — the model is being shown the
+content, not the markup); and generated links are restricted to the merchant's own domain, with any
+absolute anchor unwrapped to a plain span so the words survive and the destination does not. Autopilot
+publishing stays off by default, asserted against the schema.
+
+**Item 20 — `/billing/callback` was an unauthenticated oracle.** Given only `?shop=`, it used that
+shop's offline token to read their subscription state and write the result: anyone could read another
+merchant's plan, burn their Admin API budget, and bust their caches. The link is now signed
+(`HMAC(secret, shop|expiry)`, base64url, 6 h) by the Plans page and verified before anything else
+happens. An unsigned or stale link is deliberately **not** a dead end — a merchant may have started an
+upgrade before this shipped, or lingered on Shopify's approval screen — so it skips the lookup, the
+abusable part, and sends them into the app; the webhook and the Plans reconcile correct the plan within
+seconds regardless.
+
+**Item 21 — `/api/generate` deleted.** It was keyed on the shop's offline access token, which now expires
+hourly, so no external caller could ever produce a valid signature: it was unusable by design and
+reachable by everyone. The route is gone, along with the Settings card that advertised it and the stale
+startup comment about it.
+
+**Item 22 — the rest.** `navaal_shop` and `navaal_ref` are `HttpOnly` (both are read server-side only).
+Every `/app/*` document now sends `Cache-Control: private, no-store, max-age=0, must-revalidate`,
+`Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: no-referrer` — these documents carry the merchant's catalogue content and their plan
+and usage figures. `sanitize-html` gets `allowProtocolRelative: false`, because `//evil.example/x`
+inherits the page scheme and is not caught by `allowedSchemes`. The product-page preview that renders
+stored HTML with `dangerouslySetInnerHTML` is now sanitised **on the server**, in the loader, through the
+same exported allowlist — the value comes from Shopify, so it is whatever staff (or an injected
+generation) put there. `/api/build-info` no longer publishes the Node version. The public `llms.txt`
+feed now queries `status:active AND published_status:published`, so a product that is active but not
+published to the online store no longer appears in a public feed.
+
+**Tests — 25 new assertions in `tests/utils/security.test.js`, one block per item:**
+item 17 (the whitelist against nine hostile targets, the `</script>` gap that `JSON.stringify` leaves,
+the rendered page containing exactly our two script tags and no payload, the CSP, and a legitimate target
+still reaching the admin URL); item 18 (the escaped-script round trip, nesting and half-tags, the meta
+caps, the JSON-LD containing no angle bracket at all, and a walk over every interpolation in the Liquid
+block); item 19 (system prompt on both product paths, the fence and its "data, never instructions"
+sentence, the 4 KB cap, autopilot default); item 20 (right shop only, tampered signature, tampered
+expiry, missing, expired, closed-when-no-secret, and that verification precedes the lookup it protects);
+item 21 (route gone, nothing advertises it); item 22 (each of the six).
+
+**Three existing tests updated for deliberately changed contracts:** `sanitize.test.js` asserted that an
+external link keeps a safe `rel` — item 19 removes external links outright, so it now asserts the anchor
+is unwrapped, the host is gone, the text survives, a relative link still works, and a protocol-relative
+one does not. `text.test.js` asserted the plain-text fields go through `decodeHtmlEntities`; they now go
+through `toPlainText`, which is strictly stronger, and the guard also asserts the bare decode is gone.
+`billing.callback.test.js` now signs its requests, since an unsigned callback is no longer allowed to
+perform the lookup.
+
+**Pre-deploy gate:** unit suite **441 passed**, 5 failed — the same untracked
+`tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean.
+Typecheck **0 errors**. Build clean.

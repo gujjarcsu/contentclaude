@@ -239,5 +239,14 @@ export function ErrorBoundary() {
 }
 
 export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
+  // Phase 0 item 22 — every /app/* document carries the merchant's own catalogue
+  // content plus their plan and usage figures. No shared cache (and no
+  // back/forward restore on a shared machine) should keep any of it, and the
+  // connection must never be downgraded to http.
+  const h = new Headers(boundary.headers(headersArgs));
+  h.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
+  h.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("Referrer-Policy", "no-referrer");
+  return h;
 };

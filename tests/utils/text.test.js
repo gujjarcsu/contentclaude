@@ -32,8 +32,13 @@ describe("P1-10: decodeHtmlEntities", () => {
 
   it("is applied to AI-parsed plain-text fields at the source (source guard)", () => {
     const aiSrc = readFileSync(join(repoRoot, "app/utils/ai.server.js"), "utf8");
-    expect(aiSrc).toMatch(/metaTitle:\s*decodeHtmlEntities\(/);
-    expect(aiSrc).toMatch(/metaDescription:\s*decodeHtmlEntities\(/);
+    // Phase 0 item 18 replaced the bare decode with toPlainText: decoding alone
+    // turned "&lt;script&gt;" back into live markup, which is then published to
+    // the merchant storefront by the FAQ theme block.
+    expect(aiSrc).toMatch(/metaTitle:\s*toPlainText\(/);
+    expect(aiSrc).toMatch(/metaDescription:\s*toPlainText\(/);
+    expect(aiSrc).toMatch(/faq:\s*toPlainText\(/);
+    expect(aiSrc).not.toMatch(/metaTitle:\s*decodeHtmlEntities\(/);
   });
 });
 

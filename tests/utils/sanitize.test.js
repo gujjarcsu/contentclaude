@@ -28,11 +28,26 @@ describe("sanitizeHtml — allowlist (svg/math/handler bypass)", () => {
     expect(out).toContain("text");
   });
 
-  it("drops javascript: hrefs and forces safe rel on links", () => {
+  it("drops javascript: hrefs, and (Phase 0 item 19) removes links to other hosts entirely", () => {
     const out = extractTag(wrap('<a href="javascript:alert(1)">x</a>'), "DESCRIPTION");
     expect(out).not.toMatch(/javascript:/i);
-    const safe = extractTag(wrap('<a href="https://example.com">x</a>'), "DESCRIPTION");
-    expect(safe).toMatch(/rel="noopener noreferrer nofollow"/);
+
+    // An external link is the highest-value thing an injected instruction can
+    // plant on a merchant storefront, so the anchor is unwrapped: the words
+    // survive, the destination does not.
+    const external = extractTag(wrap('<a href="https://evil.example/x">click</a>'), "DESCRIPTION");
+    expect(external).not.toMatch(/<a/);
+    expect(external).not.toMatch(/evil\.example/);
+    expect(external).toContain("click");
+
+    // A relative link stays on the merchant's own storefront, so it survives.
+    const internal = extractTag(wrap('<a href="/products/other">see also</a>'), "DESCRIPTION");
+    expect(internal).toMatch(/href="\/products\/other"/);
+    expect(internal).toMatch(/rel="noopener noreferrer nofollow"/);
+
+    // Protocol-relative borrows the page scheme and must not survive either.
+    const protoRel = extractTag(wrap('<a href="//evil.example/x">y</a>'), "DESCRIPTION");
+    expect(protoRel).not.toMatch(/evil\.example/);
   });
 
   it("removes <script> and <iframe>", () => {
