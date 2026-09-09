@@ -291,3 +291,114 @@ auto-publish path, and under fake timers that connection never settles.
 **Pre-deploy gate:** unit suite **393 passed**, 5 failed — the 5 are the untracked
 `tests/routes/no-dark-patterns.test.js` (Phase 3 work, fails against `main` by design, not committed, not
 seen by CI). Lint clean. Typecheck **0 errors**. Build clean.
+
+### Group 0.B — LIVE verification (deployed SHA 500543c, 2026-09-09)
+
+`/api/build-info` = `500543c8ba1db6be6bb755bd0a7ba085d8524d31` = `main` HEAD (**G5 pass**).
+**G2**: `curl -sI https://app.navaal.ai/` and `curl -sI -H "Referer: https://admin.shopify.com/"
+https://app.navaal.ai/auth/login` both `302 -> /reembed`.
+
+The release `prisma db push` applied the item 10 columns. Read back from the production database:
+
+```
+Shop columns added by Phase 0 item 10:
+  trialUsedAt     timestamp without time zone
+  usageCarryover  integer  default 0
+  usageMonth      text
+ALL THREE PRESENT
+GenerationJob.quotaSkipped present: true
+Shop rows: 3, of which have used a trial: 0
+```
+
+So item 10 storage is **LIVE-verified**; the trial and carryover LOGIC is code-only until a real
+subscribe or uninstall exercises it (both need a merchant action, not a request I can safely make against
+a live store). Items 4-9 are **code-only** — every one of them needs a real generation, a real bulk run,
+or a real Shopify charge to observe end to end, and firing those against production would spend the
+owner's Anthropic budget and write to a live catalogue. Item 11 is LIVE-verified (secret names read from
+Fly). **G1**: `node scripts/gauntlet-211.mjs` ran to completion this time — **30/30 steps passed,
+FINAL_RESULT=PASS**, recording under `gauntlet-211/` (video plus a screenshot per step, URL bar visible).
+
+---
+
+## Group 0.C — Jobs that never finish (items 12-16)
+
+**Item 12 — a deploy or crash mid-job stranded it forever.** Five separate things had to be true for a
+job to recover, and none of them were:
+- `fly.toml` had no `kill_timeout`, so Fly used its 5-second default while the shutdown path drains
+  BullMQ for up to 30 seconds. **Every deploy SIGKILLed any running job mid-product.** Now `60s`.
+- `bulkProcessor` returned unless `status === "queued"`, so BullMQ's stall retry found a row already
+  marked `processing` and did nothing. A retry (`attemptsMade > 0`) may now pick up a `processing` row,
+  and it skips whatever the killed attempt already wrote — so no product is generated, or charged, twice.
+  The original `startedAt` is preserved on a resume because it is the boundary for that comparison.
+- `lockDuration` was 30 minutes, so BullMQ waited half an hour before even considering the job stalled.
+  Now 5 minutes; the processor already heartbeats the lock after every product, so a long healthy run is
+  never cut short by the shorter value.
+- the worker's `failed` event only logged. It now writes `status: "failed"` on the row once BullMQ has
+  genuinely exhausted its attempts, so the job stops occupying the shop's in-flight slot.
+- `recoverStuckJobs` ran only at boot and keyed on `startedAt`, which cannot tell a healthy 40-minute run
+  from a dead one. It now runs every 5 minutes, keys on `updatedAt` (the processor writes progress after
+  every product, so silence is the honest signal), re-checks the condition in the write so a job that woke
+  up is never killed underneath a live worker, and tells the merchant that resuming will not re-charge.
+
+**Item 13 — a Redis outage hung "Start job".** ioredis defaults to an offline queue plus unlimited
+retries, so `queue.add` did not fail when Redis was unreachable — it buffered and waited until the edge
+proxy returned 502, and the inline fallback below it (the entire point of the surrounding try/catch) was
+never reached. The enqueue connection now sets `enableOfflineQueue: false` and `maxRetriesPerRequest: 1`,
+and the enqueue itself is bounded by a 5-second race, so the merchant gets the fallback or a clear error
+instead of a spinner. The WORKER keeps the offline queue deliberately: it is a long-lived consumer that
+should ride out a blip rather than die, and nothing is waiting on it.
+
+**Item 14 — uninstalling during a bulk job.** Two halves. The uninstall handler now marks the shop's
+queued and processing jobs failed before deleting the data, so the worker sees it on its next
+per-product status check and stops. And in the processor, a 401 whose token refresh FAILS is treated as
+"the app is gone": it aborts the whole run instead of spending four immediate 401 refresh attempts on
+every remaining product in the catalogue.
+
+**Item 15 — `connection_limit=1`.** Measured on the production machine: the URL is already the pooled
+Neon endpoint (`-pooler`, `pgbouncer=true`) but carries `connection_limit=1`, so
+`tryConsumeGeneration` holds a SERIALIZABLE transaction while three worker slots and every web request
+queue behind the same single connection — which is where "Timed out fetching a new connection from the
+pool" comes from. The startup check no longer gates on the hostname containing `neon.tech` (a pooler
+hostname or any other provider skipped it entirely), and now warns whenever `connection_limit` is below
+2 or the endpoint does not look pooled. **The value itself is inside a secret containing the database
+password, so changing it is HUMAN-NEEDED #4** — reading it back out to build a `fly secrets set` command
+would put a live credential into the shell history and this transcript. Code-only by necessity, with the
+exact steps written down.
+
+**Item 16 — first-load race and double-run suppliers.** `getOrCreatePlan` did findUnique-then-create,
+which on a fresh install races itself: the dashboard loader, the jobs-status poll and the billing
+reconcile all fire within milliseconds, all miss, and two of them get P2002 — so the merchant's very
+first page load is a 500. It is now a single `upsert`. Separately, `getCache` wrapped BOTH the Redis
+calls AND the supplier in one try, so if the supplier threw, or Redis died on the `setex` after the
+supplier had already run, the catch fell through to the in-process path and ran the supplier a SECOND
+time — a duplicate write for a supplier with side effects (creating a Plan row, creating a metafield
+definition), double cost for an expensive one. Only the Redis calls are guarded now, and the two supplier
+call sites are mutually exclusive.
+
+**Tests — one per numbered item, 21 new assertions:**
+- `tests/utils/jobRecovery.test.js` (17) — item 12: recovery selects on `updatedAt` not `startedAt`, the
+  threshold is longer than the worst single product, the write re-checks the condition, the merchant is
+  told resuming will not re-charge, nothing is written when nothing is stuck, and the interval + `unref`
+  are present; the processor accepts a retry of a processing row; the worker writes `failed` only once
+  BullMQ has finished retrying; `lockDuration` is 5 minutes; `fly.toml` has `kill_timeout = "60s"`.
+  Item 13: offline queue disabled, retries capped, the enqueue race bounded and the inline fallback
+  reachable. Item 15: the `neon.tech` gate is gone and a pool of one is warned about rather than
+  recommended. Item 16: `getOrCreatePlan` is one upsert with no `create`, and `getCache` has exactly two
+  mutually exclusive supplier call sites.
+- `tests/utils/bulkProcessor.test.js` (+4) — item 12 behaviourally: a BullMQ retry resumes a `processing`
+  row, skips the product the killed attempt already wrote, and preserves the original `startedAt`; a
+  FIRST attempt still refuses a `processing` row; a normal queued job still stamps a fresh start time.
+  Item 14: an unrefreshable 401 ends the job after exactly ONE refresh attempt, generates nothing, and
+  writes a failure that names the uninstall.
+- `tests/routes/install-tracking.routes.test.js` (+2) — item 14: the uninstall cancels the shop's queued
+  and processing jobs; item 10: it captures the month's usage onto the surviving Shop row.
+
+**Three existing test files updated for the new shapes:** `plans.test.js` and `plans.cache.test.js` now
+mock `plan.upsert` instead of `plan.findUnique`/`create` (item 16 changed the call), and
+`install-tracking.routes.test.js` asserts on the call that stamps `uninstalledAt` rather than on a call
+count, because the carryover capture also writes to that row. `bulkProcessor.test.js` gained an
+`offlineToken.server` mock so a test can decide what happens when Shopify rejects the token.
+
+**Pre-deploy gate:** unit suite **416 passed**, 5 failed — the same untracked
+`tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean.
+Typecheck **0 errors**. Build clean.

@@ -72,19 +72,53 @@ export async function getRedis() {
 export async function getCache(key, supplier, ttlSeconds = 300) {
   const fullKey = CACHE_PREFIX + key;
 
+  // Phase 0 item 16 — a Redis failure and a SUPPLIER failure are different
+  // things, and this used to catch both in one try. If the supplier threw, or
+  // if Redis died on the setex AFTER the supplier had already run, the catch
+  // fell through to the in-process path and ran the supplier a SECOND time.
+  // For a supplier with side effects — creating a Plan row, creating a
+  // metafield definition — that is a duplicate write; for an expensive one it
+  // is double the cost; and a supplier that throws deterministically threw
+  // twice per request. Only the Redis calls are guarded here now.
+  let redis = null;
   try {
-    const redis = await getRedis();
-    if (redis) {
-      const cached = await redis.get(fullKey);
-      if (cached !== null) return JSON.parse(cached);
+    redis = await getRedis();
+  } catch (err) {
+    logger.warn({ key, err: err.message }, "Redis unavailable — using in-process cache");
+    redis = null;
+  }
+
+  if (redis) {
+    let cached = null;
+    let readFailed = false;
+    try {
+      cached = await redis.get(fullKey);
+    } catch (err) {
+      logger.warn({ key, err: err.message }, "Redis cache read failed — falling back to in-process cache");
+      readFailed = true;
+    }
+
+    if (!readFailed) {
+      if (cached !== null) {
+        try {
+          return JSON.parse(cached);
+        } catch {
+          // A corrupt entry is a miss, not a failed request.
+          logger.warn({ key }, "Discarding unparseable cache entry");
+        }
+      }
+      // The supplier runs OUTSIDE any catch that could route us to a second run.
       const value = await supplier();
       if (value !== null && value !== undefined) {
-        await redis.setex(fullKey, ttlSeconds, JSON.stringify(value));
+        try {
+          await redis.setex(fullKey, ttlSeconds, JSON.stringify(value));
+        } catch (err) {
+          // The value is good; only storing it failed.
+          logger.warn({ key, err: err.message }, "Redis cache write failed — value still returned");
+        }
       }
       return value;
     }
-  } catch (err) {
-    logger.warn({ key, err: err.message }, "Redis cache get failed — falling back");
   }
 
   // In-process fallback

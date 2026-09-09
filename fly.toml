@@ -13,6 +13,12 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
   # backup taken) and reverted in the same session.
   release_command = "npx prisma db push --skip-generate"
 
+# Phase 0 item 12 — Fly sends SIGTERM and then SIGKILLs after kill_timeout,
+# which defaults to 5 SECONDS. The graceful shutdown in startup.server.js drains
+# BullMQ for up to 30 s, so every deploy hard-killed any bulk job that happened
+# to be running, mid-product. 60 s covers that drain with room to spare.
+kill_timeout = "60s"
+
 [env]
   NODE_ENV = "production"
   LOG_LEVEL = "info"

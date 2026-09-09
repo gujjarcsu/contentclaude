@@ -20,12 +20,47 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
   let job = null;
   try {
     job = await prisma.generationJob.findUnique({ where: { id: jobId } });
-    if (!job || job.status !== "queued") return;
+    if (!job) return;
 
+    // ── Phase 0 item 12: a deploy or crash mid-job must not strand it ────────
+    // This used to `return` unless status === "queued", which made BullMQ's
+    // stall retry a no-op: the row was already "processing" from the killed
+    // attempt, so the retry did nothing and the job sat at "Processing…"
+    // forever — while still counting against the per-shop in-flight cap, so the
+    // merchant then got "You already have jobs running" and could not start a
+    // new one either. A RETRY (attemptsMade > 0) may now pick up a row that is
+    // already processing.
+    const isRetry = (bullJob?.attemptsMade ?? 0) > 0;
+    if (job.status !== "queued" && !(isRetry && job.status === "processing")) return;
+
+    const resuming = job.status === "processing";
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { status: "processing", startedAt: new Date() },
+      data: {
+        status: "processing",
+        // Keep the ORIGINAL start time on a resume: it is the boundary for
+        // "what has this run already written", used just below and by the
+        // merchant-facing resume on the Jobs page.
+        ...(resuming && job.startedAt ? {} : { startedAt: new Date() }),
+      },
     });
+
+    // On a resume, skip whatever the killed attempt already produced, so no
+    // product is generated (or charged) twice.
+    let alreadyDone = new Set();
+    if (resuming) {
+      const since = job.startedAt ?? job.createdAt;
+      const rows = await prisma.generatedContent.findMany({
+        where: { shop: job.shop, updatedAt: { gte: since } },
+        select: { productId: true },
+        distinct: ["productId"],
+      });
+      alreadyDone = new Set(rows.map((r) => r.productId));
+      jobLogger.warn(
+        { shop: job.shop, attempt: (bullJob?.attemptsMade ?? 0) + 1, alreadyDone: alreadyDone.size },
+        "Resuming an interrupted job — products already written will be skipped"
+      );
+    }
 
     const productIds = JSON.parse(job.productIds);
     const contentTypes = job.contentTypes.split(",").filter(Boolean);
@@ -120,6 +155,14 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     for (let i = 0; i < productIds.length; i++) {
       const productId = productIds[i];
+
+      // Written by the attempt this run is resuming — already paid for.
+      if (alreadyDone.has(productId)) {
+        completedCount++;
+        pendingCompleted++;
+        await flushCounters();
+        continue;
+      }
 
       // Honour cancellation: "Cancel job" flips the row out of "processing".
       // Without this re-check the loop kept generating (and consuming credits)
@@ -374,6 +417,21 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
         jobLogger.debug({ shop: job.shop, productId, productTitle: product.title }, "Product content generated");
       } catch (err) {
+        // Phase 0 item 14 — the app is gone; there is nothing left to do for
+        // any remaining product. Stop now instead of grinding through 401s.
+        if (err.isAuthGone) {
+          await flushCounters(true);
+          jobLogger.warn({ shop: job.shop, event: "bulk_auth_gone" }, "Access token is no longer valid — ending the job");
+          await prisma.generationJob.updateMany({
+            where: { id: jobId, status: "processing" },
+            data: {
+              status: "failed",
+              completedAt: new Date(),
+              errorLog: JSON.stringify([...errorLog, { productId: "N/A", error: err.message }].slice(-MAX_ERROR_LOG_ENTRIES)),
+            },
+          });
+          return;
+        }
         jobLogger.error({ shop: job.shop, productId, err }, "Failed to generate content for product");
         captureException(err, { jobId, shop: job.shop, productId });
         if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: err.message });
@@ -490,12 +548,25 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
     throw new Error(`Shopify rate limit exceeded fetching product ${productId} after ${MAX_SHOPIFY_RETRIES} retries`);
   }
 
-  if (res.status === 401 && attempt < MAX_SHOPIFY_RETRIES) {
+  if (res.status === 401) {
     // Offline token lapsed mid-run — refresh it and retry with the new token.
+    // Phase 0 item 14: if the refresh FAILS, the app has almost certainly been
+    // uninstalled. Retrying is then pointless and expensive — the old code spun
+    // through four immediate 401s for every remaining product in the job. One
+    // failed refresh aborts the whole run.
     const r = await refreshOfflineToken(session.shop);
-    if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
-    logger.warn({ productId, attempt }, "Shopify 401 on product fetch — refreshed token, retrying");
-    return fetchShopifyProduct(session, productId, attempt + 1);
+    if (!r) {
+      const err = new Error("Shopify rejected our access token and it could not be refreshed — the app may have been uninstalled.");
+      err.isAuthGone = true;
+      throw err;
+    }
+    session.accessToken = r.accessToken;
+    session.expires = r.expires;
+    if (attempt < MAX_SHOPIFY_RETRIES) {
+      logger.warn({ productId, attempt }, "Shopify 401 on product fetch — refreshed token, retrying");
+      return fetchShopifyProduct(session, productId, attempt + 1);
+    }
+    throw new Error(`Shopify kept rejecting the access token for product ${productId}`);
   }
 
   if (!res.ok) {

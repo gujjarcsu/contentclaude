@@ -75,8 +75,8 @@ describe("canGenerate", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns allowed:true when under limit", async () => {
-    // getOrCreatePlan now calls findUnique first; return existing plan so create is skipped
-    prisma.plan.findUnique.mockResolvedValue({
+    // getOrCreatePlan is a single upsert (Phase 0 item 16) — no findUnique-then-create race.
+    prisma.plan.upsert.mockResolvedValue({
       planName: "free",
       status: "active",
       monthlyLimit: 10,
@@ -91,7 +91,7 @@ describe("canGenerate", () => {
   });
 
   it("returns allowed:false when at limit", async () => {
-    prisma.plan.findUnique.mockResolvedValue({
+    prisma.plan.upsert.mockResolvedValue({
       planName: "free",
       status: "active",
       monthlyLimit: 10,
@@ -105,7 +105,7 @@ describe("canGenerate", () => {
   });
 
   it("returns allowed:false when plan is frozen", async () => {
-    prisma.plan.findUnique.mockResolvedValue({
+    prisma.plan.upsert.mockResolvedValue({
       planName: "starter",
       status: "frozen",
       monthlyLimit: 50,

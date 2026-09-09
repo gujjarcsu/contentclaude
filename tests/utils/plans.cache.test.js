@@ -24,7 +24,7 @@ vi.mock("../../app/utils/cache.server.js", () => ({
 vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: {
-      findUnique: vi.fn(async () => ({
+      upsert: vi.fn(async () => ({
         shop: "warm-cache.myshopify.com",
         planName: "growth",
         status: "active",
@@ -34,6 +34,7 @@ vi.mock("../../app/db.server.js", () => ({
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
         updatedAt: new Date("2026-08-12T05:00:00.000Z"),
       })),
+      findUnique: vi.fn(),
       create: vi.fn(),
     },
   },
@@ -57,7 +58,7 @@ describe("getOrCreatePlan date rehydration (Redis JSON round-trip)", () => {
 
   it("leaves a null currentPeriodEnd null (free plan)", async () => {
     const db = (await import("../../app/db.server.js")).default;
-    db.plan.findUnique.mockResolvedValueOnce({
+    db.plan.upsert.mockResolvedValueOnce({
       shop: "free.myshopify.com",
       planName: "free",
       status: "active",

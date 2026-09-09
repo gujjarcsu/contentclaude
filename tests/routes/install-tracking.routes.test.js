@@ -19,7 +19,7 @@ const { db, tx, webhook } = vi.hoisted(() => {
   });
   const tx = {};
   for (const m of ["generatedContent", "contentVersion", "contentTemplate", "collectionVoice", "brandVoice", "blogPost", "generationJob", "usageRecord", "plan", "growthState", "reviewRequestAttempt", "upgradePrompt", "session", "gDPRRequest", "shop"]) tx[m] = model();
-  const db = { $transaction: vi.fn(async (fn) => fn(tx)), shop: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(async () => null) } };
+  const db = { $transaction: vi.fn(async (fn) => fn(tx)), shop: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(async () => null) }, generationJob: { updateMany: vi.fn(async () => ({ count: 0 })) }, usageRecord: { count: vi.fn(async () => 0) } };
   const webhook = vi.fn();
   return { db, tx, webhook };
 });
@@ -96,8 +96,11 @@ describe("app/uninstalled", () => {
     expect(res.status).toBe(200);
     expect(db.$transaction).toHaveBeenCalled();
     expect(tx.shop.deleteMany).not.toHaveBeenCalled();
-    expect(db.shop.updateMany).toHaveBeenCalledTimes(1);
-    const { where, data } = db.shop.updateMany.mock.calls[0][0];
+    // captureUsageCarryover (Phase 0 item 10) also writes to the shop row, so
+    // find the call that actually stamps the uninstall.
+    const stamp = db.shop.updateMany.mock.calls.find(([a]) => a?.data?.uninstalledAt);
+    expect(stamp).toBeTruthy();
+    const { where, data } = stamp[0];
     expect(where).toMatchObject({ shop: SHOP, uninstalledAt: null });
     expect(where.OR[1].reinstalledAt.lt).toEqual(new Date(triggeredAt));
     expect(data.uninstalledAt).toEqual(new Date(triggeredAt));
@@ -123,7 +126,37 @@ describe("app/uninstalled — stale delivery guard", () => {
     const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
     await action({ request: new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" }) });
     expect(db.$transaction).toHaveBeenCalledTimes(1);
-    expect(db.shop.updateMany).toHaveBeenCalledTimes(1);
+    // The uninstall is stamped (alongside the usage-carryover write).
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(true);
+  });
+
+  // ── Phase 0 item 14 ──────────────────────────────────────────────────────
+  it("cancels the shop's in-flight jobs, so the worker stops instead of grinding through 401s", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: new Date().toISOString() });
+    db.shop.findUnique.mockResolvedValueOnce(null);
+    db.generationJob.updateMany.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    await action({ request: new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" }) });
+
+    const call = db.generationJob.updateMany.mock.calls.find(([a]) => a?.data?.status === "failed");
+    expect(call).toBeTruthy();
+    expect(call[0].where).toMatchObject({ shop: SHOP, status: { in: ["queued", "processing"] } });
+    expect(call[0].data.errorLog).toMatch(/uninstalled/i);
+  });
+
+  // ── Phase 0 item 10 ──────────────────────────────────────────────────────
+  it("captures this month's usage onto the surviving shop row before the deletion", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: new Date().toISOString() });
+    db.shop.findUnique.mockResolvedValueOnce(null);
+    db.usageRecord.count.mockResolvedValueOnce(9);
+    db.shop.updateMany.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    await action({ request: new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" }) });
+
+    const carry = db.shop.updateMany.mock.calls.find(([a]) => a?.data?.usageCarryover !== undefined);
+    expect(carry).toBeTruthy();
+    expect(carry[0].data.usageCarryover).toBe(9);
+    expect(carry[0].data.usageMonth).toBe(new Date().toISOString().slice(0, 7));
   });
 });
 

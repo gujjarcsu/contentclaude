@@ -33,10 +33,15 @@ export async function checkEntitlement(shop, feature) {
 
 export async function getOrCreatePlan(shop) {
   const plan = await getCache(`plan:${shop}`, async () => {
-    const existing = await prisma.plan.findUnique({ where: { shop } });
-    if (existing) return existing;
-    return prisma.plan.create({
-      data: {
+    // Phase 0 item 16 — findUnique-then-create is a read-modify-write race. On a
+    // fresh install the dashboard loader, the jobs-status poll and the billing
+    // reconcile all fire within milliseconds of each other, all miss, and all
+    // try to create the row: two of them get P2002 and the merchant's very
+    // first page load is a 500. upsert makes it one atomic statement.
+    return prisma.plan.upsert({
+      where: { shop },
+      update: {},
+      create: {
         shop,
         planName: FREE_PLAN.planName,
         status: "active",

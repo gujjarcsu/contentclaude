@@ -43,6 +43,25 @@ export const action = async ({ request }) => {
   // fresh 25 free generations on demand. A number only; nothing identifying.
   await captureUsageCarryover(shop);
 
+  // Phase 0 item 14 — stop any run that is still going. Without this the worker
+  // kept working through the catalogue for a store that no longer has the app,
+  // burning four immediate 401 refresh attempts on every remaining product.
+  // (The rows are deleted moments later; this is what the WORKER sees on its
+  // next per-product status check, which makes it abort straight away.)
+  try {
+    const { count } = await db.generationJob.updateMany({
+      where: { shop, status: { in: ["queued", "processing"] } },
+      data: {
+        status: "failed",
+        completedAt: new Date(),
+        errorLog: JSON.stringify([{ productId: "N/A", error: "The app was uninstalled while this job was running." }]),
+      },
+    });
+    if (count > 0) logger.info({ shop, count, event: "jobs_cancelled_on_uninstall" }, "Cancelled in-flight jobs on uninstall");
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "Could not cancel in-flight jobs on uninstall (non-fatal)");
+  }
+
   try {
     await db.$transaction(async (tx) => {
       // Batched deletion so large tenants stay within the transaction timeout.

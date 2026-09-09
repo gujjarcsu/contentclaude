@@ -19,33 +19,57 @@ if (!process.env.NODE_ENV) {
   throw new Error("FATAL: NODE_ENV is unset — refuse to boot");
 }
 
-const STALL_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+// Phase 0 item 12 — a job is "stuck" when nothing has TOUCHED it for this long.
+// The old rule used startedAt, so a healthy 40-minute run over a large catalogue
+// looked identical to a job whose worker had been killed 40 minutes earlier. The
+// processor writes progress after every product, so updatedAt is the honest
+// liveness signal, and 15 minutes of complete silence is well beyond the
+// worst case for a single product (a 65-second breaker pause plus retries).
+const STALL_THRESHOLD_MS = 15 * 60 * 1000;
+/** Re-check for stranded jobs this often, not only at boot. */
+const RECOVERY_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Phase 0 item 15 — connections per process against the POOLED endpoint.
+ * 5 for the web process; the worker wants 3 (BULLMQ_CONCURRENCY defaults to 3).
+ * Both are advisory: the value itself lives in DATABASE_URL, which only a human
+ * with the Fly secrets can change (see HUMAN-NEEDED).
+ */
+export const RECOMMENDED_CONNECTION_LIMIT = 5;
 
 let _initialized = false;
 
-async function recoverStuckJobs() {
+export async function recoverStuckJobs() {
   const cutoff = new Date(Date.now() - STALL_THRESHOLD_MS);
   const stuck = await prisma.generationJob.findMany({
-    where: { status: "processing", startedAt: { lt: cutoff } },
-    select: { id: true, shop: true, startedAt: true },
+    where: { status: "processing", updatedAt: { lt: cutoff } },
+    select: { id: true, shop: true, startedAt: true, updatedAt: true },
   });
 
-  if (stuck.length === 0) return;
+  if (stuck.length === 0) return 0;
 
   logger.warn({ count: stuck.length }, "Recovering stuck generation jobs");
 
-  await prisma.generationJob.updateMany({
-    where: { id: { in: stuck.map((j) => j.id) } },
+  // Guarded by the same condition so a job that woke up between the read and
+  // the write is never stamped failed underneath a live worker.
+  const { count } = await prisma.generationJob.updateMany({
+    where: { id: { in: stuck.map((j) => j.id) }, status: "processing", updatedAt: { lt: cutoff } },
     data: {
       status: "failed",
       completedAt: new Date(),
-      errorLog: JSON.stringify([{ productId: "N/A", error: "Server restarted while job was processing." }]),
+      errorLog: JSON.stringify([
+        {
+          productId: "N/A",
+          error: "This job stopped responding and was ended. Use Resume to finish the remaining products — anything already generated will not be charged again.",
+        },
+      ]),
     },
   });
 
   for (const job of stuck) {
-    logger.warn({ jobId: job.id, shop: job.shop, startedAt: job.startedAt }, "Marked stuck job as failed");
+    logger.warn({ jobId: job.id, shop: job.shop, startedAt: job.startedAt, lastTouched: job.updatedAt }, "Marked stuck job as failed");
   }
+  return count;
 }
 
 export function runStartupChecks() {
@@ -98,16 +122,38 @@ export function runStartupChecks() {
     warnings.push("SENTRY_DSN not set — runtime errors will not be captured by Sentry");
   }
 
+  // Phase 0 item 15 — connection budget.
+  //
+  // The old advice here was connection_limit=1, and it was enforced by
+  // string-matching "neon.tech" in the URL (so a pooler hostname, a proxy, or
+  // any other provider silently skipped the check entirely). One connection is
+  // actively harmful: tryConsumeGeneration holds a SERIALIZABLE transaction
+  // while three worker slots and every web request compete for that single
+  // connection, which surfaces as "Timed out fetching a new connection from the
+  // pool" under quite ordinary load. Against a POOLED endpoint (pgbouncer) a
+  // handful of connections per process is correct and cheap.
   const dbUrl = process.env.DATABASE_URL || "";
-  if (process.env.NODE_ENV === "production") {
-    if (dbUrl.includes("neon.tech") && !dbUrl.includes("pgbouncer=true")) {
+  if (process.env.NODE_ENV === "production" && dbUrl) {
+    const pooled = dbUrl.includes("pgbouncer=true") || dbUrl.includes("-pooler.");
+    const limitMatch = dbUrl.match(/[?&]connection_limit=(\d+)/);
+    const limit = limitMatch ? parseInt(limitMatch[1], 10) : null;
+
+    if (!pooled) {
       warnings.push(
-        "DATABASE_URL is a Neon connection but missing ?pgbouncer=true&connection_limit=1 — " +
-        "connection pool exhaustion will occur under concurrent load. Add these params to DATABASE_URL immediately."
+        "DATABASE_URL does not look like a pooled endpoint (no pgbouncer=true and no -pooler host) — " +
+        "use the pooled connection string, or concurrent load will exhaust the database's own connection limit."
       );
     }
-    if (dbUrl.includes("neon.tech") && !dbUrl.includes("connection_limit=")) {
-      warnings.push("DATABASE_URL missing connection_limit parameter for Neon — set connection_limit=1 with pgbouncer.");
+    if (limit === null) {
+      warnings.push(
+        `DATABASE_URL has no connection_limit — set connection_limit=${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
+      );
+    } else if (limit < 2) {
+      warnings.push(
+        `DATABASE_URL sets connection_limit=${limit}. One connection serialises the web process behind every ` +
+        "worker transaction and causes pool timeouts under modest load — " +
+        `raise it to ${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
+      );
     }
   }
 
@@ -131,6 +177,15 @@ export const startupPromise = (async () => {
     // Startup recovery is best-effort — never crash the server
     logger.error({ err }, "Startup job recovery failed");
   }
+
+  // Phase 0 item 12 — and keep checking. Running this only at boot meant a job
+  // stranded by a crash stayed "Processing…" until the next deploy, holding the
+  // shop's in-flight slot the whole time. unref() so the timer never keeps the
+  // process alive during shutdown.
+  const recoveryTimer = setInterval(() => {
+    recoverStuckJobs().catch((err) => logger.error({ err }, "Periodic job recovery failed"));
+  }, RECOVERY_INTERVAL_MS);
+  recoveryTimer.unref?.();
 
   // Start BullMQ worker if Redis is configured
   if (process.env.REDIS_URL) {
