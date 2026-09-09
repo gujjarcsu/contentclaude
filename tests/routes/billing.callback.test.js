@@ -107,10 +107,14 @@ describe("billing.callback", () => {
     // The abusable part — reading another shop's subscription state — never runs.
     expect(getFreshOfflineSession).not.toHaveBeenCalled();
     expect(syncBillingToPlan).not.toHaveBeenCalled();
-    // And the merchant is not dead-ended, nor falsely told they were declined.
+    // And the merchant is not dead-ended, nor told anything is wrong. They
+    // approved a charge and came back; the missing signature is not something
+    // they caused or can act on, and the reconcile fixes the plan silently.
     const loc = res.headers.get("Location");
-    expect(loc).toContain("/app/plans?billing_error=1");
+    expect(loc).toMatch(/\/app\/plans$/);
+    expect(loc).not.toContain("billing_error");
     expect(loc).not.toContain("declined=1");
+    expect(loc).not.toContain("?");
     expect(loc).not.toContain("/auth/login");
   });
 

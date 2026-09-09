@@ -885,3 +885,77 @@ That is HUMAN-NEEDED #4, and it is the last Phase 0 finding still visibly wrong 
 
 **Deploy `c65ba8f` is live and healthy**: `/api/build-info` matches `main`, and `/api/health?deep=1`
 reports `status: ok` with `workerRunning: true`, no failed or stranded jobs, and the AI breaker closed.
+
+---
+
+# INCIDENT — 2026-09-09, ~12:15–12:35 UTC: production database unreachable for ~20 minutes
+
+**What happened.** `DATABASE_URL` was being changed to raise `connection_limit` from 1 to 5
+(HUMAN-NEEDED #4, Phase 0 item 15). It was set with `fly secrets set` from Windows `cmd.exe`. The Neon
+password is URL-encoded and contains `%xx` sequences; `cmd.exe` treats `%…%` as variable references and
+strips them. The secret was stored **corrupted**. `fly secrets set` restarts every machine, so both
+machines came back onto a `DATABASE_URL` that could not authenticate.
+
+**Impact.** `/api/health` returned **503** with `database: "error"` for roughly twenty minutes. Every page
+in the app fails when Prisma cannot connect, so this was a total outage for the duration. No data was
+lost or written incorrectly — the app could not reach the database at all, which is the safe failure.
+
+**Recovery.** `fly secrets import` from a file. `import` reads `KEY=VALUE` lines from stdin and performs
+no shell interpolation, so the `%xx` sequences survive intact. Confirmed afterwards from the machine:
+pooled endpoint (`-pooler`, `pgbouncer=true`), `connection_limit=5`, password length 16 with no residual
+`%xx`, and `fly logs` showing `✅ All startup checks passed` on both machines with the
+`connection_limit` warning gone.
+
+**The part that matters more than the typo: nothing alerted.** There was no uptime monitor and no
+scheduled health check. The only way to learn that production was down was for a human to look. Twenty
+minutes is how long it took someone to look. That is the real finding, and it is exactly what Phase 1
+item 5 is for.
+
+## What has changed as a result
+
+1. **A rule, written where it will be read.** `docs/RUNBOOK.md` opens with Rule 0: secrets are **always**
+   set with `fly secrets import < file`, never `fly secrets set` on a command line, followed immediately
+   by a `curl /api/health?deep=1` check because import restarts every machine. `HUMAN-NEEDED.md` repeats
+   it at the top, since that is the file a human is holding when they are about to set a secret. The
+   hazard is not Windows-specific: any value containing `%`, `$`, `!`, `^` or a backtick is at risk in
+   some shell, and the file form has no such hazard in any of them.
+2. **A runbook entry that names this as the first thing to check.** "503 with `database: "error"`" now
+   begins with "was a secret just changed?", because `fly secrets list` shows a digest and a date per
+   secret and that is the fastest way to tell.
+3. **This incident is the acceptance test for Phase 1 item 5.** The brief asks four questions and requires
+   all four to read "alert". Question three is "Neon down". This incident IS that question, asked in
+   production, and the honest answer on 2026-09-09 was **nothing** — no alert, no email, no page. Item 5
+   is not complete until re-running this scenario would produce an alert within a couple of minutes, and
+   the uptime monitor plus the 5-minute deep-health check are what must make that true.
+
+**Why the deep health check would not have caught it on its own.** `/api/health` already returned 503
+correctly — the endpoint was working exactly as designed. The gap was that nothing was *calling* it. A
+correct health endpoint that nobody polls is a log line, not an alert. That distinction is the whole
+substance of Phase 1 item 5.
+
+---
+
+# Housekeeping before Phase 1 (2026-09-09)
+
+**Phase 0 is verified closed by the owner's reviewer.** HUMAN-NEEDED items 1-4 are all done and have moved
+to a Done section in that file rather than being deleted, so the record of what was required survives.
+
+- **Item 1** — app name deployed via the Shopify CLI; the admin sidebar reads `Navaal: AI SEO, AEO & GEO`.
+- **Item 2** — the App Store listing matches that string character for character.
+- **Item 3** — GA4 `G-8H3DS31YQ8` is live on the listing, so listing pageviews carry the `surface_*`
+  params and the server-side install event can be joined to them. The daily digest (Phase 1 item 5) can
+  read it now.
+- **Item 4** — `connection_limit` raised to 5. Verified from the production machine: pooled Neon endpoint,
+  `connection_limit=5`, password intact, and `fly logs` showing `✅ All startup checks passed` with the
+  warning gone from both machines. **This change caused the incident recorded below.**
+
+**The duplicate `WORLD-CLASS-BRIEF.md` in the repo root is deleted.** It was untracked and byte-identical
+to `docs/WORLD-CLASS-BRIEF.md`, which is canonical. Two copies of a brief is how they drift.
+
+**`/billing/callback` no longer raises a banner at a merchant who did nothing wrong.** An unsigned or
+expired callback used to redirect to `/app/plans?billing_error=1`, which shows an error notice. But from
+where the merchant is standing, they approved a charge and came back: the missing signature is not
+something they caused or can act on, and the reconcile corrects the plan silently within seconds. It now
+redirects to a plain `/app/plans` with no query string at all. The reason still goes to the logs, where
+it belongs. The existing assertion was tightened to match: the Location must END at `/app/plans`, carry
+no `billing_error`, and contain no `?`.

@@ -26,9 +26,11 @@ import logger from "../utils/logger.server";
 const APP_HANDLE = "navaal-seo-geo-content";
 const SHOP_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
 
-function adminPlansUrl(shop, query) {
+function adminPlansUrl(shop, query = "") {
   const storeHandle = shop.replace(/\.myshopify\.com$/i, "");
-  return `https://admin.shopify.com/store/${storeHandle}/apps/${APP_HANDLE}/app/plans?${query}`;
+  const base = `https://admin.shopify.com/store/${storeHandle}/apps/${APP_HANDLE}/app/plans`;
+  // No query means no notice — and no trailing "?" either.
+  return query ? `${base}?${query}` : base;
 }
 
 export const loader = async ({ request }) => {
@@ -54,13 +56,20 @@ export const loader = async ({ request }) => {
   // approval screen. We refuse to do the lookup — which is the part that was
   // abusable — and send them into the app instead. The subscriptions webhook and
   // the Plans reconcile both correct the plan within seconds either way.
+  //
+  // And we send them to a PLAIN Plans page, with no notice at all. The merchant
+  // did nothing wrong: from where they are standing they approved a charge and
+  // came back. `billing_error=1` would raise a banner about a problem they
+  // cannot act on and did not cause, for a plan that is about to be correct
+  // anyway. Silence is the honest answer here; the reason is in the logs, where
+  // it belongs.
   const signature = verifyShopCallback(shop, {
     sig: url.searchParams.get("sig"),
     exp: url.searchParams.get("exp"),
   });
   if (!signature.ok) {
     logger.warn({ shop, chargeId, reason: signature.reason }, "Billing callback without a valid signature — no lookup performed");
-    return redirect(adminPlansUrl(shop, "billing_error=1"));
+    return redirect(adminPlansUrl(shop, ""));
   }
 
   try {
