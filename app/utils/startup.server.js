@@ -10,7 +10,7 @@
  * Import this module from entry.server.jsx to guarantee it runs at boot.
  */
 
-import prisma from "../db.server.js";
+import prisma, { DB_ROLE_URL_SOURCE } from "../db.server.js";
 import logger from "./logger.server.js";
 import { RUNS_JOBS, PROCESS_ROLE, MACHINE_ID, REGION } from "./processRole.server.js";
 
@@ -131,7 +131,10 @@ export function runStartupChecks() {
   // connection, which surfaces as "Timed out fetching a new connection from the
   // pool" under quite ordinary load. Against a POOLED endpoint (pgbouncer) a
   // handful of connections per process is correct and cheap.
-  const dbUrl = process.env.DATABASE_URL || "";
+  // Each process checks the connection string it actually uses: the worker may
+  // have its own (WORKER_DATABASE_URL), and warning about a URL this process
+  // never opens would be a lie in the logs.
+  const dbUrl = (RUNS_JOBS ? process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL : process.env.DATABASE_URL) || "";
   if (process.env.NODE_ENV === "production" && dbUrl) {
     const pooled = dbUrl.includes("pgbouncer=true") || dbUrl.includes("-pooler.");
     const limitMatch = dbUrl.match(/[?&]connection_limit=(\d+)/);
@@ -139,17 +142,17 @@ export function runStartupChecks() {
 
     if (!pooled) {
       warnings.push(
-        "DATABASE_URL does not look like a pooled endpoint (no pgbouncer=true and no -pooler host) — " +
+        `${DB_ROLE_URL_SOURCE} does not look like a pooled endpoint (no pgbouncer=true and no -pooler host) — ` +
         "use the pooled connection string, or concurrent load will exhaust the database's own connection limit."
       );
     }
     if (limit === null) {
       warnings.push(
-        `DATABASE_URL has no connection_limit — set connection_limit=${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
+        `${DB_ROLE_URL_SOURCE} has no connection_limit — set connection_limit=${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
       );
     } else if (limit < 2) {
       warnings.push(
-        `DATABASE_URL sets connection_limit=${limit}. One connection serialises the web process behind every ` +
+        `${DB_ROLE_URL_SOURCE} sets connection_limit=${limit}. One connection serialises the web process behind every ` +
         "worker transaction and causes pool timeouts under modest load — " +
         `raise it to ${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
       );
@@ -214,8 +217,21 @@ export const startupPromise = (async () => {
     }
   }
 
+  // Phase 1 item 5 — the operator scheduler: a deep-health probe every five
+  // minutes that emails on failure, and the daily digest at 07:00 Sydney. Worker
+  // only, because exactly one worker exists — running these on every web machine
+  // would send one alert per machine.
+  if (RUNS_JOBS) {
+    try {
+      const { startScheduler } = await import("./scheduler.server.js");
+      startScheduler();
+    } catch (err) {
+      logger.error({ err }, "Failed to start the operator scheduler");
+    }
+  }
+
   logger.info(
-    { role: PROCESS_ROLE, machine: MACHINE_ID, region: REGION, runsJobs: RUNS_JOBS },
+    { role: PROCESS_ROLE, machine: MACHINE_ID, region: REGION, runsJobs: RUNS_JOBS, dbUrlSource: DB_ROLE_URL_SOURCE },
     "Startup complete"
   );
 })();

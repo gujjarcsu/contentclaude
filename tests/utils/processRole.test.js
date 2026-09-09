@@ -199,3 +199,33 @@ describe("the worker can actually be imported by plain Node (regression guard)",
     expect(offenders.join(" | "), "extensionless relative imports break node worker.js").toBe("");
   });
 });
+
+/**
+ * The worker's connection budget. Fly cannot scope a secret to a process group,
+ * so the split lives in db.server.js: the process that runs jobs prefers its own
+ * string. The failure this prevents is quiet and expensive — both machines
+ * claiming the same pool size and exhausting Neon under concurrent load.
+ */
+describe("each process opens the connection string that belongs to its role", () => {
+  const src = code("app/db.server.js");
+
+  it("the worker prefers WORKER_DATABASE_URL", () => {
+    expect(src).toMatch(/RUNS_JOBS && process\.env\.WORKER_DATABASE_URL/);
+  });
+
+  it("web never reads WORKER_DATABASE_URL", () => {
+    // The only mention is inside the RUNS_JOBS branch; a bare read would mean a
+    // web machine could pick up the worker's smaller pool.
+    const mentions = src.match(/WORKER_DATABASE_URL/g) || [];
+    const guarded = src.match(/RUNS_JOBS && process\.env\.WORKER_DATABASE_URL/g) || [];
+    expect(mentions.length).toBe(guarded.length * 2); // the pick, and the reported source
+  });
+
+  it("a missing WORKER_DATABASE_URL falls back rather than failing to boot", () => {
+    expect(src).toMatch(/return process\.env\.DATABASE_URL;/);
+  });
+
+  it("the startup log says which string this process actually opened", () => {
+    expect(code("app/utils/startup.server.js")).toMatch(/dbUrlSource: DB_ROLE_URL_SOURCE/);
+  });
+});

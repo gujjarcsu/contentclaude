@@ -6,14 +6,25 @@ import { Text, InlineStack, FooterHelp, Link } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { useEffect, useRef, useState } from "react";
 import { authenticate } from "../shopify.server.js";
+import prisma from "../db.server.js";
 import { ContentClaudeBrand } from "../components/ContentClaudeBrand.jsx";
 import { AppRenderBoundary } from "../components/RouteError.jsx";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const host = new URL(request.url).searchParams.get("host") || "";
+  // Phase 1 item 6 — the progress ticker used to poll /api/jobs-status every 15
+  // seconds, forever, in every open admin tab, with each poll costing an
+  // authenticate.admin plus a Prisma query. Almost all of those polls asked
+  // about jobs that did not exist. The layout already knows the answer, so it
+  // says so once and the ticker only starts polling when there is something to
+  // watch. One indexed COUNT, on a page load that was already hitting the
+  // database.
+  const activeJobCount = await prisma.generationJob.count({
+    where: { shop: session.shop, status: { in: ["queued", "processing"] } },
+  });
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", host, shopDomain: session.shop };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", host, shopDomain: session.shop, activeJobCount };
 };
 
 // Keep the embedded context (host/shop/embedded) STICKY in the browser URL.
@@ -63,43 +74,54 @@ const MESSAGES = [
   "⚡ Generating at full speed…",
 ];
 
-function JobProgressTicker({ navigate }) {
+function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
   const fetcher = useFetcher();
   const timerRef = useRef(null);
   const [msgIdx, setMsgIdx] = useState(0);
-  // Use a ref so the recursive timer always reads the latest count without
-  // needing to restart the effect (which would create overlapping timers).
   const hasJobsRef = useRef(false);
+  // Phase 1 item 6 — how many consecutive polls came back with nothing.
+  const idleStreakRef = useRef(0);
 
   const data = fetcher.data;
-  const hasJobs = data ? data.count > 0 : false;
+  const hasJobs = data ? data.count > 0 : activeJobCount > 0;
   const pct = data?.pct ?? 0;
   const completedProducts = data?.completedProducts ?? 0;
   const totalProducts = data?.totalProducts ?? 0;
 
-  // Keep ref in sync with latest render value.
   hasJobsRef.current = hasJobs;
 
+  // Phase 1 item 6 — poll only while there is something to watch.
+  //
+  // This used to be a mount-only effect that polled forever: every 15 s in every
+  // open admin tab, whether or not a job existed, each poll costing an
+  // authenticate.admin and a Prisma query. Now the layout loader says whether a
+  // job is running, and the ticker stops itself after two consecutive empty
+  // responses — two rather than one so a poll that lands in the gap between one
+  // job finishing and the next starting does not cut the display short.
+  //
+  // Starting a job re-runs the layout loader, so activeJobCount goes above zero
+  // and this effect starts again on its own.
   useEffect(() => {
-    let cancelled = false;
+    // The Jobs page revalidates its own loader, so the ticker polling there is
+    // the second half of a double-poll for the same data.
+    if (onJobsPage) return undefined;
+    if (activeJobCount === 0 && !hasJobsRef.current) return undefined;
 
-    const poll = () => {
-      if (cancelled) return;
-      fetcher.load("/api/jobs-status");
-    };
+    let cancelled = false;
+    idleStreakRef.current = 0;
 
     const scheduleNext = () => {
       if (cancelled) return;
-      // Read latest job state from ref so delay adapts after each poll response.
-      // Poll fast (2s) while a job runs so the bar visibly moves; slow when idle.
-      const delay = hasJobsRef.current ? 2_000 : 15_000;
+      if (idleStreakRef.current >= 2) return; // nothing running — stop entirely
+      const delay = hasJobsRef.current ? 2_000 : 5_000;
       timerRef.current = setTimeout(() => {
-        poll();
+        if (cancelled) return;
+        fetcher.load("/api/jobs-status");
         scheduleNext();
       }, delay);
     };
 
-    poll(); // immediate first fetch
+    fetcher.load("/api/jobs-status");
     scheduleNext();
 
     return () => {
@@ -107,9 +129,14 @@ function JobProgressTicker({ navigate }) {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Effect is intentionally mount-only; hasJobsRef carries live state
+  }, [activeJobCount, onJobsPage]);
 
-  // Rotate messages while jobs are running
+  // Count empty responses so the loop above can stop.
+  useEffect(() => {
+    if (!data) return;
+    idleStreakRef.current = data.count > 0 ? 0 : idleStreakRef.current + 1;
+  }, [data]);
+
   useEffect(() => {
     if (!hasJobs) return;
     const t = setInterval(() => setMsgIdx((i) => (i + 1) % MESSAGES.length), 3500);
@@ -190,8 +217,9 @@ function JobProgressTicker({ navigate }) {
 }
 
 export default function App() {
-  const { apiKey, host, shopDomain } = useLoaderData();
+  const { apiKey, host, shopDomain, activeJobCount = 0 } = useLoaderData();
   const navigate = useNavigate();
+  const location = useLocation();
   useStickyEmbeddedParams(host, shopDomain);
 
   return (
@@ -219,8 +247,14 @@ export default function App() {
           <s-link href="/app/settings">Settings</s-link>
           <s-link href="/app/plans">Plans &amp; Billing</s-link>
         </s-app-nav>
-        {/* Live job progress ticker — polls /api/jobs-status every 5s when active */}
-        <JobProgressTicker navigate={navigate} />
+        {/* Live job progress ticker. Phase 1 item 6: it polls only while a job
+            is actually running, stops after two empty responses, and stays
+            quiet on the Jobs page, which revalidates its own loader. */}
+        <JobProgressTicker
+          navigate={navigate}
+          activeJobCount={activeJobCount}
+          onJobsPage={location.pathname.startsWith("/app/jobs")}
+        />
         <AppRenderBoundary>
           <Outlet />
           {/* Support & bug reporting — visible on every page of the app */}

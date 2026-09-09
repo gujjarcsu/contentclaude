@@ -959,3 +959,207 @@ something they caused or can act on, and the reconcile corrects the plan silentl
 redirects to a plain `/app/plans` with no query string at all. The reason still goes to the logs, where
 it belongs. The existing assertion was tightened to match: the Location must END at `/app/plans`, carry
 no `billing_error`, and contain no `?`.
+
+---
+
+# PHASE 1 — A PLATFORM THAT RUNS FOR 100 YEARS
+
+Ten items. Written in order, deployed in batches, each batch through the same guardrails as Phase 0.
+
+## Item 1 — Migrations (commits `5af8e82`, `be634d9`, `82246c2`; deployed `82246c2`)
+
+**What was wrong.** There was no `prisma/migrations` folder at all. `release_command` ran
+`prisma db push`, which compares the schema to the database and applies whatever difference it finds,
+with no record of what it did and no way back. One `--accept-data-loss` — or one column rename, which
+`db push` implements as a drop and an add — and a column of merchant content is gone, with nothing to
+roll back to.
+
+**What was done.**
+
+1. `prisma migrate diff --from-empty --to-schema-datamodel` generated a 409-line
+   `prisma/migrations/0_init/migration.sql` that reproduces the current schema exactly. It was **not**
+   generated from a guess: it is the schema the production database is already running.
+2. `prisma migrate resolve --applied 0_init` marked it applied against production, so the baseline is
+   recorded without re-running DDL on a live database.
+3. `release_command` became `npx prisma migrate deploy`. It now refuses to start a release if a
+   migration fails, rather than silently reshaping the schema.
+4. `prisma/migrations/README.md` documents the rollback: **the migration rolls back before the image**.
+   `fly releases rollback` puts the old code back but leaves the new schema in place, so a migration that
+   dropped something must be reversed first, by hand or by PITR, and only then the image.
+
+**The failure that had to be fixed to make it work.** The first release command failed with
+`P1002 ... Timed out trying to acquire a postgres advisory lock`. `migrate deploy` takes a Postgres
+advisory lock to stop two deploys migrating at once, and advisory locks are session-scoped — they do not
+survive pgbouncer's transaction pooling, which hands a different backend to each statement. The deploy
+aborted. `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true` in `fly.toml` unblocks it, and is honest about what
+it costs: it is safe **only while there are no pending migrations**, when the command is just a read of
+`_prisma_migrations`. The real fix is a direct, unpooled connection, and that is HUMAN-NEEDED item 1
+(`DIRECT_URL`) because it needs the Neon console.
+
+**Status:** LIVE-verified. `fly logs` shows the release command completing and
+`https://app.navaal.ai/api/build-info` returns `82246c2`.
+
+## Item 2 — Topology: web and worker are separate processes (commits `53e9e27`, `14b73f8`; deployed `82246c2`)
+
+**What was wrong.** One `shared-cpu-1x` 512 MB machine in Sydney was serving the admin UI *and* running
+the BullMQ worker *and* holding the Prisma pool *and* base64-ing images for AI calls. Three consequences,
+all of them merchant-visible: a web deploy killed whatever bulk generation was mid-flight; a long
+generation competed with page loads for the same CPU and the same connections; and the worker could only
+ever live wherever the web server lived.
+
+**What was done.**
+
+- `app/utils/processRole.server.js` — one place that decides the role, from `FLY_PROCESS_GROUP` with a
+  `RUN_WORKER` override, and exports `RUNS_JOBS`. Local development, with no process group set, still
+  runs both, so nobody has to start two things to work on the app.
+- `worker.js` — the worker entry. Sets `RUN_WORKER=1`, imports the startup module, and **exits 1 if
+  startup throws** rather than idling as a machine that is up and doing nothing.
+- `fly.toml` — `[processes] web = "npm run start"` / `worker = "node worker.js"`; `[http_service]` bound
+  to `processes = ["web"]` so no traffic can reach the worker; per-group `[[vm]]` (web
+  `shared-cpu-1x`/512 MB, worker `shared-cpu-2x`/1 GB with `auto_stop_machines = "off"` and
+  `swap_size_mb = 512`); `kill_timeout = "60s"` so a job gets a minute to finish on SIGTERM instead of
+  being cut off; `[checks]` scoped to web.
+- `app/utils/startup.server.js` — boot recovery, the five-minute stuck-job sweep, `startWorker()` and the
+  scheduler are all behind `RUNS_JOBS`. A web machine no longer starts a worker, and with two web
+  machines that matters: it would have been two workers racing the same queue.
+- `app/queues/generationQueue.server.js` — worker liveness became a **Redis heartbeat**
+  (`worker:heartbeat`, written every 30s, stale after 90s) instead of an in-process `isRunning()` call.
+  That was not a refinement; it was necessary. Once the worker moved to its own machine, a web machine
+  answering `/api/health?deep=1` had no way to know whether the worker was alive — it would have reported
+  on itself and always said yes.
+- `app/db.server.js` — the process that runs jobs prefers `WORKER_DATABASE_URL` if it exists, so the
+  worker can hold a smaller pool than web. Fly cannot scope a secret to a process group, so this is a
+  separate secret (HUMAN-NEEDED item 2). Absent, the worker uses `DATABASE_URL` and nothing changes.
+  `Startup complete` now logs `dbUrlSource`, so which string a machine opened is a fact in the logs
+  rather than an assumption.
+
+**The proof the brief asked for — the worker survives a web deploy.** A web-only deploy was run and both
+machines watched across it:
+
+| | web machine | worker machine |
+|---|---|---|
+| version before | 143 | 143 |
+| version after | **144** | **143** |
+| created | during the deploy | 12:59:52 |
+| last updated | 13:12:30 | **12:59:52 (never)** |
+| restarts during deploy | yes, by design | **none** |
+
+`/api/health?deep=1` stayed green throughout, `workerRunning: true` the whole way. That is the property
+the split exists for: **shipping the UI no longer kills a merchant's running job.**
+
+**The failure that had to be fixed to make it work.** The first worker boot crashed with
+`Cannot find module '/app/app/db.server' imported from /app/app/shopify.server.js`. Vite resolves
+extensionless relative imports; plain Node ESM does not, and `worker.js` runs under plain Node. 113
+extensionless relative imports across 39 files were given their `.js` extensions, the chain
+`bulkProcessor` to `shopify.server` to `db.server` was verified to resolve under Node with no bundler,
+and a test now guards it. **The deep health check caught this on its first real outing** —
+`workerRunning:false` and a 503 — which is exactly what Phase 0 item 26 was built to do.
+
+**Not done, and why.** Web is still **one machine in `syd`**, not two across `iad` and `syd`. The brief
+asks for `iad` for US latency, and the measurement behind that ask is real. But Neon is in Sydney: an
+`iad` web machine would cross the Pacific on **every query**, so a page making four sequential queries
+would trade roughly 200 ms of TTFB for roughly 800 ms of database round trips and end up slower, not
+faster. Two-region web is worth doing **after** the database is regional (a Neon read replica in `iad`,
+or a move), and not before. Stated here rather than quietly skipped.
+
+**Status:** LIVE-verified, with the two-region half deliberately deferred and the reason recorded.
+
+## Item 3 — Docker: Node 22, non-root (commit `53e9e27`; deployed `82246c2`)
+
+`FROM node:20-alpine` became `node:22-alpine` — Node 20 is end of life and stops receiving security
+patches. The image now does `chown -R node:node /app` and `USER node` after the build, so the runtime is
+not root and a process escape does not start with root. Everything above that line needs write access to
+build; nothing below it does. The `.dockerignore` was verified intact (`tests/` and `*.md` excluded) and
+not regressed. `postgresql-client` is installed for the nightly `pg_dump`, and deliberately **cannot fail
+the build**: the package name moves between Alpine releases, so the candidates are tried in order and a
+miss is reported by the backup job as unconfigured rather than breaking every deploy.
+
+**Status:** LIVE-verified — production is running the Node 22 image as `node`.
+
+## Item 4 — CI: typecheck blocking, post-deploy smoke (commit `53e9e27`; deployed `82246c2`)
+
+- **Typecheck is blocking.** `continue-on-error` is gone. The errors were fixed first, in Phase 0, rather
+  than the flag being flipped over a red build.
+- **`npm audit` stays informative**, as the brief asks — it fails on transitive advisories nobody can act
+  on that day, and a gate that everyone learns to ignore is worse than no gate.
+- **A new `smoke` job runs after the deploy** and fails loudly: `/api/build-info` `sha` must equal the
+  pushed commit (so a deploy that silently did not land is caught), `/api/health?deep=1` must not be
+  `error` **and must report `workerRunning: true`**, `GET /` must 302 to `/reembed`, and `HEAD /app` must
+  not be 5xx.
+- **Concurrency:** pull-request runs cancel each other, which is free. Pushes to `main` **queue** —
+  cancelling a deploy mid-flight can leave a release half-applied, and after item 1 it can leave a
+  migration half-applied.
+
+**Status:** LIVE-verified — the smoke job ran green against `82246c2`.
+
+## Item 5 — Alerting: the owner is told, not left to look
+
+**The acceptance test is the incident above.** On 2026-09-09 production was down for twenty minutes with
+`database: error` and nothing said a word. `/api/health` was returning 503 correctly the entire time.
+Nothing was calling it. A correct health endpoint nobody polls is a log line, not an alert.
+
+- **`app/utils/notify.server.js`** — `sendOperatorEmail()` via Resend. With no `RESEND_API_KEY` it does
+  not swallow the message: it logs at **error** level with the full body and
+  `event: "operator_alert_undeliverable"`, so the alert still reaches Sentry and `fly logs`. Degrading
+  quietly is how you end up back at 2026-09-09.
+- **`app/utils/scheduler.server.js`** — a deep-health probe every five minutes against the **public** URL,
+  so it exercises the same path a merchant does: DNS, TLS, the Fly proxy, a web machine. On 503 or on no
+  answer, it emails. It alerts on the transition into trouble and then at most hourly, so a long outage
+  is one email and a reminder, not twelve an hour. It emails again when it recovers. **`degraded` is not
+  an alert** — Redis being briefly unavailable and the AI circuit breaker being open are both states the
+  app is designed to ride out, and paging on them teaches the owner to ignore the alerts.
+- **The daily digest**, 07:00 Australia/Sydney, in `app/utils/digest.server.js`: installs, uninstalls,
+  reinstalls, first drafts, first publishes, review asks, jobs run and failed, quota-skipped count,
+  generations, paid shops. The day is claimed in Redis with `SET NX`, so a worker restart inside the hour
+  cannot send a second copy. The digest **states what it is not reporting** — the install source split
+  and traffic/revenue — rather than printing a zero that reads like a fact.
+- Both run in the **worker**, which is the one process that is never auto-stopped and never
+  load-balanced. Exactly one of it exists, so these fire once rather than once per web machine.
+
+**Coverage:** `tests/utils/alerting.test.js`, 17 assertions, green. The first one is the incident itself:
+a 503 with `database: error` produces an email whose body names the runbook and says to suspect a
+just-changed secret.
+
+**Still needed from a human:** the external uptime monitor (HUMAN-NEEDED item 3) and `RESEND_API_KEY`
+(item 4). The five-minute check runs *inside* the same infrastructure — if Fly itself is gone, so is the
+thing that would tell you. Only an external monitor survives that, and it needs an account.
+
+## Item 6 — Polling load
+
+**What was wrong.** `JobProgressTicker` polled `/api/jobs-status` every 15 seconds from **every open
+admin tab, forever**, whether or not anything was running. Each poll is a full Shopify session
+authentication plus a Prisma query. A merchant with three tabs open overnight was seventeen thousand
+authenticated database round trips before breakfast, all of them answering "nothing is happening". The
+Jobs page polled on top of that, so it double-polled itself.
+
+**What was done.** The `app.jsx` loader now counts active jobs (`queued` or `processing`) and passes
+`activeJobCount` down. The ticker:
+
+- **does not start at all** when there is no active job and none has been seen;
+- **does not run on the Jobs page**, which has its own revalidation — that is the double-poll gone;
+- **stops after two consecutive idle responses**, so a finished job stops the polling instead of leaving
+  it running forever;
+- restarts by itself when the loader reports work again, so nothing is missed.
+
+**Coverage:** `tests/routes/polling.test.js`, 11 assertions, green.
+
+## Item 7 — Backups
+
+Neon's point-in-time restore is the first line of defence, and it is a console setting (HUMAN-NEEDED item
+5). But PITR does not protect against losing access to the Neon **project** — billing, account, provider.
+A backup that lives inside the thing it is backing up is not a backup.
+
+**`app/utils/backup.server.js`** takes one `pg_dump` a night at 03:00 Sydney and puts it in Cloudflare
+R2, a different company, under a dated key. It signs the request with hand-rolled SigV4 rather than
+pulling in the AWS SDK for one PUT. It **refuses to store a dump under 1024 bytes** — an empty file that
+uploads successfully is the worst possible outcome, because it looks like a backup — and it emails on
+every failure. With no R2 credentials it logs `backup_not_configured` and **names exactly which pieces
+are missing**.
+
+**Coverage:** the item 7 half of `tests/utils/alerting.test.js` — refuses when unconfigured, lists the
+missing pieces, refuses the tiny dump and emails, stores a real dump under a dated key, and fires at
+03:00 Sydney and no other hour.
+
+**The restore drill (HUMAN-NEEDED item 7) is the one item here nobody can automate.** An untested backup
+is a hope. The procedure is in `docs/RUNBOOK.md` and restores into a **new Neon branch**, never
+production.

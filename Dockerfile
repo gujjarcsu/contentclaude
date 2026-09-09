@@ -1,7 +1,11 @@
 # Phase 1 item 3 — Node 20 reached end of life, so it stops getting security
 # patches; 22 is the current LTS and is inside the engines range in package.json.
 FROM node:22-alpine
-RUN apk add --no-cache openssl
+# openssl for Prisma; pg_dump for the nightly backup (Phase 1 item 7). The
+# Postgres client package name moves between Alpine releases, so try the
+# candidates in order and never fail the image build over it — backup.server.js
+# reports a missing pg_dump by email rather than failing silently.
+RUN apk add --no-cache openssl && (apk add --no-cache postgresql17-client || apk add --no-cache postgresql16-client || apk add --no-cache postgresql-client || echo "no postgresql client available; nightly backups will report as unconfigured")
 
 EXPOSE 3000
 
