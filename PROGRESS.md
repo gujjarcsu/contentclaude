@@ -1840,3 +1840,122 @@ parser was needed.
 A second collision came from the same run: `prettier --write` landed on `app.plans.jsx` while it was
 being rewritten, and corrupted an import block mid-statement. It was caught by the build within a minute,
 restored from a byte-for-byte backup taken before the write, and redone against a fresh read.
+
+## 2.6 — Auto-publish in one place, and the bug that published without asking
+
+**The bug first, because it is the one that reached merchants.**
+
+`app.products_.$id.jsx` gated its auto-publish confirmation like this:
+
+```js
+if (autoPublish && !overrideTypes) { ...show the confirm... }
+```
+
+`overrideTypes` is set by every per-section **Regenerate** link — description, meta title, meta
+description, FAQ — and by the **Alt Text** tab. So **five of the seven generate paths skipped the
+confirm entirely**, while `doGenerate` still sent `autoPublish=true` and the server still published
+straight to the live storefront. With auto-publish ticked, clicking the small grey "Regenerate" beside a
+description overwrote what shoppers see, with no dialog.
+
+It was never intended. `pendingGenerateTypes` was initialised to `null`, the only write set it to
+`null`, and the modal called `doGenerate(pendingGenerateTypes)` — always `doGenerate(null)`. The variable
+existed solely to carry the value that branch was throwing away. So the confirm had been written to
+handle this case and then wired past it.
+
+The gate is now `if (publishWithoutReview)`, and the modal receives `overrideTypes`.
+
+**Then the shape of the thing.** Auto-publish was a per-run form field with a checkbox in five places:
+the product page, the Products bulk panel, the Generate All modal, and twice on Optimize. **The bulk
+panel submitted with no confirmation at all.**
+
+The App Store listing tells merchants that nothing goes live until they approve it. That cannot depend on
+which of five checkboxes was last ticked. It is now one setting, `BrandVoice.publishWithoutReview`,
+shipped as a real migration:
+
+- **Off by default, and no backfill.** A shop that had been ticking a per-run box has not consented to
+  publishing everything without review from now on, so it must not inherit one.
+- **Every generate path reads it server-side** through `publishesWithoutReview(shop)`. No action reads
+  `autoPublish` from a form any more, and a test posts `bulk_autoPublish=true` and asserts the job is
+  created with `autoPublish: false` — a stale form, a replayed request or a crafted POST cannot override
+  the merchant's setting.
+- **The helper fails closed.** No settings row, a non-boolean value, or a database error all return
+  false. The asymmetry is the point: wrongly returning false costs a review step nobody wanted; wrongly
+  returning true puts content on a live storefront that nobody approved.
+- **Turning it on asks first**, in destructive tone, and says what actually changes — including that
+  previous versions are kept and can be restored per product, because omitting that makes the warning
+  read as more final than it is. Turning it back **off** is immediate; the safe direction needs no
+  ceremony.
+
+19 assertions.
+
+## 2.7 — One primary action, chosen by state
+
+Home rendered **six primary buttons at once** to a brand-new merchant: four onboarding steps, the
+theme-embed card, and the usage-card upsell. Two of the six were **the same action** — "Open theme
+editor" — from two different components on one screen. And the two buttons that were the page's actual
+purpose, "Generate content" and "Optimize store", were the ones **hidden** from new shops.
+
+Home now has **no primary of its own**. It has a `Page` primary chosen by what the merchant should do
+next:
+
+| Condition | Primary |
+|---|---|
+| drafts waiting | `Review N drafts` |
+| products with no content | `Optimize N products` |
+| neither | `Run audit`, with `Write a blog post` beside it |
+
+Content waiting for a person beats content that does not exist yet, which beats a diagnostic. The label
+carries the count, so it is never a bare verb, and the fallback offers a second thing to do rather than a
+dead end.
+
+**Primaries that multiplied per card are gone.** Jobs rendered one per job card and Collections rendered
+two per collection, so the count scaled with the merchant's catalogue. Review rendered one per product —
+a 50-product page put 52 green primaries on screen, one of which was `✓ Approved`, **a primary whose job
+was to un-approve**. That one is handled in 2.8.
+
+**Disabled primaries, and the distinction that matters.** The brief says never render one. A button
+disabled *while submitting* is a double-submit guard and stays — that is what stopped the Plans purchase
+button being clicked twice. A button disabled because *a field is empty* is a dead end: it does not say
+which field, and the merchant is left clicking something that does nothing. Three of those are gone —
+blog generate, blog publish, product-page generate — and in every case the action already validates and
+answers in a sentence ("Topic is required.", "Title and content are required to publish."). The Products
+primary is not rendered at all when there is nothing to optimize, rather than rendered grey.
+
+14 assertions.
+
+## 2.8 — The Review screen
+
+**The defect it shipped with was not cosmetic.** Every draft on the page was pre-approved:
+
+```js
+const [approved, setApproved] = useState(() => new Set(products.map((p) => p.productId)));
+```
+
+A merchant's **first** click on the publish button pushed up to fifty pieces of AI-written content to
+their live storefront — content they had never opened. The listing promises nothing goes live until they
+approve it, and the screen where they approve it had approved everything on their behalf.
+
+Now: the set starts empty, and approving a whole page is an explicit action that says so.
+
+**And that fix armed a different gun, which is why it is worth recording.** "Reject skipped" rejects
+everything *not* approved. With approvals starting empty, that button became enabled in the default
+state, on a freshly loaded page, meaning every draft — one click, no confirmation. Removing a foot-gun
+should not install another. It now counts what it will do in its own label
+(`Reject 12 not approved`), asks first in destructive tone, and says the live storefront is not touched,
+because it is not.
+
+| Was | Is |
+|---|---|
+| Edits in React state; pagination called `navigate()` and discarded them silently | Persisted on blur through a `saveEdit` action, keyed on `(shop, productId, contentType)`, with `shouldRevalidate` so a blur does not re-query Shopify for all fifty products |
+| No side-by-side; the merchant approved a replacement without seeing what it replaced | **Current** beside **Proposed** per field, stacking at 375px, with "Nothing yet" where there is no current value. Fetched in the loader's existing batch query, so no extra round trip |
+| Badges showing the raw database key `metaTitle` | `Description`, `Page title`, `Search description`, `FAQ` — from one map, so the wording cannot drift between the badge and the heading |
+| `Content quality: 72` | `Content quality: 72/100`, with a one-line explanation |
+| A green **primary** on every card whose job was to **un**-approve — 52 primaries on a 50-product page | One `Approve` checkbox per card, one publish primary on the page |
+| A disabled primary whenever nothing was approved | Not rendered at all |
+| `label=""` on the search field and every editor — no accessible name | Real labels, visually hidden where the heading already says it |
+
+Keyboard: Enter approves, arrows move between products. It bails on text-entry elements so it cannot
+hijack typing, and the index starts at `-1` so a stray Enter before choosing a product approves nothing.
+
+22 assertions, including one that `saveEdit` refuses a `contentType` outside the known set — the row is
+addressed by that value, so an unchecked one would let a caller create rows outside it.

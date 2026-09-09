@@ -11,7 +11,7 @@
  * and it is what makes `node worker.js` work anywhere — locally, in CI, or on a
  * host that is not Fly.
  *
- * Local development keeps the old behaviour on purpose: with neither variable
+ * Local development keeps the old behavior on purpose: with neither variable
  * set, one `npm run dev` process is both web and worker, so nobody has to run
  * two terminals to try a bulk job.
  */

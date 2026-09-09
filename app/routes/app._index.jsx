@@ -27,7 +27,6 @@ import {
   ChartVerticalIcon,
   BlogIcon,
   SearchIcon,
-  ArrowRightIcon,
   MagicIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
@@ -239,8 +238,8 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
         {done ? (
           <Badge tone="success">Done</Badge>
         ) : (
-          <Button size="slim" variant="primary" tone="success" onClick={onAction}>
-            {actionLabel} <Icon source={ArrowRightIcon} tone="inherit" />
+          <Button size="slim" onClick={onAction}>
+            {actionLabel}
           </Button>
         )}
       </InlineStack>
@@ -282,6 +281,7 @@ export default function Dashboard() {
     totalProducts,
     generatedCount,
     draftCount,
+    needsContentCount,
     activeJobCount,
     hasBrandVoice,
     isNewShop,
@@ -334,11 +334,44 @@ export default function Dashboard() {
   } else if (remaining <= 3) {
     heroSubtitle = `Only ${remaining} generation${remaining !== 1 ? "s" : ""} left this month — upgrade to keep momentum going.`;
   } else {
-    heroSubtitle = `${generatedCount} product${generatedCount !== 1 ? "s" : ""} optimised · ${draftCount} draft${draftCount !== 1 ? "s" : ""} awaiting review`;
+    heroSubtitle = `${generatedCount} product${generatedCount !== 1 ? "s" : ""} optimized · ${draftCount} draft${draftCount !== 1 ? "s" : ""} awaiting review`;
   }
 
+  /* Phase 2 item 2.7 — ONE primary action, chosen by what the merchant should
+     do next.
+
+     Home rendered six primary buttons at once for a new merchant: four in the
+     onboarding checklist, one in the embed setup card, one in the usage card —
+     and two of them ("Open theme editor") were the same action, from two
+     different components, on the same screen. The two buttons that were the
+     real primaries, "Generate content" and "Optimize store", were the ones
+     HIDDEN from new shops.
+
+     The order below is what actually helps: content waiting for a person beats
+     content that does not exist yet, which beats a diagnostic. Everything else
+     on the page is now secondary or plain. */
+  const primaryAction =
+    draftCount > 0
+      ? {
+          content: `Review ${draftCount} draft${draftCount === 1 ? "" : "s"}`,
+          onAction: () => navigate("/app/review"),
+        }
+      : needsContentCount > 0
+        ? {
+            content: `Optimize ${needsContentCount} product${needsContentCount === 1 ? "" : "s"}`,
+            onAction: () => navigate("/app/optimize"),
+          }
+        : { content: "Run audit", onAction: () => navigate("/app/seo-audit") };
+
+  // Never a disabled primary: when there is nothing to review and nothing to
+  // generate, the primary becomes the audit and this becomes the second option.
+  const secondaryActions =
+    draftCount === 0 && needsContentCount === 0
+      ? [{ content: "Write a blog post", onAction: () => navigate("/app/blog") }]
+      : undefined;
+
   return (
-    <Page>
+    <Page primaryAction={primaryAction} secondaryActions={secondaryActions}>
       <BlockStack gap="600">
         {/* ── Job completion banner ──────────────────────────────────────── */}
         {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
@@ -387,11 +420,6 @@ export default function Dashboard() {
                 <span style={{ color: "rgba(255,255,255,0.85)" }}>{heroSubtitle}</span>
               </Text>
             </BlockStack>
-            {!isNewShop && (
-              <Button variant="primary" tone="success" size="large" onClick={() => navigate("/app/products")}>
-                Generate content
-              </Button>
-            )}
           </InlineStack>
         </Box>
 
@@ -532,7 +560,7 @@ export default function Dashboard() {
                       : "You're in good shape for this month."}
               </Text>
               {isFreePlan && (
-                <Button size="slim" variant="primary" tone="success" onClick={() => navigate("/app/plans")}>
+                <Button size="slim" onClick={() => navigate("/app/plans")}>
                   Upgrade Plan
                 </Button>
               )}
@@ -625,7 +653,7 @@ export default function Dashboard() {
                   background.
                 </Text>
               </BlockStack>
-              <Button variant="primary" size="large" tone="success" onClick={() => navigate("/app/optimize")}>
+              <Button onClick={() => navigate("/app/optimize")}>
                 Optimize store
               </Button>
             </InlineStack>
@@ -685,7 +713,7 @@ export default function Dashboard() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Write SEO-optimised blog posts in your brand voice in under 60 seconds.
+                  Write SEO-optimized blog posts in your brand voice in under 60 seconds.
                 </Text>
                 {blogsTotal > 0 && (
                   <InlineStack gap="200">

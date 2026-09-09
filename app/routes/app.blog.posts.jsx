@@ -207,7 +207,7 @@ export default function BlogPosts() {
                   action={{ content: "Write Your First Post", onAction: () => navigate("/app/blog") }}
                   image="/empty-blog.svg"
                 >
-                  <p>Generate SEO-optimised blog posts in your brand voice in under 60 seconds.</p>
+                  <p>Generate SEO-optimized blog posts in your brand voice in under 60 seconds.</p>
                 </EmptyState>
               </Card>
             ) : (

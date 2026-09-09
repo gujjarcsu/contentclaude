@@ -488,7 +488,6 @@ export default function CollectionsPage() {
                     </Layout>
                     <InlineStack align="end">
                       <Button
-                        variant="primary"
                         onClick={() => handlePublish(collection.id)}
                         loading={isPublishing && fetcher.formData?.get("collectionId") === collection.id}
                       >
@@ -564,7 +563,6 @@ export default function CollectionsPage() {
                     <InlineStack align="end">
                       <Button
                         size="slim"
-                        variant="primary"
                         onClick={() => handleSaveVoice(collection.id)}
                         loading={
                           voiceFetcher.state !== "idle" &&

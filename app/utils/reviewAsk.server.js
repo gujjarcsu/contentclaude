@@ -4,7 +4,7 @@
  * shopify.reviews.request() with an attemptId the server issued, so:
  *   - never on open, never on a button they did not press (structural);
  *   - exactly one call per eligible publish confirmation, even under the two
- *     parallel document loaders (optimistic updateMany on the Shop row);
+ *     parallel document loaders (optimiztic updateMany on the Shop row);
  *   - every call is a ReviewRequestAttempt row and every returned code is
  *     recorded on it and summarised on the Shop row;
  *   - never retried within Shopify's cooldown: a claim immediately writes a

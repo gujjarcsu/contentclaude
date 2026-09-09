@@ -137,7 +137,7 @@ export const loader = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function ScoreRing({ score }) {
-  // Unified colour rule: >=70 green, 40–69 amber (highlight), <40 red.
+  // Unified color rule: >=70 green, 40–69 amber (highlight), <40 red.
   const tone = score >= 70 ? "success" : score >= 40 ? "highlight" : "critical";
   return (
     <BlockStack gap="200" inlineAlign="center">
@@ -208,7 +208,7 @@ export default function SeoAuditPage() {
   return (
     <Page
       title="SEO Audit"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analysed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`}
+      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} analyzed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
       primaryAction={{
         content: "Optimize store",
@@ -228,8 +228,8 @@ export default function SeoAuditPage() {
           <Banner tone="warning" title="This is a partial audit">
             <p>
               {truncatedReason === "timeout"
-                ? `The scan hit its time limit after ${scannedCount} products — your remaining products were NOT analysed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.`
-                : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analysed. Scores and counts below cover only the scanned portion.`}
+                ? `The scan hit its time limit after ${scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.`
+                : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analyzed. Scores and counts below cover only the scanned portion.`}
             </p>
           </Banner>
         )}

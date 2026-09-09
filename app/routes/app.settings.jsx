@@ -1,6 +1,7 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
+  Modal,
   ChoiceList,
   Page,
   Layout,
@@ -50,6 +51,7 @@ export const loader = async ({ request }) => {
       language: "en",
       autopilotEnabled: false,
       autopilotAutoPublish: false,
+      publishWithoutReview: false,
       autopilotContentTypes: "description,metaTitle,metaDescription",
     },
     templates,
@@ -155,6 +157,8 @@ export const action = async ({ request }) => {
     language: VALID_LANGUAGES.has(rawLang) ? rawLang : "en",
     autopilotEnabled,
     autopilotAutoPublish: autopilotEnabled && formData.get("autopilotAutoPublish") === "true",
+    // Phase 2 item 2.6 - the ONE place auto-publish is decided.
+    publishWithoutReview: formData.get("publishWithoutReview") === "true",
     autopilotContentTypes,
   };
 
@@ -224,6 +228,8 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState(brandVoice.language || "en");
 
   const [autopilotEnabled, setAutopilotEnabled] = useState(brandVoice.autopilotEnabled || false);
+  const [publishWithoutReview, setPublishWithoutReview] = useState(brandVoice.publishWithoutReview || false);
+  const [confirmPublishWithoutReview, setConfirmPublishWithoutReview] = useState(false);
   const [autopilotAutoPublish, setAutopilotAutoPublish] = useState(brandVoice.autopilotAutoPublish || false);
   const apTypes = (brandVoice.autopilotContentTypes || "description,metaTitle,metaDescription").split(",");
   const [apDesc, setApDesc] = useState(apTypes.includes("description"));
@@ -275,6 +281,7 @@ export default function SettingsPage() {
         <Form method="post">
           <input type="hidden" name="actionType" value="saveBrandVoice" />
           <input type="hidden" name="autopilotEnabled" value={autopilotEnabled.toString()} />
+          <input type="hidden" name="publishWithoutReview" value={publishWithoutReview.toString()} />
           <input type="hidden" name="autopilotAutoPublish" value={autopilotAutoPublish.toString()} />
           <input type="hidden" name="ap_description" value={apDesc.toString()} />
           {/* The checkbox says "Meta Title & Description" — it must submit BOTH
@@ -338,9 +345,9 @@ export default function SettingsPage() {
                     </BlockStack>
                     {/* Phase 2 item 2.5 — this was a CSS grid of nine raw
                         <button style> elements with hard-coded hex, and the
-                        selected one was indicated by colour alone: a 1px grey
+                        selected one was indicated by color alone: a 1px grey
                         border became a 2px blue one and the background shifted
-                        to #f3f7ff. Colour-only status fails contrast and fails
+                        to #f3f7ff. Color-only status fails contrast and fails
                         anyone who cannot distinguish those two.
 
                         A Polaris ChoiceList is the component for "pick exactly
@@ -437,7 +444,7 @@ export default function SettingsPage() {
                       onChange={setSampleContent}
                       multiline={8}
                       autoComplete="off"
-                      placeholder="Paste your favourite product descriptions here..."
+                      placeholder="Paste your favorite product descriptions here..."
                     />
                     <TextField
                       name="additionalNotes"
@@ -451,6 +458,46 @@ export default function SettingsPage() {
                   </BlockStack>
                 </Card>
 
+                {/* Phase 2 item 2.6 — auto-publish, in ONE place.
+
+                    It used to be a per-run checkbox in five: the product page,
+                    the Products bulk panel, the Generate All modal, and twice on
+                    Optimize. The bulk panel had no confirmation at all, and a
+                    bug on the product page skipped the confirm on five of its
+                    seven generate paths — so the small grey "Regenerate" link
+                    beside a description could overwrite the live storefront with
+                    no dialog and no undo.
+
+                    The App Store listing tells merchants nothing goes live until
+                    they approve it. That promise cannot depend on which of five
+                    checkboxes was last ticked. */}
+                <Card>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <BlockStack gap="100">
+                        <Text as="h2" variant="headingLg">
+                          Review before publishing
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Generated content is saved as a draft for you to read first.
+                        </Text>
+                      </BlockStack>
+                      {publishWithoutReview && <Badge tone="attention">Review is off</Badge>}
+                    </InlineStack>
+
+                    <Checkbox
+                      label="Publish without review"
+                      checked={publishWithoutReview}
+                      helpText="Content goes straight to your live storefront. Nothing is held for approval."
+                      onChange={(value) => {
+                        // Turning it ON asks first. Turning it OFF is the safe
+                        // direction and needs no ceremony.
+                        if (value) setConfirmPublishWithoutReview(true);
+                        else setPublishWithoutReview(false);
+                      }}
+                    />
+                  </BlockStack>
+                </Card>
                 {/* Autopilot */}
                 <Card>
                   <BlockStack gap="400">
@@ -685,6 +732,37 @@ export default function SettingsPage() {
           </Card>
         )}
       </BlockStack>
+      {/* Phase 2 item 2.6 - turning review OFF is the consequential direction,
+          so it asks once, in destructive tone, and says exactly what changes. */}
+      <Modal
+        open={confirmPublishWithoutReview}
+        onClose={() => setConfirmPublishWithoutReview(false)}
+        title="Publish without reviewing first?"
+        primaryAction={{
+          content: "Turn off review",
+          destructive: true,
+          onAction: () => {
+            setPublishWithoutReview(true);
+            setConfirmPublishWithoutReview(false);
+          },
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setConfirmPublishWithoutReview(false) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p" variant="bodyMd">
+              Generated content will go straight to your live storefront, replacing what shoppers currently
+              see. You will not get a chance to read it first.
+            </Text>
+            <Text as="p" variant="bodyMd">
+              Previous descriptions are kept, and you can restore any product from its History tab.
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              You can turn review back on here at any time. Remember to save.
+            </Text>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

@@ -1,14 +1,24 @@
-import { useLoaderData, useActionData, useNavigation, useNavigate, useSubmit } from "react-router";
+import {
+  useLoaderData,
+  useActionData,
+  useNavigation,
+  useNavigate,
+  useSubmit,
+  useFetcher,
+} from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { scoreContent } from "../utils/contentScorer.server.js";
 import {
+  Modal,
   Page,
   Card,
   Text,
   BlockStack,
   InlineStack,
+  InlineGrid,
   Button,
   ButtonGroup,
+  Checkbox,
   Thumbnail,
   Badge,
   Banner,
@@ -17,7 +27,7 @@ import {
   Divider,
   Tooltip,
 } from "@shopify/polaris";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -77,6 +87,24 @@ const PAGE_SIZE = 50;
 // Collections page — sending one to productUpdate fails forever ("Invalid id")
 // and permanently jams the queue.
 const PRODUCT_GID_PREFIX = "gid://shopify/Product/";
+
+// The four draft types this page reviews, in the order they are shown.
+const CONTENT_TYPES = ["description", "metaTitle", "metaDescription", "faq"];
+
+// Merchant-facing names for the content types. The stored keys ("metaTitle")
+// are ours, not words a merchant has ever seen — they were being rendered raw
+// in the badges. One map, used by the badges, the section headings and the
+// editor's accessible label, so the wording can never drift apart again.
+const CONTENT_LABELS = {
+  description: "Description",
+  metaTitle: "Page title",
+  metaDescription: "Search description",
+  faq: "FAQ",
+};
+
+// Stable DOM id for a product's Approve checkbox, so the keyboard handler can
+// put real browser focus on it (visible focus ring, scrolled into view).
+const approveCheckboxId = (productId) => `approve-${String(productId).replace(/\W+/g, "-")}`;
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -159,6 +187,9 @@ export const loader = async ({ request }) => {
       ...byProduct[pid],
       productTitle: info.title || byProduct[pid].productTitle,
       imageUrl: info.imageUrl || "",
+      // What is on the product right now, so the merchant can see what the
+      // draft would replace instead of approving blind.
+      current: info.current || emptyCurrent(),
       qualityScore: score.score,
     };
   });
@@ -174,6 +205,11 @@ export const loader = async ({ request }) => {
   });
 };
 
+// "Nothing is on the product yet" — the shape the card expects when Shopify
+// could not be reached, so a failed fetch shows "Nothing yet" rather than
+// crashing the page.
+const emptyCurrent = () => ({ description: "", metaTitle: "", metaDescription: "", faq: "" });
+
 async function fetchProductsBatch(admin, productIds) {
   if (productIds.length === 0) return {};
   const BATCH_SIZE = 200;
@@ -183,12 +219,16 @@ async function fetchProductsBatch(admin, productIds) {
     const batch = productIds.slice(i, i + BATCH_SIZE);
     let response;
     try {
+      // ONE query per batch for everything the page needs: the card header
+      // (title, image) and the live values shown beside each draft.
       response = await admin.graphql(
         `query getNodes($ids: [ID!]!) {
           nodes(ids: $ids) {
             ... on Product {
               id
               title
+              descriptionHtml
+              seo { title description }
               featuredImage { url altText }
             }
           }
@@ -214,6 +254,14 @@ async function fetchProductsBatch(admin, productIds) {
         result[node.id] = {
           title: node.title || "",
           imageUrl: node.featuredImage?.url || "",
+          current: {
+            description: node.descriptionHtml || "",
+            metaTitle: node.seo?.title || "",
+            metaDescription: node.seo?.description || "",
+            // The FAQ lives in a metafield, not on the product record — there
+            // is no "current" to compare against, so the card says so.
+            faq: "",
+          },
         };
       }
     }
@@ -406,7 +454,52 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, message: `${rejected.length} product(s) marked as rejected.` });
   }
 
+  // Persist one inline edit as the merchant makes it (fired on blur, not on
+  // every keystroke). Edits used to live only in React state, so turning the
+  // page — or a reload, or a session timeout — threw the merchant's rewriting
+  // away without a word. The publish-time `edits` merge above still runs; this
+  // is what survives leaving the page.
+  if (actionType === "saveEdit") {
+    const productId = formData.get("productId");
+    const contentType = formData.get("contentType");
+    const content = formData.get("content");
+    if (
+      typeof productId !== "string" ||
+      !productId ||
+      typeof contentType !== "string" ||
+      !CONTENT_TYPES.includes(contentType) ||
+      typeof content !== "string"
+    ) {
+      return Response.json({ error: "Invalid edit." }, { status: 400 });
+    }
+
+    const productTitle = formData.get("productTitle");
+    await prisma.generatedContent.upsert({
+      where: { shop_productId_contentType: { shop, productId, contentType } },
+      update: { generatedContent: content },
+      create: {
+        shop,
+        productId,
+        contentType,
+        productTitle: typeof productTitle === "string" ? productTitle : "",
+        generatedContent: content,
+        status: "draft",
+      },
+    });
+
+    return Response.json({ success: true, saved: true, productId, contentType });
+  }
+
   return Response.json({ error: "Unknown action." }, { status: 400 });
+};
+
+// A blur-save is a background write of text the page already has on screen.
+// Without this, every blur would re-run the loader — and with it a Shopify
+// GraphQL fetch for all 50 products on the page. Publish and reject still
+// revalidate as before.
+export const shouldRevalidate = ({ formData, defaultShouldRevalidate }) => {
+  if (formData?.get("actionType") === "saveEdit") return false;
+  return defaultShouldRevalidate;
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -422,10 +515,15 @@ export default function ReviewPage() {
   const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
 
-  const [approved, setApproved] = useState(() => new Set(products.map((p) => p.productId)));
+  // NOTHING is approved until the merchant says so. This used to start as
+  // every product on the page, so the first press of Publish pushed drafts the
+  // merchant had never opened to a live storefront.
+  const [approved, setApproved] = useState(() => new Set());
   const [search, setSearch] = useState("");
-  // edits: { [productId]: { [contentType]: editedValue } }
+  // edits: { [productId]: { [contentType]: editedValue } } — still merged at
+  // publish time; each one is also written to the draft row on blur.
   const [edits, setEdits] = useState({});
+  const saveFetcher = useFetcher();
 
   const handleEdit = useCallback((productId, type, value) => {
     setEdits((prev) => ({
@@ -433,6 +531,20 @@ export default function ReviewPage() {
       [productId]: { ...prev[productId], [type]: value },
     }));
   }, []);
+
+  // Blur, not keystroke: one write when the merchant leaves the field.
+  const handleSaveEdit = useCallback(
+    (productId, productTitle, type, value) => {
+      const fd = new FormData();
+      fd.append("actionType", "saveEdit");
+      fd.append("productId", productId);
+      fd.append("productTitle", productTitle ?? "");
+      fd.append("contentType", type);
+      fd.append("content", value);
+      saveFetcher.submit(fd, { method: "POST" });
+    },
+    [saveFetcher],
+  );
 
   const toggleApproved = useCallback((productId) => {
     setApproved((prev) => {
@@ -443,11 +555,11 @@ export default function ReviewPage() {
     });
   }, []);
 
-  const selectAll = useCallback(() => {
+  const approveAllOnPage = useCallback(() => {
     setApproved(new Set(products.map((p) => p.productId)));
   }, [products]);
 
-  const deselectAll = useCallback(() => setApproved(new Set()), []);
+  const clearSelection = useCallback(() => setApproved(new Set()), []);
 
   const handlePublish = useCallback(() => {
     const fd = new FormData();
@@ -457,14 +569,30 @@ export default function ReviewPage() {
     submit(fd, { method: "POST" });
   }, [approved, edits, submit]);
 
-  const handleRejectUnapproved = useCallback(() => {
-    const rejectedIds = products.map((p) => p.productId).filter((id) => !approved.has(id));
-    if (rejectedIds.length === 0) return;
+  /**
+   * Phase 2 item 2.8 — rejecting is now confirmed.
+   *
+   * Making approvals start empty (so a merchant cannot publish content they
+   * have never opened) had a consequence nobody asked for: this button, which
+   * rejects everything NOT approved, became enabled in the default state. On a
+   * freshly loaded page that is every draft, one click, no confirmation, and no
+   * way back from the UI.
+   *
+   * Removing one foot-gun should not install another, so it asks first and says
+   * the number.
+   */
+  const unapprovedIds = products.map((p) => p.productId).filter((id) => !approved.has(id));
+
+  const doRejectUnapproved = useCallback(() => {
+    if (unapprovedIds.length === 0) return;
     const fd = new FormData();
     fd.append("actionType", "reject");
-    fd.append("rejected", JSON.stringify(rejectedIds));
+    fd.append("rejected", JSON.stringify(unapprovedIds));
     submit(fd, { method: "POST" });
-  }, [products, approved, submit]);
+    setConfirmReject(false);
+  }, [unapprovedIds, submit]);
+
+  const [confirmReject, setConfirmReject] = useState(false);
 
   const prevActionData = useRef(null);
   useEffect(() => {
@@ -476,9 +604,64 @@ export default function ReviewPage() {
     }
   }, [actionData]);
 
-  const filtered = products.filter((p) => p.productTitle.toLowerCase().includes(search.toLowerCase()));
+  const filtered = useMemo(
+    () => products.filter((p) => p.productTitle.toLowerCase().includes(search.toLowerCase())),
+    [products, search],
+  );
 
   const approvedCount = [...approved].filter((id) => products.some((p) => p.productId === id)).length;
+
+  // Keyboard review: arrow right steps to the next product, Enter approves the
+  // one you are on. -1 means "nobody yet" — Enter must never approve something
+  // the merchant has not stepped to.
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const activeIndexRef = useRef(-1);
+  activeIndexRef.current = activeIndex;
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      // Never hijack a key the merchant is typing with.
+      const target = event.target;
+      const tag = target?.tagName;
+      if (target?.isContentEditable || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (tag === "INPUT") {
+        // The arrow keys move focus ONTO the Approve checkbox, so a checkbox
+        // must not bail out of the handler that put it there. Only text entry
+        // is protected.
+        const inputType = (target.type || "text").toLowerCase();
+        if (inputType !== "checkbox" && inputType !== "radio") return;
+      }
+      // A focused button already answers to Enter; approving as well would fire
+      // two things off one keypress.
+      if (event.key === "Enter" && (tag === "BUTTON" || tag === "A")) return;
+
+      if (filtered.length === 0) return;
+      const i = activeIndexRef.current;
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setActiveIndex(Math.min(i + 1, filtered.length - 1));
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setActiveIndex(i <= 0 ? 0 : i - 1);
+      } else if (event.key === "Enter" && i >= 0 && i < filtered.length) {
+        event.preventDefault();
+        toggleApproved(filtered[i].productId);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [filtered, toggleApproved]);
+
+  // Move the real browser focus with the arrow keys, so the merchant can see
+  // where they are and the page scrolls the card into view for them.
+  useEffect(() => {
+    if (activeIndex < 0 || activeIndex >= filtered.length) return;
+    const el = document.getElementById(approveCheckboxId(filtered[activeIndex].productId));
+    if (el && document.activeElement !== el) el.focus();
+  }, [activeIndex, filtered]);
 
   if (products.length === 0) {
     return (
@@ -513,15 +696,7 @@ export default function ReviewPage() {
           schema attached, in the structured format search engines and AI answer engines read and quote from.
         </Banner>
 
-        {actionData?.success && actionData.errors?.length > 0 && (
-          <Banner tone="warning" title="Published with some errors">
-            {actionData.errors.map((e, i) => (
-              <p key={i}>
-                Failed: {e.productTitle || "Untitled product"} — {e.error}
-              </p>
-            ))}
-          </Banner>
-        )}
+        {actionData?.success && <PublishFailures errors={actionData.errors} />}
         {actionData?.error && (
           <Banner tone="critical">
             <p>{actionData.error}</p>
@@ -536,36 +711,41 @@ export default function ReviewPage() {
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
                   {approvedCount} of {products.length} approved
                 </Text>
-                <Button variant="plain" size="slim" onClick={selectAll}>
-                  Select All
+                <Button variant="plain" size="slim" onClick={approveAllOnPage}>
+                  Approve all on this page
                 </Button>
-                <Button variant="plain" size="slim" onClick={deselectAll}>
-                  Deselect All
+                <Button variant="plain" size="slim" onClick={clearSelection}>
+                  Clear selection
                 </Button>
               </InlineStack>
               <ButtonGroup>
                 <Button
                   tone="critical"
-                  onClick={handleRejectUnapproved}
+                  onClick={() => setConfirmReject(true)}
                   loading={isSubmitting && navigation.formData?.get("actionType") === "reject"}
-                  disabled={isSubmitting || approvedCount === products.length}
+                  disabled={isSubmitting || unapprovedIds.length === 0}
                 >
-                  Reject skipped
+                  {`Reject ${unapprovedIds.length} not approved`}
                 </Button>
-                <Button
-                  variant="primary"
-                  tone="success"
-                  onClick={handlePublish}
-                  loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
-                  disabled={isSubmitting || approvedCount === 0}
-                >
-                  Publish {approvedCount} approved
-                </Button>
+                {/* No disabled primary: with nothing approved there is nothing
+                    to publish, so the slot stays empty rather than dangling a
+                    button the merchant cannot press. */}
+                {approvedCount > 0 && (
+                  <Button
+                    variant="primary"
+                    tone="success"
+                    onClick={handlePublish}
+                    loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
+                    disabled={isSubmitting}
+                  >
+                    Publish {approvedCount} approved
+                  </Button>
+                )}
               </ButtonGroup>
             </InlineStack>
 
             <TextField
-              label=""
+              label="Search products"
               labelHidden
               placeholder="Search products..."
               value={search}
@@ -574,42 +754,33 @@ export default function ReviewPage() {
               onClearButtonClick={() => setSearch("")}
               autoComplete="off"
             />
+
+            <Text as="p" variant="bodySm" tone="subdued">
+              Keyboard: press the right arrow key to step to the next product, Enter to approve it.
+            </Text>
           </BlockStack>
         </Card>
 
         {/* Product cards */}
         <BlockStack gap="400">
-          {filtered.map((product) => (
+          {filtered.map((product, index) => (
             <ProductReviewCard
               key={product.productId}
               product={product}
               isApproved={approved.has(product.productId)}
               onToggle={() => toggleApproved(product.productId)}
+              onFocusCard={() => setActiveIndex(index)}
               onEdit={(type, value) => handleEdit(product.productId, type, value)}
+              onSaveEdit={(type, value) =>
+                handleSaveEdit(product.productId, product.productTitle, type, value)
+              }
             />
           ))}
         </BlockStack>
 
-        {/* Bottom publish button */}
-        {filtered.length > 3 && (
-          <Card>
-            <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                {approvedCount} of {products.length} approved and ready to publish
-              </Text>
-              <Button
-                variant="primary"
-                tone="success"
-                size="large"
-                onClick={handlePublish}
-                loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
-                disabled={isSubmitting || approvedCount === 0}
-              >
-                Publish {approvedCount} approved
-              </Button>
-            </InlineStack>
-          </Card>
-        )}
+        {/* There is exactly one publish primary, in the action bar above. A
+            second identical one at the foot of the list was the same action
+            twice, and the merchant had to work out whether it was. */}
 
         {totalPages > 1 && (
           <Card>
@@ -627,24 +798,46 @@ export default function ReviewPage() {
           </Card>
         )}
       </BlockStack>
+      <Modal
+        open={confirmReject}
+        onClose={() => setConfirmReject(false)}
+        title={`Reject ${unapprovedIds.length} draft${unapprovedIds.length === 1 ? "" : "s"}?`}
+        primaryAction={{
+          content: "Reject them",
+          destructive: true,
+          onAction: doRejectUnapproved,
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setConfirmReject(false) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p" variant="bodyMd">
+              Every draft on this page that you have not approved will be marked rejected and will leave this
+              queue. Your live storefront is not changed.
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              You can generate fresh content for these products at any time.
+            </Text>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }
 
-function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
+function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit, onSaveEdit }) {
   const [expanded, setExpanded] = useState({});
   const toggleExpand = (type) => setExpanded((prev) => ({ ...prev, [type]: !prev[type] }));
 
-  const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
-    (t) => product.content[t],
-  );
+  const contentTypes = CONTENT_TYPES.filter((t) => product.content[t]);
+  const current = product.current || {};
 
   return (
     // Phase 2 item 2.5 - this was a div with an inset box-shadow in
     // hard-coded #00A047 / #C9CCCF: status by COLOUR ALONE, which fails
     // anyone who cannot tell those two apart. Polaris Card carries the
-    // state as a background token, and the Badge beside the title says it
-    // in words.
+    // state as a background token, and the Approve checkbox below states it
+    // in words and in its own checked state.
     <Card background={isApproved ? "bg-surface-success" : "bg-surface-secondary"}>
       <BlockStack gap="400">
         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
@@ -667,7 +860,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
                   // traditional SEO scores shown elsewhere). Unified colour rule:
                   // >=70 green, 40–69 amber, <40 red — a mid score is "work to do",
                   // not "broken", so it never shows alarming red.
-                  <Tooltip content="Content quality score — measures how complete and structured this content is for AI search.">
+                  <Tooltip content="How complete this draft is, scored out of 100.">
                     <Badge
                       tone={
                         product.qualityScore >= 70
@@ -677,29 +870,32 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
                             : "critical"
                       }
                     >
-                      {`Content quality: ${product.qualityScore}`}
+                      {`Content quality: ${product.qualityScore}/100`}
                     </Badge>
                   </Tooltip>
                 )}
               </InlineStack>
               <InlineStack gap="200">
+                {/* Merchant-facing names. These badges used to print the raw
+                    storage keys — "metaTitle", "metaDescription". */}
                 {contentTypes.map((t) => (
                   <Badge key={t} tone="info">
-                    {t}
+                    {CONTENT_LABELS[t] || t}
                   </Badge>
                 ))}
               </InlineStack>
             </BlockStack>
           </InlineStack>
-          {isApproved ? (
-            <Button variant="primary" tone="success" onClick={onToggle}>
-              ✓ Approved
-            </Button>
-          ) : (
-            <Button variant="tertiary" onClick={onToggle}>
-              Skipped — tap to include
-            </Button>
-          )}
+          {/* A checkbox, not a primary button. Approval is a choice you tick,
+              and a green primary per card competed with the one real primary
+              on the page while actually meaning "un-approve". */}
+          <Checkbox
+            id={approveCheckboxId(product.productId)}
+            label="Approve"
+            checked={isApproved}
+            onChange={onToggle}
+            onFocus={onFocusCard}
+          />
         </InlineStack>
 
         <Divider />
@@ -709,9 +905,11 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
             key={type}
             type={type}
             content={product.content[type]}
+            currentValue={current[type] || ""}
             expanded={!!expanded[type]}
             onToggle={() => toggleExpand(type)}
             onEdit={(value) => onEdit(type, value)}
+            onSaveEdit={(value) => onSaveEdit(type, value)}
           />
         ))}
       </BlockStack>
@@ -719,15 +917,17 @@ function ProductReviewCard({ product, isApproved, onToggle, onEdit }) {
   );
 }
 
-function ContentSection({ type, content, expanded, onToggle, onEdit }) {
-  const [editedValue, setEditedValue] = useState(content);
+// decodeHtmlEntities: stored content (and stripped HTML) can carry entities
+// ("Premium Skateboards &amp; Gear") which React renders literally.
+function previewText(type, value) {
+  const plain = type === "description" ? value.replace(/<[^>]+>/g, "") : value;
+  const decoded = decodeHtmlEntities(plain).trim();
+  return decoded.length > 200 ? `${decoded.substring(0, 200)}...` : decoded;
+}
 
-  const labels = {
-    description: "Description",
-    metaTitle: "Meta Title",
-    metaDescription: "Meta Description",
-    faq: "FAQ",
-  };
+function ContentSection({ type, content, currentValue, expanded, onToggle, onEdit, onSaveEdit }) {
+  const [editedValue, setEditedValue] = useState(content);
+  const savedValue = useRef(content);
 
   const handleChange = useCallback(
     (value) => {
@@ -737,12 +937,17 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     [onEdit],
   );
 
-  // decodeHtmlEntities: stored content (and stripped HTML) can carry entities
-  // ("Premium Skateboards &amp; Gear") which React renders literally.
-  const preview =
-    type === "description"
-      ? decodeHtmlEntities(content.replace(/<[^>]+>/g, "")).substring(0, 120) + "..."
-      : decodeHtmlEntities(content).substring(0, 120) + (content.length > 120 ? "..." : "");
+  // Persist on blur, not on every keystroke: one write when the merchant
+  // leaves the field, and only if they actually changed something.
+  const handleBlur = useCallback(() => {
+    if (editedValue === savedValue.current) return;
+    savedValue.current = editedValue;
+    onSaveEdit(editedValue);
+  }, [editedValue, onSaveEdit]);
+
+  const label = CONTENT_LABELS[type] || type;
+  const preview = previewText(type, content);
+  const currentPreview = previewText(type, currentValue || "");
 
   const charLimit = type === "metaTitle" ? 60 : type === "metaDescription" ? 155 : null;
   const charCount = editedValue.length;
@@ -752,35 +957,74 @@ function ContentSection({ type, content, expanded, onToggle, onEdit }) {
     <BlockStack gap="200">
       <InlineStack align="space-between" blockAlign="center">
         <Text as="p" variant="bodySm" fontWeight="semibold">
-          {labels[type] || type}
+          {label}
         </Text>
         <Button variant="plain" size="slim" onClick={onToggle}>
           {expanded ? "Collapse" : "Edit"}
         </Button>
       </InlineStack>
-      {expanded ? (
+
+      {/* What is on the product now, beside what would replace it. One column
+          at 375px, two from md up. */}
+      <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
         <BlockStack gap="100">
-          <TextField
-            label=""
-            labelHidden
-            value={editedValue}
-            onChange={handleChange}
-            multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-            helpText={
-              charLimit
-                ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}`
-                : "Edit before publishing"
-            }
-            error={overLimit ? `Shorten to under ${charLimit} characters` : ""}
-            autoComplete="off"
-          />
+          <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
+            Current
+          </Text>
+          {currentPreview ? (
+            <Text as="p" variant="bodySm">
+              {currentPreview}
+            </Text>
+          ) : (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Nothing yet
+            </Text>
+          )}
         </BlockStack>
-      ) : (
-        <Text as="p" variant="bodySm" tone="subdued">
-          {preview}
-        </Text>
-      )}
+
+        <BlockStack gap="100">
+          <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
+            Proposed
+          </Text>
+          {expanded ? (
+            <TextField
+              label={`Proposed ${label}`}
+              labelHidden
+              value={editedValue}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
+              helpText={
+                charLimit
+                  ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}`
+                  : "Edits are saved when you leave the field"
+              }
+              error={overLimit ? `Shorten to under ${charLimit} characters` : ""}
+              autoComplete="off"
+            />
+          ) : (
+            <Text as="p" variant="bodySm">
+              {preview}
+            </Text>
+          )}
+        </BlockStack>
+      </InlineGrid>
     </BlockStack>
+  );
+}
+
+// The products that did not publish, named. Kept out of the main render so the
+// one publish primary is not buried in a list of failure rows.
+function PublishFailures({ errors }) {
+  if (!errors?.length) return null;
+  return (
+    <Banner tone="warning" title="Published with some errors">
+      {errors.map((e, i) => (
+        <p key={i}>
+          Failed: {e.productTitle || "Untitled product"} — {e.error}
+        </p>
+      ))}
+    </Banner>
   );
 }
 

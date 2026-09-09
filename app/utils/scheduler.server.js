@@ -55,7 +55,7 @@ const BACKUP_HOUR_SYDNEY = 3;
 let _healthTimer = null;
 let _digestTimer = null;
 // In-memory is enough for the alert state: a worker restart re-alerting once on
-// a genuinely broken system is the correct behaviour, not a bug.
+// a genuinely broken system is the correct behavior, not a bug.
 let _lastAlertAt = 0;
 let _lastStatus = "ok";
 let _degradedStreak = 0;

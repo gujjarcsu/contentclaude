@@ -330,7 +330,7 @@ const FAQ_ITEMS = [
 ];
 
 function FeatureCell({ value }) {
-  // Never colour- or glyph-only: Polaris Icon renders accessibilityLabel as
+  // Never color- or glyph-only: Polaris Icon renders accessibilityLabel as
   // visually-hidden text, so a screen reader hears "Included" / "Not included"
   // instead of a bare check glyph or an em dash.
   if (value === true) return <Icon source={CheckIcon} tone="success" accessibilityLabel="Included" />;

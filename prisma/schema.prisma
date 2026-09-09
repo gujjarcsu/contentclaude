@@ -54,6 +54,12 @@ model BrandVoice {
   autopilotEnabled       Boolean  @default(false) // auto-generate on new product
   autopilotAutoPublish   Boolean  @default(false) // publish immediately during autopilot
   autopilotContentTypes  String   @default("description,metaTitle,metaDescription") // csv
+  // Phase 2 item 2.6 — "Publish without review". ONE switch, in Settings.
+  // Auto-publish used to be a per-run checkbox in five places, one of which had
+  // no confirm at all. The listing promises nothing goes live until the
+  // merchant approves it; that promise cannot depend on which box was last
+  // ticked. Off by default, and turning it on asks first.
+  publishWithoutReview   Boolean  @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

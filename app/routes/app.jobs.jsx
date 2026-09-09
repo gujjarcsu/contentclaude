@@ -553,8 +553,8 @@ export default function JobsPage() {
                       <>
                         <Divider />
                         <InlineStack gap="300" blockAlign="center">
-                          <Button variant="primary" onClick={() => navigate("/app/review")}>
-                            Review & Publish Content
+                          <Button onClick={() => navigate("/app/review")}>
+                            Review drafts
                           </Button>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {job.completedProducts} product{job.completedProducts !== 1 ? "s" : ""} ready
@@ -587,7 +587,6 @@ export default function JobsPage() {
                             <input type="hidden" name="jobId" value={job.id} />
                             <input type="hidden" name="actionType" value="resume" />
                             <Button
-                              variant="primary"
                               tone="critical"
                               submit
                               loading={

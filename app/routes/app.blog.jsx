@@ -299,7 +299,7 @@ const LOADING_MESSAGES = [
   "Researching the topic...",
   "Structuring the outline...",
   "Writing your blog post...",
-  "Optimising for SEO...",
+  "Optimizing for SEO...",
   "Adding your brand voice...",
 ];
 
@@ -523,7 +523,7 @@ export default function BlogPage() {
                           variant="primary"
                           submit
                           loading={isGenerating}
-                          disabled={!topic.trim() || isGenerating}
+                          disabled={isGenerating}
                           fullWidth
                         >
                           {isGenerating ? "Generating..." : "Generate Blog Post"}
@@ -762,7 +762,7 @@ export default function BlogPage() {
                         size="large"
                         submit
                         loading={isPublishing}
-                        disabled={isPublishing || !editedTitle || !editedContent}
+                        disabled={isPublishing}
                         fullWidth
                       >
                         {isPublishing ? "Publishing..." : "Publish to Shopify Blog"}

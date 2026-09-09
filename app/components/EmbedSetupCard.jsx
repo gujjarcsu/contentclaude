@@ -29,7 +29,7 @@ export function embedDeepLink(shopDomain) {
  */
 export function EmbedSetupCard({ shopDomain, confirmed }) {
   const fetcher = useFetcher();
-  // Optimistic: hide as soon as the confirm post is in flight
+  // Optimiztic: hide as soon as the confirm post is in flight
   if (confirmed || fetcher.formData?.get("actionType") === "confirm") return null;
 
   const openEditor = () => {
@@ -61,7 +61,7 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
           <List.Item>Come back here and click &quot;I&apos;ve enabled it&quot;.</List.Item>
         </List>
         <InlineStack gap="300">
-          <Button variant="primary" onClick={openEditor}>
+          <Button onClick={openEditor}>
             Open theme editor
           </Button>
           <fetcher.Form method="post" action="/app/embed-status">

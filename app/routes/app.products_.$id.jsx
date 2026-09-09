@@ -29,6 +29,7 @@ import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
@@ -83,22 +84,24 @@ export async function loader({ request, params }) {
   if (!data.product) throw new Response("Product not found", { status: 404 });
   const product = data.product;
 
-  const [existingContent, brandVoice, versions, templates, plan, growthState] = await Promise.all([
-    prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
-    prisma.brandVoice.findUnique({ where: { shop } }),
-    prisma.contentVersion.findMany({
-      where: { shop, productId },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-    }),
-    prisma.contentTemplate.findMany({
-      where: { shop },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-      take: 50,
-    }),
-    getOrCreatePlan(shop),
-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
-  ]);
+  const [existingContent, brandVoice, versions, templates, plan, growthState, publishWithoutReview] =
+    await Promise.all([
+      prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
+      prisma.brandVoice.findUnique({ where: { shop } }),
+      prisma.contentVersion.findMany({
+        where: { shop, productId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+      prisma.contentTemplate.findMany({
+        where: { shop },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        take: 50,
+      }),
+      getOrCreatePlan(shop),
+      prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+      publishesWithoutReview(shop),
+    ]);
 
   const { scoreContent } = await import("../utils/contentScorer.server.js");
   const contentMap = existingContent.reduce((acc, c) => {
@@ -170,6 +173,7 @@ export async function loader({ request, params }) {
     templates,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
+    publishWithoutReview,
     shopDomain: shop,
   };
 }
@@ -304,7 +308,8 @@ export async function action({ request, params }) {
         (t) => formData.get(`gen_${t}`) === "true",
       );
       const doAltText = formData.get("gen_altText") === "true";
-      const autoPublish = formData.get("autoPublish") === "true";
+      // Phase 2 item 2.6 - read from Settings, never from the form.
+      const autoPublish = await publishesWithoutReview(shop);
       const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
       const contentLength = ["short", "standard", "detailed"].includes(formData.get("contentLength"))
         ? formData.get("contentLength")
@@ -949,7 +954,7 @@ export async function action({ request, params }) {
           generateProductContent(productData, brandVoice, contentTypes, {
             ...baseOptions,
             variantHint:
-              "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasise different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
+              "Write a COMPLETELY DIFFERENT version. Use a different opening hook, different structural approach, and emphasize different product benefits. The tone should remain consistent but the angle and flow should be clearly distinct from option A.",
           }),
         ]);
       } catch (err) {
@@ -1200,6 +1205,7 @@ export default function ProductGeneratePage() {
     versionsByType,
     templates,
     entitlements,
+    publishWithoutReview,
     shopDomain,
   } = useLoaderData();
   const navigate = useNavigate();
@@ -1227,10 +1233,10 @@ export default function ProductGeneratePage() {
 
   // Progressive loading messages during AI generation
   const loadingMessages = [
-    "Analysing your product...",
+    "Analyzing your product...",
     "Crafting your brand voice...",
     "Writing compelling copy...",
-    "Optimising for SEO...",
+    "Optimizing for SEO...",
     "Polishing the final draft...",
   ];
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
@@ -1250,7 +1256,6 @@ export default function ProductGeneratePage() {
   const [genMetaDescription, setGenMetaDescription] = useState(true);
   const [genFaq, setGenFaq] = useState(false);
   const [genAltText, setGenAltText] = useState(false);
-  const [autoPublish, setAutoPublish] = useState(false);
   const [showAutoPublishConfirm, setShowAutoPublishConfirm] = useState(false);
   const [pendingGenerateTypes, setPendingGenerateTypes] = useState(null);
   const [targetKeywords, setTargetKeywords] = useState("");
@@ -1366,7 +1371,6 @@ export default function ProductGeneratePage() {
       fd.append("gen_metaDescription", (types.metaDescription ?? false).toString());
       fd.append("gen_faq", (types.faq ?? false).toString());
       fd.append("gen_altText", (types.altText ?? false).toString());
-      fd.append("autoPublish", autoPublish.toString());
       fd.append("targetKeywords", targetKeywords);
       fd.append("contentLength", contentLength);
       fetcher.submit(fd, { method: "POST" });
@@ -1377,7 +1381,6 @@ export default function ProductGeneratePage() {
       genMetaDescription,
       genFaq,
       genAltText,
-      autoPublish,
       targetKeywords,
       contentLength,
       fetcher,
@@ -1386,14 +1389,26 @@ export default function ProductGeneratePage() {
 
   const handleGenerate = useCallback(
     (overrideTypes = null) => {
-      if (autoPublish && !overrideTypes) {
-        setPendingGenerateTypes(null);
+      // Phase 2 item 2.6 — this read `if (autoPublish && !overrideTypes)`.
+      //
+      // `overrideTypes` is set by every per-section "Regenerate" link and by the
+      // Alt Text tab, so those five paths skipped the confirm entirely — while
+      // doGenerate still sent autoPublish=true and the server still published
+      // straight to the live storefront. Clicking the small grey "Regenerate"
+      // beside a description overwrote what shoppers see, with no dialog.
+      //
+      // The dead state proved it was never intended: pendingGenerateTypes was
+      // initialised null, the only write set it to null, and the modal called
+      // doGenerate(pendingGenerateTypes) — i.e. always doGenerate(null). The
+      // variable existed to carry exactly the value this branch threw away.
+      if (publishWithoutReview) {
+        setPendingGenerateTypes(overrideTypes);
         setShowAutoPublishConfirm(true);
         return;
       }
       doGenerate(overrideTypes);
     },
-    [autoPublish, doGenerate],
+    [publishWithoutReview, doGenerate],
   );
 
   const handleRegenerateSection = useCallback(
@@ -1692,13 +1707,6 @@ export default function ProductGeneratePage() {
 
                   <Divider />
 
-                  <Checkbox
-                    label="Auto-publish after generation"
-                    checked={autoPublish}
-                    onChange={setAutoPublish}
-                    helpText="Skips the review step — publishes immediately to Shopify"
-                  />
-
                   {/* Animated progress bar during generation */}
                   {(isGenerating || isEnhancing) && (
                     <Box padding="300" background="bg-surface-info" borderRadius="200">
@@ -1824,7 +1832,7 @@ export default function ProductGeneratePage() {
                           size="large"
                           onClick={() => handleGenerate()}
                           loading={isGenerating}
-                          disabled={isLoading || noneSelected}
+                          disabled={isLoading}
                           fullWidth
                         >
                           {isGenerating ? "Generating..." : "Generate Content"}
@@ -1891,7 +1899,7 @@ export default function ProductGeneratePage() {
                 {selectedTab === 0 && variants && (
                   <BlockStack gap="400">
                     <Banner tone="info" title="2 Options Generated">
-                      Compare both versions and click "Use This One" to save your favourite as a draft.
+                      Compare both versions and click "Use This One" to save your favorite as a draft.
                     </Banner>
                     {variants.map((v, idx) => (
                       <Card key={idx}>
@@ -1901,7 +1909,6 @@ export default function ProductGeneratePage() {
                               Option {idx === 0 ? "A" : "B"}
                             </Text>
                             <Button
-                              variant="primary"
                               size="slim"
                               onClick={() => handleSaveVariant(v)}
                               loading={isLoading}
@@ -2047,7 +2054,7 @@ export default function ProductGeneratePage() {
 
                         {!rawDescription && !isGenerating && (
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Click "Generate Content" to create an AI-optimised description.
+                            Click "Generate Content" to create an AI-optimized description.
                           </Text>
                         )}
 
@@ -2550,9 +2557,9 @@ export default function ProductGeneratePage() {
       <Modal
         open={showAutoPublishConfirm}
         onClose={() => setShowAutoPublishConfirm(false)}
-        title="Auto-publish is enabled"
+        title="Publish without review is on"
         primaryAction={{
-          content: "Generate & Publish Now",
+          content: "Generate and publish",
           destructive: true,
           onAction: () => {
             setShowAutoPublishConfirm(false);
@@ -2563,8 +2570,8 @@ export default function ProductGeneratePage() {
       >
         <Modal.Section>
           <Text as="p" variant="bodyMd">
-            This will generate content and immediately publish it to your live Shopify store, skipping the
-            review step. Are you sure?
+            This will publish straight to your live storefront without a review step. You can turn this off in
+            Settings.
           </Text>
         </Modal.Section>
       </Modal>

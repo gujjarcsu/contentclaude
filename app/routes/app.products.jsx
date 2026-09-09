@@ -36,6 +36,7 @@ import { useState, useCallback, useMemo } from "react";
 import { CheckCircleIcon, ClockIcon, AlertCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import {
   getOrCreatePlan,
   getMonthlyUsageCount,
@@ -84,12 +85,13 @@ export const loader = async ({ request }) => {
           }
         }`;
 
-  const [gqlResponse, plan, usageCount, metrics, productCountResp] = await Promise.all([
+  const [gqlResponse, plan, usageCount, metrics, productCountResp, publishWithoutReview] = await Promise.all([
     admin.graphql(gqlQuery, { variables: { cursor } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     getContentMetrics(shop),
     admin.graphql(`query { productsCount { count } }`),
+    publishesWithoutReview(shop),
   ]);
 
   const gqlData = await gqlResponse.json();
@@ -155,6 +157,7 @@ export const loader = async ({ request }) => {
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
+    publishWithoutReview,
   });
 };
 
@@ -168,7 +171,9 @@ export const action = async ({ request }) => {
     (t) => formData.get(`bulk_${t}`) === "true",
   );
   if (contentTypes.length === 0) return { error: "Select at least one content type." };
-  const autoPublish = formData.get("bulk_autoPublish") === "true";
+  // Phase 2 item 2.6 - read from Settings, never from the form. This panel
+  // submitted with no confirmation at all.
+  const autoPublish = await publishesWithoutReview(shop);
 
   // Bulk jobs are a Growth+ feature — enforce server-side
   const bulkEnt = await checkEntitlement(shop, "bulkJobs");
@@ -339,6 +344,7 @@ export default function ProductsPage() {
     monthlyLimit,
     planName,
     entitlements,
+    publishWithoutReview,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -354,9 +360,11 @@ export default function ProductsPage() {
   const [bulkDesc, setBulkDesc] = useState(true);
   const [bulkMeta, setBulkMeta] = useState(true);
   const [bulkFaq, setBulkFaq] = useState(false);
-  const [bulkAutoPublish, setBulkAutoPublish] = useState(false);
   const [bulkError, setBulkError] = useState("");
   const [generateAllModal, setGenerateAllModal] = useState(false);
+  // Phase 2 item 2.6 — the pending bulk run held back by the publish-without-review
+  // confirm: { actionType, ids } while the modal is open, null otherwise.
+  const [publishConfirm, setPublishConfirm] = useState(null);
 
   const handleSearchChange = useCallback((v) => setSearchValue(v), []);
   const handleSearchClear = useCallback(() => setSearchValue(""), []);
@@ -479,10 +487,9 @@ export default function ProductsPage() {
       fd.append("bulk_metaTitle", bulkMeta.toString());
       fd.append("bulk_metaDescription", bulkMeta.toString());
       fd.append("bulk_faq", bulkFaq.toString());
-      fd.append("bulk_autoPublish", bulkAutoPublish.toString());
       return fd;
     },
-    [bulkDesc, bulkMeta, bulkFaq, bulkAutoPublish],
+    [bulkDesc, bulkMeta, bulkFaq],
   );
 
   const handleBulkGenerate = useCallback(() => {
@@ -491,8 +498,12 @@ export default function ProductsPage() {
       return;
     }
     setBulkError("");
+    if (publishWithoutReview) {
+      setPublishConfirm({ actionType: "generateSelected", ids: selectedItems });
+      return;
+    }
     submit(buildBulkFormData("generateSelected", selectedItems), { method: "POST" });
-  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit]);
+  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview]);
 
   const handleGenerateAll = useCallback(() => {
     if (!bulkDesc && !bulkMeta && !bulkFaq) {
@@ -501,8 +512,12 @@ export default function ProductsPage() {
     }
     setBulkError("");
     setGenerateAllModal(false);
+    if (publishWithoutReview) {
+      setPublishConfirm({ actionType: "generateAll", ids: null });
+      return;
+    }
     submit(buildBulkFormData("generateAll", null), { method: "POST" });
-  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit]);
+  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview]);
 
   if (loadingThisRoute) return <ProductListSkeleton />;
 
@@ -515,7 +530,7 @@ export default function ProductsPage() {
          There were six labels for this job on this page alone: "Generate All
          (17)", "Quick Generate", "Generate {n} Products", "Generate for {n}
          selected", a per-row "Generate" that only navigated, and "Start Bulk
-         Job" in the modal. Plus "Optimise N Products", "Fix All Missing
+         Job" in the modal. Plus "Optimize N Products", "Fix All Missing
          Content" and "Refresh Stale Content" on other screens.
 
          It is now "Optimize store" everywhere, it always means the same thing —
@@ -562,7 +577,7 @@ export default function ProductsPage() {
         {isOutOfUsage && (
           <Banner tone="critical" title="Monthly generation limit reached">
             <p>
-              You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your
+              You've used all {monthlyLimit} generations for this month. Upgrade to keep optimizing your
               store.
             </p>
             <Box paddingBlockStart="200">
@@ -722,14 +737,6 @@ export default function ProductsPage() {
                         checked={bulkFaq}
                         onChange={setBulkFaq}
                         helpText="Q&A pairs"
-                      />
-                    </Box>
-                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox
-                        label="Auto-publish"
-                        checked={bulkAutoPublish}
-                        onChange={setBulkAutoPublish}
-                        helpText="Push directly to Shopify - skips review queue"
                       />
                     </Box>
                   </BlockStack>
@@ -902,18 +909,38 @@ export default function ProductsPage() {
               <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />
               <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} />
               <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} />
-              <Checkbox
-                label="Auto-publish (skip review)"
-                checked={bulkAutoPublish}
-                onChange={setBulkAutoPublish}
-                helpText="Pushes directly to Shopify - no review step"
-              />
               {bulkError && (
                 <Banner tone="critical">
                   <p>{bulkError}</p>
                 </Banner>
               )}
             </BlockStack>
+          </Modal.Section>
+        </Modal>
+
+        {/* Publish-without-review confirmation. Driven by the merchant's Settings
+            value, not by a per-run checkbox — this panel used to submit with no
+            confirmation at all. */}
+        <Modal
+          open={publishConfirm !== null}
+          onClose={() => setPublishConfirm(null)}
+          title="Publish without review is on"
+          primaryAction={{
+            content: "Generate and publish",
+            destructive: true,
+            onAction: () => {
+              const pending = publishConfirm;
+              setPublishConfirm(null);
+              if (pending) submit(buildBulkFormData(pending.actionType, pending.ids), { method: "POST" });
+            },
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setPublishConfirm(null) }]}
+        >
+          <Modal.Section>
+            <Text as="p" variant="bodyMd">
+              This will publish straight to your live storefront without a review step. You can turn this off
+              in Settings.
+            </Text>
           </Modal.Section>
         </Modal>
       </BlockStack>

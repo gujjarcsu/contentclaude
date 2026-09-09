@@ -10,7 +10,7 @@ import { quotaGapTitle, N_DEFINITION_COPY } from "../utils/planFit.js";
  * wrapped around a Polaris `Box`, which produced a visible double corner because
  * the outer 8px radius did not match the inner Polaris token. The background
  * used `bg-surface-warning-hover` — a HOVER token as a resting state, which
- * shifts under any Polaris theme change. The icon was a hand-coloured lucide
+ * shifts under any Polaris theme change. The icon was a hand-colored lucide
  * glyph, and the dismiss was a plain Button wrapping a lucide `X` passed as a
  * render function where Polaris expects an icon source.
  *

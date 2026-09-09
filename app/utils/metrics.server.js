@@ -5,7 +5,7 @@
  * published row; `optimize.jsx` counted description rows only; the `products.jsx`
  * tabs counted per page, by description status; `seo-audit.jsx` asked Shopify
  * whether the description was empty. So Home said 5 and Products said 3, and
- * Products said 12 where Optimise said 14, for the same store at the same
+ * Products said 12 where Optimize said 14, for the same store at the same
  * moment. A merchant who sees two numbers for one thing stops trusting both.
  *
  * The deeper fault was that the old counts were not mutually exclusive. A

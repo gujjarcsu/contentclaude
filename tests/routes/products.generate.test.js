@@ -16,7 +16,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { prisma, authenticate, enqueue, checkEntitlement, remainingGenerations, graphql } = vi.hoisted(
+const {
+  prisma,
+  authenticate,
+  enqueue,
+  checkEntitlement,
+  remainingGenerations,
+  graphql,
+  publishesWithoutReview,
+} = vi.hoisted(
   () => ({
     prisma: { generationJob: { create: vi.fn(async ({ data }) => ({ id: "job-1", ...data })) } },
     authenticate: { admin: vi.fn() },
@@ -24,11 +32,13 @@ const { prisma, authenticate, enqueue, checkEntitlement, remainingGenerations, g
     checkEntitlement: vi.fn(async () => ({ allowed: true })),
     remainingGenerations: vi.fn(async () => 1000),
     graphql: vi.fn(),
+    publishesWithoutReview: vi.fn(async () => false),
   }),
 );
 
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate }));
+vi.mock("../../app/utils/publishSetting.server.js", () => ({ publishesWithoutReview }));
 vi.mock("../../app/queues/generationQueue.server.js", () => ({ enqueueGenerationJob: enqueue }));
 vi.mock("../../app/utils/metrics.server.js", () => ({ getContentMetrics: vi.fn(async () => ({})) }));
 vi.mock("../../app/utils/plans.server.js", async () => {
@@ -68,6 +78,7 @@ beforeEach(() => {
   authenticate.admin.mockResolvedValue({ session: { shop: SHOP }, admin: { graphql } });
   checkEntitlement.mockResolvedValue({ allowed: true });
   remainingGenerations.mockResolvedValue(1000);
+  publishesWithoutReview.mockResolvedValue(false);
   graphql.mockResolvedValue(page(ids(10)));
 });
 
@@ -183,12 +194,24 @@ describe("the gates in front of both", () => {
     expect(graphql).not.toHaveBeenCalled();
   });
 
-  it("carries the merchant's auto-publish choice onto the job", async () => {
-    await generateAll({ bulk_autoPublish: "true" });
+  it("carries the merchant's SETTING onto the job, not a form field", async () => {
+    // Phase 2 item 2.6 — auto-publish used to be a per-run checkbox here, and
+    // this panel submitted with no confirmation at all. It is now one setting.
+    publishesWithoutReview.mockResolvedValue(true);
+    await generateAll();
     expect(createdJob().autoPublish).toBe(true);
   });
 
-  it("defaults auto-publish to off — publishing to a live store is opt-in", async () => {
+  it("ignores a submitted auto-publish field entirely", async () => {
+    // The field is what the page last sent. If a stale form, a replayed
+    // request or a crafted POST could still set it, the setting would not be
+    // the source of truth and the listing's promise would not hold.
+    publishesWithoutReview.mockResolvedValue(false);
+    await generateAll({ bulk_autoPublish: "true", autoPublish: "true" });
+    expect(createdJob().autoPublish).toBe(false);
+  });
+
+  it("defaults to off — publishing to a live store is opt-in", async () => {
     await generateAll();
     expect(createdJob().autoPublish).toBe(false);
   });

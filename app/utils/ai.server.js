@@ -169,7 +169,7 @@ export async function enhanceExistingContent(product, brandVoice, contentTypes =
   sections.push(`=== CRITICAL RULES ===
 You are ENHANCING existing content — not rewriting from scratch.
 PRESERVE the key facts, claims, and voice of the original — every fact in the output must come from the original content or the product data.
-You MAY reorganise the layout (headings, paragraphs, lists) where it improves scannability and the quality standard below.
+You MAY reorganize the layout (headings, paragraphs, lists) where it improves scannability and the quality standard below.
 IMPROVE: clarity, readability, formatting, SEO keyword coverage, conversion hooks, brand tone alignment.
 Do NOT invent claims not in the original or product data.`);
 
@@ -730,7 +730,7 @@ PRODUCT DESCRIPTION:
   if (contentTypes.includes("metaTitle")) {
     typeInstructions.push(`
 META TITLE:
-- SEO-optimised, maximum 60 characters (strictly enforce)
+- SEO-optimized, maximum 60 characters (strictly enforce)
 - Format: Brand Name Product Name | Key Benefit or Category
 - CAPITALISATION: Use Title Case for significant words
 - Make it compelling and relevant to search intent
@@ -740,7 +740,7 @@ META TITLE:
   if (contentTypes.includes("metaDescription")) {
     typeInstructions.push(`
 META DESCRIPTION:
-- SEO-optimised, maximum 155 characters (strictly enforce)
+- SEO-optimized, maximum 155 characters (strictly enforce)
 - Clear value proposition with a subtle call to action
 - CAPITALISATION: Sentence case — first word and proper nouns only
 - Format: <META_DESCRIPTION>Your meta description here.</META_DESCRIPTION>`);

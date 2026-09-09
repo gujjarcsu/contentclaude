@@ -21,6 +21,7 @@ import {
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
@@ -36,7 +37,7 @@ export const loader = async ({ request }) => {
 
   // productsCount shares the dashboard/analytics 5-min cache and runs in parallel
   // with the DB queries, so the loader isn't blocked on a serial Admin API call.
-  const [totalProducts, metrics, plan, usageCount] = await Promise.all([
+  const [totalProducts, metrics, plan, usageCount, publishWithoutReview] = await Promise.all([
     getCache(
       `productCount:${shop}`,
       async () => {
@@ -49,10 +50,11 @@ export const loader = async ({ request }) => {
     getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
     prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
+    publishesWithoutReview(shop),
   ]);
 
   // Phase 2 item 2.1 - one definition of product state, shared with Home and
-  // Products. This used to count DESCRIPTION ROWS ONLY, which is why Optimise
+  // Products. This used to count DESCRIPTION ROWS ONLY, which is why Optimize
   // said 14 where Products said 12: a product with a meta title but no
   // description read as needing content here and as having content there.
   const publishedCount = metrics.publishedProducts;
@@ -68,6 +70,7 @@ export const loader = async ({ request }) => {
     needsContent,
     remaining,
     canOptimize,
+    publishWithoutReview,
     planName: plan?.planName ?? "free",
     monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
   });
@@ -84,7 +87,7 @@ export const action = async ({ request }) => {
   const bulkEnt = await checkEntitlement(shop, "bulkJobs");
   if (!bulkEnt.allowed) {
     return Response.json({
-      error: `Bulk optimisation requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock.`,
+      error: `Bulk optimization requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock.`,
       limitReached: true,
     });
   }
@@ -100,12 +103,13 @@ export const action = async ({ request }) => {
       : ["description", "metaTitle", "metaDescription", "faq"];
   const contentTypes = allowedTypes.filter((t) => formData.get(t) === "true");
   if (contentTypes.length === 0) return Response.json({ error: "Select at least one content type." });
-  const autoPublish = formData.get("autoPublish") === "true";
+  // Phase 2 item 2.6 - read from Settings, never from the form.
+  const autoPublish = await publishesWithoutReview(shop);
 
   // Use $queryRaw for O(1) ID lookup — findMany would load all rows into memory
   // which is prohibitive at 100k+ products per merchant.
   // Enhance mode doesn't exclude products with prior AI content (its whole point
-  // is re-optimising what's already live), so the lookup is generate-only.
+  // is re-optimizing what's already live), so the lookup is generate-only.
   let existingIds = new Set();
   if (mode === "generate") {
     const generatedRows = await prisma.$queryRaw`
@@ -171,8 +175,8 @@ export const action = async ({ request }) => {
     return Response.json({
       error:
         mode === "enhance"
-          ? "No products with an existing description were found — use the optimise flow above to generate fresh content first."
-          : "All products already have AI content — nothing to optimise.",
+          ? "No products with an existing description were found — use the optimize flow above to generate fresh content first."
+          : "All products already have AI content — nothing to optimize.",
     });
   }
 
@@ -227,6 +231,7 @@ export default function OptimizePage() {
     canOptimize,
     planName,
     monthlyLimit,
+    publishWithoutReview,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -241,13 +246,11 @@ export default function OptimizePage() {
   const [genDesc, setGenDesc] = useState(true);
   const [genMeta, setGenMeta] = useState(true);
   const [genFaq, setGenFaq] = useState(false);
-  const [autoPublish, setAutoPublish] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Enhance panel (improve existing descriptions) — mirrors the generate panel
   const [enhDesc, setEnhDesc] = useState(true);
   const [enhMeta, setEnhMeta] = useState(true);
-  const [enhAutoPublish, setEnhAutoPublish] = useState(false);
-  // Which panel the auto-publish confirm modal belongs to
+  // Which panel the publish-without-review confirm modal belongs to
   const [confirmMode, setConfirmMode] = useState("generate");
 
   const doSubmit = useCallback(() => {
@@ -256,9 +259,8 @@ export default function OptimizePage() {
     fd.append("metaTitle", genMeta.toString());
     fd.append("metaDescription", genMeta.toString());
     fd.append("faq", genFaq.toString());
-    fd.append("autoPublish", autoPublish.toString());
     submit(fd, { method: "POST" });
-  }, [genDesc, genMeta, genFaq, autoPublish, submit]);
+  }, [genDesc, genMeta, genFaq, submit]);
 
   const doSubmitEnhance = useCallback(() => {
     const fd = new FormData();
@@ -266,27 +268,26 @@ export default function OptimizePage() {
     fd.append("description", enhDesc.toString());
     fd.append("metaTitle", enhMeta.toString());
     fd.append("metaDescription", enhMeta.toString());
-    fd.append("autoPublish", enhAutoPublish.toString());
     submit(fd, { method: "POST" });
-  }, [enhDesc, enhMeta, enhAutoPublish, submit]);
+  }, [enhDesc, enhMeta, submit]);
 
   const handleOptimize = useCallback(() => {
-    if (autoPublish) {
+    if (publishWithoutReview) {
       setConfirmMode("generate");
       setConfirmOpen(true);
     } else {
       doSubmit();
     }
-  }, [autoPublish, doSubmit]);
+  }, [publishWithoutReview, doSubmit]);
 
   const handleEnhance = useCallback(() => {
-    if (enhAutoPublish) {
+    if (publishWithoutReview) {
       setConfirmMode("enhance");
       setConfirmOpen(true);
     } else {
       doSubmitEnhance();
     }
-  }, [enhAutoPublish, doSubmitEnhance]);
+  }, [publishWithoutReview, doSubmitEnhance]);
 
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
   const estMinutes = Math.ceil((canOptimize * 3.5) / 60);
@@ -403,7 +404,7 @@ export default function OptimizePage() {
 
         {/* Optimize panel */}
         {needsContent === 0 ? (
-          <Banner tone="success" title="Your store is fully optimised!">
+          <Banner tone="success" title="Your store is fully optimized!">
             <p>All {totalProducts} products have AI-generated content.</p>
           </Banner>
         ) : remaining === 0 ? (
@@ -433,12 +434,6 @@ export default function OptimizePage() {
                   <Checkbox label="Description" checked={genDesc} onChange={setGenDesc} />
                   <Checkbox label="Meta Title & Description" checked={genMeta} onChange={setGenMeta} />
                   <Checkbox label="FAQ" checked={genFaq} onChange={setGenFaq} />
-                  <Checkbox
-                    label="Auto-publish (skip review)"
-                    checked={autoPublish}
-                    onChange={setAutoPublish}
-                    helpText="Publishes directly to Shopify"
-                  />
                 </InlineStack>
               </BlockStack>
 
@@ -466,7 +461,7 @@ export default function OptimizePage() {
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
                 Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved
-                as drafts for your review unless auto-publish is on.
+                as drafts for your review unless publish without review is turned on in Settings.
               </Text>
 
               <BlockStack gap="200">
@@ -476,12 +471,6 @@ export default function OptimizePage() {
                 <InlineStack gap="500" wrap>
                   <Checkbox label="Description" checked={enhDesc} onChange={setEnhDesc} />
                   <Checkbox label="Meta Title & Description" checked={enhMeta} onChange={setEnhMeta} />
-                  <Checkbox
-                    label="Auto-publish (skip review)"
-                    checked={enhAutoPublish}
-                    onChange={setEnhAutoPublish}
-                    helpText="Publishes directly to Shopify"
-                  />
                 </InlineStack>
               </BlockStack>
 
@@ -509,9 +498,9 @@ export default function OptimizePage() {
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Publish directly to your live storefront?"
+        title="Publish without review is on"
         primaryAction={{
-          content: "Yes, auto-publish",
+          content: "Generate and publish",
           destructive: true,
           onAction: () => {
             setConfirmOpen(false);
@@ -523,6 +512,10 @@ export default function OptimizePage() {
       >
         <Modal.Section>
           <TextContainer>
+            <Text as="p">
+              This will publish straight to your live storefront without a review step. You can turn this off
+              in Settings.
+            </Text>
             <Banner tone="warning">
               <p>
                 {confirmMode === "enhance" ? (
@@ -547,11 +540,10 @@ export default function OptimizePage() {
               </p>
             </Banner>
             <Text as="p">
-              Auto-publish will overwrite the live product descriptions on your Shopify storefront for{" "}
+              The live product descriptions on your Shopify storefront will be overwritten for{" "}
               {confirmMode === "enhance" ? "up to" : "all"}
               {""}
-              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products — without a
-              review step.
+              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products.
             </Text>
             <Text as="p" tone="subdued">
               This cannot be undone from Navaal. You can revert individual products via the product editor
