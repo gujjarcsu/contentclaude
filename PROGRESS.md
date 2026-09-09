@@ -2074,3 +2074,70 @@ are gone. Quota is stated once, in the usage card, in the same tone as any other
 that removing the pressure did not remove the information.
 
 18 assertions.
+
+---
+
+# PHASE 2 — COMPLETE. Item-by-item ledger.
+
+Five deploys, each through cold-cache lint, blocking typecheck, the full suite, a build, and the
+post-deploy smoke job. **Final deployed SHA `e6ccf0e`**, deep health `ok`, worker alive.
+
+| # | Item | Commit | Deployed | Verified |
+|---|---|---|---|---|
+| 2.13 | Fresh-store self-audit | `f32b188` | — | LIVE (audit table in this file) |
+| 2.1 | One definition of product state | `f32b188` | `f32b188` | LIVE |
+| 2.2 | Nav 13 → 5 | `f32b188` | `f32b188` | LIVE |
+| 2.3 | One bulk action, one name | `f32b188` | `f32b188` | LIVE |
+| 2.4 | Marketing out of the app | `d6a80a9` | `d6a80a9` | LIVE |
+| 2.5 | Polaris only | `d6a80a9` | `d6a80a9` | LIVE |
+| 2.6 | Auto-publish in one place | `6bff05d` | `6bff05d` | LIVE |
+| 2.7 | One primary per screen | `6bff05d` | `6bff05d` | LIVE |
+| 2.8 | The Review screen | `6bff05d` | `6bff05d` | LIVE |
+| 2.9 | Copy | `e6ccf0e` | `e6ccf0e` | LIVE |
+| 2.10 | States, and the empty store | `75809b9` | `c3bb160` | LIVE |
+| 2.11 | Performance feel | `c3bb160` | `c3bb160` | code + smoke; **numbers not obtained** |
+| 2.12 | Mobile and accessibility | `0c392f4` | `c3bb160` | code; **375px not verified** |
+
+**848 assertions across 63 tracked test files**, up from 761 at the start of the phase.
+
+## The three defects that reached merchants
+
+Worth separating from the design work, because these were not matters of taste.
+
+1. **Auto-publish skipped its confirmation on five of seven paths.** The guard read
+   `if (autoPublish && !overrideTypes)`, and `overrideTypes` is set by every per-section "Regenerate"
+   link and the Alt Text tab. Those paths still sent `autoPublish=true` and the server still published
+   to the live storefront. The dead `pendingGenerateTypes` state proved the confirm had been written to
+   cover exactly that case and then wired past it.
+2. **Every draft on the Review page arrived pre-approved**, so a merchant's first click published up to
+   fifty pieces of content they had never opened — on the screen whose entire purpose is approving them,
+   in an app whose listing promises nothing goes live until they do.
+3. **An empty store was told it was finished, on three screens**, including a green success banner
+   reading "All 0 products have AI-generated content", while a fourth screen showed it a red zero.
+
+## What Phase 2 did NOT do
+
+- **No route was deleted.** The five-item nav is the owner's decision and it has not been given. Every
+  merged route still exists, still works, and is still linked from the screen that absorbed it, with a
+  test that drives it.
+- **`welcome` and `setup` are untouched**, as instructed, beyond removing two lines that imported a
+  component this phase deleted.
+- **The Web Vitals table does not exist**, and neither do verified 375px screenshots. See 2.12.
+
+## Two process failures worth recording
+
+**A regex where a parser was needed.** The emoji sweep's whitespace tidy-up stripped the indentation
+from 973 closing tags across the tree. Nothing broke — JSX ignores whitespace — but the source was
+mangled, and hand-repair was the only route because the repo had no formatter. It has one now, which is
+why that commit's diff is far larger than its change warranted.
+
+**A harness that reported a confident false pass.** Both measurement harnesses produced complete
+results on their first run: `12 screens, 0 overflowing` and a full LCP table. Every screenshot was the
+same "410 Gone" page. Six byte-identical files gave it away. The first fix was itself wrong — it read
+`iframe.contentDocument`, which is null cross-origin, so it would have fallen back to the admin's own
+text and passed on every broken run, which is the same mistake one level down. The corrected guard reads
+through Playwright frame handles and was watched failing on a real 410 before being trusted.
+
+The general lesson is the one Phase 0 already recorded about the ESLint cache: **a tool that reports
+success is not evidence of success.** Both times, the thing that caught it was noticing that a result
+looked too tidy.
