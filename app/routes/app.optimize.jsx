@@ -1,5 +1,6 @@
 import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
 import {
+  EmptyState,
   Page,
   Layout,
   Card,
@@ -403,9 +404,22 @@ export default function OptimizePage() {
         </Layout>
 
         {/* Optimize panel */}
-        {needsContent === 0 ? (
-          <Banner tone="success" title="Your store is fully optimized!">
-            <p>All {totalProducts} products have AI-generated content.</p>
+        {/* Phase 2 item 2.10 - an empty store is not a finished store.
+
+            needsContent was total - published - draft with a Math.max(0)
+            floor, so a shop with NO PRODUCTS AT ALL computed 0 and fell
+            into the success branch. A brand-new merchant saw a green
+            banner reading "Your store is fully optimized!" above the
+            literal sentence "All 0 products have AI-generated content." -
+            and the page had no action anywhere, so the only way out was
+            the back link. SEO Audit showed that same store a red 0/100. */}
+        {totalProducts === 0 ? (
+          <EmptyState heading="No products yet" image="/empty-products.svg">
+            <p>Add products to your store, and this is where you generate content for them.</p>
+          </EmptyState>
+        ) : needsContent === 0 ? (
+          <Banner tone="success" title="Every product has content">
+            <p>All {totalProducts} products have AI content. New products will appear here.</p>
           </Banner>
         ) : remaining === 0 ? (
           <Banner tone="warning" title="Monthly quota reached">

@@ -1959,3 +1959,32 @@ hijack typing, and the index starts at `-1` so a stray Enter before choosing a p
 
 22 assertions, including one that `saveEdit` refuses a `contentType` outside the known set — the row is
 addressed by that value, so an unchecked one would let a caller create rows outside it.
+
+## 2.10 — States, and the empty store
+
+**This is the finding the brief did not list, and it was the worst one.** A merchant who had just
+installed, with zero products, was told on **three screens that they were finished** and on the fourth
+that they were failing:
+
+| Screen | What it said to an empty store |
+|---|---|
+| Home | `All caught up!` |
+| Products | `Your store is all set!` |
+| Optimize | a **green success banner** — `Your store is fully optimized!` above `All 0 products have AI-generated content.` |
+| SEO Audit | a large red **0**, four red zeros under "Issues Found", and a primary button pointing back at Optimize |
+
+One root cause. `needsContent` was `total − published − draft` with a `Math.max(0, …)` floor, so an empty
+store computed 0 and was **arithmetically indistinguishable from a finished one**. No route had a
+`totalProducts === 0` branch. Optimize was also a dead end in that state: a success banner and nothing
+else, no primary, no link, only the back arrow.
+
+Every screen now branches on it, and they say the same sentence, so a merchant who reads it twice is not
+learning two different things: *"Add products to your store, and this is where you generate content for
+them."*
+
+**Status is no longer carried by a glyph.** The audit table rendered bare `✓` and `✗` badges in four of
+six columns — roughly **400 of them on a 100-product store**, with no text and no `accessibilityLabel`,
+so a screen reader announced the raw character. They now read `Description: yes`, `Alt text: no`. The
+tone is the decoration; the words are the message.
+
+13 assertions, including one that every badge is given a label by its caller.

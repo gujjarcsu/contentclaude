@@ -524,7 +524,13 @@ export default function Dashboard() {
               iconTone="caution"
               label="Drafts Pending Review"
               value={draftCount}
-              subtext={draftCount > 0 ? "Ready to publish" : "All caught up!"}
+              subtext={
+                draftCount > 0
+                  ? "Ready to publish"
+                  : totalProducts === 0
+                    ? "No products yet"
+                    : "Nothing waiting"
+              }
             />
           </Layout.Section>
         </Layout>
@@ -653,9 +659,7 @@ export default function Dashboard() {
                   background.
                 </Text>
               </BlockStack>
-              <Button onClick={() => navigate("/app/optimize")}>
-                Optimize store
-              </Button>
+              <Button onClick={() => navigate("/app/optimize")}>Optimize store</Button>
             </InlineStack>
           </Box>
         )}

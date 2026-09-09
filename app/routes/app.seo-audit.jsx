@@ -1,6 +1,7 @@
 import { useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
+  EmptyState,
   Page,
   Layout,
   Card,
@@ -152,8 +153,17 @@ function ScoreRing({ score }) {
   );
 }
 
-function CheckIcon({ pass }) {
-  return pass ? <Badge tone="success">✓</Badge> : <Badge tone="critical">✗</Badge>;
+function CheckIcon({ pass, label }) {
+  // Phase 2 items 2.5 and 2.12 — these were bare glyphs with no text and no
+  // accessibilityLabel, rendered in four of six columns. On a 100-product store
+  // that is roughly 400 of them, and a screen reader announced the raw
+  // character. Polaris Badge carries real words; the tone is the decoration,
+  // not the message.
+  return pass ? (
+    <Badge tone="success">{`${label}: yes`}</Badge>
+  ) : (
+    <Badge tone="critical">{`${label}: no`}</Badge>
+  );
 }
 
 export default function SeoAuditPage() {
@@ -193,15 +203,15 @@ export default function SeoAuditPage() {
     >
       {p.score}
     </Text>,
-    <CheckIcon key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
-    <CheckIcon key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
-    <CheckIcon key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
+    <CheckIcon label="Description" key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
+    <CheckIcon label="Page title" key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
+    <CheckIcon label="Search description" key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
     p.checks.noImages ? (
       <Badge key={`${p.id}-alt`} tone="subdued">
         No images
       </Badge>
     ) : (
-      <CheckIcon key={`${p.id}-alt`} pass={p.checks.hasAltText} />
+      <CheckIcon label="Alt text" key={`${p.id}-alt`} pass={p.checks.hasAltText} />
     ),
   ]);
 
@@ -256,70 +266,85 @@ export default function SeoAuditPage() {
           </Banner>
         )}
 
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <ScoreRing score={totalScore} />
-            </Card>
-          </Layout.Section>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">
-                  Issues Found
-                </Text>
-                <InlineStack gap="400" wrap>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
-                      {missingDesc}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Missing descriptions
-                    </Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
-                      {missingMeta}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Missing meta titles
-                    </Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
-                      {noImages}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      No product images
-                    </Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
-                      {missingAltText}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Images missing alt text
-                    </Text>
-                  </BlockStack>
-                  {staleCount > 0 && (
+        {/* Phase 2 item 2.10 — a store with no products scored 0 out of 100.
+            `totalScore` is an average over an empty list, which the loader
+            floors to 0, and the tone thresholds then read 0 as critical. So a
+            brand-new merchant was shown a large red zero and four red zeros
+            under "Issues Found", with a primary button pointing at Optimize —
+            which greeted the same store with "Your store is fully optimized!".
+            Two screens, one empty store, opposite verdicts. */}
+        {products.length === 0 ? (
+          <Card>
+            <EmptyState heading="Nothing to audit yet" image="/empty-seo.svg">
+              <p>Add products to your store, and this is where you see what needs attention.</p>
+            </EmptyState>
+          </Card>
+        ) : (
+          <Layout>
+            <Layout.Section variant="oneThird">
+              <Card>
+                <ScoreRing score={totalScore} />
+              </Card>
+            </Layout.Section>
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">
+                    Issues Found
+                  </Text>
+                  <InlineStack gap="400" wrap>
                     <BlockStack gap="100">
-                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="attention">
-                        {staleCount}
+                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                        {missingDesc}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Content &gt;6 months old
+                        Missing descriptions
                       </Text>
                     </BlockStack>
-                  )}
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) ·
-                  Has Images (10pts) · Alt Text (10pts)
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                        {missingMeta}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Missing meta titles
+                      </Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                        {noImages}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No product images
+                      </Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                        {missingAltText}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Images missing alt text
+                      </Text>
+                    </BlockStack>
+                    {staleCount > 0 && (
+                      <BlockStack gap="100">
+                        <Text as="p" variant="heading2xl" fontWeight="bold" tone="attention">
+                          {staleCount}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Content &gt;6 months old
+                        </Text>
+                      </BlockStack>
+                    )}
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) ·
+                    Has Images (10pts) · Alt Text (10pts)
+                  </Text>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          </Layout>
+        )}
 
         {products.length > 0 && (
           <Card padding="0">

@@ -845,7 +845,11 @@ export default function ProductsPage() {
             emptyState={
               <EmptyState
                 heading={
-                  statusFilter === "all" ? "Your store is all set!" : `No ${statusFilter} products found`
+                  statusFilter !== "all"
+                    ? "No products match this filter"
+                    : totalStoreProducts === 0
+                      ? "No products yet"
+                      : "Nothing on this page"
                 }
                 image="/empty-products.svg"
                 action={
@@ -855,9 +859,11 @@ export default function ProductsPage() {
                 }
               >
                 <p>
-                  {statusFilter === "all"
-                    ? "Add products in Shopify, then come back here to generate AI content for them."
-                    : `No products match the "${statusFilter}" filter. Try switching tabs or clearing the filter.`}
+                  {statusFilter !== "all"
+                    ? "Try another tab, or clear the filter."
+                    : totalStoreProducts === 0
+                      ? "Add products to your store, and this is where you generate content for them."
+                      : "Try clearing your search."}
                 </p>
               </EmptyState>
             }
