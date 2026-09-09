@@ -4,7 +4,7 @@
  * These are the defects that let someone other than the merchant put content,
  * script, or requests into the app or onto the merchant's storefront.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
 process.env.SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || "shpss_test_secret";

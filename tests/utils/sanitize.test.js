@@ -36,7 +36,7 @@ describe("sanitizeHtml — allowlist (svg/math/handler bypass)", () => {
     // plant on a merchant storefront, so the anchor is unwrapped: the words
     // survive, the destination does not.
     const external = extractTag(wrap('<a href="https://evil.example/x">click</a>'), "DESCRIPTION");
-    expect(external).not.toMatch(/<a/);
+    expect(external).not.toMatch(/<a[\s>]/);
     expect(external).not.toMatch(/evil\.example/);
     expect(external).toContain("click");
 

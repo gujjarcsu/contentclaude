@@ -100,9 +100,25 @@ describe("billing.callback", () => {
     expect(getFreshOfflineSession).not.toHaveBeenCalled();
   });
 
+  it("Phase 0 item 20: an UNSIGNED callback performs no lookup and still lands in the app", async () => {
+    getFreshOfflineSession.mockResolvedValue({ shop: "ap13ht-zv.myshopify.com", accessToken: "tok" });
+    const res = await runRaw("shop=ap13ht-zv.myshopify.com&charge_id=1");
+    expect(res.status).toBe(302);
+    // The abusable part — reading another shop's subscription state — never runs.
+    expect(getFreshOfflineSession).not.toHaveBeenCalled();
+    expect(syncBillingToPlan).not.toHaveBeenCalled();
+    // And the merchant is not dead-ended, nor falsely told they were declined.
+    const loc = res.headers.get("Location");
+    expect(loc).toContain("/app/plans?billing_error=1");
+    expect(loc).not.toContain("declined=1");
+    expect(loc).not.toContain("/auth/login");
+  });
+
   it("source guard: the subscribe return_url points at /billing/callback, not /app/plans", () => {
     const src = readFileSync(join(repoRoot, "app/routes/app.plans.jsx"), "utf8");
     expect(src).toMatch(/returnUrl:\s*`\$\{process\.env\.SHOPIFY_APP_URL\}\/billing\/callback\?shop=/);
+    // …and it is signed (Phase 0 item 20).
+    expect(src).toMatch(/&sig=/);
     expect(src).not.toMatch(/returnUrl:\s*`\$\{process\.env\.SHOPIFY_APP_URL\}\/app\/plans`/);
   });
 });
