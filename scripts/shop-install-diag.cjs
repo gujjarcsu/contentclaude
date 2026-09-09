@@ -23,7 +23,8 @@ const p = new PrismaClient();
       surfaceIntraPosition: r.surfaceIntraPosition, surfaceInterPosition: r.surfaceInterPosition,
       installRef: r.installRef, utmSource: r.utmSource, installReferer: r.installReferer,
       installLandingPath: r.installLandingPath, installCount: r.installCount,
-      reinstalledAt: r.reinstalledAt, uninstalledAt: r.uninstalledAt, redactedAt: r.redactedAt,
+      reinstalledAt: r.reinstalledAt, reinstallSource: r.reinstallSource, reinstallReferer: r.reinstallReferer,
+      uninstalledAt: r.uninstalledAt, redactedAt: r.redactedAt,
     })),
   }, null, 2));
   await p.$disconnect();

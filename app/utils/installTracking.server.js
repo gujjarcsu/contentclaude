@@ -188,11 +188,13 @@ async function createShopRow(shop, sig) {
     ? { shop, installedAt: earliest, installSource: "pre_tracking" }
     : { shop, installedAt: now, installSource: classifyInstallSource(sig), ...attributionFields(sig) };
   try {
-    // upsert with an empty update = atomic INSERT ... ON CONFLICT DO NOTHING-style
-    // create on the unique shop column, so the two parallel document loaders
-    // cannot race into a unique-violation error line.
-    const row = await prisma.shop.upsert({ where: { shop }, create: data, update: {} });
-    logger.info(
+    // createMany + skipDuplicates = INSERT ... ON CONFLICT DO NOTHING on the
+    // unique shop column: the two parallel document loaders cannot race into a
+    // unique-violation error line, and exactly ONE of them (count 1) logs the
+    // install event. The other just reads the row back.
+    const { count } = await prisma.shop.createMany({ data: [data], skipDuplicates: true });
+    const row = await prisma.shop.findUnique({ where: { shop } });
+    if (count === 1) logger.info(
       {
         shop,
         event: preTracking ? "shop_record_backfilled" : "shop_installed",

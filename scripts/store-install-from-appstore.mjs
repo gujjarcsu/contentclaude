@@ -60,12 +60,20 @@ try {
   // 3. Install from the listing. Dismiss the cookie banner first; the Install
   // link may open a NEW TAB — follow it if so.
   await page.getByRole("button", { name: /accept cookies/i }).first().click({ timeout: 3000 }).catch(() => {});
-  const newPagePromise = context.waitForEvent("page", { timeout: 10000 }).catch(() => null);
+  // The listing's Install is a POST form (action /<handle>/install?...surface_*)
+  // with target=_blank. Submit THAT form, in this tab, so the flow is followable.
+  const installAction = await page.evaluate(() => {
+    const form = document.querySelector('form[action*="/install"]');
+    if (!form) return null;
+    form.removeAttribute("target");
+    return form.getAttribute("action");
+  });
+  log("install form action: " + installAction);
+  const newPagePromise = context.waitForEvent("page", { timeout: 6000 }).catch(() => null);
   await clickFirst([
-    page.getByRole("link", { name: /^install$/i }).first(),
+    page.locator('form[action*="/install"] button[type="submit"]').first(),
     page.getByRole("button", { name: /^install$/i }).first(),
-    page.locator('a[href*="/install"]').first(),
-  ], "Install (listing)");
+  ], "Install (listing form submit)");
   const newPage = await newPagePromise;
   if (newPage) {
     log("install opened a new tab — following it");

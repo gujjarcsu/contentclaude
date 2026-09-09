@@ -83,8 +83,11 @@ try {
   await page.goto(`https://admin.shopify.com/store/${STORE}/settings/apps`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(5000);
   await shot("apps-list");
-  const text = await page.locator("body").innerText().catch(() => "");
-  ok = !/Navaal/i.test(text);
+  // The partner org is also called "Navaal AI" (sidebar), so match the APP
+  // specifically: its settings link and its full name.
+  const stillLinked = await page.locator(`a[href*="/apps/${APP_HANDLE}"], a[href*="app_installations/app/${APP_HANDLE}"]`).count();
+  const text = await page.locator("#AppFrameMain, main").first().innerText().catch(() => "");
+  ok = stillLinked === 0 && !/Navaal: AI SEO/i.test(text);
   log(ok ? "app no longer listed — uninstalled" : "app still listed?");
 } catch (e) {
   log("ERROR " + e.message.split("\n")[0]);

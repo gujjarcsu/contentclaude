@@ -17,7 +17,7 @@ const { db, log } = vi.hoisted(() => {
   const fn = () => vi.fn();
   return {
     db: {
-      shop: { findUnique: fn(), upsert: fn(), update: fn(), updateMany: fn() },
+      shop: { findUnique: fn(), createMany: fn(), update: fn(), updateMany: fn() },
       plan: { findUnique: fn() },
       growthState: { findUnique: fn() },
       brandVoice: { findUnique: fn() },
@@ -54,7 +54,8 @@ beforeEach(() => {
   db.growthState.findUnique.mockResolvedValue(null);
   db.brandVoice.findUnique.mockResolvedValue(null);
   db.shop.findUnique.mockResolvedValue(null);
-  db.shop.upsert.mockImplementation(async ({ create }) => ({ id: "s1", installCount: 1, ...create }));
+  // createMany returns {count}; the row is then read back — emulate both.
+  db.shop.createMany.mockImplementation(async ({ data }) => { db.shop.findUnique.mockResolvedValue({ id: "s1", installCount: 1, ...data[0] }); return { count: 1 }; });
   db.shop.updateMany.mockResolvedValue({ count: 1 });
 });
 
@@ -108,8 +109,8 @@ describe("classifyInstallSource", () => {
 describe("trackShopAuth — fresh install", () => {
   it("creates the shop record with App Store attribution + referer on the first authenticated request", async () => {
     const row = await trackShopAuth(req(INSTALL_URL, { referer: "https://admin.shopify.com/" }), SHOP);
-    expect(db.shop.upsert).toHaveBeenCalledTimes(1);
-    const { create: data } = db.shop.upsert.mock.calls[0][0];
+    expect(db.shop.createMany).toHaveBeenCalledTimes(1);
+    const data = db.shop.createMany.mock.calls[0][0].data[0];
     expect(data).toMatchObject({
       shop: SHOP,
       installSource: "app_store:search",
@@ -126,19 +127,19 @@ describe("trackShopAuth — fresh install", () => {
 
   it("attributes an install to our own link when the navaal_ref cookie reaches the install request", async () => {
     await trackShopAuth(req(BARE_URL, { cookie: "navaal_ref=bilby-search" }), SHOP);
-    expect(db.shop.upsert.mock.calls[0][0].create).toMatchObject({ installSource: "ref:bilby-search", installRef: "bilby-search" });
+    expect(db.shop.createMany.mock.calls[0][0].data[0]).toMatchObject({ installSource: "ref:bilby-search", installRef: "bilby-search" });
   });
 
   it("records unknown (not a guess) when the install request carries no attribution", async () => {
     await trackShopAuth(req(BARE_URL), SHOP);
-    expect(db.shop.upsert.mock.calls[0][0].create).toMatchObject({ installSource: "unknown", surfaceType: null, installRef: null });
+    expect(db.shop.createMany.mock.calls[0][0].data[0]).toMatchObject({ installSource: "unknown", surfaceType: null, installRef: null });
   });
 
   it("a shop installed BEFORE tracking is backfilled as pre_tracking with installedAt = earliest activity, ignoring request params", async () => {
     db.plan.findUnique.mockResolvedValue({ createdAt: DAYS(3) });
     db.brandVoice.findUnique.mockResolvedValue({ createdAt: DAYS(10) });
     await trackShopAuth(req(INSTALL_URL), SHOP);
-    const { create: data } = db.shop.upsert.mock.calls[0][0];
+    const data = db.shop.createMany.mock.calls[0][0].data[0];
     expect(data.installSource).toBe("pre_tracking");
     expect(Math.abs(data.installedAt.getTime() - DAYS(10).getTime())).toBeLessThan(2_000);
     expect(data.surfaceType).toBeUndefined();
@@ -148,14 +149,17 @@ describe("trackShopAuth — fresh install", () => {
   it("a Plan created seconds ago by a parallel loader does NOT make a new install look pre-tracking", async () => {
     db.plan.findUnique.mockResolvedValue({ createdAt: MIN(1) });
     await trackShopAuth(req(INSTALL_URL), SHOP);
-    expect(db.shop.upsert.mock.calls[0][0].create.installSource).toBe("app_store:search");
+    expect(db.shop.createMany.mock.calls[0][0].data[0].installSource).toBe("app_store:search");
   });
 
-  it("tolerates the create race between the two parallel document loaders (P2002)", async () => {
-    db.shop.upsert.mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "P2002" }));
-    db.shop.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ shop: SHOP, installSource: "app_store:search" });
-    const row = await trackShopAuth(req(INSTALL_URL), SHOP);
-    expect(row.installSource).toBe("app_store:search");
+  it("logs the install event exactly once when the two parallel loaders both create (createMany skipDuplicates)", async () => {
+    db.shop.createMany
+      .mockImplementationOnce(async ({ data }) => { db.shop.findUnique.mockResolvedValue({ id: "s1", installCount: 1, ...data[0] }); return { count: 1 }; })
+      .mockImplementationOnce(async () => ({ count: 0 }));
+    const [a, b] = await Promise.all([trackShopAuth(req(INSTALL_URL), SHOP), trackShopAuth(req(INSTALL_URL), SHOP)]);
+    expect(a.installSource).toBe("app_store:search");
+    expect(b.installSource).toBe("app_store:search");
+    expect(log.info.mock.calls.filter((c) => c[0]?.event === "shop_installed")).toHaveLength(1);
     expect(log.warn).not.toHaveBeenCalled();
   });
 });
