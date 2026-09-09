@@ -1,0 +1,870 @@
+diff --git a/app/routes/app.optimize.jsx b/app/routes/app.optimize.jsx
+index 293e605..5810fc5 100644
+--- a/app/routes/app.optimize.jsx
++++ b/app/routes/app.optimize.jsx
+@@ -1,4 +1,4 @@
+-import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
++import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useFetcher, redirect } from "react-router";
+ import {
+   Page, Layout, Card, Text, BlockStack, InlineStack,
+   Button, Badge, ProgressBar, Banner, Checkbox, Box, Modal, TextContainer,
+@@ -8,11 +8,23 @@ import { useState, useCallback } from "react";
+ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
+ import { enqueueGenerationJob } from "../queues/generationQueue.server";
+-import { FREE_PLAN } from "../utils/billing-plans.js";
+-import { checkEntitlement } from "../utils/plans.server.js";
++import { FREE_PLAN, BILLING_PLANS, getEntitlements } from "../utils/billing-plans.js";
++import { checkEntitlement, getMonthlyUsageCount } from "../utils/plans.server.js";
+ import { getCache } from "../utils/cache.server.js";
++import { countProductsWithoutAiContent } from "../utils/metrics.server.js";
++import { getUpsell, recordPromptCondition, monthKey } from "../utils/upgradePrompts.server.js";
++import { fitPlanFor, quotaResetDate, fmtDay, fmtMonth, PLAN_LABELS } from "../utils/planFit.js";
++import { QuotaUpgradePrompt } from "../components/UpgradePrompt";
+ import { useRouteLoading } from "../utils/useRouteLoading.js";
+ 
++// The prompt-event fetcher (/app/upgrade-prompt: opened / cta_clicked) must not
++// re-run this loader — the page would re-scan for nothing and the modal the
++// merchant just opened has nothing to gain from fresh data.
++export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
++  if (formAction && formAction.startsWith("/app/upgrade-prompt")) return false;
++  return defaultShouldRevalidate;
++}
++
+ // ─── Loader ──────────────────────────────────────────────────────────────────
+ 
+ export const loader = async ({ request }) => {
+@@ -37,10 +49,47 @@ export const loader = async ({ request }) => {
+     prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
+   ]);
+ 
+-  const needsContent = Math.max(0, totalProducts - publishedCount - draftCount);
+-  const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
++  // N on this surface = the run's OWN target set: products with no Navaal
++  // description row in any status — exactly what the action skips
++  // (existingIds), so the pre-run disclosure equals what the job does (D13).
++  const needsContent = await countProductsWithoutAiContent(shop, totalProducts);
++  const planName = plan?.planName ?? "free";
++  const monthlyLimit = plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
++  const remaining = Math.max(0, monthlyLimit - usageCount);
+   const canOptimize = Math.min(needsContent, remaining);
+ 
++  // Item 5b: what the merchant needs to see BEFORE pressing anything —
++  // whether bulk jobs are on their plan, which plan would cover the whole
++  // catalogue in one run (bulk-capable, so Growth+), and the free reset date.
++  const entitled = !!getEntitlements(planName).bulkJobs;
++  const fit = fitPlanFor({ n: needsContent, currentPlan: planName, needsBulk: true });
++  const now = new Date();
++  const resetDate = fmtDay(quotaResetDate(now));
++  const monthName = fmtMonth(now);
++
++  // Item 5a (quota exhausted) — null while any quota remains. Never throws.
++  const upsell = await getUpsell({
++    admin, shop, usageCount,
++    plan: plan ?? { planName, monthlyLimit, status: "active" },
++    surface: "optimize", nDefinition: "no_ai_description", n: needsContent, needsBulk: true,
++  });
++
++  // Condition rows (NOT exposures — the client confirms opened/cta_clicked):
++  //   optimize_coverage  entitled, quota left, but not enough for every product → the coverage modal can open
++  //   bulk_gate          not entitled and there is something to run → the bulk-gate modal can open
++  let coveragePromptId = null;
++  let bulkGatePromptId = null;
++  const condition = {
++    shop, surface: "optimize", month: monthKey(now), n: needsContent, nDefinition: "no_ai_description",
++    truncated: false, remaining, monthlyLimit, currentPlan: planName,
++    fitPlanName: fit?.planName ?? null, monthsToCover: fit?.monthsToCover ?? 1, now,
++  };
++  if (entitled && remaining > 0 && needsContent > remaining) {
++    coveragePromptId = (await recordPromptCondition({ ...condition, trigger: "optimize_coverage" }))?.id ?? null;
++  } else if (!entitled && needsContent > 0) {
++    bulkGatePromptId = (await recordPromptCondition({ ...condition, trigger: "bulk_gate" }))?.id ?? null;
++  }
++
+   return Response.json({
+     totalProducts,
+     publishedCount,
+@@ -48,8 +97,15 @@ export const loader = async ({ request }) => {
+     needsContent,
+     remaining,
+     canOptimize,
+-    planName: plan?.planName ?? "free",
+-    monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
++    planName,
++    monthlyLimit,
++    entitled,
++    fit,
++    resetDate,
++    monthName,
++    upsell,
++    coveragePromptId,
++    bulkGatePromptId,
+   });
+ };
+ 
+@@ -98,7 +154,7 @@ export const action = async ({ request }) => {
+   // generate → products missing AI content; enhance → products that already
+   // have a live description to improve.
+   // Hard-limit to 80 pages (80 × 250 = 20,000 products max) to prevent runaway loops.
+-  const targetIds = [];
++  let targetIds = [];
+   let cursor = null;
+   let hasNextPage = true;
+   let pageCount = 0;
+@@ -148,6 +204,26 @@ export const action = async ({ request }) => {
+     });
+   }
+ 
++  // D13 — size the run to a FRESH quota (not the 60 s plan cache) so the
++  // pre-run disclosure is exactly what the job does. Products the quota cannot
++  // cover are excluded up front and recorded as quotaSkipped — never queued
++  // to fail as a red tail on the Jobs page.
++  const [freshPlan, usage] = await Promise.all([
++    prisma.plan.findUnique({ where: { shop } }),
++    getMonthlyUsageCount(shop),
++  ]);
++  const freshLimit = freshPlan?.monthlyLimit ?? FREE_PLAN.monthlyLimit;
++  const remaining = Math.max(0, freshLimit - usage);
++  if (remaining === 0) {
++    return Response.json({
++      error: `You've used all ${freshLimit} generations this month — they reset on ${fmtDay(quotaResetDate())}.`,
++      limitReached: true,
++      quotaReached: true,
++    });
++  }
++  const quotaSkipped = Math.max(0, targetIds.length - remaining);
++  targetIds = targetIds.slice(0, remaining);
++
+   const job = await prisma.generationJob.create({
+     data: {
+       shop,
+@@ -157,6 +233,7 @@ export const action = async ({ request }) => {
+       contentTypes: contentTypes.join(","),
+       mode,
+       autoPublish,
++      quotaSkipped,
+     },
+   });
+ 
+@@ -173,16 +250,39 @@ export const action = async ({ request }) => {
+ 
+ // ─── Component ───────────────────────────────────────────────────────────────
+ 
++/** Two-segment coverage bar: what this run does vs what it leaves untouched. */
++function CoverageBar({ inRun, total }) {
++  const notInRun = Math.max(0, total - inRun);
++  const pct = total > 0 ? Math.round((inRun / total) * 100) : 0;
++  const label = `This run ${inRun} · Not in this run ${notInRun}`;
++  return (
++    <BlockStack gap="100">
++      <div
++        role="img"
++        aria-label={label}
++        data-coverage-bar
++        style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", background: "#E4E5E7" }}
++      >
++        <div style={{ width: `${pct}%`, background: "#2C6ECB", transition: "width 200ms" }} />
++        <div style={{ flex: 1, background: "#C9CCCF" }} />
++      </div>
++      <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
++    </BlockStack>
++  );
++}
++
+ export default function OptimizePage() {
+   const {
+     totalProducts, publishedCount, draftCount, needsContent,
+     remaining, canOptimize, planName, monthlyLimit,
++    entitled, fit, resetDate, upsell, coveragePromptId, bulkGatePromptId,
+   } = useLoaderData();
+   const navigate = useNavigate();
+   const submit = useSubmit();
+   const navigation = useNavigation();
+   const loadingThisRoute = useRouteLoading();
+   const actionData = useActionData();
++  const promptFetcher = useFetcher();
+   const isSubmitting = navigation.state === "submitting";
+ 
+   // All hooks before any conditional return
+@@ -199,6 +299,39 @@ export default function OptimizePage() {
+   const [enhAutoPublish, setEnhAutoPublish] = useState(false);
+   // Which panel the auto-publish confirm modal belongs to
+   const [confirmMode, setConfirmMode] = useState("generate");
++  // Item 5b modals — open ONLY on the merchant's own press, never on page load.
++  const [coverageOpen, setCoverageOpen] = useState(false);
++  const [bulkGateOpen, setBulkGateOpen] = useState(false);
++
++  // Client-confirmed prompt events (opened / cta_clicked) → /app/upgrade-prompt.
++  // Shop-scoped on the server; a missing id is simply not tracked.
++  const postPromptEvent = useCallback((promptId, event) => {
++    if (!promptId) return;
++    const fd = new FormData();
++    fd.append("promptId", promptId);
++    fd.append("event", event);
++    promptFetcher.submit(fd, { method: "POST", action: "/app/upgrade-prompt" });
++  }, [promptFetcher]);
++
++  const openCoverage = useCallback(() => {
++    setCoverageOpen(true);
++    postPromptEvent(coveragePromptId, "opened");
++  }, [coveragePromptId, postPromptEvent]);
++
++  const openBulkGate = useCallback(() => {
++    setBulkGateOpen(true);
++    postPromptEvent(bulkGatePromptId, "opened");
++  }, [bulkGatePromptId, postPromptEvent]);
++
++  // Bulk jobs need Growth+, so the plan we point at is always bulk-capable.
++  const gateFit = fit ?? { planName: "growth", label: PLAN_LABELS.growth };
++  const goToFitPlan = useCallback((promptId) => {
++    postPromptEvent(promptId, "cta_clicked");
++    const q = new URLSearchParams();
++    if (promptId) q.set("prompt", promptId);
++    q.set("fit", gateFit.planName);
++    navigate(`/app/plans?${q.toString()}`);
++  }, [gateFit.planName, navigate, postPromptEvent]);
+ 
+   const doSubmit = useCallback(() => {
+     const fd = new FormData();
+@@ -220,7 +353,10 @@ export default function OptimizePage() {
+     submit(fd, { method: "POST" });
+   }, [enhDesc, enhMeta, enhAutoPublish, submit]);
+ 
+-  const handleOptimize = useCallback(() => {
++  // Order matters (spec §3.3): plan gate → coverage disclosure → auto-publish
++  // confirm → submit. The run is sized BEFORE it starts; there is no mid-run
++  // "upgrade to finish" interstitial.
++  const startRun = useCallback(() => {
+     if (autoPublish) {
+       setConfirmMode("generate");
+       setConfirmOpen(true);
+@@ -229,6 +365,17 @@ export default function OptimizePage() {
+     }
+   }, [autoPublish, doSubmit]);
+ 
++  const handleOptimize = useCallback(() => {
++    if (!entitled) { openBulkGate(); return; }
++    if (needsContent > remaining) { openCoverage(); return; }
++    startRun();
++  }, [entitled, needsContent, remaining, openBulkGate, openCoverage, startRun]);
++
++  const startCoveredRun = useCallback(() => {
++    setCoverageOpen(false);
++    startRun();
++  }, [startRun]);
++
+   const handleEnhance = useCallback(() => {
+     if (enhAutoPublish) {
+       setConfirmMode("enhance");
+@@ -238,8 +385,11 @@ export default function OptimizePage() {
+     }
+   }, [enhAutoPublish, doSubmitEnhance]);
+ 
+-  const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
++  const planLabels = PLAN_LABELS;
++  const planLabel = planLabels[planName] ?? planName;
+   const estMinutes = Math.ceil(canOptimize * 3.5 / 60);
++  const notInRun = Math.max(0, needsContent - canOptimize);
++  const contentLabel = [genDesc && "Description", genMeta && "Meta title & description", genFaq && "FAQ"].filter(Boolean).join(", ");
+ 
+   if (loadingThisRoute) {
+     return (
+@@ -263,7 +413,7 @@ export default function OptimizePage() {
+         {actionData?.error && (
+           <Banner
+             tone={actionData?.limitReached ? "warning" : "critical"}
+-            title={actionData?.limitReached ? "Plan upgrade required" : "Error"}
++            title={actionData?.quotaReached ? "Monthly quota reached" : actionData?.limitReached ? "Plan upgrade required" : "Error"}
+             action={actionData?.limitReached ? { content: "View Plans", onAction: () => navigate("/app/plans") } : undefined}
+           >
+             <p>{actionData.error}</p>
+@@ -319,12 +469,19 @@ export default function OptimizePage() {
+             <p>All {totalProducts} products have AI-generated content.</p>
+           </Banner>
+         ) : remaining === 0 ? (
+-          <Banner tone="warning" title="Monthly quota reached">
+-            <p>Upgrade your plan to generate more content this month.</p>
+-            <Box paddingBlockStart="200">
+-              <Button onClick={() => navigate("/app/plans")}>View Plans →</Button>
+-            </Box>
+-          </Banner>
++          // Quota reached is "complete" — amber, never red; the reset date is
++          // always beside the CTA. The measured prompt when the loader could
++          // compute one, the plain fact otherwise.
++          upsell ? (
++            <QuotaUpgradePrompt upsell={upsell} surface="optimize" />
++          ) : (
++            <Banner tone="warning" title="Monthly quota reached">
++              <p>You&apos;ve used all {monthlyLimit} generations this month — they reset on {resetDate}.</p>
++              <Box paddingBlockStart="200">
++                <Button onClick={() => navigate("/app/plans")}>View Plans →</Button>
++              </Box>
++            </Banner>
++          )
+         ) : (
+           <Card>
+             <BlockStack gap="400">
+@@ -332,11 +489,13 @@ export default function OptimizePage() {
+                 Optimise {canOptimize} product{canOptimize !== 1 ? "s" : ""}
+               </Text>
+               <Text as="p" variant="bodyMd" tone="subdued">
+-                This will create a background bulk job for all {needsContent} products missing AI content.
+-                {canOptimize < needsContent && ` Your quota covers ${canOptimize} of them this month.`}
++                Creates a background job for the {needsContent} product{needsContent !== 1 ? "s" : ""} without AI content.
+                 {estMinutes > 0 && ` Estimated time: ~${estMinutes} minute${estMinutes !== 1 ? "s" : ""}.`}
+               </Text>
+ 
++              {/* Item 5b: the gap is shown BEFORE the press, never hidden behind a round number. */}
++              {entitled && <CoverageBar inRun={canOptimize} total={needsContent} />}
++
+               <BlockStack gap="200">
+                 <Text as="p" variant="bodySm" fontWeight="semibold">Content to generate:</Text>
+                 <InlineStack gap="500" wrap>
+@@ -357,9 +516,15 @@ export default function OptimizePage() {
+                 size="large"
+                 onClick={handleOptimize}
+                 loading={isSubmitting}
+-                disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
++                // Not entitled: never disabled — the press opens the bulk-gate
++                // modal, which explains the plan and the on-plan alternative.
++                disabled={entitled ? (isSubmitting || (!genDesc && !genMeta && !genFaq)) : isSubmitting}
+               >
+-                {isSubmitting ? "Starting job..." : `Optimise ${canOptimize} Products →`}
++                {isSubmitting
++                  ? "Starting job..."
++                  : entitled
++                    ? `Optimise ${canOptimize} of ${needsContent} products →`
++                    : "Optimise Store — Growth plan"}
+               </Button>
+             </BlockStack>
+           </Card>
+@@ -489,6 +654,65 @@ export default function OptimizePage() {
+           </TextContainer>
+         </Modal.Section>
+       </Modal>
++
++      {/* Item 5b — pre-run coverage disclosure. Opens only from the merchant's
++          press when the quota cannot cover every product. The truthful action
++          ("Start with N") is primary; Cancel is always present; no timer,
++          nothing pre-selected; the reset date sits beside the plan CTA. */}
++      <Modal
++        open={coverageOpen}
++        onClose={() => setCoverageOpen(false)}
++        title={`This run covers ${canOptimize} of ${needsContent} products`}
++        primaryAction={{ content: `Start with ${canOptimize} products`, onAction: startCoveredRun }}
++        secondaryActions={[
++          ...(fit ? [{ content: `See ${fit.label} plan →`, onAction: () => goToFitPlan(coveragePromptId) }] : []),
++          { content: "Cancel", onAction: () => setCoverageOpen(false) },
++        ]}
++      >
++        <Modal.Section>
++          <BlockStack gap="300">
++            <List type="bullet">
++              <List.Item>Will be optimised — {canOptimize} products · uses all {remaining} generations left this month</List.Item>
++              <List.Item>Not in this run — {notInRun} products · they keep their current content; nothing is charged for them</List.Item>
++              <List.Item>Order — Shopify&apos;s default product order (oldest product first)</List.Item>
++              <List.Item>Content — {contentLabel || "nothing selected"}</List.Item>
++              <List.Item>Time — about {Math.max(1, estMinutes)} min, runs in the background</List.Item>
++            </List>
++            {fit && (
++              <Text as="p" variant="bodyMd">
++                To cover all {needsContent} in one run: {fit.label} covers {fit.monthlyLimit}/month — {fit.priceLabel}.
++              </Text>
++            )}
++            <Text as="p" variant="bodyMd">Your {planLabel} quota resets on {resetDate}.</Text>
++          </BlockStack>
++        </Modal.Section>
++      </Modal>
++
++      {/* Item 5b — bulk-gate (Free / Starter). No Start button: the run cannot
++          happen on this plan, and the on-plan path is stated honestly. The
++          server-side entitlement check stays as defence in depth. */}
++      <Modal
++        open={bulkGateOpen}
++        onClose={() => setBulkGateOpen(false)}
++        title="Optimise Store runs as a background job on Growth and above"
++        primaryAction={{ content: `See ${gateFit.label} plan →`, onAction: () => goToFitPlan(bulkGatePromptId) }}
++        secondaryActions={[
++          { content: "Go to Products", onAction: () => navigate("/app/products") },
++          { content: "Cancel", onAction: () => setBulkGateOpen(false) },
++        ]}
++      >
++        <Modal.Section>
++          <List type="bullet">
++            <List.Item>Your catalogue — {needsContent} products without AI content</List.Item>
++            <List.Item>
++              Growth — {BILLING_PLANS.growth.monthlyLimit} generations a month, bulk jobs, ${BILLING_PLANS.growth.amount.toFixed(2)}/mo
++            </List.Item>
++            <List.Item>
++              On {planLabel} today — write products one at a time from the Products page ({remaining} generations left this month)
++            </List.Item>
++          </List>
++        </Modal.Section>
++      </Modal>
+     </Page>
+   );
+ }
+diff --git a/app/routes/app.plans.jsx b/app/routes/app.plans.jsx
+index 0326abf..36da1eb 100644
+--- a/app/routes/app.plans.jsx
++++ b/app/routes/app.plans.jsx
+@@ -7,12 +7,47 @@ import {
+ } from "@shopify/polaris";
+ import { Check, Zap, Star, Rocket, Building2, ArrowRight } from "lucide-react";
+ import { authenticate } from "../shopify.server";
++import prisma from "../db.server";
+ import { resolveBillingTest } from "../utils/billingTest.server.js";
+ import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
+ import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
+ import { getOrCreatePlan, getMonthlyUsageCount, syncBillingToPlan } from "../utils/plans.server";
++import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePrompts.server.js";
+ import { useRouteLoading } from "../utils/useRouteLoading.js";
+ 
++// An upgrade-prompt id (cuid) carried in ?prompt= / the subscribe form. Anything
++// else is ignored — the helpers are shop-scoped, so a foreign id is a no-op too.
++const PROMPT_ID_RE = /^[a-z0-9]{20,40}$/i;
++
++/**
++ * Item 5: arrival from an upgrade prompt. Stamps arrivedAtPlansAt (first time,
++ * shop-scoped) and returns what the cards need to highlight the fit plan —
++ * { planName, promptId, n, covers }. "Covers your N products" is only true
++ * when the count was complete (not truncated) AND the fit plan's monthly
++ * limit is at least N (D12). Tracking can never affect the page: every read
++ * is guarded and a failure just means no highlight.
++ */
++async function readPromptArrival(shop, url) {
++  const promptId = url.searchParams.get("prompt") || "";
++  if (!PROMPT_ID_RE.test(promptId)) return null;
++  const fitName = url.searchParams.get("fit") || "";
++  const fitDef = Object.values(BILLING_PLANS).find((p) => p.planName === fitName) ?? null;
++  const highlight = { planName: fitDef?.planName ?? null, promptId, n: null, covers: false };
++  try {
++    await markPromptArrived(shop, promptId);
++    if (fitDef && prisma.upgradePrompt?.findFirst) {
++      const row = await prisma.upgradePrompt.findFirst({ where: { id: promptId, shop }, select: { n: true, truncated: true } });
++      if (row && Number.isFinite(row.n)) {
++        highlight.n = row.n;
++        highlight.covers = !row.truncated && fitDef.monthlyLimit >= row.n;
++      }
++    }
++  } catch {
++    // tracking only — the Plans page renders regardless
++  }
++  return highlight;
++}
++
+ export const loader = async ({ request }) => {
+   const { session } = await authenticate.admin(request);
+   const shop = session.shop;
+@@ -40,6 +75,8 @@ export const loader = async ({ request }) => {
+     url.searchParams.get("declined") ? "declined" :
+     url.searchParams.get("billing_error") ? "error" : null;
+ 
++  const highlight = await readPromptArrival(shop, url);
++
+   return {
+     plan: {
+       planName: plan.planName,
+@@ -51,6 +88,7 @@ export const loader = async ({ request }) => {
+     usageCount,
+     currentMonth,
+     billingNotice,
++    highlight,
+   };
+ };
+ 
+@@ -64,6 +102,18 @@ export const action = async ({ request }) => {
+     if (!planKey || !ALL_BILLING_PLAN_KEYS.includes(planKey)) {
+       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
+     }
++    // Item 5 funnel: the merchant pressed Upgrade from a prompt. Stamped BEFORE
++    // billing.request (which throws a redirect Response on success, so nothing
++    // after it runs). Shop-scoped, never throws — and even so, guarded: no
++    // tracking failure may reach the billing call.
++    const promptId = String(formData.get("promptId") || "");
++    if (PROMPT_ID_RE.test(promptId)) {
++      try {
++        await markSubscribeRequested(session.shop, promptId, planKey);
++      } catch {
++        // tracking only
++      }
++    }
+     // Dev stores (incl. the App Store review team's) can only approve TEST
+     // charges; real merchants get real charges. Resolved per shop — only the
+     // subscribe path needs it (test-vs-real must be decided before the sub
+@@ -290,13 +340,17 @@ function FeatureCell({ value }) {
+   return <Text as="span" variant="bodySm" fontWeight="semibold">{value}</Text>;
+ }
+ 
+-function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting, submittingPlan, billingPeriod }) {
++function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting, submittingPlan, billingPeriod, highlight }) {
+   const Icon = displayPlan.icon;
+   const isLight = !displayPlan.highlight;
+   const isAnnual = billingPeriod === "annual" && !!displayPlan.annualPlanKey;
+   const shownPrice = isAnnual ? displayPlan.annualPrice : displayPlan.price;
+   const shownPeriod = isAnnual ? "/ year" : displayPlan.period;
+   const activeKey = isAnnual ? displayPlan.annualPlanKey : displayPlan.planKey;
++  // "Covers your N products" — only on the plan the prompt computed as the fit,
++  // and only when that is measured to be true (complete count, limit ≥ N).
++  const coversBadge = !!highlight && highlight.planName === displayPlan.planName && highlight.covers && highlight.n > 0;
++  const promptId = highlight?.promptId || null;
+ 
+   return (
+     <div style={{
+@@ -352,6 +406,11 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
+         <div style={{ color: isLight ? "#6D7175" : "rgba(255,255,255,0.75)", fontSize: "13px", marginBottom: "12px" }}>
+           {displayPlan.tagline}
+         </div>
++        {coversBadge && (
++          <div data-covers-badge style={{ marginBottom: "12px" }}>
++            <Badge tone="success">{`Covers your ${highlight.n} products`}</Badge>
++          </div>
++        )}
+         <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+           <span style={{ color: displayPlan.textColor, fontSize: "32px", fontWeight: "800", lineHeight: 1 }}>
+             {shownPrice}
+@@ -397,6 +456,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
+           <Form method="post">
+             <input type="hidden" name="actionType" value="subscribe" />
+             <input type="hidden" name="planKey" value={activeKey} />
++            {promptId && <input type="hidden" name="promptId" value={promptId} />}
+             <button type="submit" style={{
+               width: "100%",
+               padding: "12px 16px",
+@@ -449,7 +509,7 @@ function PlanCard({ displayPlan, isCurrent, isUpgrade, isDowngrade, isSubmitting
+ }
+ 
+ export default function PlansPage() {
+-  const { plan, usageCount, currentMonth, billingNotice } = useLoaderData();
++  const { plan, usageCount, currentMonth, billingNotice, highlight } = useLoaderData();
+   const actionData = useActionData();
+   const navigation = useNavigation();
+   const loadingThisRoute = useRouteLoading();
+@@ -613,6 +673,7 @@ export default function PlansPage() {
+                   isSubmitting={isSubmitting}
+                   submittingPlan={submittingPlan}
+                   billingPeriod={billingPeriod}
++                  highlight={highlight}
+                 />
+               );
+             })}
+diff --git a/app/routes/app.products.jsx b/app/routes/app.products.jsx
+index 69e377a..50e22d9 100644
+--- a/app/routes/app.products.jsx
++++ b/app/routes/app.products.jsx
+@@ -30,10 +30,12 @@ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
+ import { getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
+ import { getEntitlements } from "../utils/billing-plans.js";
+-import { getContentMetrics } from "../utils/metrics.server.js";
++import { getContentMetrics, countProductsWithoutAiContent } from "../utils/metrics.server.js";
++import { getUpsell } from "../utils/upgradePrompts.server.js";
++import { quotaResetDate, fmtDay } from "../utils/planFit.js";
+ import { enqueueGenerationJob } from "../queues/generationQueue.server";
+-import { UpgradePrompt } from "../components/UpgradePrompt";
+-import { useRouteLoading } from "../utils/useRouteLoading.js";
++import { UpgradePrompt, QuotaUpgradePrompt } from "../components/UpgradePrompt";
++import { useRouteLoading } from "../utils/useRouteLoading.js";
+ 
+ const PAGE_SIZE = 50;
+ 
+@@ -120,10 +122,18 @@ export const loader = async ({ request }) => {
+   // (distinct products, never > total) — accurate across all pages, tiny query.
+   const publishedProducts = metrics.publishedProducts;
+   const draftProducts = metrics.draftProducts;
+-  const noContentProducts = Math.max(0, totalStoreProducts - publishedProducts - draftProducts);
++  // "Without AI content" = products with no Navaal description row in ANY
++  // status (one DISTINCT count). The old `total − published − draft`
++  // over-subtracted a product that had both a published and a draft row.
++  const noContentProducts = await countProductsWithoutAiContent(shop, totalStoreProducts);
+ 
+   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
+ 
++  // Item 5a: the quota prompt is a server-computed STATE. getUpsell returns
++  // null while any quota remains (or the plan is not active), and only scans
++  // the catalogue (cached) when the quota is exhausted. Never throws.
++  const upsell = await getUpsell({ admin, shop, plan, usageCount, surface: "products", nDefinition: "catalog_gaps" });
++
+   return Response.json({
+     products,
+     contentMap,
+@@ -138,6 +148,8 @@ export const loader = async ({ request }) => {
+     monthlyLimit: plan.monthlyLimit,
+     planName: plan.planName,
+     entitlements: getEntitlements(plan.planName),
++    upsell,
++    resetDate: fmtDay(quotaResetDate()),
+   });
+ };
+ 
+@@ -282,6 +294,7 @@ export default function ProductsPage() {
+     products, contentMap, pageInfo, statusFilter,
+     totalStoreProducts, publishedProducts, draftProducts, noContentProducts,
+     usageCount, usageRemaining, monthlyLimit, planName, entitlements,
++    upsell, resetDate,
+   } = useLoaderData();
+   const navigate = useNavigate();
+   const submit = useSubmit();
+@@ -441,7 +454,7 @@ export default function ProductsPage() {
+   return (
+     <Page
+       title="Products"
+-      subtitle={`${totalStoreProducts} products · ${publishedProducts} optimised · ${noContentProducts} need content`}
++      subtitle={`${totalStoreProducts} products · ${publishedProducts} optimised · ${noContentProducts} without AI content`}
+       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+       secondaryActions={[
+         {
+@@ -476,15 +489,18 @@ export default function ProductsPage() {
+           </Banner>
+         )}
+ 
+-        {/* Usage alert "" only when critical */}
+-        {isOutOfUsage && (
+-          <Banner tone="critical" title="Monthly generation limit reached">
+-            <p>You've used all {monthlyLimit} generations for this month. Upgrade to keep optimising your store.</p>
+-            <Box paddingBlockStart="200">
+-              <Button variant="plain" onClick={() => navigate("/app/plans")}>View Plans & Upgrade →</Button>
+-            </Box>
++        {/* Quota reached is "complete" — amber, never red. The prompt is a
++            server-computed state (measured N, computed fit plan, reset date
++            always beside the CTA); a neutral upsell renders the reset line
++            only. When the loader could not compute one (catalogue scan failed
++            / plan not active) the plain fact still renders. */}
++        {isOutOfUsage && (upsell ? (
++          <QuotaUpgradePrompt upsell={upsell} surface="products" />
++        ) : (
++          <Banner tone="warning" title="Monthly generation limit reached">
++            <p>You&apos;ve used all {monthlyLimit} generations this month — they reset on {resetDate}.</p>
+           </Banner>
+-        )}
++        ))}
+         {isLowUsage && (
+           <UpgradePrompt
+             tone="warning"
+@@ -574,12 +590,12 @@ export default function ProductsPage() {
+               </InlineStack>
+ 
+               {isOutOfUsage ? (
+-                <UpgradePrompt
+-                  tone="warning"
+-                  title="No generations remaining"
+-                  message="Upgrade your plan to generate content for these products"
+-                  onUpgrade={() => navigate("/app/plans")}
+-                />
++                <BlockStack gap="300">
++                  <QuotaUpgradePrompt upsell={upsell} surface="products" />
++                  <Text as="p" variant="bodySm" tone="subdued">
++                    No generations left this month — they reset on {resetDate}.
++                  </Text>
++                </BlockStack>
+               ) : (
+                 <>
+                   {bulkError && <Banner tone="critical"><p>{bulkError}</p></Banner>}
+diff --git a/app/routes/app.seo-audit.jsx b/app/routes/app.seo-audit.jsx
+index 70c07d5..035c056 100644
+--- a/app/routes/app.seo-audit.jsx
++++ b/app/routes/app.seo-audit.jsx
+@@ -18,6 +18,9 @@ import {
+ } from "@shopify/polaris";
+ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
++import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
++import { getUpsell } from "../utils/upgradePrompts.server.js";
++import { QuotaUpgradePrompt } from "../components/UpgradePrompt";
+ import { useRouteLoading } from "../utils/useRouteLoading.js";
+ 
+ // ─── Loader ──────────────────────────────────────────────────────────────────
+@@ -122,10 +125,25 @@ export const loader = async ({ request }) => {
+       ? "cap"
+       : null;
+ 
++  // Item 5a on this surface: N is the audit's OWN missing-description count
++  // (scanned just now), flagged "At least" when the scan was partial. Renders
++  // only when the quota is exhausted (getUpsell returns null otherwise). The
++  // scanned count is attached so the prompt can print its caveat. Never throws.
++  const [plan, usageCount] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
++  const upsellBase = await getUpsell({
++    admin, shop, plan, usageCount,
++    surface: "seo_audit",
++    nDefinition: "audit_missing_description",
++    n: missingDesc,
++    truncated: !!truncatedReason,
++  });
++  const upsell = upsellBase ? { ...upsellBase, scanned: allEdges.length } : null;
++
+   return Response.json({
+     products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount,
+     truncatedReason,
+     scannedCount: allEdges.length,
++    upsell,
+   });
+ };
+ 
+@@ -152,7 +170,7 @@ function CheckIcon({ pass }) {
+ }
+ 
+ export default function SeoAuditPage() {
+-  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount, truncatedReason, scannedCount } = useLoaderData();
++  const { products, totalScore, missingDesc, missingMeta, noImages, missingAltText, staleCount, truncatedReason, scannedCount, upsell } = useLoaderData();
+   const navigate = useNavigate();
+   const navigation = useNavigation();
+   const loadingThisRoute = useRouteLoading();
+@@ -227,6 +245,9 @@ export default function SeoAuditPage() {
+           </Banner>
+         )}
+ 
++        {/* Quota exhausted: the audit's own N with its caveat, amber, reset date beside the CTA. */}
++        {upsell && <QuotaUpgradePrompt upsell={upsell} surface="seo_audit" />}
++
+         <Layout>
+           <Layout.Section variant="oneThird">
+             <Card>
+diff --git a/app/routes/webhooks.app.subscriptions_update.jsx b/app/routes/webhooks.app.subscriptions_update.jsx
+index 5b9a169..c1eab1c 100644
+--- a/app/routes/webhooks.app.subscriptions_update.jsx
++++ b/app/routes/webhooks.app.subscriptions_update.jsx
+@@ -2,6 +2,7 @@ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
+ import { FREE_PLAN, getPlanByKey } from "../utils/plans.server";
+ import { invalidateCache } from "../utils/cache.server.js";
++import { attributePlanChoice, markPromptDeclined } from "../utils/upgradePrompts.server.js";
+ 
+ export const action = async ({ request }) => {
+   const { topic, shop, payload } = await authenticate.webhook(request);
+@@ -18,6 +19,15 @@ export const action = async ({ request }) => {
+ 
+   let planChanged = false;
+   if (status === "ACTIVE" && planDef) {
++    // Brief item 5 (D14): read the previous charge id BEFORE the write so a
++    // new subscription can be attributed to the prompt the merchant acted on.
++    // Read-only and non-fatal — the plan write below is untouched (1.2.3).
++    let prev = null;
++    try {
++      prev = await prisma.plan.findUnique({ where: { shop }, select: { planName: true, shopifyChargeId: true } });
++    } catch {
++      prev = null;
++    }
+     await prisma.plan.upsert({
+       where: { shop },
+       update: {
+@@ -37,6 +47,16 @@ export const action = async ({ request }) => {
+       },
+     });
+     planChanged = true;
++    try {
++      await attributePlanChoice(shop, {
++        planName: planDef.planName,
++        chargeId: sub.id,
++        prevChargeId: prev?.shopifyChargeId ?? null,
++        prevPlanName: prev?.planName ?? "free",
++      });
++    } catch {
++      // tracking only — never affects the webhook response
++    }
+   } else if (["CANCELLED", "DECLINED", "EXPIRED"].includes(status)) {
+     await prisma.plan.upsert({
+       where: { shop },
+@@ -55,6 +75,15 @@ export const action = async ({ request }) => {
+       },
+     });
+     planChanged = true;
++    if (status === "DECLINED" || status === "EXPIRED") {
++      // The merchant asked for a plan from a prompt and the charge did not go
++      // through — stamp the newest recent subscribe request (non-fatal).
++      try {
++        await markPromptDeclined(shop);
++      } catch {
++        // tracking only
++      }
++    }
+   } else if (status === "FROZEN") {
+     await prisma.plan.updateMany({
+       where: { shop },
+diff --git a/app/utils/metrics.server.js b/app/utils/metrics.server.js
+index 4ac7552..0ee8d5f 100644
+--- a/app/utils/metrics.server.js
++++ b/app/utils/metrics.server.js
+@@ -47,6 +47,34 @@ export async function getContentMetrics(shop) {
+   };
+ }
+ 
++/**
++ * Products with NO Navaal description row — the Products-page "without AI
++ * content" number (brief item 5, D15).
++ *
++ * Counts DISTINCT products that have a description row in ANY status (draft /
++ * approved / published / rejected — Navaal already touched them) and subtracts
++ * that from the live Shopify product count. This is exactly the set the
++ * Optimise action skips (existingIds), so the number a merchant sees before a
++ * run equals what the run will target. The previous
++ * `total − published − draft` over-subtracted a product that had BOTH a
++ * published and a draft row (it was counted twice) and mis-counted products
++ * whose only row was a meta title.
++ *
++ * @param {string} shop
++ * @param {number} productsCount live productsCount from the Admin API
++ * @returns {Promise<number>} never negative
++ */
++export async function countProductsWithoutAiContent(shop, productsCount) {
++  const [r] = await prisma.$queryRaw`
++    SELECT COUNT(DISTINCT "productId")::integer AS covered
++    FROM "GeneratedContent"
++    WHERE shop = ${shop}
++      AND "contentType" = 'description'
++      AND "productId" LIKE 'gid://shopify/Product/%'
++  `;
++  return Math.max(0, (Number(productsCount) || 0) - Number(r?.covered ?? 0));
++}
++
+ /**
+  * Coverage percentage: distinct published products ÷ total products, 0-100.
+  * Always clamped so it can never exceed 100%.
+diff --git a/app/utils/plans.server.js b/app/utils/plans.server.js
+index 51229a5..6a00499 100644
+--- a/app/utils/plans.server.js
++++ b/app/utils/plans.server.js
+@@ -3,6 +3,7 @@ import prisma from "../db.server.js";
+ import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
+ import { getCache, invalidateCache } from "./cache.server.js";
+ import logger from "./logger.server.js";
++import { attributePlanChoice } from "./upgradePrompts.server.js";
+ 
+ export { FREE_PLAN };
+ 
+@@ -213,6 +214,16 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
+   if (activeSub) {
+     const planDef = getPlanByKey(activeSub.name);
+     if (planDef) {
++      // Brief item 5 (D14): remember what the plan row said BEFORE this write so
++      // a genuinely new subscription id can be attributed to the upgrade prompt
++      // the merchant acted on. A READ only — and a failed read must never stop
++      // the plan write below (App Store 1.2.3), so it degrades to "unknown".
++      let prev = null;
++      try {
++        prev = await prisma.plan.findUnique({ where: { shop }, select: { planName: true, shopifyChargeId: true } });
++      } catch (err) {
++        logger.warn({ shop, err: err?.message }, "billing: previous-plan read failed (attribution only, non-fatal)");
++      }
+       await prisma.plan.upsert({
+         where: { shop },
+         update: {
+@@ -236,6 +247,19 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
+         },
+       });
+       await invalidateCache(`plan:${shop}`);
++      // Attribution is a side call AFTER the plan is written and the cache
++      // busted. attributePlanChoice never throws by contract; the try/catch is
++      // belt-and-braces so no tracking failure can surface from a billing sync.
++      try {
++        await attributePlanChoice(shop, {
++          planName: planDef.planName,
++          chargeId: activeSub.id,
++          prevChargeId: prev?.shopifyChargeId ?? null,
++          prevPlanName: prev?.planName ?? "free",
++        });
++      } catch (err) {
++        logger.warn({ shop, err: err?.message }, "billing: attributePlanChoice threw (non-fatal)");
++      }
+       return;
+     }
+   }

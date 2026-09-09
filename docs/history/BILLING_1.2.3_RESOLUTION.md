@@ -99,3 +99,67 @@ real invoice in Settings → Billing.
 > **What we changed:** The reconciliation (and the cancel path) now read the store's active subscriptions directly from Shopify, which returns every active subscription regardless of its test flag, so a review store's test subscription can no longer be treated as missing. The plan is only ever moved to Free on an authoritative response that positively shows zero active subscriptions; on any error or ambiguity the current plan is kept. The `app_subscriptions/update` webhook remains the source of truth.
 >
 > **What we verified:** On a development store we upgraded to Professional and reloaded the Plans page repeatedly over more than two minutes — the plan stays Professional every time. We also simulated a complete loss of Shopify connectivity during the reconcile and confirmed the plan still remains Professional. Plan upgrades now remain active for testing. A screen recording showing the upgrade and the persistent reloads is attached.
+
+---
+
+## Round 3 (resubmission) — full live verification, nothing "covered by design"
+
+Re-ran the **complete** gauntlet live against Fly **v107** (= `main` HEAD `0fb4754`),
+including the two tests skipped last time: a **brand-new development store** and a
+**full uninstall → reinstall** cycle. Full PASS/FAIL matrix in `BILLING_1.2.3_GO_NOGO.md`.
+
+**Fresh store `navaal-qa-fresh` (the reviewer's exact environment):**
+- Created a new dev store, installed the app from scratch (fresh OAuth) into the embedded app.
+- Install-time webhooks registered for the shop — `app_subscriptions/update` and `app/uninstalled` (active version `navaal-seo-geo-content-14`, live firing confirmed).
+- Free → Professional: Approve → landed `…/app/plans?upgraded=1`, banner, quota **1000**, charge `34180399334`.
+- **Persistence:** reloaded Plans 3× over >2 min + Dashboard round-trips → Professional every time. Fly: `Billing callback processed active:true count:1`.
+- Charge visible in this store's admin (Settings → Apps: *Free trial · $79.99/mo after trial*; Settings → Billing → current charges).
+- **Plan change** Growth → Professional: confirm said *"Replaces your previous subscription"*, approved (`34180497638`), reload ×2 persists, exactly one active subscription.
+- **Decline path:** Cancel on Shopify's confirm page → back in-app on Free, unchanged on reload.
+- **Uninstall → reinstall → upgrade:** `app/uninstalled` fired and `plan`+`session` rows were cleared (`All shop data deleted after uninstall`); reinstall started **clean on Free**; re-upgrade persisted.
+- Left the store on **Free** (25/25) at the end.
+
+**Original store `contentpilot-dev2` (regression):** upgrade → reload ×2 → persists; cancel → Free persists. v105→v107 did not regress.
+
+**Release hygiene:** deployed release = `main` (temp shop-scoped fault-injection is fully
+absent — verified by source grep and by production logs showing the clean reconcile path);
+no debug/test-only branches in billing; `.env` restored (the 2026-07-13 product-list overwrite
+was EBS storefront navigation content saved to the wrong path — no repo code writes to `.env`);
+`git status` clean; CI #74 on `main` green (Lint · Test · Build).
+
+**Proof recording:** `navaal-billing-1.2.3-proof.gif` — self-driven synthetic pointer with
+click ripples on both key clicks (including **Approve**), the reload-persists frame, and the
+real URL shown at every transition.
+
+---
+
+## Draft reply for the review form (resubmission)
+
+> **What was happening (issue 1.2.3):** After an upgrade, a background reconciliation on the
+> Plans page confirmed the subscription with Shopify using a call that filters by the charge's
+> *test* flag. Development and review stores can only approve **test** subscriptions, so when our
+> test-vs-real resolution briefly returned the wrong value, that filtered call came back empty and
+> the reconciliation concluded there was no active subscription — resetting the plan to Free on the
+> next page load, even though an active subscription existed.
+>
+> **What we changed:** The reconciliation (and the cancel path) now read the store's **active
+> subscriptions directly** from Shopify, which returns every active subscription regardless of its
+> test flag, so a review store's test subscription can no longer be treated as missing. The plan is
+> only ever moved to Free on an authoritative response that positively shows zero active
+> subscriptions; on any error or ambiguity the current plan is kept. The `app_subscriptions/update`
+> webhook remains the source of truth.
+>
+> **Plan changes now persist — upgrades and downgrades, with no support contact and no reinstall.**
+> On a brand-new development store we installed the app from scratch and then: upgraded Free →
+> Professional and reloaded the Plans page repeatedly over more than two minutes (it stays
+> Professional every time); changed plans Growth → Professional (the new plan replaces the old one,
+> exactly one active subscription); declined a charge (the plan correctly stays unchanged); and
+> uninstalled, reinstalled, and upgraded again (it starts clean on Free and the upgrade persists).
+> We also confirmed the same on our original test store. **Plan upgrades now remain active for
+> testing.**
+>
+> **Charges appear correctly in the application charge history.** The approved subscription is shown
+> in the store's admin under Settings → Apps and Settings → Billing (current charges), and via the
+> app's own usage badge ("Professional Plan · 1000/mo").
+>
+> A screen recording of the upgrade, the Approve click, and the persistent reloads is attached.

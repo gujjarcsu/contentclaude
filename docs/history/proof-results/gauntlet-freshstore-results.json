@@ -1,0 +1,58 @@
+[
+  {
+    "label": "1-open-dashboard",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "ok": true,
+    "len": 2724
+  },
+  {
+    "label": "2-plans",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app/plans",
+    "form": false,
+    "ok": true,
+    "len": 2245
+  },
+  {
+    "label": "3-dashboard-via-nav",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "ok": true,
+    "len": 2724
+  },
+  {
+    "label": "4-reload-app",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "ok": true,
+    "len": 2724
+  },
+  {
+    "label": "5-settings",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app/settings",
+    "form": false,
+    "ok": true,
+    "len": 2466
+  },
+  {
+    "label": "6-back-to-dashboard",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "ok": true,
+    "len": 2724
+  },
+  {
+    "label": "7-reload-plans",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app/plans",
+    "form": false,
+    "ok": true,
+    "len": 2245
+  },
+  {
+    "label": "8-app-name-home",
+    "url": "https://admin.shopify.com/store/navaal-test-2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "ok": true,
+    "len": 2724
+  }
+]

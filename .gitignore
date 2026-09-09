@@ -39,21 +39,29 @@ tests/e2e/.auth/
 playwright-report/
 test-results/
 navaal-e2e/
-billing-proof/
-billing-persist/
-billing-cancel-upgrade/
-reconcile-probe/
-billing-review-proof/
-gauntlet-211/
-gauntlet-freshstore/
-gauntlet-record/
-reviewer-frames/
-verify-incognito/
-title-proof2/
-gauntlet-freshstore/
-reviewer-frames/
-proof-items12/
-proof-items345/
+
+# Playwright proof-harness output (Phase 1 item 9).
+#
+# These are screenshots, video frames and results.json written by the harnesses
+# in tools/proof/. They reached 186 MB across thirteen directories and were
+# being sent to Fly as build context on every single deploy. They are outputs:
+# re-runnable, and never worth committing. The results.json files that mattered
+# were kept in docs/history/proof-results/.
+/gauntlet-*/
+/billing-*/
+/proof-*/
+/title-proof*/
+/repro-*/
+/reviewer-*/
+/verify-*/
+/reconcile-probe/
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# Agent worktrees. Recovered and pruned on 2026-09-09; see
+# docs/history/worktree-recovery/.
+.claude/worktrees/
 
 # Phase 3 will write and commit this. It targets work not yet done, so it FAILS
 # against main by design — and typecheck/tests are blocking in CI now, so an

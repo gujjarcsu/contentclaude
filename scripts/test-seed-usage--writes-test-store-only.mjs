@@ -4,7 +4,7 @@
 // spending 25 real generations. Refuses to touch anything that is not a
 // recognised test store. Run on the Fly machine:
 //
-//   fly ssh console -a contentclaude -C "sh -c 'SEED_SHOP=navaal-qa-fresh.myshopify.com node /app/scripts/test-seed-usage.mjs'"
+//   fly ssh console -a contentclaude -C "sh -c 'SEED_SHOP=navaal-qa-fresh.myshopify.com node /app/scripts/test-seed-usage--writes-test-store-only.mjs'"
 //   ... SEED_ACTION=restore ...   removes the synthetic rows again
 import { PrismaClient } from "@prisma/client";
 

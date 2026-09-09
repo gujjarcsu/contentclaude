@@ -1,0 +1,427 @@
+/**
+ * Quick start (brief item 3) — one real draft for one real product, per request.
+ *
+ * The dashboard hero fires up to three of these in parallel (one fetcher each)
+ * so the first draft lands in ~15–35 s and one failure never sinks the others.
+ * Everything here returns a PLAIN OBJECT — the resource route always answers
+ * HTTP 200 JSON with `ok: false` on an expected failure, because a thrown
+ * Response would land the merchant on the ErrorBoundary mid-run.
+ *
+ * Credits (D5 — a merchant is never charged for a draft they did not get):
+ *   reuse_draft  a usable draft < 24 h old already exists → returned, no charge
+ *   in_flight    a credit was taken < 300 s ago and no draft followed → the
+ *                first request may still be running → poll, never charge again
+ *   orphan       a credit was taken 300 s–24 h ago and no draft followed → the
+ *                request died → reuse THAT credit instead of charging twice
+ *   new          the quota gate wrote a fresh UsageRecord
+ *   refund       any throw / empty draft / vanished product after a charge
+ *                deletes the credit again
+ *
+ * Only description + metaTitle + metaDescription are written (one credit,
+ * fastest, literally "descriptions"; FAQ needs the theme embed to matter).
+ */
+import prisma from "../db.server.js";
+import logger from "./logger.server.js";
+import { getCache } from "./cache.server.js";
+import { checkRateLimit } from "./rateLimit.server.js";
+import { tryConsumeGeneration, refundGeneration, getOrCreatePlan, getMonthlyUsageCount } from "./plans.server.js";
+import { generateProductContent, enhanceExistingContent } from "./ai.server.js";
+import { scoreContent } from "./contentScorer.server.js";
+import { snapshotAndPrune } from "./contentVersion.server.js";
+import { markFirstDraftSeen, stampQuickStartStarted, incrementQuickStartDrafts } from "./firstValue.server.js";
+import { invalidateCatalogGaps } from "./catalogGaps.server.js";
+
+/** Worst-case life of one generation request: 45 s × 3 attempts + 2 × 60 s 429 backoff ≈ 255 s. */
+export const IN_FLIGHT_MS = 300_000;
+/** A draft this recent is simply shown again — never regenerated, never charged. */
+export const REUSE_MS = 24 * 3_600_000;
+export const QUICK_START_TYPES = ["description", "metaTitle", "metaDescription"];
+export const PRODUCT_GID_RE = /^gid:\/\/shopify\/Product\/\d+$/;
+const PRODUCT_GID_PREFIX = "gid://shopify/Product/";
+const REUSABLE_STATUSES = new Set(["draft", "approved", "published"]);
+
+/** Merchant-safe failure copy (exact strings — locked by tests). Never an internal error message. */
+export const QUICK_START_MESSAGES = {
+  timeout: "This one took too long — no generation was used.",
+  busy: "Our AI is busy — no generation was used. Retry in a minute.",
+  empty: "The AI returned an empty draft — no generation was used.",
+  notFound: "This product no longer exists in your store.",
+  contention: "Busy for a moment — no generation was used.",
+  generic: "We couldn't write this one — no generation was used.",
+  save: "We couldn't save this draft — no generation was used.",
+  invalid: "Invalid product.",
+  rateLimited: (seconds) => `Too many at once — try again in ${seconds}s.`,
+};
+
+/** Map an AI/transport error to merchant-safe copy. Pure. */
+export function friendly(err) {
+  const msg = String(err?.message || "");
+  if (err?.name === "AbortError" || /timed out|timeout/i.test(msg)) return QUICK_START_MESSAGES.timeout;
+  if (err?.isRateLimit || /rate limit|temporarily unavailable|circuit/i.test(msg)) return QUICK_START_MESSAGES.busy;
+  return QUICK_START_MESSAGES.generic;
+}
+
+export const numericIdOf = (gid) => String(gid || "").split("/").pop();
+
+const PRODUCT_QUERY = `query quickStartProduct($id: ID!) {
+  product(id: $id) {
+    id title productType vendor description descriptionHtml tags
+    seo { title description }
+    featuredMedia { preview { image { url } } }
+    media(first: 4) { edges { node { mediaContentType ... on MediaImage { image { url } } } } }
+    variants(first: 5) { edges { node { title price } } }
+  }
+}`;
+
+const CARDS_QUERY = `query quickStartCards($ids: [ID!]!) {
+  nodes(ids: $ids) { ... on Product { id title featuredMedia { preview { image { url } } } } }
+}`;
+
+async function fetchProduct(admin, productId) {
+  const r = await admin.graphql(PRODUCT_QUERY, { variables: { id: productId } });
+  const { data } = await r.json();
+  return data?.product ?? null;
+}
+
+/** Title + image for a few product ids (for cards rebuilt from the DB). Never throws → {}. */
+async function fetchCardInfo(admin, ids) {
+  if (!admin?.graphql || !ids.length) return {};
+  try {
+    const r = await admin.graphql(CARDS_QUERY, { variables: { ids } });
+    const { data } = await r.json();
+    const out = {};
+    for (const n of data?.nodes ?? []) {
+      if (n?.id) out[n.id] = { title: n.title || "", imageUrl: n.featuredMedia?.preview?.image?.url || "" };
+    }
+    return out;
+  } catch (err) {
+    logger.warn({ err: err?.message }, "quickStart: card info lookup failed (non-fatal)");
+    return {};
+  }
+}
+
+/** The product shape ai.server expects (same as the welcome demo and the product page). */
+function toAiProduct(node) {
+  return {
+    title: node.title,
+    productType: node.productType,
+    vendor: node.vendor,
+    description: node.description,
+    descriptionHtml: node.descriptionHtml,
+    images: (node.media?.edges ?? [])
+      .filter((e) => e.node?.mediaContentType === "IMAGE" && e.node?.image?.url)
+      .map((e) => ({ url: e.node.image.url })),
+    imageUrl: node.featuredMedia?.preview?.image?.url || "",
+    variants: (node.variants?.edges ?? []).map((e) => e.node),
+    tags: node.tags || [],
+    seoTitle: node.seo?.title || "",
+    seoDescription: node.seo?.description || "",
+  };
+}
+
+/** The true Shopify original, kept so the merchant can always roll back (never overwritten on update). */
+function originalFor(type, node) {
+  if (type === "description") return node.descriptionHtml || "";
+  if (type === "metaTitle") return node.seo?.title || "";
+  if (type === "metaDescription") return node.seo?.description || "";
+  return "";
+}
+
+const qualityOf = (c) =>
+  scoreContent({ description: c.description || "", metaTitle: c.metaTitle || "", metaDescription: c.metaDescription || "" }).score;
+
+async function remainingFor(shop) {
+  try {
+    const [plan, usage] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
+    return Math.max(0, (plan?.monthlyLimit ?? 0) - (usage ?? 0));
+  } catch {
+    return null;
+  }
+}
+
+/** The stored quick-start rows for one product, shaped like a fresh result. */
+async function draftPayload(shop, productId) {
+  const rows = await prisma.generatedContent.findMany({
+    where: { shop, productId, contentType: { in: QUICK_START_TYPES } },
+  });
+  const content = {};
+  let title = "";
+  for (const r of rows) {
+    content[r.contentType] = r.generatedContent || "";
+    if (!title && r.productTitle) title = r.productTitle;
+  }
+  return {
+    numericId: numericIdOf(productId),
+    title,
+    imageUrl: "",
+    description: content.description || "",
+    metaTitle: content.metaTitle || "",
+    metaDescription: content.metaDescription || "",
+    qualityScore: qualityOf(content),
+  };
+}
+
+/**
+ * Decide how this request is paid for. Reads first; only the "new" branch
+ * writes (through the SERIALIZABLE quota gate).
+ * → { kind: "reuse_draft", draft } | { kind: "in_flight" } | { kind: "orphan", usageRecordId }
+ *   | { kind: "contention" } | { kind: "denied" } | { kind: "new", remaining }
+ */
+export async function reserveCredit(shop, productId, now = new Date()) {
+  const draft = await prisma.generatedContent.findUnique({
+    where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+  });
+  const draftAt = draft?.updatedAt ? new Date(draft.updatedAt) : null;
+  if (
+    draft?.generatedContent?.trim() &&
+    REUSABLE_STATUSES.has(draft.status) &&
+    draftAt &&
+    draftAt.getTime() >= now.getTime() - REUSE_MS
+  ) {
+    return { kind: "reuse_draft", draft };
+  }
+
+  const last = await prisma.usageRecord.findFirst({
+    where: { shop, productId, contentType: "description", createdAt: { gte: new Date(now.getTime() - REUSE_MS) } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (last) {
+    const lastAt = new Date(last.createdAt).getTime();
+    const draftFollowed = draftAt && draftAt.getTime() >= lastAt; // that credit produced a row (any status)
+    if (!draftFollowed) {
+      if (lastAt >= now.getTime() - IN_FLIGHT_MS) return { kind: "in_flight" }; // may still be running → never charge again
+      return { kind: "orphan", usageRecordId: last.id }; // request died → reuse the paid credit
+    }
+  }
+
+  const gate = await tryConsumeGeneration(shop, "description", productId);
+  if (gate.isContention) return { kind: "contention" };
+  if (!gate.allowed) return { kind: "denied" };
+  return { kind: "new", remaining: gate.remaining };
+}
+
+/**
+ * Generate (or enhance) one product's description + meta title + meta
+ * description as DRAFTS. Always resolves to a plain object.
+ */
+export async function runQuickStartOne({ admin, shop, productId, mode = "generate" }) {
+  if (!PRODUCT_GID_RE.test(String(productId || ""))) {
+    return { ok: false, productId, error: QUICK_START_MESSAGES.invalid };
+  }
+
+  const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+  if (!rl.allowed) {
+    const s = Math.max(1, Number(rl.retryAfterSeconds) || 60);
+    return { ok: false, productId, rateLimited: true, retryAfterSeconds: s, error: QUICK_START_MESSAGES.rateLimited(s) };
+  }
+
+  const res = await reserveCredit(shop, productId);
+  if (res.kind === "reuse_draft") {
+    return { ok: true, productId, reused: true, credit: "reuse_draft", ...(await draftPayload(shop, productId)), remaining: await remainingFor(shop) };
+  }
+  if (res.kind === "in_flight") return { ok: false, productId, inFlight: true, retryAfterSeconds: 10 };
+  if (res.kind === "contention") return { ok: false, productId, retryable: true, error: QUICK_START_MESSAGES.contention };
+  if (res.kind === "denied") return { ok: false, productId, limitReached: true, remaining: 0 };
+
+  const charged = res.kind === "new" || res.kind === "orphan";
+  const refund = async () => {
+    if (!charged) return false;
+    try {
+      return await refundGeneration(shop, { productId, contentType: "description" });
+    } catch (err) {
+      logger.error({ shop, productId, err: err?.message, event: "quick_start_refund_failed" }, "quick start: refund failed");
+      return false;
+    }
+  };
+  const failure = (extra) => ({ ok: false, productId, retryable: true, ...extra });
+
+  await stampQuickStartStarted(shop); // first-writer-wins, never throws
+
+  let node;
+  try {
+    node = await fetchProduct(admin, productId);
+  } catch (err) {
+    const refunded = await refund();
+    logger.warn({ shop, productId, err: err?.message, event: "quick_start_failed", stage: "product" }, "quick start: product lookup failed");
+    return failure({ refunded, error: QUICK_START_MESSAGES.generic });
+  }
+  if (!node) {
+    const refunded = await refund();
+    return { ok: false, productId, notFound: true, refunded, error: QUICK_START_MESSAGES.notFound };
+  }
+
+  let brandVoice = null;
+  let recentTitles = [];
+  try {
+    const [bv, recent] = await Promise.all([
+      getCache(`bv:${shop}`, () => prisma.brandVoice.findUnique({ where: { shop } }), 300),
+      prisma.generatedContent.findMany({
+        where: { shop, contentType: "description", NOT: { productId } },
+        select: { productTitle: true },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+      }),
+    ]);
+    brandVoice = bv;
+    recentTitles = (recent ?? []).map((r) => r.productTitle).filter(Boolean);
+  } catch (err) {
+    // Context only — a neutral tone is a valid draft, not a failure.
+    logger.warn({ shop, productId, err: err?.message }, "quick start: context lookup failed (continuing)");
+  }
+
+  const product = toAiProduct(node);
+  let generated;
+  try {
+    generated =
+      mode === "enhance"
+        ? await enhanceExistingContent(product, brandVoice || {}, QUICK_START_TYPES)
+        : await generateProductContent(product, brandVoice || {}, QUICK_START_TYPES, { length: "standard", recentTitles });
+  } catch (err) {
+    const refunded = await refund();
+    logger.warn({ shop, productId, mode, err: err?.message, event: "quick_start_failed", stage: "generate" }, "quick start: generation failed");
+    return failure({ refunded, error: friendly(err) });
+  }
+  if (!generated?.description?.trim()) {
+    const refunded = await refund();
+    logger.warn({ shop, productId, mode, event: "quick_start_failed", stage: "empty" }, "quick start: empty draft");
+    return failure({ refunded, error: QUICK_START_MESSAGES.empty });
+  }
+
+  const typesToSave = QUICK_START_TYPES.filter((t) => generated[t]);
+  try {
+    const existing = await prisma.generatedContent.findMany({ where: { shop, productId, contentType: { in: typesToSave } } });
+    await snapshotAndPrune(shop, productId, existing);
+    await Promise.all(
+      typesToSave.map((type) =>
+        prisma.generatedContent.upsert({
+          where: { shop_productId_contentType: { shop, productId, contentType: type } },
+          update: { generatedContent: generated[type], status: "draft", version: { increment: 1 } },
+          create: {
+            shop,
+            productId,
+            productTitle: node.title || "",
+            contentType: type,
+            originalContent: originalFor(type, node),
+            generatedContent: generated[type],
+            status: "draft",
+          },
+        })
+      )
+    );
+  } catch (err) {
+    const refunded = await refund();
+    logger.error({ shop, productId, err: err?.message, event: "quick_start_failed", stage: "save" }, "quick start: draft save failed");
+    return failure({ refunded, error: QUICK_START_MESSAGES.save });
+  }
+
+  // The draft is real and stored: milestones, counters, cache — all non-fatal.
+  await markFirstDraftSeen(shop, "quick_start");
+  await incrementQuickStartDrafts(shop);
+  await invalidateCatalogGaps(shop);
+  logger.info({ shop, productId, mode, credit: res.kind, event: "quick_start_result" }, "quick start: draft written");
+
+  const description = generated.description;
+  const metaTitle = generated.metaTitle || "";
+  const metaDescription = generated.metaDescription || "";
+  return {
+    ok: true,
+    productId,
+    numericId: numericIdOf(productId),
+    title: node.title || "",
+    imageUrl: node.featuredMedia?.preview?.image?.url || "",
+    description,
+    metaTitle,
+    metaDescription,
+    qualityScore: qualityOf({ description, metaTitle, metaDescription }),
+    credit: res.kind,
+    remaining: res.kind === "new" && Number.isFinite(res.remaining) ? Math.max(0, res.remaining) : await remainingFor(shop),
+  };
+}
+
+/**
+ * The n most recently updated products with quick-start DRAFT rows — the same
+ * rows /app/review lists — shaped like ready cards. Never throws → [].
+ */
+export async function loadRecentDrafts(shop, n = 3, { admin = null } = {}) {
+  try {
+    const idRows = await prisma.generatedContent.findMany({
+      where: { shop, status: "draft", contentType: { in: QUICK_START_TYPES }, productId: { startsWith: PRODUCT_GID_PREFIX } },
+      select: { productId: true },
+      orderBy: { updatedAt: "desc" },
+    });
+    const ordered = [...new Set(idRows.map((r) => r.productId))].slice(0, Math.max(0, n));
+    if (ordered.length === 0) return [];
+    const [rows, info] = await Promise.all([
+      prisma.generatedContent.findMany({
+        where: { shop, status: "draft", productId: { in: ordered }, contentType: { in: QUICK_START_TYPES } },
+      }),
+      fetchCardInfo(admin, ordered),
+    ]);
+    const byId = {};
+    for (const r of rows) {
+      const p = (byId[r.productId] ??= { title: r.productTitle || "", content: {}, updatedAt: new Date(r.updatedAt) });
+      p.content[r.contentType] = r.generatedContent || "";
+      if (new Date(r.updatedAt) > p.updatedAt) p.updatedAt = new Date(r.updatedAt);
+    }
+    return ordered
+      .filter((id) => byId[id])
+      .map((id) => {
+        const p = byId[id];
+        const c = p.content;
+        return {
+          productId: id,
+          numericId: numericIdOf(id),
+          title: info[id]?.title || p.title || "Product",
+          imageUrl: info[id]?.imageUrl || "",
+          description: c.description || "",
+          metaTitle: c.metaTitle || "",
+          metaDescription: c.metaDescription || "",
+          qualityScore: qualityOf(c),
+          updatedAt: p.updatedAt.toISOString(),
+        };
+      });
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "quickStart.loadRecentDrafts failed (non-fatal)");
+    return [];
+  }
+}
+
+/**
+ * Products whose description credit was taken < 300 s ago with no draft row
+ * written since — a request may still be running for them. Never throws → [].
+ */
+export async function findInFlight(shop, { admin = null, now = new Date() } = {}) {
+  try {
+    const recs = await prisma.usageRecord.findMany({
+      where: {
+        shop,
+        contentType: "description",
+        createdAt: { gte: new Date(now.getTime() - IN_FLIGHT_MS) },
+        productId: { startsWith: PRODUCT_GID_PREFIX },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recs.length === 0) return [];
+    const ids = [...new Set(recs.map((r) => r.productId))];
+    const rows = await prisma.generatedContent.findMany({
+      where: { shop, contentType: "description", productId: { in: ids } },
+      select: { productId: true, updatedAt: true, generatedContent: true },
+    });
+    const drafts = new Map(rows.map((r) => [r.productId, r]));
+    const pending = [];
+    const seen = new Set();
+    for (const r of recs) {
+      if (seen.has(r.productId)) continue;
+      seen.add(r.productId);
+      const d = drafts.get(r.productId);
+      if (d && d.generatedContent?.trim() && new Date(d.updatedAt).getTime() >= new Date(r.createdAt).getTime()) continue;
+      pending.push({ productId: r.productId, numericId: numericIdOf(r.productId), startedAt: new Date(r.createdAt).toISOString() });
+    }
+    if (pending.length === 0) return [];
+    const info = await fetchCardInfo(admin, pending.map((p) => p.productId));
+    return pending.map((p) => ({ ...p, title: info[p.productId]?.title || "", imageUrl: info[p.productId]?.imageUrl || "" }));
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "quickStart.findInFlight failed (non-fatal)");
+    return [];
+  }
+}

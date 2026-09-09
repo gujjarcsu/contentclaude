@@ -54,3 +54,20 @@ qa-audit
 fix-encoding.mjs
 launch.sh
 *.md
+# Proof harnesses and their output (Phase 1 item 9). These drive a browser from
+# a laptop; nothing in the container ever runs them, and their output once
+# reached 186 MB of screenshots and video frames being uploaded as build
+# context on every deploy.
+tools
+gauntlet-*
+billing-*
+proof-*
+title-proof*
+repro-*
+reviewer-*
+verify-*
+reconcile-probe
+playwright-report
+test-results
+.playwright-mcp
+.claude

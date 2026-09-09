@@ -1,0 +1,678 @@
+diff --git a/app/components/ReviewRequest.jsx b/app/components/ReviewRequest.jsx
+index ceae3fb..8f03790 100644
+--- a/app/components/ReviewRequest.jsx
++++ b/app/components/ReviewRequest.jsx
+@@ -2,46 +2,83 @@ import { useEffect, useRef } from "react";
+ import { useFetcher } from "react-router";
+ 
+ /**
+- * Post-publish App Store review ask.
++ * Post-publish App Store review ask — the compliant way (brief item 4).
+  *
+- * Render <ReviewRequest active={...} /> on a surface where a publish just
+- * succeeded. When `active` first becomes true, it waits ~2s (so it doesn't
+- * collide with the success toast/banner), calls App Bridge's
+- * shopify.reviews.request(), then records the attempt server-side so the shop is
+- * NEVER asked again — regardless of the outcome (success, cooldown, ineligible).
++ * This component can only call shopify.reviews.request() with an `attemptId`
++ * the SERVER issued inside the publish action the merchant pressed
++ * (openReviewAsk in app/utils/reviewAsk.server.js). It never fires on page
++ * open, from a loader, or after an auto-publish — there is simply no attempt
++ * for those. Render <ReviewRequest ask={actionData?.reviewAsk} /> on a publish
++ * surface; `ask` is `{ attemptId }` or null/undefined.
+  *
+- * App Bridge runs client-side, so this MUST fire from the frontend (never the
+- * worker). The parent decides eligibility (first success + not-yet-asked +
+- * not onboarding) and passes it via `active`.
++ *   - one call per server-issued attemptId, even across a remount (the Review
++ *     page swaps subtrees after publishing everything);
++ *   - 2,000 ms after mount so the "published" toast/banner is visible first;
++ *   - a hidden document (background tab) gets "skipped-hidden" and NO call —
++ *     a modal nobody can see would burn Shopify's display allowance;
++ *   - whatever Shopify returns is reported to /app/review-request so every call
++ *     is a recorded outcome (success / decline code / unavailable / error).
++ *
++ * App Bridge runs client-side, so this MUST fire from the frontend.
+  */
+-export function ReviewRequest({ active }) {
++const ASK_DELAY_MS = 2000;
++const REPORT_ACTION = "/app/review-request";
++
++// attemptIds this document has already called reviews.request() for. Module
++// scope (not a ref) so a remount of this component cannot repeat a call.
++const calledAttempts = new Set();
++
++export function ReviewRequest({ ask }) {
+   const fetcher = useFetcher();
+-  const fired = useRef(false);
++  const submitRef = useRef(fetcher.submit);
++  submitRef.current = fetcher.submit;
++  const firedFor = useRef(null);
++  const attemptId = ask?.attemptId || null;
+ 
+   useEffect(() => {
+-    if (!active || fired.current) return;
+-    fired.current = true; // one attempt per mount; server flag prevents future mounts
++    if (!attemptId || firedFor.current === attemptId || calledAttempts.has(attemptId)) return;
+ 
+     const timer = setTimeout(async () => {
++      // Re-check at fire time: another instance may have fired meanwhile.
++      if (calledAttempts.has(attemptId)) return;
++      calledAttempts.add(attemptId);
++      firedFor.current = attemptId;
++
+       let code = "unavailable";
++      let success = false;
++      let message = "";
+       try {
+-        // eslint-disable-next-line no-undef
+-        const bridge = typeof window !== "undefined" ? window.shopify : undefined;
+-        if (bridge?.reviews?.request) {
+-          const result = await bridge.reviews.request();
+-          code = result?.success ? "success" : (result?.code || "declined");
++        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
++          code = "skipped-hidden"; // nothing is called — the merchant is not looking
++        } else {
++          // eslint-disable-next-line no-undef
++          const bridge = typeof window !== "undefined" ? window.shopify : undefined;
++          if (bridge?.reviews?.request) {
++            const result = await bridge.reviews.request();
++            success = !!result?.success;
++            code = success ? "success" : (result?.code || "unknown");
++            message = result?.message || "";
++          }
+         }
+       } catch {
+         code = "error";
+       }
+-      // Persist regardless of outcome — one ask per shop, ever.
++
++      // Report the outcome for THIS attempt — the server records it once.
+       const fd = new FormData();
++      fd.append("attemptId", attemptId);
+       fd.append("code", code);
+-      fetcher.submit(fd, { method: "POST", action: "/app/review-request" });
+-    }, 2000);
++      fd.append("success", String(success));
++      fd.append("message", message);
++      try {
++        submitRef.current(fd, { method: "POST", action: REPORT_ACTION });
++      } catch {
++        // Reporting is best-effort; the server's pending hold already protects the cooldown.
++      }
++    }, ASK_DELAY_MS);
+ 
+     return () => clearTimeout(timer);
+-  }, [active, fetcher]);
++  }, [attemptId]);
+ 
+   return null;
+ }
+diff --git a/app/routes/app.jobs.jsx b/app/routes/app.jobs.jsx
+index e534b88..f19681c 100644
+--- a/app/routes/app.jobs.jsx
++++ b/app/routes/app.jobs.jsx
+@@ -21,24 +21,19 @@ import { Clock, CheckCircle2, XCircle, Loader } from "lucide-react";
+ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
+ import { enqueueGenerationJob } from "../queues/generationQueue.server";
+-import { ReviewRequest } from "../components/ReviewRequest";
+ import { useRouteLoading } from "../utils/useRouteLoading.js";
+ 
+ export const loader = async ({ request }) => {
+   const { session } = await authenticate.admin(request);
+   const shop = session.shop;
+ 
+-  const [jobs, growthState] = await Promise.all([
+-    prisma.generationJob.findMany({
+-      where: { shop },
+-      orderBy: { createdAt: "desc" },
+-      take: 20,
+-    }),
+-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+-  ]);
++  const jobs = await prisma.generationJob.findMany({
++    where: { shop },
++    orderBy: { createdAt: "desc" },
++    take: 20,
++  });
+ 
+   return Response.json({
+-    reviewRequested: !!growthState?.reviewRequestedAt,
+     jobs: jobs.map((j) => ({
+       id: j.id,
+       status: j.status,
+@@ -48,6 +43,9 @@ export const loader = async ({ request }) => {
+       autoPublish: j.autoPublish,
+       contentTypes: j.contentTypes,
+       mode: j.mode,
++      // Products excluded BEFORE the run because the monthly quota could not
++      // cover them (disclosed pre-run on Optimise) — informational, never a failure.
++      quotaSkipped: j.quotaSkipped ?? 0,
+       errorLog: j.errorLog ? JSON.parse(j.errorLog) : [],
+       startedAt: j.startedAt?.toISOString() ?? null,
+       completedAt: j.completedAt?.toISOString() ?? null,
+@@ -167,15 +165,20 @@ function formatDate(iso) {
+   return new Date(iso).toLocaleString();
+ }
+ 
++// Quota-sized runs: the products left out were disclosed before the job
++// started, so they are shown as information (info tone), never as failures.
++function QuotaSkippedLine({ count }) {
++  if (!(count > 0)) return null;
++  return (
++    <div>
++      <Badge tone="info">{`${count} products not included — monthly quota`}</Badge>
++    </div>
++  );
++}
++
+ export default function JobsPage() {
+-  const { jobs, reviewRequested } = useLoaderData();
++  const { jobs } = useLoaderData();
+   const navigate = useNavigate();
+-  // A completed auto-publish job means content actually went live → ask for a
+-  // review (once). Non-auto-publish jobs only created drafts, so they don't count
+-  // here; the Review & Publish screen handles that path.
+-  const askReview = !reviewRequested && jobs.some(
+-    (j) => j.autoPublish && j.status === "complete" && j.completedProducts > 0
+-  );
+   const revalidator = useRevalidator();
+   const retryFetcher = useFetcher();
+   const cancelFetcher = useFetcher();
+@@ -263,8 +266,6 @@ export default function JobsPage() {
+       }}
+     >
+       <BlockStack gap="500">
+-        <ReviewRequest active={askReview} />
+-
+         {hasActiveJobs && (
+           <Banner tone="info" title="Jobs are running">
+             <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>
+@@ -322,6 +323,7 @@ export default function JobsPage() {
+                         <Text as="p" variant="bodySm" tone="subdued">
+                           {job.mode === "enhance" ? "Enhancing" : "Generating"}: {contentTypesList}
+                         </Text>
++                        <QuotaSkippedLine count={job.quotaSkipped} />
+                         <InlineStack gap="300">
+                           {elapsedTime && (
+                             <Text as="p" variant="bodySm" tone="subdued">{elapsedTime} elapsed</Text>
+@@ -410,6 +412,7 @@ export default function JobsPage() {
+                           {job.mode === "enhance" ? "Enhance · " : ""}{contentTypesList}
+                           {elapsedTime ? ` · ${elapsedTime}` : ""}
+                         </Text>
++                        <QuotaSkippedLine count={job.quotaSkipped} />
+                       </BlockStack>
+ 
+                       <BlockStack gap="100" inlineAlign="end">
+diff --git a/app/routes/app.products_.$id.jsx b/app/routes/app.products_.$id.jsx
+index d13a59b..fbf2fea 100644
+--- a/app/routes/app.products_.$id.jsx
++++ b/app/routes/app.products_.$id.jsx
+@@ -24,14 +24,18 @@ import {
+ } from "@shopify/polaris";
+ import { useState, useEffect, useRef, useCallback } from "react";
+ import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+-import { UpgradePrompt } from "../components/UpgradePrompt";
++import { UpgradePrompt, QuotaUpgradePrompt } from "../components/UpgradePrompt";
+ import { GeoValueBanner } from "../components/GeoValueBanner";
+ import { ContentBenefits } from "../components/ContentBenefits";
+ import { ReviewRequest } from "../components/ReviewRequest";
+ import { authenticate } from "../shopify.server";
+ import prisma from "../db.server";
+ import logger from "../utils/logger.server.js";
+-import { getOrCreatePlan } from "../utils/plans.server.js";
++import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
++import { markFirstDraftSeen, markFirstPublish } from "../utils/firstValue.server.js";
++import { openReviewAsk } from "../utils/reviewAsk.server.js";
++import { invalidateCatalogGaps } from "../utils/catalogGaps.server.js";
++import { getUpsell } from "../utils/upgradePrompts.server.js";
+ import { getEntitlements } from "../utils/billing-plans.js";
+ import { snapshotAndPrune } from "../utils/contentVersion.server.js";
+ import { readMutationResult } from "../utils/adminGraphql.server.js";
+@@ -83,7 +87,7 @@ export async function loader({ request, params }) {
+   if (!data.product) throw new Response("Product not found", { status: 404 });
+   const product = data.product;
+ 
+-  const [existingContent, brandVoice, versions, templates, plan, growthState] = await Promise.all([
++  const [existingContent, brandVoice, versions, templates, plan, usageCount] = await Promise.all([
+     prisma.generatedContent.findMany({ where: { shop, productId }, orderBy: { updatedAt: "desc" } }),
+     prisma.brandVoice.findUnique({ where: { shop } }),
+     prisma.contentVersion.findMany({
+@@ -93,7 +97,7 @@ export async function loader({ request, params }) {
+     }),
+     prisma.contentTemplate.findMany({ where: { shop }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }], take: 50 }),
+     getOrCreatePlan(shop),
+-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
++    getMonthlyUsageCount(shop),
+   ]);
+ 
+   const { scoreContent } = await import("../utils/contentScorer.server.js");
+@@ -112,6 +116,16 @@ export async function loader({ request, params }) {
+     if (versionsByType[v.contentType].length < 5) versionsByType[v.contentType].push(v);
+   }
+ 
++  // A draft description on screen is the first-value milestone (first-writer-wins, never throws).
++  if (contentMap.description?.status === "draft") await markFirstDraftSeen(shop, "product_page");
++
++  // Item 5a: with the monthly quota exhausted, a measured, plan-fit upgrade
++  // prompt replaces the generic "limit reached" callout. null while quota remains.
++  const remaining = Math.max(0, (plan?.monthlyLimit ?? 0) - (usageCount ?? 0));
++  const upsell = remaining === 0
++    ? await getUpsell({ admin, shop, plan, usageCount, surface: "product_page", nDefinition: "catalog_gaps" })
++    : null;
++
+   return {
+     product: {
+       id: product.id,
+@@ -146,7 +160,7 @@ export async function loader({ request, params }) {
+       return acc;
+     }, {}),
+     hasBrandVoice: !!brandVoice,
+-    reviewRequested: !!growthState?.reviewRequestedAt,
++    upsell,
+     qualityScore,
+     versionsByType,
+     templates,
+@@ -244,6 +258,8 @@ export async function action({ request, params }) {
+         })
+       )
+     );
++    if (generated.description?.trim()) await markFirstDraftSeen(shop, "product_page");
++    await invalidateCatalogGaps(shop);
+     return { success: true, generated, message: "Existing content enhanced — review and publish when ready." };
+   }
+ 
+@@ -310,6 +326,7 @@ export async function action({ request, params }) {
+ 
+     let generated = {};
+     let autoPublishFailed = false;
++    let autoPublishAccepted = false; // true only after Shopify accepted the productUpdate
+     if (contentTypes.length > 0) {
+       generated = await generateProductContent(
+         {
+@@ -383,6 +400,8 @@ export async function action({ request, params }) {
+               data: { status: "draft" },
+             });
+             autoPublishFailed = true;
++          } else {
++            autoPublishAccepted = true;
+           }
+         }
+       }
+@@ -492,6 +511,13 @@ export async function action({ request, params }) {
+       }
+     }
+ 
++    // First-value stamps (server-side, first-writer-wins, never throw). A
++    // generate-with-auto-publish counts as a publish for time-to-value, but it
++    // is NOT a review-ask surface: the button the merchant pressed was Generate.
++    if (generated.description?.trim()) await markFirstDraftSeen(shop, "product_page");
++    if (autoPublishAccepted) await markFirstPublish(shop, "product_page_auto");
++    await invalidateCatalogGaps(shop);
++
+     return {
+       success: true,
+       generated,
+@@ -557,6 +583,9 @@ export async function action({ request, params }) {
+       )
+     );
+ 
++    // Shopify accepted the write — first-publish milestone (first-writer-wins).
++    const firstPublish = await markFirstPublish(shop, "product_page");
++
+     // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
+     let faqWarning = null;
+     const faqRecord = await prisma.generatedContent.findUnique({
+@@ -610,9 +639,21 @@ export async function action({ request, params }) {
+       }
+     }
+ 
++    // The App Store review ask is decided HERE, inside the Publish the merchant
++    // pressed. A single product is a batch of one (surface "product_page").
++    const reviewAsk = await openReviewAsk({
++      shop,
++      surface: "product_page",
++      trigger: firstPublish ? "first_publish" : "publish",
++      publishedCount: 1,
++    });
++    await invalidateCatalogGaps(shop);
++
+     return {
+       success: true,
+       published: true,
++      firstPublish,
++      reviewAsk,
+       message: faqWarning
+         ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
+         : `Content published to your Shopify store!${embedNotice}`,
+@@ -764,6 +805,7 @@ export async function action({ request, params }) {
+         })
+       )
+     );
++    if (typesToSave.includes("description")) await markFirstDraftSeen(shop, "product_page");
+     return { success: true, generated: variantContent, message: "Variant saved as draft — review and publish when ready." };
+   }
+ 
+@@ -929,7 +971,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
+ }
+ 
+ export default function ProductGeneratePage() {
+-  const { product, existingContent, hasBrandVoice, reviewRequested, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
++  const { product, existingContent, hasBrandVoice, upsell, qualityScore, versionsByType, templates, entitlements, shopDomain } = useLoaderData();
+   const navigate = useNavigate();
+   const revalidator = useRevalidator();
+ 
+@@ -943,9 +985,6 @@ export default function ProductGeneratePage() {
+ 
+   const isLoading = fetcher.state !== "idle";
+   const actionData = fetcher.data;
+-  // Ask for an App Store review once, right after a publish succeeds (single
+-  // publish or generate-with-auto-publish).
+-  const askReview = !reviewRequested && (actionData?.published === true || actionData?.autoPublished === true);
+   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
+   const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
+   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
+@@ -1187,7 +1226,9 @@ export default function ProductGeneratePage() {
+       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
+     >
+       <BlockStack gap="500">
+-        <ReviewRequest active={askReview} />
++        {/* Server-issued only: the publish action returns reviewAsk = { attemptId } | null.
++            Generate-with-auto-publish never carries one (the button pressed was Generate). */}
++        <ReviewRequest ask={actionData?.reviewAsk} />
+         <GeoValueBanner variant="compact" />
+         {actionData?.error && (
+           <Banner tone="critical" title="Error">
+@@ -1376,12 +1417,16 @@ export default function ProductGeneratePage() {
+                   )}
+ 
+                   {actionData?.limitReached && (
+-                    <UpgradePrompt
+-                      tone="warning"
+-                      title="Monthly limit reached"
+-                      message="Upgrade your plan to keep generating content"
+-                      onUpgrade={() => navigate("/app/plans")}
+-                    />
++                    upsell ? (
++                      <QuotaUpgradePrompt upsell={upsell} surface="product_page" />
++                    ) : (
++                      <UpgradePrompt
++                        tone="warning"
++                        title="Monthly limit reached"
++                        message="Upgrade your plan to keep generating content"
++                        onUpgrade={() => navigate("/app/plans")}
++                      />
++                    )
+                   )}
+                 </BlockStack>
+               </Card>
+@@ -1523,12 +1568,16 @@ export default function ProductGeneratePage() {
+                     )}
+ 
+                     {actionData?.limitReached && (
+-                      <UpgradePrompt
+-                        tone="warning"
+-                        title="Monthly limit reached"
+-                        message="Upgrade your plan to keep generating content"
+-                        onUpgrade={() => navigate("/app/plans")}
+-                      />
++                      upsell ? (
++                        <QuotaUpgradePrompt upsell={upsell} surface="product_page" />
++                      ) : (
++                        <UpgradePrompt
++                          tone="warning"
++                          title="Monthly limit reached"
++                          message="Upgrade your plan to keep generating content"
++                          onUpgrade={() => navigate("/app/plans")}
++                        />
++                      )
+                     )}
+                   </BlockStack>
+                 </Card>
+diff --git a/app/routes/app.review-request.jsx b/app/routes/app.review-request.jsx
+index 657f11e..8ef20eb 100644
+--- a/app/routes/app.review-request.jsx
++++ b/app/routes/app.review-request.jsx
+@@ -1,35 +1,52 @@
+-// Resource route (action only) — records that we've asked this shop for an App
+-// Store review, exactly once. Called by the ReviewRequest client component after
+-// it invokes App Bridge's shopify.reviews.request() at the peak-value moment
+-// (first successful publish). We set reviewRequestedAt on ANY outcome (success or
+-// decline) so we never ask the same shop twice, and log the outcome code so we
+-// can measure ask→review conversion later.
++// Resource route (action only) — records the outcome of ONE App Store review
++// ask. The ReviewRequest client component POSTs here after calling App
++// Bridge's shopify.reviews.request() for an attempt the server opened inside
++// the merchant's own publish action (openReviewAsk). Nothing here decides
++// whether to ask; it only records what Shopify answered, so every call has a
++// recorded code and the per-code hold is applied (recordReviewOutcome).
++//
++// This is hit by a BACKGROUND fetcher. authenticate.admin throws a redirect
++// (to /auth/login) on a transient auth miss — and React Router would follow it
++// and yank the embedded app to the login form (App Store 2.1.1). Like
++// api.jobs-status.jsx, an auth miss is swallowed and answered with
++// { ok: false } — never a redirect, never a throw.
+ import { authenticate } from "../shopify.server";
+-import prisma from "../db.server";
+-import logger from "../utils/logger.server";
++import { recordReviewOutcome } from "../utils/reviewAsk.server.js";
+ 
+-export const action = async ({ request }) => {
+-  const { session } = await authenticate.admin(request);
+-  const shop = session.shop;
++// Prisma cuid ids — the only attempt ids the server ever issues.
++const ATTEMPT_ID_RE = /^[a-z0-9]{20,40}$/i;
++const MAX_CODE_LENGTH = 60;
++const MAX_MESSAGE_LENGTH = 200;
+ 
+-  const form = await request.formData();
+-  const code = String(form.get("code") || "unknown").slice(0, 60);
++export const action = async ({ request }) => {
++  let session;
++  try {
++    ({ session } = await authenticate.admin(request));
++  } catch {
++    return Response.json({ ok: false });
++  }
++  const shop = session?.shop;
++  if (!shop) return Response.json({ ok: false });
+ 
+-  // Only the FIRST ask counts — if already recorded, do nothing (idempotent).
+-  const existing = await prisma.growthState.findUnique({
+-    where: { shop },
+-    select: { reviewRequestedAt: true },
+-  });
+-  if (existing?.reviewRequestedAt) {
+-    return Response.json({ ok: true, already: true });
++  let form;
++  try {
++    form = await request.formData();
++  } catch {
++    return Response.json({ ok: false, status: 400 }, { status: 400 });
+   }
+ 
+-  await prisma.growthState.upsert({
+-    where: { shop },
+-    create: { shop, reviewRequestedAt: new Date() },
+-    update: { reviewRequestedAt: new Date() },
+-  });
++  const attemptId = String(form.get("attemptId") || "");
++  const code = String(form.get("code") || "");
++  if (!ATTEMPT_ID_RE.test(attemptId) || code.length === 0 || code.length > MAX_CODE_LENGTH) {
++    return Response.json({ ok: false, status: 400 }, { status: 400 });
++  }
++  const success = form.get("success") === "true";
++  const message = String(form.get("message") || "").slice(0, MAX_MESSAGE_LENGTH);
+ 
+-  logger.info({ shop, reviewOutcome: code }, "App Store review requested (post-publish)");
+-  return Response.json({ ok: true });
++  try {
++    const result = await recordReviewOutcome(shop, attemptId, { code, success, message });
++    return Response.json({ ok: result.status === 200, status: result.status });
++  } catch {
++    return Response.json({ ok: false, status: 500 });
++  }
+ };
+diff --git a/app/routes/app.review.jsx b/app/routes/app.review.jsx
+index bab3e1a..8989d28 100644
+--- a/app/routes/app.review.jsx
++++ b/app/routes/app.review.jsx
+@@ -28,6 +28,9 @@ import logger from "../utils/logger.server.js";
+ import { ReviewRequest } from "../components/ReviewRequest";
+ import { EmbedSetupCard } from "../components/EmbedSetupCard";
+ import { useRouteLoading } from "../utils/useRouteLoading.js";
++import { markFirstDraftSeen, markFirstPublish } from "../utils/firstValue.server.js";
++import { openReviewAsk } from "../utils/reviewAsk.server.js";
++import { invalidateCatalogGaps } from "../utils/catalogGaps.server.js";
+ 
+ // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
+ const PUBLISH_CONCURRENCY = 3;
+@@ -150,9 +153,8 @@ export const loader = async ({ request }) => {
+       select: { productId: true },
+       orderBy: { updatedAt: "desc" },
+     }),
+-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true, embedConfirmedAt: true } }),
++    prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } }),
+   ]);
+-  const reviewRequested = !!growthState?.reviewRequestedAt;
+   const embedConfirmed = !!growthState?.embedConfirmedAt;
+ 
+   const orderedProductIds = [...new Set(draftIdRows.map((r) => r.productId))];
+@@ -167,7 +169,7 @@ export const loader = async ({ request }) => {
+     : [];
+ 
+   if (drafts.length === 0 && page === 1) {
+-    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0, reviewRequested, embedConfirmed, shopDomain: shop });
++    return Response.json({ products: [], page: 1, totalPages: 1, totalDraftCount: 0, embedConfirmed, shopDomain: shop });
+   }
+ 
+   // Group by productId — preserve the recency order from pageProductIds
+@@ -206,12 +208,15 @@ export const loader = async ({ request }) => {
+     };
+   });
+ 
++  // This response puts AI drafts on the merchant's screen — first-value milestone
++  // (first-writer-wins, never throws).
++  if (products.length >= 1) await markFirstDraftSeen(shop, "review_page");
++
+   return Response.json({
+     products,
+     page,
+     totalPages: Math.ceil(totalDraftCount / PAGE_SIZE),
+     totalDraftCount,
+-    reviewRequested,
+     embedConfirmed,
+     shopDomain: shop,
+   });
+@@ -411,12 +416,31 @@ export const action = async ({ request }) => {
+       }
+     }
+ 
++    // Shopify accepted at least one productUpdate: stamp the first-publish
++    // milestone, then decide the App Store review ask HERE — inside the publish
++    // the merchant pressed, never on page open. reviewAsk is { attemptId } or
++    // null; the client can only call reviews.request() with that attemptId.
++    let firstPublish = false;
++    let reviewAsk = null;
++    if (published >= 1) {
++      firstPublish = await markFirstPublish(shop, "review_page");
++      reviewAsk = await openReviewAsk({
++        shop,
++        surface: "review_page",
++        trigger: firstPublish ? "first_publish" : "publish",
++        publishedCount: published,
++      });
++      await invalidateCatalogGaps(shop);
++    }
++
+     return Response.json({
+       success: true,
+       published,
+       failed,
+       errors,
+       message: `Published content for ${published} product${published !== 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}.${faqWarning}${embedNotice}`,
++      firstPublish,
++      reviewAsk,
+     });
+   }
+ 
+@@ -442,12 +466,10 @@ export const action = async ({ request }) => {
+ // ─── Component ───────────────────────────────────────────────────────────────
+ 
+ export default function ReviewPage() {
+-  const { products, page, totalPages, reviewRequested, embedConfirmed, shopDomain } = useLoaderData();
++  const { products, page, totalPages, embedConfirmed, shopDomain } = useLoaderData();
+   const actionData = useActionData();
+   const navigation = useNavigation();
+   const loadingThisRoute = useRouteLoading();
+-  // Ask for an App Store review right after a bulk publish succeeds (once ever).
+-  const askReview = !reviewRequested && !!actionData?.success && (actionData?.published ?? 0) >= 1;
+   const navigate = useNavigate();
+   const submit = useSubmit();
+   const isSubmitting = navigation.state === "submitting";
+@@ -523,9 +545,9 @@ export default function ReviewPage() {
+         title="Review & Publish"
+         backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+       >
+-        {/* After publishing all drafts we land here with a success actionData —
+-            still the right moment to ask for a review. */}
+-        <ReviewRequest active={askReview} />
++        {/* After publishing all drafts we land here with the publish actionData —
++            the server-issued ask (if any) fires here, 2 s after the toast. */}
++        <ReviewRequest ask={actionData?.reviewAsk} />
+         <EmptyState
+           heading="Nothing to review — you're all caught up! 🎉"
+           image="/empty-review.svg"
+@@ -547,7 +569,7 @@ export default function ReviewPage() {
+       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+     >
+       <BlockStack gap="500">
+-        <ReviewRequest active={askReview} />
++        <ReviewRequest ask={actionData?.reviewAsk} />
+         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
+         <Banner tone="info">
+           Generated by premium AI in your brand voice. Review each draft, then publish — published
+diff --git a/app/utils/bulkProcessor.server.js b/app/utils/bulkProcessor.server.js
+index aadc8a3..67fe465 100644
+--- a/app/utils/bulkProcessor.server.js
++++ b/app/utils/bulkProcessor.server.js
+@@ -6,6 +6,8 @@ import { tryConsumeGeneration } from "./plans.server.js";
+ import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
+ import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
+ import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "./seo.server.js";
++import { markFirstPublish } from "./firstValue.server.js";
++import { invalidateCatalogGaps } from "./catalogGaps.server.js";
+ // Throttle between products to stay within Anthropic's rate limits.
+ // Configurable via BULK_THROTTLE_MS env var.
+ // Default 2000ms: safe for claude-sonnet-4-6 with 3 concurrent workers.
+@@ -38,6 +40,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
+     let failedCount = 0;
+     let pendingCompleted = 0;
+     let pendingFailed = 0;
++    // First-publish milestone: stamped once per run, after the FIRST accepted
++    // auto-publish (the stamp itself is first-writer-wins across runs).
++    let firstPublishStamped = false;
+ 
+     // Flush after every product (was every 10) so the progress bar moves smoothly
+     // and live, instead of sitting at 0% then jumping. The ~2s inter-product
+@@ -273,6 +278,10 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
+           }
+           if (Object.keys(input).length > 1) {
+             await publishToShopify(session, productId, input);
++            if (!firstPublishStamped) {
++              firstPublishStamped = true;
++              await markFirstPublish(job.shop, "bulk_auto_publish");
++            }
+           }
+           // Write the FAQ JSON-LD metafield so the storefront emits FAQPage schema
+           // (the AI-search/GEO promise) for auto-published products too. The
+@@ -331,6 +340,8 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
+       where: { id: jobId, status: "processing" },
+       data: { status: "complete", completedAt: new Date() },
+     });
++    // The run wrote content rows either way — the cached catalog-gap scan is stale.
++    await invalidateCatalogGaps(job.shop);
+     if (completed.count === 0) {
+       jobLogger.info({ shop: job.shop }, "Bulk job finished but status changed mid-run (cancelled) — leaving status as-is");
+       return;

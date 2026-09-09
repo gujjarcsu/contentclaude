@@ -141,6 +141,115 @@ never load a session, so an expired token cannot break them (Phase 0 items 1-3).
 
 ---
 
+## Restoring from a backup
+
+Two mechanisms, and they answer different disasters. Use the first one unless you cannot.
+
+### 1. Neon point-in-time restore — for "we broke the data"
+
+A bad migration, a mistaken delete, a script that ran against the wrong shop. Neon can restore the whole
+database to a moment in time, and it is far faster than replaying a dump.
+
+1. Neon console → the project → **Branches** → **Create branch** → *from a point in time*.
+2. Pick a timestamp a few minutes **before** the damage. Err earlier; you can always branch again.
+3. This creates a **new branch**. Production is untouched. Look at the data first.
+4. Compare against production before promoting anything:
+   ```sql
+   SELECT count(*) FROM "Shop";
+   SELECT count(*) FROM "GeneratedContent";
+   ```
+5. Only then repoint the app, by importing the branch's pooled connection string as `DATABASE_URL`
+   (Rule 0 — from a file), and check deep health immediately.
+
+History retention is a project setting, and how far back you can go is exactly that number. Confirm it
+in the console rather than trusting this file (HUMAN-NEEDED item 5).
+
+### 2. The nightly R2 dump — for "we lost Neon"
+
+PITR lives inside the Neon project. If the account, the billing or the provider is the problem, PITR is
+gone with it. The nightly `pg_dump` goes to Cloudflare R2, a different company, at 03:00 Sydney under
+`neondb/<date>/contentclaude-<timestamp>.dump`.
+
+```bash
+# 1. find the dump you want
+aws s3 ls s3://navaal-backups/neondb/ --recursive \
+  --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+# 2. fetch it
+aws s3 cp "s3://navaal-backups/neondb/2026-09-09/contentclaude-....dump" ./restore.dump \
+  --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+# 3. restore into a NEW, EMPTY database — never over production
+pg_restore --no-owner --no-privileges -d "$TARGET_DATABASE_URL" ./restore.dump
+
+# 4. prove it is complete
+psql "$TARGET_DATABASE_URL" -c 'SELECT count(*) FROM "Shop";'
+psql "$TARGET_DATABASE_URL" -c 'SELECT count(*) FROM "GeneratedContent";'
+npx prisma migrate status    # with DATABASE_URL pointed at the restored database
+```
+
+`--no-owner --no-privileges` matters: the dump carries Neon's role names, and without those flags
+`pg_restore` fails on every `ALTER ... OWNER TO` against a database with different roles.
+
+### The drill
+
+**Do this once, deliberately, before you need it.** An untested backup is a hope, not a backup.
+
+Restore the most recent dump into a **new Neon branch** — not production — run the three commands in
+step 4, and record the date and the row counts in `PROGRESS.md`. That is the whole drill, and it converts
+"we have backups" into a fact. It is HUMAN-NEEDED item 7.
+
+---
+
+## `backup_not_configured` in the logs at 03:00 Sydney
+
+Not an incident. R2 credentials are not set, so the backup refuses to run and **names each missing
+piece** rather than reporting success. Set them per HUMAN-NEEDED item 6, from a file.
+
+If instead you see `backup FAILED` by email, read the reason:
+
+- **refusing to store an empty backup** — `pg_dump` produced under 1024 bytes. Almost always a bad
+  `DATABASE_URL` or a missing `pg_dump` binary in the image. An empty file that uploads cleanly is the
+  worst possible outcome, because it looks like a backup, which is why this refuses.
+- **a non-2xx from R2** — the credential or the bucket name is wrong, or the token is not scoped to
+  write. The status code is in the email.
+
+---
+
+## An alert arrived, or should have
+
+The scheduled probe runs in the **worker** every five minutes against the public
+`https://app.navaal.ai/api/health?deep=1`, deliberately over the public URL so it exercises DNS, TLS, the
+Fly proxy and a web machine exactly as a merchant does.
+
+- **On 503 or no answer it emails**, once on the way into trouble, then at most hourly, then once more
+  when it recovers.
+- **`degraded` does not alert.** Redis briefly away and an open AI circuit breaker are states the app is
+  built to ride out. Paging on them teaches you to ignore the alerts.
+- **With no `RESEND_API_KEY` nothing is silently dropped.** The alert is logged at **error** level with
+  the full body and `event: "operator_alert_undeliverable"`, so it still reaches Sentry and `fly logs`.
+  Check there before concluding nothing fired.
+
+```bash
+fly logs -a contentclaude | grep -E 'health_watch_bad|health_watch_recovered|operator_alert'
+```
+
+**If the app is completely gone, this probe is gone too** — it runs inside the same infrastructure. The
+external uptime monitor (HUMAN-NEEDED item 3) is the only check that survives that, which is exactly why
+it is on the list.
+
+## The daily digest did not arrive
+
+Due 07:00 Australia/Sydney, from the worker. In order:
+
+1. `RESEND_API_KEY` set? Without it, look for `operator_alert_undeliverable` — the digest is in the log.
+2. Was the worker alive at 07:00 Sydney? `/api/health?deep=1` → `queue.workerRunning`.
+3. The day is claimed in Redis (`ops:digest:lastSentDay`) with `SET NX`, so a restart inside the hour
+   sends nothing further. That is correct behaviour, not a fault.
+4. `fly logs -a contentclaude | grep daily_digest`.
+
+---
+
 ## Standing facts
 
 - **Deploy = push to `main`.** `.github/workflows/ci.yml` runs lint, typecheck, tests and build, then

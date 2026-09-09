@@ -10,8 +10,8 @@
  *
  * ALL SHOPS. Dry-run by default; pass --apply to write.
  *
- *   node scripts/fix-legacy-alttext-rows.mjs          # dry-run
- *   node scripts/fix-legacy-alttext-rows.mjs --apply  # perform
+ *   node scripts/fix-legacy-alttext-rows--dry-run-default.mjs          # dry-run
+ *   node scripts/fix-legacy-alttext-rows--dry-run-default.mjs --apply  # perform
  */
 import { PrismaClient } from "@prisma/client";
 import {

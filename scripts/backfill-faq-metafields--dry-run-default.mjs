@@ -16,9 +16,9 @@
 //   backoff, so back-to-back shops don't trip Shopify rate limits.
 //
 // Usage:
-//   node scripts/backfill-faq-metafields.mjs                 # DRY RUN (default) — no writes
-//   node scripts/backfill-faq-metafields.mjs --apply         # perform repairs/downgrades
-//   node scripts/backfill-faq-metafields.mjs --apply --shop foo.myshopify.com
+//   node scripts/backfill-faq-metafields--dry-run-default.mjs                 # DRY RUN (default) — no writes
+//   node scripts/backfill-faq-metafields--dry-run-default.mjs --apply         # perform repairs/downgrades
+//   node scripts/backfill-faq-metafields--dry-run-default.mjs --apply --shop foo.myshopify.com
 //
 // Env required (same as the app): DATABASE_URL, SHOPIFY_API_KEY, SHOPIFY_API_SECRET.
 

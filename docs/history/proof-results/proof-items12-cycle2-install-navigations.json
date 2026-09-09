@@ -1,0 +1,104 @@
+{
+  "store": "navaal-qa-fresh",
+  "query": "navaal",
+  "listingHref": "https://apps.shopify.com/navaal-ai-seo-geo-content?search_id=dafc8788-7928-4dac-809d-034a7c6c9aa8&surface_detail=navaal&surface_inter_position=1&surface_intra_position=1&surface_type=search",
+  "finalUrl": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app/welcome",
+  "surfaceParamsSeen": false,
+  "navs": [
+    {
+      "t": "2026-09-09T04:16:44.804Z",
+      "frame": "top",
+      "url": "https://apps.shopify.com/search?q=navaal"
+    },
+    {
+      "t": "2026-09-09T04:16:44.986Z",
+      "frame": "top",
+      "url": "https://apps.shopify.com/search?q=navaal"
+    },
+    {
+      "t": "2026-09-09T04:16:49.907Z",
+      "frame": "top",
+      "url": "https://apps.shopify.com/navaal-ai-seo-geo-content?search_id=dafc8788-7928-4dac-809d-034a7c6c9aa8&surface_detail=navaal&surface_inter_position=1&surface_intra_position=1&surface_type=search"
+    },
+    {
+      "t": "2026-09-09T04:16:50.100Z",
+      "frame": "top",
+      "url": "https://apps.shopify.com/navaal-ai-seo-geo-content?search_id=dafc8788-7928-4dac-809d-034a7c6c9aa8&surface_detail=navaal&surface_inter_position=1&surface_intra_position=1&surface_type=search"
+    },
+    {
+      "t": "2026-09-09T04:16:50.450Z",
+      "frame": "iframe",
+      "url": "https://www.youtube-nocookie.com/embed/kX6fbRNhYo8?enablejsapi=1&modestbranding=1&origin=https%3A%2F%2Fapps.shopify.com&rel=0"
+    },
+    {
+      "t": "2026-09-09T04:16:50.706Z",
+      "frame": "iframe",
+      "url": "https://www.youtube-nocookie.com/embed/kX6fbRNhYo8?enablejsapi=1&modestbranding=1&origin=https%3A%2F%2Fapps.shopify.com&rel=0"
+    },
+    {
+      "t": "2026-09-09T04:16:51.088Z",
+      "frame": "iframe",
+      "url": "https://www.youtube-nocookie.com/embed/kX6fbRNhYo8?enablejsapi=1&modestbranding=1&origin=https%3A%2F%2Fapps.shopify.com&rel=0"
+    },
+    {
+      "t": "2026-09-09T04:16:57.827Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/app/grant?action=eyJjbGllbnRfaWQiOiIxMjc5YTE0Y2NhNDFkNGE2ZjhlNmUzYzQ4NTg3MGI3NyIsImFwcF9pZCI6MzY4NDc5NjAwNjQxLCJmbG93Ijoic2hvcGlmeV9tYW5hZ2VkX2luc3RhbGwiLCJyZWZlcnJlciI6ImFwcF9zdG9yZSIsImFjdGlvbiI6Imluc3RhbGwiLCJhcHBfdHlwZSI6ImFwcCJ9"
+    },
+    {
+      "t": "2026-09-09T04:16:58.126Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/app/grant?action=eyJjbGllbnRfaWQiOiIxMjc5YTE0Y2NhNDFkNGE2ZjhlNmUzYzQ4NTg3MGI3NyIsImFwcF9pZCI6MzY4NDc5NjAwNjQxLCJmbG93Ijoic2hvcGlmeV9tYW5hZ2VkX2luc3RhbGwiLCJyZWZlcnJlciI6ImFwcF9zdG9yZSIsImFjdGlvbiI6Imluc3RhbGwiLCJhcHBfdHlwZSI6ImFwcCJ9"
+    },
+    {
+      "t": "2026-09-09T04:16:59.775Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps?action=eyJjbGllbnRfaWQiOiIxMjc5YTE0Y2NhNDFkNGE2ZjhlNmUzYzQ4NTg3MGI3NyIsImFwcF9pZCI6MzY4NDc5NjAwNjQxLCJmbG93Ijoic2hvcGlmeV9tYW5hZ2VkX2luc3RhbGwiLCJyZWZlcnJlciI6ImFwcF9zdG9yZSIsImFjdGlvbiI6Imluc3RhbGwiLCJhcHBfdHlwZSI6ImFwcCJ9"
+    },
+    {
+      "t": "2026-09-09T04:17:00.416Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps?action=eyJjbGllbnRfaWQiOiIxMjc5YTE0Y2NhNDFkNGE2ZjhlNmUzYzQ4NTg3MGI3NyIsImFwcF9pZCI6MzY4NDc5NjAwNjQxLCJmbG93Ijoic2hvcGlmeV9tYW5hZ2VkX2luc3RhbGwiLCJyZWZlcnJlciI6ImFwcF9zdG9yZSIsImFjdGlvbiI6Imluc3RhbGwiLCJhcHBfdHlwZSI6ImFwcCJ9&before=&after=&tab=installed"
+    },
+    {
+      "t": "2026-09-09T04:17:02.039Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps?before=&after=&tab=installed"
+    },
+    {
+      "t": "2026-09-09T04:17:05.047Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps"
+    },
+    {
+      "t": "2026-09-09T04:18:20.288Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content"
+    },
+    {
+      "t": "2026-09-09T04:18:20.688Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content"
+    },
+    {
+      "t": "2026-09-09T04:18:23.949Z",
+      "frame": "iframe",
+      "url": "https://app.navaal.ai/app/welcome?host=YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvbmF2YWFsLXFhLWZyZXNo&shop=navaal-qa-fresh.myshopify.com&id_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczpcL1wvbmF2YWFsLXFhLWZyZXNoLm15c2hvcGlmeS5jb21cL2FkbWluIiwiZGVzdCI6Imh0dHBzOlwvXC9uYXZhYWwtcWEtZnJlc2gubXlzaG9waWZ5LmNvbSIsImF1ZCI6IjEyNzlhMTRjY2E0MWQ0YTZmOGU2ZTNjNDg1ODcwYjc3Iiwic3ViIjoiMTA4ODc4MjAxMDYyIiwiZXhwIjoxNzg4OTI3NTYyLCJuYmYiOjE3ODg5Mjc1MDIsImlhdCI6MTc4ODkyNzUwMiwianRpIjoiNjgwYTAxZjItNDk0Ny00MjcxLTg1NzYtN2RiOTM2ZWMwNzM3Iiwic2lkIjoiYmVjYzNlMTEtY2EzZS00ZGNhLTkzMTktZjU2ZDI4ODA0MDU3Iiwic2lnIjoiYzBiMWI3NzkxYWU0OGYyMDU0MTllOGNiNmQ5ZDVjMWJlOWM4NGRjZmQ0MTMzODQ0M2NhODVmY2YyODg0ZGYxZiJ9.gDZo5LHF3lSNvoV5iebaoNjbANPOmSlYiAB7gz0kKQs&session=0d4936c53bc0f338f266417b297756c4dc969861d17f40eb7c2e82e5c0374c57&embedded=1&locale=en&timestamp=1788927502&hmac=e05ffcc7d0daf2851c332b468ad22b93627d31e51bfeebb57db4b10ec162b229"
+    },
+    {
+      "t": "2026-09-09T04:18:24.329Z",
+      "frame": "iframe",
+      "url": "https://app.navaal.ai/app/welcome?host=YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvbmF2YWFsLXFhLWZyZXNo&shop=navaal-qa-fresh.myshopify.com&id_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczpcL1wvbmF2YWFsLXFhLWZyZXNoLm15c2hvcGlmeS5jb21cL2FkbWluIiwiZGVzdCI6Imh0dHBzOlwvXC9uYXZhYWwtcWEtZnJlc2gubXlzaG9waWZ5LmNvbSIsImF1ZCI6IjEyNzlhMTRjY2E0MWQ0YTZmOGU2ZTNjNDg1ODcwYjc3Iiwic3ViIjoiMTA4ODc4MjAxMDYyIiwiZXhwIjoxNzg4OTI3NTYyLCJuYmYiOjE3ODg5Mjc1MDIsImlhdCI6MTc4ODkyNzUwMiwianRpIjoiNjgwYTAxZjItNDk0Ny00MjcxLTg1NzYtN2RiOTM2ZWMwNzM3Iiwic2lkIjoiYmVjYzNlMTEtY2EzZS00ZGNhLTkzMTktZjU2ZDI4ODA0MDU3Iiwic2lnIjoiYzBiMWI3NzkxYWU0OGYyMDU0MTllOGNiNmQ5ZDVjMWJlOWM4NGRjZmQ0MTMzODQ0M2NhODVmY2YyODg0ZGYxZiJ9.gDZo5LHF3lSNvoV5iebaoNjbANPOmSlYiAB7gz0kKQs&session=0d4936c53bc0f338f266417b297756c4dc969861d17f40eb7c2e82e5c0374c57&embedded=1&locale=en&timestamp=1788927502&hmac=e05ffcc7d0daf2851c332b468ad22b93627d31e51bfeebb57db4b10ec162b229"
+    },
+    {
+      "t": "2026-09-09T04:18:24.353Z",
+      "frame": "top",
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app/welcome"
+    },
+    {
+      "t": "2026-09-09T04:18:24.408Z",
+      "frame": "iframe",
+      "url": "https://app.navaal.ai/app/welcome?host=YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvbmF2YWFsLXFhLWZyZXNo&shop=navaal-qa-fresh.myshopify.com&id_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczpcL1wvbmF2YWFsLXFhLWZyZXNoLm15c2hvcGlmeS5jb21cL2FkbWluIiwiZGVzdCI6Imh0dHBzOlwvXC9uYXZhYWwtcWEtZnJlc2gubXlzaG9waWZ5LmNvbSIsImF1ZCI6IjEyNzlhMTRjY2E0MWQ0YTZmOGU2ZTNjNDg1ODcwYjc3Iiwic3ViIjoiMTA4ODc4MjAxMDYyIiwiZXhwIjoxNzg4OTI3NTYyLCJuYmYiOjE3ODg5Mjc1MDIsImlhdCI6MTc4ODkyNzUwMiwianRpIjoiNjgwYTAxZjItNDk0Ny00MjcxLTg1NzYtN2RiOTM2ZWMwNzM3Iiwic2lkIjoiYmVjYzNlMTEtY2EzZS00ZGNhLTkzMTktZjU2ZDI4ODA0MDU3Iiwic2lnIjoiYzBiMWI3NzkxYWU0OGYyMDU0MTllOGNiNmQ5ZDVjMWJlOWM4NGRjZmQ0MTMzODQ0M2NhODVmY2YyODg0ZGYxZiJ9.gDZo5LHF3lSNvoV5iebaoNjbANPOmSlYiAB7gz0kKQs&session=0d4936c53bc0f338f266417b297756c4dc969861d17f40eb7c2e82e5c0374c57&embedded=1&locale=en&timestamp=1788927502&hmac=e05ffcc7d0daf2851c332b468ad22b93627d31e51bfeebb57db4b10ec162b229"
+    }
+  ]
+}

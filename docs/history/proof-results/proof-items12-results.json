@@ -1,0 +1,10 @@
+{
+  "store": "navaal-qa-fresh",
+  "buildInfo": "{\"sha\":\"bd1fabc5a88b6e8ebcf8d2e3256ff6bd0c5a3055\",\"shortSha\":\"bd1fabc\",\"startedAt\":\"2026-09-09T04:55:28.153Z\",\"node\":\"v20.20.2\",\"env\":\"production\"}",
+  "dashboardUrl": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app/welcome",
+  "dashboardHasContent": false,
+  "inAppTitle": "Navaal: AI SEO, AEO & GEO",
+  "brandText": "NavaalAI SEO, AEO & GEO",
+  "adminSidebarAppLabel": "Navaal: AI SEO, AEO & GEO",
+  "ok": true
+}

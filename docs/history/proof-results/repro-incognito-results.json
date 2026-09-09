@@ -1,0 +1,61 @@
+{
+  "strippedCookies": 0,
+  "results": [
+    {
+      "label": "1-open-app",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 745
+    },
+    {
+      "label": "2-plans",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app/plans",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 2384
+    },
+    {
+      "label": "3-settings",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app/settings",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 2870
+    },
+    {
+      "label": "4-back-to-dashboard",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 2254
+    },
+    {
+      "label": "5-app-name-root",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 745
+    },
+    {
+      "label": "6-reload-app",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 2254
+    },
+    {
+      "label": "7-reload-subpage",
+      "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app/plans",
+      "form": false,
+      "blank": false,
+      "onLogin": false,
+      "contentLen": 2384
+    }
+  ]
+}

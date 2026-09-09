@@ -1,0 +1,34 @@
+[
+  {
+    "label": "1-app-open",
+    "coldPath": false,
+    "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app",
+    "form": false,
+    "recovered": true,
+    "len": 2254
+  },
+  {
+    "label": "cold-/app",
+    "coldPath": true,
+    "url": "https://admin.shopify.com/store/contentpilot-dev2/app",
+    "form": false,
+    "recovered": false,
+    "len": 0
+  },
+  {
+    "label": "cold-/app/plans",
+    "coldPath": true,
+    "url": "https://admin.shopify.com/store/contentpilot-dev2/apps/navaal-seo-geo-content/app/plans",
+    "form": false,
+    "recovered": true,
+    "len": 2384
+  },
+  {
+    "label": "cold-/app/settings",
+    "coldPath": true,
+    "url": "https://admin.shopify.com/store/contentpilot-dev2/app/settings",
+    "form": false,
+    "recovered": false,
+    "len": 0
+  }
+]

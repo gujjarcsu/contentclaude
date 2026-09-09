@@ -36,7 +36,13 @@ const prompts = await import("../../app/utils/upgradePrompts.server.js");
 const ttv = await import("../../app/utils/ttvReport.server.js");
 
 const SHOP = "fresh-store.myshopify.com";
-const HOURS = (n) => new Date(Date.now() - n * 3_600_000);
+// One clock for the whole file. These helpers were calling Date.now() afresh
+// on every use, so `DAYS(1)` built as an input and `DAYS(1)` built as the
+// expectation could differ by a millisecond and fail the run. It did, in CI.
+// Every assertion here is about differences of hours or days, so a base
+// pinned at import is both correct and deterministic.
+const NOW = Date.now();
+const HOURS = (n) => new Date(NOW - n * 3_600_000);
 const DAYS = (n) => HOURS(n * 24);
 
 beforeEach(() => {

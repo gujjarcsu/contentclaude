@@ -1163,3 +1163,85 @@ missing pieces, refuses the tiny dump and emails, stores a real dump under a dat
 **The restore drill (HUMAN-NEEDED item 7) is the one item here nobody can automate.** An untested backup
 is a hope. The procedure is in `docs/RUNBOOK.md` and restores into a **new Neon branch**, never
 production.
+
+## Item 8 — Docs
+
+`DEPLOYMENT.md` described a different application. It recommended **Railway** as the primary target
+(the app is on Fly, and has been for months), described a migration flow that did not exist, told the
+reader to set `BILLING_TEST = false` **in source** before submitting to the App Store, listed
+`write_metaobjects` and `write_metaobject_definitions` among the scopes (the app requests
+`write_products,write_content`, and startup warns about the others), advised `connection_limit=1`, and
+stated that the app has no health endpoint. Every one of those was wrong. The billing one could cost a
+rejection; the `connection_limit=1` one is the exact advice that caused pool timeouts.
+
+**Rewritten from the deployed reality**, and three new documents beside it:
+
+- **`DEPLOYMENT.md`** — the deploy is `git push origin main`, and nothing else. Process groups and why
+  each setting exists (`kill_timeout` was five seconds by default and hard-killed a job on every deploy).
+  Migrations and the rollback order. The CI gates and the smoke job. **The ESLint `--cache` trap that
+  already cost a deploy**, with the exact command to defeat it. Verification commands. The Shopify half,
+  which is a separate human step.
+- **`docs/SECRETS.md`** — every environment variable the app reads, split into required, optional,
+  `fly.toml`, platform-provided and tuning. For each optional one, **what happens without it**, which is
+  the question anybody actually has. Rotation steps per secret, including the honest note that rotating
+  `SHOPIFY_API_SECRET` has a real window where webhooks and OAuth fail. No values, ever.
+- **`docs/ARCHITECTURE.md`** — one page, one diagram, the two processes, the flow of a bulk generation,
+  a table of every failure mode and where it surfaces, and a closing section on what this architecture
+  does **not** do yet.
+- **`docs/RUNBOOK.md`** — already existed from the housekeeping pass; gained **Restoring from a backup**
+  (both mechanisms, and why they answer different disasters), the backup failure modes, what to do when
+  an alert arrives or should have, and why the digest might be missing.
+
+**Coverage:** `tests/docs/docs.test.js`, 29 assertions. Documentation rots silently, which is exactly
+what a test is for. Each of the four false claims is pinned so it cannot return. One assertion is worth
+naming: **it walks `app/` for every `process.env.X` and fails if any of them is missing from
+`docs/SECRETS.md`.** It caught three undocumented variables on its first run.
+
+## Item 9 — Repo hygiene
+
+Fly's own build-context warning was the evidence: `gauntlet-211/ 70MB`, `title-proof2/ 33MB`,
+`gauntlet-record/ 22MB`, `reviewer-proof-video/ 18MB`, `billing-review-proof/ 9.5MB`. **186 MB across
+thirteen directories of Playwright screenshots and video frames, uploaded to Fly on every single
+deploy.**
+
+- **Three stale agent worktrees**, all at `ff52f34`, all with uncommitted work. Everything was taken out
+  before they were removed: the quick-start route and its 427-line helper that Phase 3 needs, and two
+  patches covering thirteen modified files. They are in `docs/history/worktree-recovery/` with a README
+  that says plainly that `ff52f34` predates every Phase 0 fix, so **the patches may apply cleanly and
+  still be wrong**. Saved as `.txt` so nothing compiles them. Worktrees pruned, branches deleted.
+- **186 MB of proof output deleted**, after checking what was in it: screenshots, video frames, and eight
+  small `results.json` files. The JSON was kept, in `docs/history/proof-results/`; the media was not.
+  Nothing tracked was deleted.
+- **The ignore rules are now patterns, not thirteen names.** `.gitignore` had accumulated an entry per
+  directory, which is a rule that loses to the next directory somebody invents. `gauntlet-*/`,
+  `billing-*/`, `proof-*/`, `repro-*/`, `reviewer-*/`, `verify-*/` and friends replace them, in
+  `.gitignore` and again in `.dockerignore`.
+- **Six root reports moved to `docs/history/`.** They are the record of four App Store rejections, worth
+  keeping and not worth being the first thing a reader sees. The root now holds exactly four markdown
+  files: README, DEPLOYMENT, PROGRESS, HUMAN-NEEDED.
+- **32 Playwright harnesses moved from `scripts/` to `tools/proof/`**, which `.dockerignore` excludes
+  wholesale. `scripts/` is now only the seven operational scripts that run **on the Fly machine**.
+  Two different jobs had been living in one pile, and nothing distinguished a read-only report from a
+  script that uninstalls the app from a live store.
+- **`tools/proof/README.md`** grades every harness by what it touches — writes to a live shop, reads a
+  live shop, or purely local — and states that they run against `navaal-qa-fresh`, never a real merchant.
+- **`scripts/README.md`**, and the three keepers renamed so the default is in the name:
+  `backfill-faq-metafields--dry-run-default.mjs`, `fix-legacy-alttext-rows--dry-run-default.mjs`,
+  `test-seed-usage--writes-test-store-only.mjs`. A script name that does not say whether it writes is a
+  trap at 2am.
+- **`build/_to_delete/audit-src.tgz` no longer exists.** Checked rather than assumed; `build/` now holds
+  only `client` and `server`, and is ignored by git and Docker both.
+
+**Coverage:** `tests/docs/repo-hygiene.test.js`, 13 assertions. Cleaning a repository once is worth
+little — it comes back within a month. These are what makes it stay clean: the root may hold only those
+four documents, no proof pattern may be tracked, `.dockerignore` must exclude `tools`, nothing in
+`scripts/` may import Playwright, every script must appear in its README, and the seeding script's
+test-store guard must survive its rename.
+
+### A flaky test, fixed rather than retried
+
+The items 5-7 push went red on `growthFoundation.test.js`, unrelated to the change:
+`expected 2026-09-08T13:42:00.239Z to deeply equal ...240Z`. The helper called `Date.now()` afresh on
+every use, so the same expression built as an input and as an expectation could differ by a millisecond.
+It is now one clock pinned at import. Re-running until green would have left a test that fails roughly
+one run in a few hundred, forever.
