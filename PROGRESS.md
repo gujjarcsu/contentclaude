@@ -1481,3 +1481,85 @@ The items 5-7 push went red in CI on a test that had nothing to do with it: `gro
 same timestamp twice from `Date.now()` and the two differed by a millisecond. Re-running would have gone
 green and left a test that fails roughly one run in a few hundred, forever. It was fixed instead — one
 clock, pinned at import. A flake that is re-run rather than fixed is how a suite stops being believed.
+
+---
+
+# Phase 1 close-out — the secrets landed, and one did not (2026-09-09)
+
+Phase 1 is verified closed by the owner's reviewer. Four HUMAN-NEEDED items were reported done. Three
+of them are, and are proven below. **One is not, and the record needs to say so rather than repeat what
+it was told.**
+
+## `WORKER_DATABASE_URL` — done, and each process opened the right string
+
+From production logs, one line per machine:
+
+```
+"role":"worker","machine":"d8d996d7b1ed28","region":"syd","runsJobs":true,"dbUrlSource":"WORKER_DATABASE_URL"
+"role":"web",   "machine":"81112eb9733578","region":"syd","runsJobs":false,"dbUrlSource":"DATABASE_URL"
+```
+
+That is the whole point of the split budget: the worker holds a smaller pool sized to its three
+concurrent jobs, web keeps its five, and the two together stay inside Neon's ceiling instead of each
+claiming five. Deep health stayed green throughout.
+
+## `RESEND_API_KEY` — done, and proven end to end
+
+Not inferred from the secret existing. One deliberate test alert was sent **from the production
+machine**, through `sendOperatorEmail()` — the same function the five-minute health probe, the `/app`
+shell probe, the daily digest and the nightly backup all call:
+
+```
+{"event":"operator_alert_sent","subject":"Navaal alert path test — 2026-09-09T15:28:50.183Z",
+ "to":"hello@navaal.ai","msg":"Operator email sent"}
+{"event":"alert_path_test","at":"2026-09-09T15:28:50.183Z","recipient":"hello@navaal.ai","sent":true}
+```
+
+`operator_alert_sent`, not `operator_alert_undeliverable`. Every alert written in Phase 1 item 5 can
+now reach a human. The one-off script was deleted from the machine afterwards.
+
+## The four R2 secrets — done, untested until 03:00 Sydney
+
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` are all set. The next
+03:00 Sydney run is the first real exercise: it should log `backup_ok` with a key and a byte count
+rather than `backup_not_configured`. **The restore drill remains open**, and it is the one that
+matters — a backup nobody has restored is a hope.
+
+## `DIRECT_URL` — reported done, and it is not set
+
+This was to be the first task before Phase 2: add `directUrl = env("DIRECT_URL")` to the datasource,
+drop `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from `fly.toml`, and prove `prisma migrate deploy` takes
+its advisory lock normally. **The secret does not exist.**
+
+```
+$ fly secrets list -a contentclaude | grep -ci DIRECT_URL
+0
+$ fly ssh console -a contentclaude -C printenv | grep -oE '^(DIRECT_URL|WORKER_DATABASE_URL|RESEND_API_KEY|R2_BUCKET)='
+DATABASE_URL=
+R2_BUCKET=
+RESEND_API_KEY=
+WORKER_DATABASE_URL=
+```
+
+Seventeen secrets are set. `DIRECT_URL` is not one of them. The other three from the same sitting all
+landed, so the import method worked — this one did not make it into the file, or into that import.
+
+**What was NOT done because of it.** `directUrl = env("DIRECT_URL")` would make Prisma fail at
+validation with "environment variable not found", and the release command would abort every deploy.
+Landing that on a missing secret would have taken production's deploy path down to prove a point. So
+the datasource is unchanged and the override stays.
+
+**What this costs, precisely.** `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true` disables the lock Prisma
+uses to stop two migration runs racing. Nothing here can race: CI serialises pushes to `main` with a
+queued concurrency group, and Fly runs exactly one release command per deploy. So real migrations can
+land safely under the override. What is lost is the belt-and-braces guarantee if someone ever runs
+`migrate deploy` by hand while a deploy is in flight.
+
+**One line unblocks it**, and then the datasource change and the override removal are a single commit:
+
+```
+printf 'DIRECT_URL=%s\n' 'postgresql://…direct-host…/neondb?sslmode=require' > s.env
+fly secrets import -a contentclaude < s.env && rm s.env
+```
+
+The direct host is the pooled host with `-pooler` removed. Never `fly secrets set` — Rule 0.

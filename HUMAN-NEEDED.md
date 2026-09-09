@@ -11,9 +11,9 @@ and restarts both machines onto it.
 
 ## Open
 
-Every one of these needs a credential, an account, or a decision the agent cannot
-make. The code for each is already shipped and degrades honestly without it —
-nothing here fails silently.
+Four items, all with the owner. Every one needs an account or a console the
+agent cannot reach. The code for each is shipped and degrades honestly without
+it.
 
 ### 1. `DIRECT_URL` — unblock real migrations (Phase 1 item 1)
 - **Why:** `prisma migrate deploy` takes a Postgres advisory lock, and advisory locks do not survive
@@ -33,32 +33,14 @@ nothing here fails silently.
   3. Tell me, and I will add `directUrl = env("DIRECT_URL")` to the datasource and remove the
      advisory-lock override in the same commit.
 
-### 2. `WORKER_DATABASE_URL` — the worker's own connection budget (Phase 1 item 2)
-- **Why:** web and worker are now separate machines, and each keeps its own Prisma pool. Web is on
-  `connection_limit=5`. The worker runs three jobs at once and holds a connection for the length of a
-  generation, so it wants 3 — the two processes together then stay inside Neon's ceiling instead of each
-  claiming five. Fly has no per-process-group secrets, so the worker's string is a separate secret and
-  `app/db.server.js` picks it only when the process runs jobs. **Without it nothing breaks**: the worker
-  falls back to `DATABASE_URL`, which is the behaviour today.
-- **Steps:** take the current pooled URL and change only the connection limit.
-  ```
-  fly ssh console -a contentclaude -C 'printenv DATABASE_URL'   # copy this exactly
-  # same string, connection_limit=5 -> connection_limit=3
-  printf 'WORKER_DATABASE_URL=%s\n' 'postgresql://…&connection_limit=3' > s.env
-  fly secrets import -a contentclaude < s.env && rm s.env
-  ```
-  **Never** `fly secrets set` — the password is URL-encoded, and `%xx` is what corrupted production on
-  2026-09-09 (Rule 0 in `docs/RUNBOOK.md`). Write the file, import the file, delete the file.
-- **Verify:** immediately after the machines restart —
-  ```
-  curl -s 'https://app.navaal.ai/api/health?deep=1' | head -c 400
-  fly logs -a contentclaude | grep 'Startup complete'
-  ```
-  The worker's line must read `"dbUrlSource":"WORKER_DATABASE_URL"` and the web line
-  `"dbUrlSource":"DATABASE_URL"`. If deep health is anything but `ok`/`degraded`, the string is wrong:
-  re-import the old one from a file.
+**Status 2026-09-09, after the owner set the other three:** `DIRECT_URL` is **still not set**.
+`fly secrets list -a contentclaude` returns seventeen names and this is not among them, and
+`printenv` on the machine confirms it. `WORKER_DATABASE_URL`, `RESEND_API_KEY` and the four `R2_*`
+secrets all landed in the same sitting, so the import worked; this one did not make it. Until it
+exists, `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` has to stay in `fly.toml`, and the datasource cannot
+take `directUrl`.
 
-### 3. Uptime monitor from two regions (Phase 1 item 5)
+### 2. Uptime monitor from two regions (Phase 1 item 5)
 - **Why:** this is the gap the 2026-09-09 incident exposed. A five-minute in-app check now exists and
   emails on failure, but it runs *inside* the same infrastructure — if Fly itself is unreachable, the
   thing that would tell you is also unreachable. An external monitor is the only check that survives the
@@ -70,46 +52,13 @@ nothing here fails silently.
   - Optional second monitor on `https://app.navaal.ai/api/health?deep=1` expecting the body to contain
     `"status":"ok"` — that one catches a dead worker, which the shallow check deliberately does not.
 
-### 4. `RESEND_API_KEY` — let the alerts actually leave the building (Phase 1 item 5)
-- **Why:** the health watch and the daily digest are written and running. Without an email provider they
-  log at **error** level with the full message body, so the alert still reaches Sentry and the logs — but
-  nothing arrives in an inbox, which is the point.
-- **Steps:** resend.com → verify the `navaal.ai` domain (DNS records) → create an API key →
-  ```
-  printf 'RESEND_API_KEY=%s\n' 're_…' > s.env
-  fly secrets import -a contentclaude < s.env && rm s.env
-  ```
-  Sender defaults to `Navaal Ops <ops@navaal.ai>` and recipient to `hello@navaal.ai`; both are
-  overridable with `OPERATOR_EMAIL_FROM` and `OPERATOR_EMAIL`.
-- **Verify:** the next digest at 07:00 Sydney should arrive. To test sooner, look for
-  `operator_alert_sent` in `fly logs`.
-
-### 5. Neon point-in-time restore, 7 days (Phase 1 item 7)
+### 3. Neon point-in-time restore, 7 days (Phase 1 item 7)
 - **Why:** first line of defence for a bad migration or a mistaken delete, and much faster than restoring
   a dump.
 - **Steps:** Neon console → project → Settings → **History retention** → set to **7 days**. On the free
   tier this may cap lower; if so, note the actual number here so the runbook stops promising seven.
 
-### 6. R2 bucket and credentials for the nightly backup (Phase 1 item 7)
-- **Why:** Neon PITR does not protect against losing access to the Neon project itself — billing, account
-  or provider problems. A backup inside the thing it is backing up is not a backup. One `pg_dump` a night
-  goes to Cloudflare R2, which is a different company.
-- **Steps:** Cloudflare dashboard → R2 → create bucket `navaal-backups` → **Manage API tokens** → create
-  a token scoped to *Object Read & Write* on that bucket only. Then:
-  ```
-  cat > s.env <<'EOF'
-  R2_ACCOUNT_ID=…
-  R2_ACCESS_KEY_ID=…
-  R2_SECRET_ACCESS_KEY=…
-  R2_BUCKET=navaal-backups
-  EOF
-  fly secrets import -a contentclaude < s.env && rm s.env
-  ```
-  Add a lifecycle rule on the bucket to expire objects after **30 days**.
-- **Verify:** at 03:00 Sydney the worker logs `backup_ok` with a key and a byte count. Until the secrets
-  exist it logs `backup_not_configured` and lists exactly what is missing.
-
-### 7. Run the restore drill once (Phase 1 item 7)
+### 4. Run the restore drill once (Phase 1 item 7)
 - **Why:** an untested backup is a hope. This is the only item here that cannot be replaced by a
   credential — somebody has to actually do it once.
 - **Steps:** in `docs/RUNBOOK.md` under "Restoring from a backup". Restore the most recent dump into a
@@ -118,6 +67,25 @@ nothing here fails silently.
   knows it has been proven at least once.
 
 ## Done
+
+### `WORKER_DATABASE_URL` — the worker's own connection budget (Phase 1 item 2)
+**Done 2026-09-09.** Set via `fly secrets import`. Confirmed from production logs: the worker's
+`Startup complete` line reads `"dbUrlSource":"WORKER_DATABASE_URL"` and the web machine's reads
+`"dbUrlSource":"DATABASE_URL"`, so each process opened the connection string meant for its role.
+Deep health green throughout.
+
+### `RESEND_API_KEY` — the alerts can now leave the building (Phase 1 item 5)
+**Done 2026-09-09, and proven end to end.** A single deliberate test alert was sent from the
+production machine through `sendOperatorEmail()` — the same function the five-minute health probe,
+the `/app` shell probe, the daily digest and the nightly backup all use. The log line reads
+`operator_alert_sent` with `"to":"hello@navaal.ai"` and the call returned `sent: true`, replacing
+the `operator_alert_undeliverable` that every alert produced before. Recorded in `PROGRESS.md`.
+
+### R2 bucket and credentials for the nightly backup (Phase 1 item 7)
+**Done 2026-09-09.** All four of `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and
+`R2_BUCKET` are set. The next 03:00 Sydney run is the first real test: it should log `backup_ok`
+with a key and a byte count instead of `backup_not_configured`. **The restore drill is still open**
+— a backup nobody has restored is a hope, not a backup.
 
 ### 4. Raise `connection_limit` on `DATABASE_URL` from 1 to 5 — Phase 0 item 15
 **Done 2026-09-09.** Confirmed from the production machine: pooled Neon endpoint (`-pooler`,
