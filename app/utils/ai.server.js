@@ -72,7 +72,7 @@ export async function generateProductContent(
     max_tokens: 4000,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: messageContent }],
-  });
+  }, 0, { interactive: options.interactive !== false });
 
   return parseGeneratedContent(rawText);
 }
@@ -240,7 +240,7 @@ ${typeInstructions.join("\n\n")}
     max_tokens: 3000,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: messageContent }],
-  });
+  }, 0, { interactive: options.interactive !== false });
 
   return parseGeneratedContent(rawText);
 }
@@ -449,9 +449,51 @@ function recordFailure() {
   }
 }
 
+// ─── Rate-limit backoff (Phase 0 item 23) ────────────────────────────────────
+
+/** A merchant is watching this request — never hold it for long. */
+export const INTERACTIVE_BACKOFF_CAP_MS = 10_000;
+/** A bulk job has nobody waiting, so it can afford to be patient. */
+export const BACKGROUND_BACKOFF_CAP_MS = 60_000;
+
+/**
+ * Milliseconds until the Anthropic rate-limit window resets.
+ *
+ * The `anthropic-ratelimit-*-reset` headers are RFC3339 TIMESTAMPS
+ * ("2026-09-09T11:30:00Z"), not durations. `parseFloat` on one yields the YEAR,
+ * so the old code computed ~2,026,000 ms and slept the full cap on every
+ * successful call that happened to land in a low window. Accepts a numeric
+ * seconds value too, since that is what several other APIs send.
+ * Pure. Returns 0 when there is nothing useful to wait for.
+ */
+export function rateLimitResetMs(header, now = Date.now()) {
+  if (!header) return 0;
+  const raw = String(header).trim();
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const seconds = Number(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
+  }
+  const at = new Date(raw).getTime();
+  if (!Number.isFinite(at)) return 0;
+  return Math.max(0, at - now);
+}
+
+
+/**
+ * Phase 0 item 26 — the circuit breaker's state, for the deep health check. An
+ * open breaker means no generation is happening for ANY shop, which is exactly
+ * the kind of thing the outside world should be able to see.
+ */
+export function getCircuitBreakerState() {
+  return {
+    open: circuitState.isOpen,
+    failures: circuitState.failures,
+    lastFailureAt: circuitState.lastFailure ? new Date(circuitState.lastFailure).toISOString() : null,
+  };
+}
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-async function callClaude(apiKey, body, attempt = 0) {
+async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {}) {
   if (!checkCircuit()) {
     throw new Error("AI service temporarily unavailable. The system will retry automatically in about a minute.");
   }
@@ -474,12 +516,19 @@ async function callClaude(apiKey, body, attempt = 0) {
     });
   } catch (err) {
     clearTimeout(timer);
-    if (err.name === "AbortError") {
-      recordFailure();
-      logger.error({ model: body.model, attempt }, "Claude API request timed out");
-      throw new Error("Claude API timed out after 45 seconds.");
+    // Phase 0 item 23 — a dropped connection or a single slow response is not a
+    // reason to fail the merchant's generation. Retry once (the 5xx path already
+    // did; this one did not), then give up.
+    const transient = err.name === "AbortError" || err.name === "TypeError" || err.name === "FetchError";
+    if (transient && attempt < 1) {
+      logger.warn({ model: body.model, attempt, err: err.message }, "Claude API network error/timeout — retrying once");
+      return callClaude(apiKey, body, attempt + 1, { interactive });
     }
     recordFailure();
+    if (err.name === "AbortError") {
+      logger.error({ model: body.model, attempt }, "Claude API request timed out");
+      throw Object.assign(new Error("Claude API timed out after 45 seconds."), { isTimeout: true });
+    }
     logger.error({ err, model: body.model, attempt }, "Claude API fetch error");
     throw err;
   }
@@ -488,13 +537,20 @@ async function callClaude(apiKey, body, attempt = 0) {
   if (response.ok) {
     recordSuccess();
     const data = await response.json();
-    // Proactively back off when Anthropic rate limit is nearly exhausted
+    // Proactively back off when the Anthropic rate limit is nearly exhausted.
+    // Phase 0 item 23: the reset header is an RFC3339 TIMESTAMP, not a number of
+    // seconds. parseFloat("2026-09-09T11:30:00Z") is 2026, so resetMs came out
+    // as ~2,026,000 and the Math.min pinned it to the full 10-second cap — a
+    // flat 10 s added to the MERCHANT'S request, every time, on a SUCCESSFUL
+    // call, whenever the window happened to be low.
     if (response.headers?.get) {
       const remaining = parseInt(response.headers.get("anthropic-ratelimit-requests-remaining") || "50", 10);
-      const resetMs   = parseFloat(response.headers.get("anthropic-ratelimit-requests-reset") || "1") * 1000;
+      const resetMs = rateLimitResetMs(response.headers.get("anthropic-ratelimit-requests-reset"));
+      const cap = interactive ? INTERACTIVE_BACKOFF_CAP_MS : BACKGROUND_BACKOFF_CAP_MS;
       if (remaining <= 5 && resetMs > 0) {
-        logger.warn({ remaining, resetMs }, "Anthropic rate limit nearly exhausted — backing off");
-        await new Promise((r) => setTimeout(r, Math.min(resetMs, 10_000)));
+        const wait = Math.min(resetMs, cap);
+        logger.warn({ remaining, resetMs, wait, interactive }, "Anthropic rate limit nearly exhausted — backing off");
+        await new Promise((r) => setTimeout(r, wait));
       }
     }
     logger.debug({ model: body.model, attempt, ms: Date.now() - t0 }, "Claude API call succeeded");
@@ -503,13 +559,19 @@ async function callClaude(apiKey, body, attempt = 0) {
 
   // 429 — Rate limited: respect Retry-After header before retrying
   if (response.status === 429) {
-    recordFailure();
+    // Phase 0 item 23: a 429 is NOT a failure of the service — it is the service
+    // telling us to slow down. Counting it toward the circuit breaker meant five
+    // concurrent rate-limited requests blacked out generation for EVERY shop for
+    // a minute. It is also capped: the old code waited max(Retry-After, ...)
+    // with a 60-second default, twice, inside a web request the merchant was
+    // watching.
     if (attempt < MAX_RETRIES) {
-      const retryAfter = parseInt(response.headers?.get?.("Retry-After") || "60", 10);
-      const delay = Math.max(retryAfter * 1000, (attempt + 1) * 5_000);
-      logger.warn({ model: body.model, attempt, retryAfterMs: delay }, "Anthropic 429 — backing off before retry");
+      const retryAfter = parseInt(response.headers?.get?.("Retry-After") || "5", 10);
+      const cap = interactive ? INTERACTIVE_BACKOFF_CAP_MS : BACKGROUND_BACKOFF_CAP_MS;
+      const delay = Math.min(Math.max(retryAfter * 1000, (attempt + 1) * 2_000), cap);
+      logger.warn({ model: body.model, attempt, retryAfterMs: delay, interactive }, "Anthropic 429 — backing off before retry");
       await new Promise((r) => setTimeout(r, delay));
-      return callClaude(apiKey, body, attempt + 1);
+      return callClaude(apiKey, body, attempt + 1, { interactive });
     }
     throw Object.assign(
       new Error("Anthropic rate limit exceeded after max retries. Try again in a minute."),
@@ -534,7 +596,7 @@ async function callClaude(apiKey, body, attempt = 0) {
     recordFailure();
     logger.warn({ model: body.model, status: response.status, attempt }, "Claude API 5xx — retrying");
     await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
-    return callClaude(apiKey, body, attempt + 1);
+    return callClaude(apiKey, body, attempt + 1, { interactive });
   }
 
   const errorBody = await response.text();

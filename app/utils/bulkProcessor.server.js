@@ -257,7 +257,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                 },
                 brandVoice,
                 effectiveTypes,
-                {}
+                // A bulk run has nobody waiting on it, so it can afford the longer
+                // rate-limit backoff (Phase 0 item 23).
+                { interactive: false }
               )
             : await generateProductContent(
                 {
@@ -273,7 +275,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                 },
                 brandVoice,
                 effectiveTypes,
-                { recentTitles, collectionVoice }
+                { recentTitles, collectionVoice, interactive: false }
               );
         } catch (genErr) {
           // Circuit breaker open — pause the entire job for 65s then retry same product

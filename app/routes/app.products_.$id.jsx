@@ -678,20 +678,41 @@ export async function action({ request, params }) {
 
   // ── Generate Social Media Content ────────────────────────────────────────
   if (actionType === "generateSocial") {
-    const { generateSocialContent } = await import("../utils/ai.server.js");
-    const [productResp, brandVoice, descRecord] = await Promise.all([
-      admin.graphql(`query($id:ID!){product(id:$id){title description}}`, { variables: { id: productId } }),
-      prisma.brandVoice.findUnique({ where: { shop } }),
-      prisma.generatedContent.findUnique({
-        where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
-      }),
-    ]);
-    const { data: pd } = await productResp.json();
-    const social = await generateSocialContent(
-      { title: pd.product?.title || "", description: descRecord?.generatedContent || pd.product?.description || "" },
-      brandVoice
+    // Phase 0 item 24 — social captions are a normal AI generation and were the
+    // one path with NEITHER a rate limit NOR a credit: unlimited unmetered
+    // calls on any plan, from a button on the product page.
+    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+    if (!rl.allowed) {
+      return { error: "You're generating too fast. Please wait a moment before trying again." };
+    }
+
+    const socialOutcome = await withGenerationCredit(
+      shop,
+      { contentType: "social", productId },
+      async () => {
+        const { generateSocialContent } = await import("../utils/ai.server.js");
+        const [productResp, brandVoice, descRecord] = await Promise.all([
+          admin.graphql(`query($id:ID!){product(id:$id){title description}}`, { variables: { id: productId } }),
+          prisma.brandVoice.findUnique({ where: { shop } }),
+          prisma.generatedContent.findUnique({
+            where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+          }),
+        ]);
+        const { data: pd } = await productResp.json();
+        return generateSocialContent(
+          { title: pd.product?.title || "", description: descRecord?.generatedContent || pd.product?.description || "" },
+          brandVoice
+        );
+      },
     );
-    return { success: true, social };
+
+    if (!socialOutcome.allowed) {
+      return { error: "You've reached your monthly generation limit. Upgrade your plan to continue.", limitReached: true };
+    }
+    if (socialOutcome.refunded) {
+      return { error: "The AI returned nothing. Please retry — this did not use a generation." };
+    }
+    return { success: true, social: socialOutcome.result };
   }
 
   // ── Restore Version ───────────────────────────────────────────────────────

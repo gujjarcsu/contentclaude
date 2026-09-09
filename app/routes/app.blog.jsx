@@ -84,6 +84,18 @@ export const action = async ({ request }) => {
 
     if (!topic) return Response.json({ error: "Topic is required." }, { status: 400 });
 
+    // Phase 0 item 24 — blog generation is the most expensive single call in the
+    // app and had no rate limit at all; the same 10/minute ceiling as every
+    // other generation now applies.
+    const { checkRateLimit } = await import("../utils/rateLimit.server.js");
+    const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
+    if (!rl.allowed) {
+      return Response.json(
+        { error: "You're generating too fast. Please wait a moment before trying again." },
+        { status: 429 },
+      );
+    }
+
     // Phase 0 item 5 — take the credit, but give it back if the post never
     // arrives. A 45 s timeout or an open circuit breaker used to cost the
     // merchant a generation and produce nothing at all.

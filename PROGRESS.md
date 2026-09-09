@@ -511,3 +511,111 @@ perform the lookup.
 **Pre-deploy gate:** unit suite **441 passed**, 5 failed — the same untracked
 `tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean.
 Typecheck **0 errors**. Build clean.
+
+### Group 0.D — LIVE verification (deployed SHA 0ae81e9)
+
+`/api/build-info` = `0ae81e9e0b7d7b24ffd451516b61de0ebe4f5c22` = `main` HEAD (**G5 pass**), and the
+response itself is the first proof: it no longer carries a `node` field (item 22).
+
+**Item 17, against production**, with the brief's own payload as `?target=`:
+
+```
+$ curl -s "https://app.navaal.ai/reembed?shop=navaal-qa-fresh.myshopify.com    &target=%3C%2Fscript%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E"
+
+content-security-policy: frame-ancestors https://navaal-qa-fresh.myshopify.com https://admin.shopify.com;
+                         script-src 'self' 'unsafe-inline' https://cdn.shopify.com;
+                         object-src 'none'; base-uri 'none';
+referrer-policy: no-referrer
+x-content-type-options: nosniff
+
+<script tags in body>: 2        (both ours)
+alert(1) occurrences: 0
+var target = "/app";            (the payload was rejected by the whitelist)
+```
+
+**LIVE-verified: items 17 and the build-info half of 22.** Items 18-21 and the rest of 22 are
+**code-only** — proving them live would mean publishing attacker content to a real storefront, driving a
+real charge through Shopify billing, or reading another merchant's plan. Each is covered by the
+assertions listed above.
+
+---
+
+### Group 0.C — G1 (deployed SHA dce73cf)
+
+`node scripts/gauntlet-211.mjs` ran to completion: **30/30 steps passed, FINAL_RESULT=PASS**.
+Recording under `gauntlet-211/` — video plus a screenshot per step, URL bar visible.
+
+### Group 0.D — CI went red, and why
+
+The group 0.D commit (`7942c30`) **failed CI on lint and therefore did not deploy.** Three errors, all
+in the new test files, none in production code:
+
+```
+tests/routes/billing.callback.test.js  51:7   'runRaw' is assigned a value but never used
+tests/utils/sanitize.test.js           39:34  Unexpected control character(s) in regular expression: \x08
+tests/utils/security.test.js            7:36  'beforeEach' is defined but never used
+```
+
+The `\x08` is the interesting one: a regex written as `/<a\b/` reached the file as a literal **backspace**
+character, because it was patched in through a non-raw Python string — the exact trap recorded in this
+repo's own notes. My pre-commit lint missed all three because eslint runs with `--cache`; CI starts from
+a cold cache and caught them immediately. Fixed in `0ae81e9` as a group 0.D follow-up rather than folded
+into group 0.E, so 0.D still deploys on its own. The unused `runRaw` was not deleted but put to work: it
+now asserts that an **unsigned** billing callback performs no subscription lookup, does not touch the
+plan, and still lands the merchant in the app without a false "declined". **Every later pre-commit lint
+clears the cache first.**
+
+---
+
+## Group 0.E — AI provider resilience (items 23-24)
+
+**Item 23 — four separate ways the AI client punished the merchant for something that was not an outage.**
+
+*The rate-limit reset header was parsed as a number.* `anthropic-ratelimit-requests-reset` is an RFC3339
+**timestamp**, and the code did `parseFloat(header) * 1000`. `parseFloat("2026-09-09T11:30:00Z")` is
+`2026`, so the computed wait was ~2,026,000 ms and `Math.min(resetMs, 10_000)` pinned it to the full
+10-second cap. That is a flat **10 seconds added to the merchant's own request, on a SUCCESSFUL call**,
+every time the window happened to be low. New pure `rateLimitResetMs` parses the timestamp (and still
+accepts a plain seconds value, which other APIs send), returning 0 for junk or a window already past.
+
+*A 429 waited up to a minute, inside a web request.* `Math.max(retryAfter * 1000, (attempt+1) * 5000)`
+with a **60-second default** when the header is absent, up to `MAX_RETRIES` times. Now the default is 5
+seconds and the whole wait is capped: 10 s where a merchant is watching, 60 s in a bulk job where nobody
+is. The two paths are distinguished by an `interactive` flag that defaults to "someone is waiting" — the
+worker is the single caller that opts into patience, so a new interactive path cannot accidentally
+inherit the slow behaviour.
+
+*A 429 counted toward the global circuit breaker.* Five concurrent rate-limited requests tripped the
+5-failure threshold and blacked out generation for **every shop** for 60 seconds. A 429 is not a failure
+of the service, it is the service asking us to slow down, so it no longer calls `recordFailure()`.
+
+*A dropped connection failed immediately.* The 5xx path retried; a network error or a timeout did not.
+Both are now retried once before giving up, and a timeout is tagged `isTimeout` so callers can tell it
+apart from a refusal.
+
+**Deliberately partial, and why.** The brief also asks interactive routes to hand the work to the queue
+and answer "taking longer than usual — we'll keep going in the background". I have not done that half.
+Handing off mid-request means the original call may still complete after the queued copy starts, and the
+merchant is then charged twice for one product — the exact class of defect group 0.B just removed. The
+practical outcome the brief is after is already delivered by the two changes above plus item 5: an
+interactive generation now fails within ~10 seconds instead of holding for two minutes, and the credit is
+refunded, so the merchant loses nothing and can retry. The queue hand-off wants an idempotency key per
+(shop, product, attempt) to be safe, which belongs with the Phase 3 quick-start work that will own these
+screens.
+
+**Item 24 — two AI paths ran with no rate limit and no credit.**
+`generateSocial` on the product page had **neither**: unlimited unmetered model calls on any plan, from a
+button. It now takes the same 10/minute rate limit and a credit (`contentType: "social"`), refunded if
+nothing usable comes back. Blog generation had a credit (from item 5) but still no rate limit, and it is
+the most expensive single call in the app; it now has the same ceiling as everything else.
+
+**Tests — 11 new assertions in `tests/utils/aiResilience.test.js`:** the timestamp parse (including an
+explicit assertion that `parseFloat` on the header yields 2026, so the bug cannot quietly return), the
+seconds fallback and junk handling, the cap relationship, and source guards that a 429 no longer records
+a failure, that its wait is capped and its default is no longer 60 s, that a transient error is retried
+once, and that the interactive default is "someone is waiting" with only the worker opting out. Item 24
+is covered by per-path assertions plus a sweep asserting every route that calls a generator also gates it.
+
+**Pre-deploy gate:** unit suite **453 passed**, 5 failed — the same untracked
+`tests/routes/no-dark-patterns.test.js` (Phase 3, not committed, not seen by CI). Lint clean **from a
+cleared cache**. Typecheck **0 errors**. Build clean.
