@@ -3977,3 +3977,28 @@ Guard broken: ignoring `collectionCopy` fails **1 test**, printing the boilerpla
   dashboard's hot path. That needs a decision, not a quiet extra query.
 - **The Agena before/after is not shown** (new item A4.9, BLOCKED by H3). It needs a real generation
   against a real catalogue — a model call and a store to run it on, not a code change.
+
+### A4.7 — auditing for the defect rather than fixing one instance of it
+
+`includeDraftProducts` had a column, a read path, a write path and a green suite, and appeared on no
+screen. Every source-level assertion about the machinery passed, because the machinery was fine. That
+is the failure mode a perfect test suite guarantees you will miss.
+
+The audit reads the booleans from **`schema.prisma`**, not from a list someone maintains, so a boolean
+added later is audited on the next run without anyone remembering. It checks two things per field,
+because the second is not obvious: a control exists, **and** a hidden input posts it. A Polaris
+`Checkbox` is not a form field — without the hidden input the control renders, toggles, looks saved
+and posts nothing, which is indistinguishable from working until a merchant reloads.
+
+Result: all four booleans — `autopilotEnabled`, `autopilotAutoPublish`, `publishWithoutReview`,
+`includeDraftProducts` — are reachable. `autopilotAutoPublish`, flagged as unaudited when A4.7 was
+written, turns out to be fine.
+
+Exemptions are allowed but must carry a reason longer than thirty characters, so "we forgot" cannot
+masquerade as "we decided". There are none.
+
+Guard broken: deleting one hidden input fails **1 test**, naming the field and saying it "posts
+nothing".
+
+**Not proved:** that any of these controls is VISIBLE — L15's third requirement. A control in a
+collapsed section or behind a plan gate passes every assertion here. Needs a browser; queued.
