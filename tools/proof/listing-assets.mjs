@@ -93,7 +93,11 @@ const FRAMES = [
     path: "/app",
     width: 1600,
     height: 900,
-    must: /scores \d+\/100|Add a product/i,
+    // NOT `|Add a product`. The first run of this harness accepted the empty
+    // state on a store with no products — a technically-correct capture that
+    // is useless as a listing image, and the guard waved it through. A listing
+    // frame of the first run has to show a real score on a real catalogue.
+    must: /scores \d+\/100/i,
     label: "First run — the store is scored and three drafts are written",
   },
   {
@@ -143,12 +147,23 @@ if (!existsSync(AUTH)) {
 }
 mkdirSync(OUT, { recursive: true });
 
+// Optional filter: `node tools/proof/listing-assets.mjs 04` captures only the
+// frames whose filename contains "04". Some frames need the store in a
+// different state (the first run needs a shop that has not seen a draft), so
+// they cannot all be taken in one pass.
+const only = process.argv[2] || null;
+const SELECTED = only ? FRAMES.filter((f) => f.file.includes(only)) : FRAMES;
+if (SELECTED.length === 0) {
+  console.error(`no frame matches "${only}"`);
+  process.exit(2);
+}
+
 const browser = await chromium.launch();
 const results = [];
 const hashes = new Map();
 let failed = 0;
 
-for (const f of FRAMES) {
+for (const f of SELECTED) {
   const context = await browser.newContext({
     storageState: AUTH,
     viewport: { width: f.width, height: f.height },
@@ -213,7 +228,18 @@ for (const f of FRAMES) {
 }
 
 await browser.close();
-writeFileSync(`${OUT}/manifest.json`, JSON.stringify({ at: new Date().toISOString(), results }, null, 2));
+// Merge into any existing manifest — a subset run must not erase the record of
+// frames captured in another pass.
+let prior = [];
+try {
+  prior = JSON.parse(readFileSync(`${OUT}/manifest.json`, "utf8")).results ?? [];
+} catch {
+  prior = [];
+}
+const merged = [...prior.filter((p) => !results.some((r) => r.file === p.file)), ...results].sort((a, b) =>
+  a.file.localeCompare(b.file),
+);
+writeFileSync(`${OUT}/manifest.json`, JSON.stringify({ at: new Date().toISOString(), results: merged }, null, 2));
 
 console.log(`\n${results.filter((r) => r.ok).length}/${FRAMES.length} frames captured`);
 console.log("NOW LOOK AT THEM. Every guard above can be satisfied by a page that is");

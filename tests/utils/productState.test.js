@@ -307,6 +307,27 @@ describe("the tabs and the cards cannot disagree", () => {
     expect(stateOfContentMap({ description: { status: 42 } })).toBe(PRODUCT_STATE.NEEDS_CONTENT);
   });
 
+  it("the row badge, the tabs and the cards are all ONE classifier", () => {
+    // There were THREE rules on this one screen: the stat cards (shared), the
+    // tabs (description-only) and the row badge (description-only). The badge
+    // said "Published" on a product the tabs had just put under "Draft".
+    const src = readFileSync("app/routes/app.products.jsx", "utf8");
+    const classifiers = (src.match(/stateOfContentMap\(/g) || []).length;
+    expect(
+      classifiers,
+      "every classification on this screen goes through the shared rule",
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the row badge uses the shared vocabulary, not words of its own", () => {
+    // "No AI Content" and "Unknown" were invented here; PRODUCT_STATE_LABEL is
+    // what every other screen says.
+    const src = readFileSync("app/routes/app.products.jsx", "utf8");
+    expect(src).not.toMatch(/>No AI Content</);
+    expect(src).not.toMatch(/>Unknown</);
+    expect(src).toMatch(/PRODUCT_STATE_LABEL\[state\]/);
+  });
+
   it("the Products screen no longer classifies on the description row alone", () => {
     // The source guard. Without it this reverts the moment somebody needs a
     // count and reaches for the nearest field.

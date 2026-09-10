@@ -49,7 +49,7 @@ import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js"
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
-import { PRODUCT_STATE, stateOfContentMap } from "../utils/productState.js";
+import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap } from "../utils/productState.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -451,12 +451,22 @@ export default function ProductsPage() {
     [tabs, setSearchParams],
   );
 
+  // The SAME rule as the tabs and the stat cards, and the SAME words as every
+  // other screen. This was a third independent classifier: it read the
+  // description row alone, so a product with a published description and a
+  // draft meta title showed "Published" while sitting in the Draft tab one
+  // line above. It also invented its own vocabulary — "No AI Content",
+  // "Unknown" — where PRODUCT_STATE_LABEL is the one the rest of the app uses.
+  const BADGE_TONE = {
+    [PRODUCT_STATE.PUBLISHED]: "success",
+    [PRODUCT_STATE.DRAFT]: "info",
+    [PRODUCT_STATE.NEEDS_CONTENT]: "attention",
+    [PRODUCT_STATE.REJECTED]: "warning",
+  };
+
   function getStatusBadge(productId) {
-    const m = contentMap[productId];
-    if (!m?.description) return <Badge tone="attention">No AI Content</Badge>;
-    if (m.description.status === "published") return <Badge tone="success">Published</Badge>;
-    if (m.description.status === "draft") return <Badge tone="info">Draft Ready</Badge>;
-    return <Badge>Unknown</Badge>;
+    const state = stateOfContentMap(contentMap[productId]);
+    return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
   }
 
   function getContentTypePills(productId) {

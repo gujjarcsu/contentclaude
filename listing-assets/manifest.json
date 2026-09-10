@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-10T03:25:29.957Z",
+  "at": "2026-09-10T03:35:35.705Z",
   "results": [
     {
       "file": "01-home-desktop.png",
@@ -10,8 +10,8 @@
       "must": {},
       "label": "Home — store score and the one next action",
       "ok": true,
-      "bytes": 264487,
-      "hash": "a01ffaba5fb616c5",
+      "bytes": 264568,
+      "hash": "6309136791b9c21c",
       "excerpt": "Review 4 drafts Welcome back, E2E Test Store! 13 products optimized · 4 drafts awaiting review Written for Google and for AI search Your "
     },
     {
@@ -36,8 +36,8 @@
       "must": {},
       "label": "Products — every product and where it stands",
       "ok": true,
-      "bytes": 336498,
-      "hash": "aa5f309359ed21de",
+      "bytes": 336749,
+      "hash": "eb96390b38da2d30",
       "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content Review 4 drafts Collections Activity 13"
     },
     {
@@ -48,10 +48,8 @@
       "height": 900,
       "must": {},
       "label": "First run — the store is scored and three drafts are written",
-      "ok": true,
-      "bytes": 179027,
-      "hash": "d6380b497cb17fab",
-      "excerpt": "Let's get your store found by AI. This page is ready Let's get your store found by AI Add a product and we'll get started Navaal writes A"
+      "ok": false,
+      "error": "this is not the First run — the store is scored and three drafts are written screen — no match for /scores \\d+\\/100/i in: Let's get your store found by AI. This page is ready\n\nLet's get your store found by AI\n\nAdd a product and we'll get star"
     },
     {
       "file": "05-settings-desktop.png",
@@ -104,8 +102,8 @@
       "must": {},
       "label": "Products on a phone",
       "ok": true,
-      "bytes": 85165,
-      "hash": "ca4a63f8e07c42e0",
+      "bytes": 85168,
+      "hash": "8e3ee17c6a1e1bf8",
       "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content 13 AI Content Published 4 Drafts to R"
     }
   ]
