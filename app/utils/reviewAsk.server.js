@@ -29,8 +29,35 @@ import logger from "./logger.server.js";
 import { installAtOf } from "./firstValue.server.js";
 
 export const REVIEW_ASK_POLICY = "once_displayed"; // | "strict_once"
-export const REVIEW_ASK_MAX_CALLS = 5;              // local safety cap on CALLS per shop — not Shopify's display limit
+export const REVIEW_ASK_MAX_CALLS = 5; // local safety cap on CALLS per shop — not Shopify's display limit
 export const REVIEW_ASK_SURFACES = ["review_page", "product_page"];
+
+/**
+ * How many products a merchant must have approved before they are ever asked.
+ *
+ * Brief item 3.3: "after the merchant's THIRD successful Approve". Asking after
+ * the first one asks somebody who has seen the app work exactly once, which is
+ * both a worse review and a worse experience. Three is the point at which they
+ * have chosen to publish repeatedly rather than tried it.
+ *
+ * Counted as approved PRODUCTS, not published rows: publishing one product
+ * writes a description, a meta title and a meta description, so counting rows
+ * would fire on the first approve while claiming to be the third.
+ */
+export const APPROVES_BEFORE_ASK = 3;
+
+/**
+ * Triggers that are NOT subject to the approve count.
+ *
+ * An explicit allow-list, not `trigger === "publish"`, because the failure
+ * directions are not equal: gating a trigger that did not need it costs one
+ * un-asked review, while letting a new trigger string slip past the count asks
+ * a merchant who has approved nothing. Anything unrecognised is counted.
+ *
+ * `audit_improved` is exempt because the merchant re-ran an audit and it scored
+ * higher — the value moment is the score going up, not a publish count.
+ */
+export const COUNT_EXEMPT_TRIGGERS = new Set(["audit_improved"]);
 export const TERMINAL_CODES = new Set(["success", "already-reviewed", "merchant-ineligible"]);
 const H = 3_600_000;
 const D = 24 * H;
@@ -49,7 +76,11 @@ export function holdFor(code, { installAt = null, now = new Date() } = {}) {
     case "cooldown-period":
       return { terminal: false, shown: false, nextEligibleAt: new Date(t + 60 * D) };
     case "recently-installed":
-      return { terminal: false, shown: false, nextEligibleAt: new Date(Math.max(installAt ? new Date(installAt).getTime() + 25 * H : 0, t + 1 * H)) };
+      return {
+        terminal: false,
+        shown: false,
+        nextEligibleAt: new Date(Math.max(installAt ? new Date(installAt).getTime() + 25 * H : 0, t + 1 * H)),
+      };
     case "mobile-app":
     case "already-open":
     case "open-in-progress":
@@ -67,35 +98,103 @@ export function holdFor(code, { installAt = null, now = new Date() } = {}) {
 /** Pure eligibility over the Shop row (+ legacy GrowthState). → { eligible, reason, nextEligibleAt? } */
 export function decideReviewAsk(shopRow, growthState, now = new Date()) {
   if (!shopRow) return { eligible: false, reason: "no_shop_row" };
-  if (REVIEW_ASK_POLICY === "strict_once" && shopRow.reviewAskCount >= 1) return { eligible: false, reason: "strict_once" };
+  if (REVIEW_ASK_POLICY === "strict_once" && shopRow.reviewAskCount >= 1)
+    return { eligible: false, reason: "strict_once" };
   if (shopRow.reviewDoneAt) return { eligible: false, reason: "terminal" };
   const t = now.getTime();
   if (shopRow.reviewNextEligibleAt && new Date(shopRow.reviewNextEligibleAt).getTime() > t) {
     return { eligible: false, reason: "hold", nextEligibleAt: new Date(shopRow.reviewNextEligibleAt) };
   }
   // Legacy: asked under the old code (GrowthState.reviewRequestedAt), outcome unknown → treat as a possible display.
-  if (!shopRow.reviewLastAskedAt && growthState?.reviewRequestedAt && new Date(growthState.reviewRequestedAt).getTime() + 60 * D > t) {
-    return { eligible: false, reason: "legacy_hold", nextEligibleAt: new Date(new Date(growthState.reviewRequestedAt).getTime() + 60 * D) };
+  if (
+    !shopRow.reviewLastAskedAt &&
+    growthState?.reviewRequestedAt &&
+    new Date(growthState.reviewRequestedAt).getTime() + 60 * D > t
+  ) {
+    return {
+      eligible: false,
+      reason: "legacy_hold",
+      nextEligibleAt: new Date(new Date(growthState.reviewRequestedAt).getTime() + 60 * D),
+    };
   }
   if (shopRow.reviewAskCount >= REVIEW_ASK_MAX_CALLS) return { eligible: false, reason: "call_cap" };
   return { eligible: true, reason: "eligible" };
 }
 
 /**
+ * How many PRODUCTS this shop has published, from the shared metrics
+ * definition. Returns 0 rather than throwing — a counting failure must never
+ * turn a successful publish into an error, and 0 fails closed (no ask).
+ */
+async function approvedProductCount(shop) {
+  try {
+    const { getContentMetrics } = await import("./metrics.server.js");
+    const m = await getContentMetrics(shop);
+    return Number(m?.publishedProducts) || 0;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "approved-count lookup failed — not asking");
+    return 0;
+  }
+}
+
+/**
  * Inside a publish action that succeeded for `publishedCount` products: should
  * THIS response carry a review ask? Returns { attemptId } or null. Never throws.
  */
-export async function openReviewAsk({ shop, surface, trigger = "publish", publishedCount = 0, now = new Date() }) {
+export async function openReviewAsk({
+  shop,
+  surface,
+  trigger = "publish",
+  publishedCount = 0,
+  now = new Date(),
+}) {
   try {
     if (!shop || !REVIEW_ASK_SURFACES.includes(surface) || publishedCount < 1) return null;
     if (!prisma.shop?.findUnique || !prisma.reviewRequestAttempt?.create) return null;
+
+    // The third-approve gate. Counted here rather than passed in, so no call
+    // site can get it wrong or skip it — the number is read from the one
+    // shared definition of "published products" (metrics.server.js), the same
+    // one Home and Products report, so it can never disagree with the screen
+    // the merchant is looking at.
+    if (!COUNT_EXEMPT_TRIGGERS.has(trigger)) {
+      const approved = await approvedProductCount(shop);
+      if (approved < APPROVES_BEFORE_ASK) {
+        logger.info(
+          {
+            shop,
+            event: "review_ask_skipped",
+            reason: "too_few_approves",
+            approved,
+            needed: APPROVES_BEFORE_ASK,
+            surface,
+          },
+          "review ask skipped",
+        );
+        return null;
+      }
+    }
     const [row, gs] = await Promise.all([
       prisma.shop.findUnique({ where: { shop } }),
-      prisma.growthState?.findUnique ? prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }).catch(() => null) : null,
+      prisma.growthState?.findUnique
+        ? prisma.growthState
+            .findUnique({ where: { shop }, select: { reviewRequestedAt: true } })
+            .catch(() => null)
+        : null,
     ]);
     const d = decideReviewAsk(row, gs, now);
     if (!d.eligible) {
-      logger.info({ shop, event: "review_ask_skipped", reason: d.reason, surface, trigger, nextEligibleAt: d.nextEligibleAt ?? null }, "review ask skipped");
+      logger.info(
+        {
+          shop,
+          event: "review_ask_skipped",
+          reason: d.reason,
+          surface,
+          trigger,
+          nextEligibleAt: d.nextEligibleAt ?? null,
+        },
+        "review ask skipped",
+      );
       return null;
     }
     // One open attempt per eligible moment — a DB guarantee, not a client hope.
@@ -109,7 +208,10 @@ export async function openReviewAsk({ shop, surface, trigger = "publish", publis
       },
     });
     if (r.count !== 1) {
-      logger.info({ shop, event: "review_ask_skipped", reason: "concurrent", surface, trigger }, "review ask skipped");
+      logger.info(
+        { shop, event: "review_ask_skipped", reason: "concurrent", surface, trigger },
+        "review ask skipped",
+      );
       return null;
     }
     const installAt = installAtOf(row);
@@ -120,11 +222,24 @@ export async function openReviewAsk({ shop, surface, trigger = "publish", publis
         trigger,
         publishedCount,
         attemptNo: row.reviewAskCount + 1,
-        installAgeSeconds: installAt ? Math.round((now.getTime() - new Date(installAt).getTime()) / 1000) : null,
+        installAgeSeconds: installAt
+          ? Math.round((now.getTime() - new Date(installAt).getTime()) / 1000)
+          : null,
         requestedAt: now,
       },
     });
-    logger.info({ shop, event: "review_ask_opened", attemptId: attempt.id, surface, trigger, attemptNo: row.reviewAskCount + 1, publishedCount }, "review ask opened");
+    logger.info(
+      {
+        shop,
+        event: "review_ask_opened",
+        attemptId: attempt.id,
+        surface,
+        trigger,
+        attemptNo: row.reviewAskCount + 1,
+        publishedCount,
+      },
+      "review ask opened",
+    );
     return { attemptId: attempt.id };
   } catch (err) {
     logger.warn({ shop, surface, err: err?.message }, "openReviewAsk failed (non-fatal)");
@@ -136,7 +251,12 @@ export async function openReviewAsk({ shop, surface, trigger = "publish", publis
  * Record the code the client got back from shopify.reviews.request().
  * → { status: 200 | 404 | 409 | 500 }. Idempotent per attempt. Never throws.
  */
-export async function recordReviewOutcome(shop, attemptId, { code, success, message } = {}, now = new Date()) {
+export async function recordReviewOutcome(
+  shop,
+  attemptId,
+  { code, success, message } = {},
+  now = new Date(),
+) {
   try {
     if (!shop || !attemptId || !prisma.reviewRequestAttempt?.findUnique) return { status: 404 };
     const attempt = await prisma.reviewRequestAttempt.findUnique({ where: { id: attemptId } });
@@ -148,7 +268,13 @@ export async function recordReviewOutcome(shop, attemptId, { code, success, mess
     const writes = [
       prisma.reviewRequestAttempt.update({
         where: { id: attemptId },
-        data: { respondedAt: now, code: safeCode, success: !!success, message: String(message || "").slice(0, 200), nextEligibleAt: hold.nextEligibleAt },
+        data: {
+          respondedAt: now,
+          code: safeCode,
+          success: !!success,
+          message: String(message || "").slice(0, 200),
+          nextEligibleAt: hold.nextEligibleAt,
+        },
       }),
       prisma.shop.updateMany({
         where: { shop },
@@ -163,8 +289,19 @@ export async function recordReviewOutcome(shop, attemptId, { code, success, mess
     if (typeof prisma.$transaction === "function") await prisma.$transaction(writes);
     else await Promise.all(writes);
     logger.info(
-      { shop, event: "review_ask_result", attemptId, code: safeCode, success: !!success, surface: attempt.surface, trigger: attempt.trigger, installAgeSeconds: attempt.installAgeSeconds ?? null, nextEligibleAt: hold.nextEligibleAt, terminal: hold.terminal },
-      "review ask result"
+      {
+        shop,
+        event: "review_ask_result",
+        attemptId,
+        code: safeCode,
+        success: !!success,
+        surface: attempt.surface,
+        trigger: attempt.trigger,
+        installAgeSeconds: attempt.installAgeSeconds ?? null,
+        nextEligibleAt: hold.nextEligibleAt,
+        terminal: hold.terminal,
+      },
+      "review ask result",
     );
     return { status: 200, terminal: hold.terminal, shown: hold.shown };
   } catch (err) {

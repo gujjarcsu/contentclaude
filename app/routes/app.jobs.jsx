@@ -22,24 +22,21 @@ import { ClockIcon, CheckCircleIcon, XCircleIcon, RefreshIcon } from "@shopify/p
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
-import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [jobs, growthState] = await Promise.all([
+  const [jobs] = await Promise.all([
     prisma.generationJob.findMany({
       where: { shop },
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
   ]);
 
   return Response.json({
-    reviewRequested: !!growthState?.reviewRequestedAt,
     jobs: jobs.map((j) => ({
       id: j.id,
       status: j.status,
@@ -203,13 +200,13 @@ function formatDate(iso) {
 }
 
 export default function JobsPage() {
-  const { jobs, reviewRequested } = useLoaderData();
+  const { jobs } = useLoaderData();
   const navigate = useNavigate();
-  // A completed auto-publish job means content actually went live → ask for a
-  // review (once). Non-auto-publish jobs only created drafts, so they don't count
-  // here; the Review & Publish screen handles that path.
-  const askReview =
-    !reviewRequested && jobs.some((j) => j.autoPublish && j.status === "complete" && j.completedProducts > 0);
+  // Phase 3 item 3.3 — there is NO review ask on this screen any more.
+  // It fired on page load, derived from loader data: a merchant who opened
+  // Jobs to check on a run was asked to review the app, having pressed nothing.
+  // A reviewer reads that as a soft dark pattern, and they are right. The ask
+  // now happens only inside a publish the merchant confirmed.
   const revalidator = useRevalidator();
   const retryFetcher = useFetcher();
   const cancelFetcher = useFetcher();
@@ -307,8 +304,6 @@ export default function JobsPage() {
       }}
     >
       <BlockStack gap="500">
-        <ReviewRequest active={askReview} />
-
         {hasActiveJobs && (
           <Banner tone="info" title="Jobs are running">
             <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>

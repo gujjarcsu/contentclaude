@@ -27,6 +27,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
+import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
@@ -75,7 +76,6 @@ export async function loader({ request, params }) {
     versions,
     templates,
     plan,
-    growthState,
     publishWithoutReview,
     { scoreContent },
   ] = await Promise.all([
@@ -111,7 +111,7 @@ export async function loader({ request, params }) {
       take: 50,
     }),
     getOrCreatePlan(shop),
-    prisma.growthState.findUnique({ where: { shop }, select: { reviewRequestedAt: true } }),
+
     publishesWithoutReview(shop),
     import("../utils/contentScorer.server.js"),
   ]);
@@ -182,7 +182,7 @@ export async function loader({ request, params }) {
       return acc;
     }, {}),
     hasBrandVoice: !!brandVoice,
-    reviewRequested: !!growthState?.reviewRequestedAt,
+
     qualityScore,
     versionsByType,
     templates,
@@ -784,9 +784,21 @@ export async function action({ request, params }) {
         }
       }
 
+      // Phase 3 item 3.3 — opened inside the publish the merchant confirmed,
+      // and only from their third approve onwards. Never after an auto-publish:
+      // that is content nobody pressed approve on. Returns null when the shop
+      // is not eligible, and never throws.
+      const reviewAsk = await openReviewAsk({
+        shop,
+        surface: "product_page",
+        trigger: "publish",
+        publishedCount: 1,
+      });
+
       return {
         success: true,
         published: true,
+        reviewAsk,
         message: faqWarning
           ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
           : `Content published to your Shopify store!${embedNotice}`,
@@ -1221,7 +1233,6 @@ export default function ProductGeneratePage() {
     product,
     existingContent,
     hasBrandVoice,
-    reviewRequested,
     qualityScore,
     versionsByType,
     templates,
@@ -1244,8 +1255,12 @@ export default function ProductGeneratePage() {
   const actionData = fetcher.data;
   // Ask for an App Store review once, right after a publish succeeds (single
   // publish or generate-with-auto-publish).
-  const askReview =
-    !reviewRequested && (actionData?.published === true || actionData?.autoPublished === true);
+  // Phase 3 item 3.3 — the ask is whatever the SERVER issued for the action
+  // the merchant just confirmed. There is deliberately no client-side
+  // eligibility test any more, and deliberately nothing keyed off
+  // `autoPublished`: an auto-publish is content the merchant never pressed
+  // approve on, so it is not a moment to ask them how much they like the app.
+  const reviewAsk = actionData?.reviewAsk ?? null;
   const isGenerating = isLoading && fetcher.formData?.get("actionType") === "generate";
   const isEnhancing = isLoading && fetcher.formData?.get("actionType") === "enhance";
   const isPublishing = isLoading && fetcher.formData?.get("actionType") === "publish";
@@ -1536,7 +1551,7 @@ export default function ProductGeneratePage() {
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
     >
       <BlockStack gap="500">
-        <ReviewRequest active={askReview} />
+        <ReviewRequest ask={reviewAsk} />
         {actionData?.error && (
           <Banner tone="critical" title="Error">
             <p>{actionData.error}</p>

@@ -2700,3 +2700,117 @@ publish: { n: 0, note: "no install has reached this milestone yet" }
 That is not a broken report. `computeTtvReport` excludes `installSource: "pre_tracking"` because those
 shops predate measurement, and all three `Shop` rows carry it — so the cohort is correctly empty rather
 than wrongly full of shops whose install moment is unknown.
+
+## 3.3 — Compliant review request, one code path
+
+### There were two, and the dead one won
+
+The tree carried two complete designs for the App Store review ask.
+
+The **live** one stamped `GrowthState.reviewRequestedAt` from a client component
+(`<ReviewRequest active={...} />`) that decided for itself whether to ask, using loader data. That is how
+`app.jobs.jsx` ended up asking for a review **on page open**: a merchant who opened Jobs to check on a
+run was asked to rate the app having pressed nothing. A reviewer reads that as a soft dark pattern, and
+they are right.
+
+The **dead** one, `reviewAsk.server.js`, was complete, careful and called by nothing.
+
+The dead one won, and the reason is structural rather than aesthetic. In the new shape the **server**
+opens an attempt inside the publish action the merchant confirmed, and returns an `attemptId`. The client
+can only call `shopify.reviews.request()` when it is handed one. A page load has no action result, so it
+has no attemptId, so it cannot ask. **"Never on load" stops being a rule anyone has to remember, because
+there is no code path for it.** The component no longer accepts a boolean at all — `active` is gone, and
+a test asserts it, because `active` is precisely the shape of prop that lets a parent say "ask now" from
+loader data.
+
+### The trigger
+
+`APPROVES_BEFORE_ASK = 3`. The ask opens on the merchant's **third** approve or later, counted as
+approved **products** rather than published rows — publishing one product writes a description, a meta
+title and a meta description, so counting rows would fire on the first approve while calling itself the
+third.
+
+The count is read inside `openReviewAsk` from `getContentMetrics`, the Phase 2.1 shared definition of
+"published products", so no call site can pass a wrong number and the gate can never disagree with the
+figure on the merchant's screen. A failed count returns 0 and does not ask — it fails closed.
+
+The gate is an **allow-list**, not `trigger === "publish"`. Anything unrecognised is counted, because the
+two failure directions are not equal: gating a trigger that did not need it costs one un-asked review,
+while a new trigger string slipping past the count asks a merchant who has approved nothing. Only
+`audit_improved` is exempt.
+
+### Where it fires, and where it does not
+
+| Surface | Before | Now |
+|---|---|---|
+| Review screen | on any successful publish, from loader state | inside the publish action, 3rd approve onwards |
+| Product page | on publish **or auto-publish**, from action data | inside the publish action only |
+| Jobs page | **on page load**, from loader data | **removed entirely** |
+| Start state | — | never — a merchant who has published nothing is not asked |
+
+Auto-publish is deliberately excluded: it is content the merchant never pressed approve on, so it is not
+a moment to ask them how much they like the app.
+
+### The parts that were already right, and are kept
+
+`reviewAsk.server.js` already got the hard parts correct and they are untouched: the optimistic
+`updateMany` claim on the `Shop` row so exactly one attempt opens per eligible moment even under the two
+parallel document loaders; a 60-day **pending** hold written at open time, so a lost callback can never
+cause a re-ask inside Shopify's cooldown; per-code holds on the reported outcome; and terminal codes
+(`success`, `already-reviewed`, `merchant-ineligible`) ending asking for good. Shopify enforces
+eligibility; nothing here pre-empts it.
+
+Results are stored on the `Shop` row as the brief specifies — `reviewLastAskedAt`, `reviewLastCode`,
+`reviewShownAt`, `reviewDoneAt` — plus a `ReviewRequestAttempt` row per attempt carrying the surface, the
+trigger, the install age and the returned code.
+
+Two smaller things worth naming:
+
+- **A hidden tab is not a decline.** If the merchant has switched away, the modal opens behind their back
+  and is dismissed unseen. That is reported as `skipped-hidden` and held for a day, rather than spending
+  the one ask on nothing.
+- **The callback route never redirects.** A background fetcher that receives a redirect to a login form
+  renders it into nothing and loses the outcome, which would leave the attempt `pending` — and a pending
+  attempt holds the shop for 60 days. It answers JSON with a status, always.
+
+### What was deleted, and what was deliberately kept
+
+The `GrowthState.reviewRequestedAt` **write** path is gone from every screen and from the callback route.
+The **column and the read** stay, and that is deliberate: `decideReviewAsk` still treats a legacy
+`reviewRequestedAt` within 60 days as a hold, so a shop that was asked under the old code is not asked
+again immediately by the new one. A test pins both halves — no screen writes it, `reviewAsk.server.js`
+still reads it.
+
+`tests/routes/no-dark-patterns.test.js` is **committed** (item 3.1 asked for it once it passed). It was
+gitignored precisely because it described this work and failed against `main` by design; the ignore entry
+and its explanatory comment are both removed.
+
+### The second trigger — NOT implemented, and why
+
+The brief offers two triggers, "whichever first": the third approve, **or** an audit re-run scoring
+higher than the previous.
+
+**Only the first is implemented.** `app.seo-audit.jsx` computes its score in a **loader** and has no
+action — its only refresh is `revalidator.revalidate()`. Firing a review ask from there would be firing
+one on page load, which is the exact thing this item exists to stop, and it would undo the structural
+guarantee that the rest of the work is built on. Persisting a previous score and comparing it would not
+change that; the problem is not the data, it is that there is no merchant-confirmed action to attach to.
+
+Doing it properly means giving the audit a real "Run audit again" action and opening the ask inside it.
+That is a contained piece of work and `COUNT_EXEMPT_TRIGGERS` already reserves `audit_improved` for it,
+but it is not done, and "whichever first" means the item's requirement is met by the approve trigger.
+Recorded as a deliberate omission with its reason rather than quietly dropped.
+
+### The trace
+
+`shopify.reviews.request()` cannot be exercised without a merchant and a real admin session, so the
+network/console trace at the trigger and the `Shop` row update are **not captured**. What is verified:
+
+| | Status |
+|---|---|
+| One code path; the dead one deleted | **Verified** — tests + source guards |
+| Fires only inside a confirmed action | **Verified structurally** — no attemptId exists without an action |
+| Never on load / on error / in Start | **Verified** — jobs-page ask removed, source guards on all four surfaces |
+| Third approve enforced, fails closed | **Verified** — unit tests at 0, 1, 2 and 3 approves |
+| Terminal codes never re-fire | **Verified** — existing `holdFor` / `decideReviewAsk` tests |
+| Network trace at the trigger, `Shop` row updated live | **Not captured** — needs a merchant session and a real ask |

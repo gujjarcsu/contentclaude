@@ -1,35 +1,40 @@
-// Resource route (action only) — records that we've asked this shop for an App
-// Store review, exactly once. Called by the ReviewRequest client component after
-// it invokes App Bridge's shopify.reviews.request() at the peak-value moment
-// (first successful publish). We set reviewRequestedAt on ANY outcome (success or
-// decline) so we never ask the same shop twice, and log the outcome code so we
-// can measure ask→review conversion later.
+// Resource route (action only) — records what shopify.reviews.request() came
+// back with, against the attempt the SERVER opened.
+//
+// Phase 3 item 3.3. The attemptId is the whole security model: this route
+// records an outcome for an attempt that already exists, and it refuses
+// anything else. A client cannot invent one, cannot record against another
+// shop's attempt (the row is checked to belong to this session's shop), and
+// cannot answer the same attempt twice (a second report is a 409). So the ask
+// is opened exactly once, inside a publish action the merchant confirmed, and
+// closed exactly once.
+//
+// It never redirects. A background fetcher that receives a redirect to a login
+// form renders it into nothing and loses the outcome, which would leave the
+// attempt permanently "pending" — and a pending attempt holds the shop for 60
+// days. Errors are JSON with a status.
 import { authenticate } from "../shopify.server.js";
-import prisma from "../db.server.js";
-import logger from "../utils/logger.server.js";
+import { recordReviewOutcome } from "../utils/reviewAsk.server.js";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const form = await request.formData();
-  const code = String(form.get("code") || "unknown").slice(0, 60);
-
-  // Only the FIRST ask counts — if already recorded, do nothing (idempotent).
-  const existing = await prisma.growthState.findUnique({
-    where: { shop },
-    select: { reviewRequestedAt: true },
-  });
-  if (existing?.reviewRequestedAt) {
-    return Response.json({ ok: true, already: true });
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
   }
 
-  await prisma.growthState.upsert({
-    where: { shop },
-    create: { shop, reviewRequestedAt: new Date() },
-    update: { reviewRequestedAt: new Date() },
+  const attemptId = String(form.get("attemptId") || "");
+  if (!attemptId) return Response.json({ ok: false, error: "missing_attempt" }, { status: 400 });
+
+  const result = await recordReviewOutcome(shop, attemptId, {
+    code: String(form.get("code") || "unknown"),
+    success: form.get("success") === "1",
+    message: String(form.get("message") || ""),
   });
 
-  logger.info({ shop, reviewOutcome: code }, "App Store review requested (post-publish)");
-  return Response.json({ ok: true });
+  return Response.json({ ok: result.status === 200, ...result }, { status: result.status });
 };

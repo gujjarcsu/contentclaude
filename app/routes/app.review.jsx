@@ -36,6 +36,7 @@ import { readMutationResult, publishProductWithRetry } from "../utils/adminGraph
 import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
+import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { EmbedSetupCard } from "../components/EmbedSetupCard.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -126,10 +127,10 @@ export const loader = async ({ request }) => {
     }),
     prisma.growthState.findUnique({
       where: { shop },
-      select: { reviewRequestedAt: true, embedConfirmedAt: true },
+      select: { embedConfirmedAt: true },
     }),
   ]);
-  const reviewRequested = !!growthState?.reviewRequestedAt;
+
   const embedConfirmed = !!growthState?.embedConfirmedAt;
 
   const orderedProductIds = [...new Set(draftIdRows.map((r) => r.productId))];
@@ -149,7 +150,6 @@ export const loader = async ({ request }) => {
       page: 1,
       totalPages: 1,
       totalDraftCount: 0,
-      reviewRequested,
       embedConfirmed,
       shopDomain: shop,
     });
@@ -199,7 +199,6 @@ export const loader = async ({ request }) => {
     page,
     totalPages: Math.ceil(totalDraftCount / PAGE_SIZE),
     totalDraftCount,
-    reviewRequested,
     embedConfirmed,
     shopDomain: shop,
   });
@@ -429,11 +428,21 @@ export const action = async ({ request }) => {
       }
     }
 
+    // Phase 3 item 3.3 — the ONE place a review ask is opened from this
+    // screen: inside the publish the merchant just confirmed, only when it
+    // actually published something, and only on their third approve or later.
+    // Returns null (never throws) whenever the shop is not eligible.
+    const reviewAsk =
+      published > 0
+        ? await openReviewAsk({ shop, surface: "review_page", trigger: "publish", publishedCount: published })
+        : null;
+
     return Response.json({
       success: true,
       published,
       failed,
       errors,
+      reviewAsk,
       message: `Published content for ${published} product${published !== 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}.${faqWarning}${embedNotice}`,
     });
   }
@@ -505,12 +514,12 @@ export const shouldRevalidate = ({ formData, defaultShouldRevalidate }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products, page, totalPages, reviewRequested, embedConfirmed, shopDomain } = useLoaderData();
+  const { products, page, totalPages, embedConfirmed, shopDomain } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
   // Ask for an App Store review right after a bulk publish succeeds (once ever).
-  const askReview = !reviewRequested && !!actionData?.success && (actionData?.published ?? 0) >= 1;
+
   const navigate = useNavigate();
   const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
@@ -668,7 +677,7 @@ export default function ReviewPage() {
       <Page title="Review & Publish" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
         {/* After publishing all drafts we land here with a success actionData —
             still the right moment to ask for a review. */}
-        <ReviewRequest active={askReview} />
+        <ReviewRequest ask={actionData?.reviewAsk} />
         <EmptyState
           heading="Nothing to review — you're all caught up"
           image="/empty-review.svg"
@@ -689,7 +698,7 @@ export default function ReviewPage() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-        <ReviewRequest active={askReview} />
+        <ReviewRequest ask={actionData?.reviewAsk} />
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
           Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ
