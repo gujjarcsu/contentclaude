@@ -641,7 +641,16 @@ export default function Dashboard() {
       : notOptimizedCount > 0
         ? {
             content: `Optimize ${notOptimizedCount} product${notOptimizedCount === 1 ? "" : "s"}`,
-            onAction: () => navigate("/app/optimize"),
+            // A3.2 — this went to /app/optimize while the identically-labelled
+            // primary on Products opened a modal. Same label, same intent, two
+            // different next steps, and a merchant who used both would not know
+            // which one was "the" optimize.
+            //
+            // One behaviour: every Optimize entry point now lands on the same
+            // confirmation, which is the one that states what will actually run
+            // against the quota (A3.3) and names the plan before the click
+            // (A3.1). The Optimize SCREEN keeps its own job: enhance mode.
+            onAction: () => navigate("/app/products?optimize=1"),
           }
         : { content: "Run audit", onAction: () => navigate("/app/seo-audit") };
 
@@ -917,7 +926,9 @@ export default function Dashboard() {
                   background.
                 </Text>
               </BlockStack>
-              <Button onClick={() => navigate("/app/optimize")}>Optimize store</Button>
+              {/* A3.2 — the third surface with this label. Same destination as
+                  the primary above, for the same reason. */}
+              <Button onClick={() => navigate("/app/products?optimize=1")}>Optimize store</Button>
             </InlineStack>
           </Box>
         )}

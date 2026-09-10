@@ -3900,3 +3900,29 @@ money. That is not a change to make as a side effect of a scale report.
 tests, so this proves the budget is enforced, not that 80 real requests take 8–24 s.
 
 Guard broken: disabling the budget check fails **2 tests**.
+
+### A3.2 — three surfaces with one label and two destinations
+
+The backlog said two entry points. There were **three**: Home's state-driven primary
+("Optimize N products"), a second button on Home's "Optimize your store" card, and the Products
+primary ("Optimize store (N)"). The first two navigated to `/app/optimize`; the third opened a modal.
+Same label, same intent, two different next steps — a merchant who used both would not know which one
+was "the" optimize.
+
+All three now deep-link to `/app/products?optimize=1`, which opens the one confirmation that states
+what will actually run against the quota (A3.3) and names the plan before the click (A3.1). The
+Optimize *screen* keeps its own distinct job — enhance mode — so nothing became unreachable.
+
+Chosen this direction rather than pointing Products at `/app/optimize`, because the `generateAll`
+action on Products is the well-tested path (`products.generate.test.js`) and sending its own primary
+away would have left it reachable only by tests.
+
+**A latent bug this surfaced:** `app.products.jsx` had `const [, setSearchParams] = useSearchParams()`
+— the value discarded. Reading `searchParams` compiled and typechecked fine and would have been
+`undefined` at runtime. Caught by lint, not by typecheck; a test now pins the destructure.
+
+Guard broken: pointing either Home entry point back at `/app/optimize` fails **2 tests**, printing
+both destinations.
+
+**Not proved:** that the modal opens on a rendered page. Source assertions only — a `useState`
+initialiser that never runs would pass. L15; queued for a human.

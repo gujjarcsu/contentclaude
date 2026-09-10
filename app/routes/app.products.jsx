@@ -516,7 +516,7 @@ export default function ProductsPage() {
   // be visible — on success the action redirects to /app/jobs, so any object
   // return here is an error the merchant needs to see.
   const actionData = useActionData();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [searchValue, setSearchValue] = useState("");
   // Phase 4 item 7 — which product the merchant is being asked to confirm a
@@ -527,7 +527,10 @@ export default function ProductsPage() {
   const [bulkMeta, setBulkMeta] = useState(true);
   const [bulkFaq, setBulkFaq] = useState(false);
   const [bulkError, setBulkError] = useState("");
-  const [generateAllModal, setGenerateAllModal] = useState(false);
+  // A3.2 — opened directly by Home's "Optimize" entry points via
+  // ?optimize=1, so every surface carrying that label ends in this one
+  // confirmation instead of two different next steps.
+  const [generateAllModal, setGenerateAllModal] = useState(searchParams.get("optimize") === "1");
   // Phase 2 item 2.6 — the pending bulk run held back by the publish-without-review
   // confirm: { actionType, ids } while the modal is open, null otherwise.
   const [publishConfirm, setPublishConfirm] = useState(null);

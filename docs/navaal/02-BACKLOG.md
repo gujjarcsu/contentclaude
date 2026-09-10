@@ -33,7 +33,7 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 | ID | Item | Status |
 |---|---|---|
 | A3.1 | Kill the silent redirect. `app.products.jsx:714` sends an unlabelled "Optimize store (N)" straight to `/app/plans`. Entitlement must be visible BEFORE the click: plan badge + explaining modal, or replaced by an upgrade card as Phase 3.4 does for quota. **Never a bare navigate to billing.** | DONE 2d9c37d — plan named in the label, click opens an explaining modal, the action the merchant CAN take stays available. |
-| A3.2 | One behaviour for both entry points. Home (`app._index.jsx:885`) goes to `/app/optimize`; Products goes to billing. | OPEN |
+| A3.2 | One behaviour for both entry points. Home (`app._index.jsx:885`) goes to `/app/optimize`; Products goes to billing. | DONE — there were THREE surfaces with this label, not two. All now deep-link to the one confirmation that states what runs against the quota and names the plan before the click. The Optimize screen keeps its distinct job, enhance mode. |
 | A3.3 | The bulk confirmation modal shows two different counts (`:1083` title vs `:1091` body) and omits the one that governs the outcome. `sliceToQuota` (`app.optimize.jsx:208`) already knows. State: processed now · waiting · realistic time · what covers the rest. | DONE 2d9c37d |
 | A3.4 | Audit every gated surface. `/app/jobs` is reachable on Free for a paid feature. "Generate More" on an empty state — fixed. | DONE (partial) |
 
