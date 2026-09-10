@@ -186,13 +186,17 @@ for (const f of SELECTED) {
     );
 
     // 1. the app's own frame must exist. No mainFrame() fallback, ever.
-    await page.waitForFunction(
-      () => [...document.querySelectorAll("iframe")].some((i) => (i.src || "").includes("app.navaal.ai")),
-      { timeout: 45_000 },
-    );
-    await page.waitForTimeout(6000); // let streamed sections and skeletons settle
-
-    const frame = page.frames().find((fr) => fr.url().includes("app.navaal.ai"));
+    //
+    // Polled from Playwright's frame list, NOT page.waitForFunction: that polls
+    // with requestAnimationFrame inside the page, and the Shopify admin can
+    // starve it long enough to time out while the frame is plainly there.
+    const deadline = Date.now() + 60_000;
+    let frame = null;
+    while (Date.now() < deadline) {
+      frame = page.frames().find((fr) => fr.url().includes("app.navaal.ai"));
+      if (frame) break;
+      await page.waitForTimeout(500);
+    }
     if (!frame) throw new Error("the app frame never appeared");
 
     // 2. + 3. it rendered, and it rendered THIS screen.
