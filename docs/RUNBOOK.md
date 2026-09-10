@@ -138,6 +138,59 @@ as a failure — 410 is never healthy**.
 is not evidence of success. Ask what the check would do if the thing it watches were completely broken.
 All three of these would have passed.
 
+## Shopify's Dev Dashboard says webhooks are failing
+
+Dev Dashboard → Monitoring shows a failure rate per topic and a response time. It does not show why, and
+Fly's log retention will usually have rolled past the deliveries by the time anyone looks. So reproduce
+them:
+
+```bash
+# Runs ON the machine — it signs with SHOPIFY_API_SECRET, which only exists there.
+fly ssh console -a contentclaude --machine <started-web-machine> \
+  -C "node /app/scripts/webhook-probe--writes-fake-shop-only.mjs"
+```
+
+It sends real HMAC-signed deliveries at a range of ages, plus the dedup and shop-mismatch cases, and
+prints the status and time for each. It only ever addresses `navaal-webhook-probe.myshopify.com`, which
+is not a real store, and refuses anything else — `app/uninstalled` and `shop/redact` delete everything
+for the shop named in the `x-shopify-shop-domain` header, so a probe that can be pointed at a merchant
+by editing one string is not acceptable. There is no override flag. Do not add one.
+
+Read the output like this:
+
+| What you see | What it means |
+|---|---|
+| Fresh 200, old 401 | An age/replay rule of ours is refusing Shopify's retries. This is what caused the 88.5% failure rate. |
+| 2nd delivery of the same id is NOT `Duplicate` | The Redis dedup claim is not working; check `REDIS_URL` and `/api/health?deep=1`. |
+| Mismatch case returns 200 | The payload/header shop cross-check has regressed. That is a security defect — a genuine body of ours could be replayed under another merchant's domain. |
+| Everything 200 but slow | Work is happening before the response. See below. |
+
+**Two rules this app must keep.**
+
+1. **Never reject a delivery on its timestamp as a replay defence.** A retry *is* an old delivery.
+   Shopify retries for ~48 h carrying the original `x-shopify-triggered-at`, so any window tight enough
+   to stop a replay is tight enough to refuse a retry. Replay protection is the `x-shopify-webhook-id`
+   dedup claim, which catches a replay on the first attempt. The age check exists only to bound how long
+   the dedup store must remember, and `MAX_WEBHOOK_AGE_MS` and `DEDUP_TTL_SECONDS` are derived from one
+   constant so they cannot drift apart. The mandatory GDPR topics skip the age check entirely.
+
+2. **A webhook answers first and works afterwards.** Deletion is ~26 sequential queries even for an empty
+   shop. Whatever runs before the 200 must be the smallest thing that leaves a durable marker saying the
+   work is owed; the rest goes in `finishAfterResponse`. `sweepUnfinishedWebhookWork` (worker, every
+   10 min) finishes anything a killed process left behind, and shutdown drains in-flight work first.
+   If you add a webhook that deletes or writes a lot, follow that shape or it will time out one day.
+
+**Checking that the deferred half is actually running:**
+
+```bash
+fly logs -a contentclaude --no-tail | grep -E "deferred|webhook_sweep|redaction_unfinished"
+```
+
+`Deferred webhook work finished` with an `ms` field is healthy. `Deferred webhook work failed — the sweep
+will finish it` means look at the next sweep. `redaction_unfinished` or `uninstall_cleanup_unfinished`
+means the sweep found owed work — expected occasionally after a deploy, a standing problem if repeated
+for the same shop.
+
 ## Symptom → action
 
 ### `/api/health` returns 503 with `database: "error"`

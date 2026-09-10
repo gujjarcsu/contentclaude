@@ -1,12 +1,28 @@
 /**
- * Phase 2 item 2.11 — Web Vitals from a US admin, p75 over 10 loads.
+ * SYNTHETIC Web Vitals regression detector. NOT a Built for Shopify measurement.
  *
- * Built for Shopify measures admin LCP, CLS and INP for real merchants, most of
- * whom are in the US or EU. The app is in Sydney. Measuring from Sydney would
- * flatter it by roughly the width of the Pacific, so this throttles the network
- * to a US-to-Sydney round trip rather than pretending the distance is not there.
+ * READ THIS BEFORE QUOTING ANY NUMBER THIS PRINTS.
  *
- * Targets (Built for Shopify): LCP <= 2.5s, CLS <= 0.1, INP <= 200ms.
+ * This is a regression detector: it produces a stable figure under fixed,
+ * deliberately pessimistic conditions, so a change that makes the app slower
+ * shows up as a change in the figure. That is all it is for.
+ *
+ * It is NOT comparable to the Built for Shopify thresholds, for two reasons:
+ *
+ *  1. `web-vitals` runs in the TOP-LEVEL document, which is admin.shopify.com,
+ *     not this app. The LCP element it picks is usually Shopify's own admin
+ *     chrome. Shopify's documentation warns that synthetic tools misread
+ *     embedded apps for exactly this reason.
+ *  2. It emulates 200 ms of latency on every request, which no merchant has.
+ *
+ * On 2026-09-09 this harness reported LCP 4644-5892 ms and the Phase 2 item
+ * 2.11 write-up concluded the app "fails on all three screens, by roughly two
+ * to three times". Shopify's field data — App Bridge, real merchant sessions,
+ * p75 over 28 days, which is what Built for Shopify actually grades — read
+ * LCP 895 ms and INP 16 ms, both Good. The app was passing the entire time.
+ *
+ * So: use this to compare a before against an after. Never against 2500 ms.
+ * The authoritative numbers are in the Dev Dashboard, not here.
  *
  *   node tools/proof/web-vitals.mjs --label before
  *   node tools/proof/web-vitals.mjs --label after
@@ -22,6 +38,11 @@
 import { chromium } from "@playwright/test";
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+
+const BANNER =
+  "SYNTHETIC — top-level admin document, 200 ms emulated latency. " +
+  "Use for before/after only. NOT comparable to Built for Shopify thresholds; " +
+  "the authoritative LCP/INP are in Shopify's Dev Dashboard (field data, p75 over 28 days).";
 
 const STORE = process.env.SHOP_HANDLE || "navaal-qa-fresh";
 const AUTH = "tests/e2e/.auth/shopify.json";
@@ -212,12 +233,17 @@ async function run(label) {
     store: STORE,
     runs: RUNS,
     emulatedLatencyMs: US_LATENCY_MS,
-    targets: { LCP_p75_ms: 2500, CLS_p75: 0.1, INP_p75_ms: 200 },
+    // Deliberately NOT called "targets". These figures measure the top-level
+    // admin document under emulated latency; comparing them to the Built for
+    // Shopify thresholds is the mistake this harness already caused once.
+    measurement: "synthetic-top-level-document",
+    notComparableTo: "Built for Shopify (field data, App Bridge, p75 over 28 days)",
     results,
   };
   const out = join(OUT_DIR, `${label}.json`);
   writeFileSync(out, JSON.stringify(payload, null, 2));
   console.log(`\nWrote ${out}`);
+  console.log(`\n${BANNER}`);
 }
 
 function compare() {
@@ -237,11 +263,11 @@ function compare() {
         metric,
         before: b.results[screen]?.[metric] ?? null,
         after: a.results[screen]?.[metric] ?? null,
-        target: a.targets[metric],
       });
     }
   }
   console.table(rows);
+  console.log(`\n${BANNER}`);
 }
 
 const args = process.argv.slice(2);

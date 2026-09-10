@@ -2284,3 +2284,249 @@ Phase 1 item 2: **the database is in Sydney and the merchants are not.**
 alongside `results.json` with each screen's `scrollWidth`. The widest element anywhere was a Polaris tab
 disclosure button on Products at 485px, which is inside its own scroll container and does not overflow
 the page.
+
+---
+
+# 2026-09-10 — Corrections and reconciliations, before Phase 3
+
+Three things the owner brought back from Shopify's Dev Dashboard, which neither of us had been reading.
+Two of them correct claims made above. Under the append-only rule the original text stays; this section
+is what supersedes it.
+
+## CORRECTION 1 — item 2.11: LCP passes. My harness was measuring the wrong thing.
+
+The table under "Web Vitals, p75 over 10 loads" reports **LCP 5892 / 5036 / 4644 ms** and concludes
+**"LCP fails on all three screens, by roughly two to three times."**
+
+**That conclusion is wrong and is withdrawn.**
+
+Shopify's own field data for this app — App Bridge, real merchant sessions, **p75 over 28 days**, which
+is the measurement Built for Shopify actually grades against:
+
+| Metric | Shopify field data | BFS threshold | Verdict |
+|---|---|---|---|
+| LCP | **895 ms** | p75 ≤ 2500 ms | **Good** |
+| INP | **16 ms** | p75 ≤ 200 ms | **Good** |
+
+Not marginal — 895 ms against a 2500 ms budget. The app was passing the whole time I was reporting it as
+failing by two to three times.
+
+**Why my number was wrong.** Two compounding errors, both mine:
+
+1. `web-vitals` runs in the **top-level document**, which is `admin.shopify.com`, not this app. So the
+   LCP element it picked was Shopify's admin chrome. I wrote that caveat down at the time — "the LCP
+   element may belong to the Shopify admin chrome rather than to this app" — and then drew a conclusion
+   about *this app's* performance from the number anyway. Writing the caveat and then ignoring it is
+   worse than not knowing, because it reads as though the number had been qualified.
+2. On top of that the harness **emulates 200 ms of latency on every request**. That is a deliberately
+   pessimistic synthetic condition, not what a merchant experiences.
+
+Shopify's documentation warns specifically that synthetic tools misread embedded apps for exactly this
+reason. I had not read it.
+
+**What the harness is now, and what it is not.** `tools/proof/web-vitals.mjs` is kept, because a
+regression detector that produces a stable number under fixed conditions is useful. It is **synthetic,
+measures the top-level document including Shopify's own chrome, and applies 200 ms of emulated latency.
+Its LCP figure is NOT comparable to the Built for Shopify threshold and must never be quoted against
+it.** The harness now prints that in its own output so the number cannot be lifted out of context again.
+
+**Consequences, recorded so they are not re-litigated later:**
+
+- **No LCP optimisation work is to be done in any later phase on the strength of those numbers.** There
+  is no measured LCP problem. Work aimed at a number that is already 895 ms against a 2500 ms budget is
+  work spent on nothing, and every hour of it is an hour not spent on something a merchant would notice.
+- **The two-region question is DEPRIORITISED.** Phase 1 item 2 named "the database is in Sydney and the
+  merchants are not" as the largest remaining latency lever, and the section above repeats it as a Phase
+  3 question. The field data does not show a latency problem, so there is nothing to justify the cost
+  and the failure modes of a second region. It stays recorded as an option, not a plan.
+
+## CORRECTION 2 — the install count: 3 was never a count of installs.
+
+I reported **3 shops**. Shopify reports **4 merchants / 4 installs**. Shopify is right; my number was
+measuring something else and I described it as though it were an install count.
+
+Every shop domain that has ever touched this database, and what holds it:
+
+| Shop | Shop row | Session | Admin API | Reading |
+|---|---|---|---|---|
+| `contentpilot-dev2` | yes (`pre_tracking`) | yes | 401 (store exists) | **installed** — owner's dev store |
+| `navaal-qa-fresh` | yes (`pre_tracking`, installCount 2) | yes | 401 (store exists) | **installed** — QA store |
+| `navaal-test-2` | yes (`pre_tracking`) | yes | 401 (store exists) | **installed** — owner's test store |
+| `contentpilot-test-4gudawgn` | **no** | yes, last 2026-07-01 | 401 (store exists) | **installed — this is the 4th** |
+| `app-review-85870b77-r78944-a0` | no | yes | **404 (store gone)** | Shopify App Review store, deleted |
+| `app-review-85870b77-r92361-a0` | no | yes | **404 (store gone)** | Shopify App Review store, deleted |
+| `ap13ht-zv`, `222bb2-2a`, `q491r2-si`, `xbbf0y-vp`, `cpbgzr-pu` | no | no | — | automated-check stores; only `shop_redact` audit rows remain, which is correct |
+
+Four stores still exist and hold a session: the three with `Shop` rows, plus
+**`contentpilot-test-4gudawgn.myshopify.com`**. That is Shopify's 4, exactly.
+
+(The 401s are not evidence of uninstallation. This app uses Shopify's *expiring* offline tokens, so every
+stored token is expired by design and a live store answers 401 rather than 200. The 404s are the useful
+signal: that domain no longer resolves, because Shopify deletes App Review stores after a review.)
+
+**Why the 4th is missing.** A `Shop` row is written by install tracking from **inside
+`authenticate.admin`** — that is, when a shop *opens the app*. For a shop that installed before tracking
+shipped, the row is created lazily, on that shop's next authenticated request, as `pre_tracking`. All
+three existing rows carry `pre_tracking`, so **not one of them was recorded live**; they are simply the
+three shops that have opened the app since tracking shipped on 2026-08-26.
+`contentpilot-test-4gudawgn` last authenticated on **2026-07-01** — it still holds the pre-reduction
+scope set (`write_metaobject_definitions, write_metaobjects, write_products, write_content`) — and has
+not opened the app since, so no row was ever created for it.
+
+**So `Shop` row count answers "how many shops have opened the app since 2026-08-26", not "how many
+shops have the app installed".** I used it as the second and it is the first. Nothing is broken; the
+label was wrong, and it was wrong in the flattering direction, which is the direction that matters.
+
+**One thing this is worth being plain about:** all four installs are ours or Shopify's — two owner dev
+stores, one QA store, one old test store. **There are no real merchants on this app.** "4 merchants" in
+Shopify's dashboard is a count of installs, not of businesses using the product.
+
+## WEBHOOK FAILURES — diagnosed, fixed, proven live
+
+Shopify's Dev Dashboard, 7 days, flagged **High**:
+
+| Topic | Failure rate | Deliveries | Response time |
+|---|---|---|---|
+| `app/uninstalled` | **82.353%** | 17 | 1,039 ms |
+| `shop/redact` | **100.0%** | 9 | 816 ms |
+| **Overall** | **88.5%** | | |
+
+`shop/redact` is a mandatory GDPR topic. Failing every delivery of it is a compliance failure, not a
+lost notification.
+
+### Diagnosis — measured, not assumed
+
+Fly's log retention had already rolled past the failing deliveries, so there was nothing to read. I wrote
+`scripts/webhook-probe--writes-fake-shop-only.mjs` (committed, listed in `scripts/README.md`) to
+reproduce a delivery exactly — same HMAC over the same raw body, same headers, varying only the age —
+against production, using `navaal-webhook-probe.myshopify.com`, which is not a real store. The script
+refuses any other domain, with no override flag, because `app/uninstalled` deletes everything for the
+shop named in the header.
+
+**Before the fix, against `5dd9a1c`:**
+
+```
+200    183ms  fresh (app/scopes_update)        200     29ms  dedup, 1st delivery
+200     42ms  12 h old                         200     31ms  dedup, 2nd, same id  Duplicate
+401     13ms  25 h old      <-- ours           401     14ms  payload names another shop
+401     21ms  47 h old      <-- ours           200    174ms  payload matches header
+200     39ms  no triggered-at header           200     95ms  uninstalled, no shop in payload
+200    117ms  shop/redact fresh                200     22ms  customers/redact fresh
+401     10ms  shop/redact 25 h old             200     18ms  customers/data_request fresh
+401     14ms  shop/redact 47 h old
+```
+
+That eliminates the two other candidates and names the cause:
+
+- **Dedup is innocent.** A redelivery with the same webhook id answered `200 Duplicate`, as designed.
+- **The payload/header shop cross-check is innocent.** A matching payload answered 200; only a genuine
+  mismatch was refused, which is correct.
+- **Every fresh delivery of every topic succeeded.** Nothing in the handlers was broken.
+- **The 25 h and 47 h rejections are ours**, and they are the whole failure rate.
+
+### Cause
+
+`MAX_WEBHOOK_AGE_MS` was **24 h**. Shopify retries for **~48 h**, 19 attempts, and every retry carries
+the **original** `x-shopify-triggered-at`. So a delivery that failed once for any transient reason aged
+past 24 h, and from that moment every remaining retry was refused by us — permanently, deliberately, with
+a 401. One transient failure was enough to make a delivery unrecoverable.
+
+`shop/redact` is worse, and explains the 100%: it **arrives 48 h after the uninstall**. It was outside a
+24 h window before Shopify's first attempt was even made. It could never have succeeded.
+
+The owner's leading hypothesis was exactly right, and it was a trade-off I had written down when I
+shipped it in Phase 0 item 2 — the docblock said in as many words that "were the app unreachable for
+more than 24 h, a compliance retry arriving after that window would be rejected rather than processed".
+I recorded the risk and then did not act on it, and it was not hypothetical: it was already happening.
+
+### The fix, against the owner's three requirements
+
+**(a) A genuine retry is always accepted inside its full retry window.** The window is now 7 days, well
+past the ~48 h schedule, so no genuine retry can land near a boundary.
+
+**(b) Mandatory compliance topics are never rejected on age.** `shop/redact`, `customers/redact` and
+`customers/data_request` skip the timestamp check entirely — not a wider window, no check. Performing a
+deletion we were not owed costs a merchant nothing; refusing one we were owed is the failure that
+matters.
+
+**(c) Replay protection still holds, by webhook id.** The dedup claim is now the only replay primitive,
+and it is the stronger one: it catches a replay on the **first** attempt rather than after a day. The age
+check is demoted to one job — bounding how long the dedup store must remember — and is derived from the
+same constant as `DEDUP_TTL_SECONDS`, so the two cannot drift apart and open a gap in which a replay is
+both too young to reject and no longer remembered. A test asserts they stay equal.
+
+**The general lesson, now in the source so it survives me:** an age cutoff cannot be a replay defence,
+because *a retry is an old delivery*. Any window short enough to stop a replay is short enough to refuse
+a retry. I had built the replay defence twice — once correctly, by webhook id, and once incorrectly, by
+age — and the incorrect one was the one that fired.
+
+### Response times
+
+The 1,039 ms and 816 ms are **round trips, not rows**. `chunkDelete` walks 13 models issuing a `findMany`
+and a `deleteMany` each, so a shop with **no data at all** still spent ~26 sequential queries against
+Neon before the 200 went out. That is also how a delivery earns the first transient failure that the 24 h
+window then made permanent — the two defects fed each other.
+
+Both handlers now do the smallest **durable** thing and answer, then finish the work:
+
+| Topic | Before the 200 | After the 200 |
+|---|---|---|
+| `app/uninstalled` | stamp `uninstalledAt` | capture carryover, cancel in-flight jobs, delete |
+| `shop/redact` | write the GDPR audit row | delete, then anonymise the `Shop` row **last** |
+
+Answering 200 tells Shopify never to send that delivery again, so this trade is only honest if a process
+killed mid-deletion loses nothing. The split is chosen so the synchronous half always leaves a marker
+saying the work is owed:
+
+- `app/uninstalled` — `uninstalledAt` set **and** `Session` rows still present
+- `shop/redact` — a `GDPRRequest(shop_redact)` row exists **and** `Shop.redactedAt` is still null
+
+`sweepUnfinishedWebhookWork` runs in the worker every 10 minutes and finishes exactly those two states,
+and `gracefulShutdown` drains in-flight deferred work before exit, so a routine deploy cannot interrupt a
+redaction that started two seconds earlier. There is no window in which work is both owed and forgotten.
+
+### Proof — real deliveries against `224211a` in production
+
+```
+── the retry window
+  200    261ms  fresh                     200     36ms  1st delivery
+  200     38ms  12 h old                  200     47ms  2nd, same id      Duplicate
+  200     32ms  25 h old   <-- was 401  ! 401     18ms  payload names ANOTHER shop
+  200     31ms  47 h old   <-- was 401    200     46ms  payload matches the header
+  200     27ms  no triggered-at header
+── mandatory compliance topics, at ages that used to be refused
+  200     34ms  shop/redact fresh         200     42ms  customers/redact fresh
+  200     28ms  shop/redact 25 h old      200     22ms  customers/data_request fresh
+  200     79ms  shop/redact 47 h old
+  200     16ms  shop/redact 10 days old
+```
+
+Every previously-refused case now returns 200. Replay protection and the shop cross-check are unchanged.
+
+Response times, same probe shop, before → after: `shop/redact` **117 ms → 34 ms**, `app/uninstalled`
+**174 ms → 46 ms**. More importantly the response time is now **independent of how much data the shop
+has**, because the deletes no longer happen before the answer. Production logs confirm the deferred half
+runs and completes:
+
+```
+event: app_uninstalled_deferred   ms: 142   "Deferred webhook work finished"
+event: shop_redact_deferred       ms: 108   "Deferred webhook work finished"
+event: shop_redacted                        "Shop redacted"
+```
+
+— a 46 ms answer to Shopify with 142 ms of work behind it, instead of 1,039 ms in front of it.
+
+### Still to confirm
+
+**The dashboard failure rate is a 7-day trailing figure, so it cannot move immediately.** It must be
+re-read on **2026-09-11** and again on **2026-09-17**, once a full 7 days of post-fix deliveries have
+accumulated. Recorded here as an open item, not as a result: the probe proves the mechanism, the
+dashboard is what proves the outcome.
+
+| | Before | After |
+|---|---|---|
+| Overall failure rate (7 d) | **88.5%** | _pending — re-read 2026-09-17_ |
+| `app/uninstalled` | 82.353% of 17 | _pending_ |
+| `shop/redact` | 100.0% of 9 | _pending_ |
+| Probe: retry at 25 h / 47 h | **401 / 401** | **200 / 200** (verified live) |
+| Probe: `shop/redact` at 25 h / 47 h / 10 d | **401 / 401 / —** | **200 / 200 / 200** (verified live) |
