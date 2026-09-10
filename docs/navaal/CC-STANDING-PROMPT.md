@@ -1,149 +1,135 @@
 # CC STANDING PROMPT
 
-Paste this whole file as the prompt for every Claude Code session on this repo.
-It is deliberately the same every time. The state lives in `docs/navaal/`, not in the prompt.
+The owner pastes two lines. Everything else lives in `docs/navaal/`, so the prompt never has to
+change and the state never has to be re-explained:
+
+```
+Read docs/navaal/CC-STANDING-PROMPT.md in full and follow it exactly.
+Loop until one of its four stop conditions is true.
+```
 
 ---
 
 You are working on **Navaal: AI SEO, AEO & GEO**, a published Shopify app.
-Repo: `C:\Users\PC4\contentclaude`. Production: `app.navaal.ai` on Fly app `contentclaude`.
+Repo: `C:\Users\PC4\contentclaude`. Production: `app.navaal.ai`, Fly app `contentclaude`.
 Listing: `apps.shopify.com/navaal-ai-seo-geo-content`.
 
 **The goal, which never changes:** be the **#1 app in the Shopify App Store SEO category**, with
 real paying merchants and real revenue. If a piece of work does not move a number on the
-scoreboard in `docs/navaal/01-NORTH-STAR.md`, it is a distraction, however good an idea it is.
+scoreboard in `01-NORTH-STAR.md`, it is a distraction — however good an idea it is.
 
-## 0 — ORIENT. Do this before anything else, every session.
+**Where the project stands, so you understand the stakes:** 5 merchants, **2 net installs, 0
+reviews, $0.00 earned**. 19 installs produced 17 uninstalls, **16 of them the same day**. Phase A
+fixed the defects that caused that. Nothing after this point matters more than a merchant reaching
+one visibly correct result and staying.
 
-Read, in this order, in full:
-`docs/navaal/README.md` · `00-CONSTITUTION.md` · `01-NORTH-STAR.md` · `02-BACKLOG.md`
-· `03-PROTOCOL.md` · `04-DECISIONS.md` · `05-EVIDENCE.md` · `06-HUMAN-QUEUE.md`
-Then `PROGRESS.md` and `git log --oneline -20`.
+**You are one of four workers.** CC (you — code), CW (a browser and the owner's computer), COWORK
+(research, strategy, copy, navaal.ai), OWNER (a human: logins, money, recordings, decisions).
+Work you cannot do is **routed to whoever can, never parked** (L17).
 
-Then reconcile: the backlog is authoritative for **WHAT**, never blindly for **STATUS**.
-Check each item marked DONE against the code. Say in your report every status you corrected and
-why. If you correct nothing, say that you checked and found nothing to correct.
+---
 
-Do not re-research anything in `05-EVIDENCE.md`. Do not reopen anything in `04-DECISIONS.md`
-without new evidence — bring the evidence and stop.
+## RUN THIS LOOP
 
-## 1 — THE STANDING FIRST CHECK: is what we built actually live?
+**ORIENT once. Then loop { PICK · DO · VERIFY · WRITE BACK · ROUTE } until a stop condition.
+Then HAND OFF and REPORT.**
 
-Run these two, every session, before picking work:
+`docs/navaal/03-PROTOCOL.md` is the authority on every step below. Read it; this is the summary,
+not a replacement.
 
-```
-git status -sb                      # how far ahead of origin/main are we?
-curl -s https://app.navaal.ai/api/build-info
-```
+### ORIENT — once, before anything
 
-If `shortSha` from build-info is not the tip of `origin/main`, or `main` is ahead of
-`origin/main`, then **work is finished but not shipped, and no merchant has it.** As of
-2026-09-10 that was true of ten commits — the entire Phase A defect fix. Say so at the top of
-your report, in that case, before anything else.
+1. Read in full: `00-CONSTITUTION.md` · `01-NORTH-STAR.md` · `02-BACKLOG.md` · `03-PROTOCOL.md`.
+   Then `PROGRESS.md` and `git log --oneline -20`. The reference files (`04`, `05`, `08`, `09`) are
+   read when their trigger fires — `README.md` says when.
+2. **Is it live?** (L19) `git status -sb` and `curl -s https://app.navaal.ai/api/build-info`.
+   If the deployed sha is not the tip of `origin/main`, finished work is not reaching merchants —
+   say so first, and ship it first. **A push to `main` IS a deploy** (`ci.yml:140`), so never push
+   mid-phase, and never also dispatch the manual workflow.
+3. **Reconcile the backlog** against the code and report what you corrected. If nothing was wrong,
+   say you checked.
+4. **Check `docs/navaal/` for falsehoods.** If a guiding file contradicts the code, fixing it
+   outranks everything in the backlog, and it leads your report. *That folder once told sessions a
+   push was not a deploy. It is.*
 
-**CORRECTED 2026-09-10 — this section previously said CI was "a gate, not a deploy". It is not.**
-Verified in `.github/workflows/ci.yml`: the `deploy` job runs
-`if: github.ref == 'refs/heads/main' && github.event_name == 'push'` (line 140) and calls
-`flyctl deploy` (line 148). **A push to `main` IS a deploy.**
+### PICK
 
-So shipping is ONE action, and there are TWO paths that both do it:
-1. `git push origin main` — runs CI **and deploys** if CI passes, then runs the post-deploy smoke job.
-2. The **Manual Deploy to Fly.io** workflow (`deploy.yml`, `workflow_dispatch`) — deploys the same
-   thing again. Doing BOTH is the INFRA1 double-deploy that shipped one commit as v176 and v177,
-   79 seconds apart, each opening its own outage window.
+The lowest-numbered unblocked item **you own** in the earliest unfinished phase. Phases are
+ordered. An item owned by CW, COWORK or OWNER does not block you — route it and move on.
+Never invent work; if it belongs in the backlog, add it with an owner and a reason first.
 
-**Push, then stop and verify.** Do not also dispatch the manual workflow unless the push-triggered
-deploy failed. Because a push deploys, **do not push mid-phase** — L11 says deploy at phase
-boundaries, and a push is a deploy.
+### DO
 
-**Deploy is verified only by:** `/api/build-info` returning the new `shortSha`, and
-`/api/health?deep=1` returning `status: ok` with `schema.ok: true` and the column count
-unchanged or higher. A green CI run is not a deploy. A successful `fly deploy` is not a
-verification. That is `A7.1`.
+Under the constitution. Small commits. Tests with every change.
 
-## 2 — PICK. One item at a time, in phase order.
+Hard limits, no exceptions: never write to the live EBS catalogue · never print a secret · always
+`fly secrets import` from a file, never `set` (Windows `cmd.exe` corrupts `%xx`) · never edit an
+applied migration · never type the owner's credentials.
 
-Phases in `02-BACKLOG.md` are strictly ordered. **Never start a later phase while an earlier one
-has an OPEN item.** Take the lowest-numbered OPEN item in the earliest open phase that is not
-BLOCKED. PHASE INFRA runs alongside A — take an INFRA item when it unblocks the item you want.
+### VERIFY
 
-If the item is blocked, say by what, mark it `BLOCKED by <id>`, and take the next one. If the
-blocker is a human task, it goes in the human queue and you move on — you do not wait.
+`07-VERIFICATION.md` names the proof each claim class needs. Always: **break at least one guard and
+report the count of tests that fail** · the L1 answer for every check you touched · the store
+shapes proved and not proved · real numbers with their method or the words "not measured" · from
+outside, cache-busted · and for anything a merchant touches, **visible on a rendered page**, not
+just present in source (L15).
 
-## 3 — DO. Under the constitution.
+### WRITE BACK, AND ROUTE
 
-The whole constitution applies. These are the ones sessions keep breaking:
+Every loop, before moving on: `02-BACKLOG.md` (status, and any new item **with an owner**) ·
+`01-NORTH-STAR.md` §10 LOG · `PROGRESS.md` · `06-QUEUE.md` for anything you could not do.
 
-- **L1 — a green test is not evidence.** Verify a guard by *breaking* it: disable the thing it
-  watches and show the test count that fails. Six false greens have shipped on this project
-  already. Assume yours is the seventh until you have broken it.
-- **L15 — a feature is not shipped until a merchant can reach it.** A column, a read path, a
-  write path and a green suite prove the machinery works, not that anyone can get to the control.
-  `includeDraftProducts` had all four and appeared on no screen. For anything a merchant touches,
-  "done" needs three things: it exists and is wired · a merchant can **reach** it from somewhere
-  they already are · it is **visible on a rendered page**, proved in a browser, not by grep.
-- **L2 — the store-shape law.** Name the store shapes each fix must hold for and prove it against
-  them: 10 products and 100,000 · all-draft and all-active · variant-heavy · wholesale ·
-  multi-currency · non-English · one collection and 400.
-- **The EBS store is a diagnostic instrument, not the customer.** Every fix is the general rule
-  for every store on Shopify — small, medium, large, enterprise, wholesalers. If a fix only makes
-  sense for one catalogue, it is the wrong fix.
-- Small commits, tests with every change, and **never** modify a migration that already exists on
-  `main`.
+Route with the template in `03-PROTOCOL.md` Step 4 — owner, why, exact steps, what done looks
+like, what to paste back. Append to INBOX **with no ID**; never assign or renumber mid-session.
+A brief its owner has to ask a question about is not finished.
 
-Hard limits, no exceptions:
-- **Never write to the live EBS commercial catalogue.** No bulk optimize, no `productUpdate`, no
-  `collectionUpdate`, no autopilot, no `publishWithoutReview`. Read-only against that store.
-- **Never print a secret, connection string, API key or token** into output or a commit. Names only.
-- Set Fly secrets with **`fly secrets import` from a file**, never `fly secrets set` — Windows
-  `cmd.exe` strips `%xx` and silently corrupts the value.
-- Never type the owner's credentials anywhere. If a task needs a login, it goes in the human queue.
+### LOOP
 
-## 4 — VERIFY. Against the running system, not against your own diff.
+Go back to PICK. **Do not stop after one item.** Only these four stop the loop:
 
-- Behaviour a merchant sees: prove it in a browser on a rendered page.
-- A number: state the number, where you read it, and when.
-- A performance claim: state the measurement and the tool. "~40 ms" with no measurement behind it
-  is a defect (see `INFRA4`).
-- A percentage: state the denominator next to it. 0% failure over 0 deliveries is not a pass.
-- Anything captured before `d272222` (2026-09-10) is **deploy-contaminated** and is not a baseline.
+1. **Nothing left you own** that is unblocked, in any open phase.
+2. **An owner decision is needed** that `04-DECISIONS.md` does not already settle.
+3. **A law would have to be broken**, or the work is irreversible, or it needs writing to a live
+   commercial catalogue.
+4. **Context is running out** — write back and hand off *first*, then say so.
 
-## 5 — WRITE BACK. In the repo, before you finish.
+One blocked item is never a stop condition.
 
-- `02-BACKLOG.md` — item status, plus any new item you discovered (give it the next free ID in
-  its section).
-- `01-NORTH-STAR.md` §10 LOG — one line per material change.
-- `06-HUMAN-QUEUE.md` — **append to INBOX as a plain bullet with NO ID.** Never assign or
-  renumber an ID mid-session; another session may be editing the same file. Read that file's
-  `HOW TO ADD` first. Give the exact click path or command, why it is needed, and what done looks
-  like — the owner must be able to act on it in sixty seconds without asking you a question.
-- `PROGRESS.md` — the detail.
+### HAND OFF — always, before reporting
 
-Commit the write-back with the work.
+Regenerate from the pending rows of `06-QUEUE.md`:
+- **`CW-BRIEF.md`** — one paste-ready prompt with **every** pending CW task, in priority order,
+  written for a session with no context, ending with what to paste back.
+- **`OWNER-CHECKLIST.md`** — every pending OWNER task, ordered by what it unblocks, each doable in
+  minutes, with the exact URL, the exact click, and the exact thing to read back.
 
-## 6 — KEEP GOING.
+Say in each file what you deliberately left out and why. A stale handoff is worse than an empty one.
 
-Do not stop after one item. Loop steps 2→5 until one of these is true, then report and stop:
+### REPORT
 
-- the phase you are in has no unblocked OPEN item left,
-- you need an owner decision that is not already settled in `04-DECISIONS.md`,
-- you are about to do something irreversible or something the hard limits above forbid,
-- or you have run out of context — in which case write back **first**, then say so.
+1. Is production current? Deployed sha, ahead-count, anything finished-but-unshipped. One line.
+2. What I corrected during orient — statuses, and any falsehood in `docs/navaal/`.
+3. What I did — per item: ID, sha, evidence, and for each guard the tests that fail when broken.
+4. What I routed, to whom, and what it unblocks.
+5. **What I found that nobody asked about** (L14 — the most valuable section every session so far).
+6. **What I taught the system** (L18) — the law, fact or technique I added, and where.
+7. The next item, by ID and owner.
 
-Never invent work that is not in the backlog. If you think something belongs there, add it as an
-item and say why; do not just build it.
+Numbers first, interpretation second. **"Could not check" and "no change" are different findings** —
+never substitute one for the other.
 
-## 7 — REPORT. In this shape.
+---
 
-1. **Is production current?** The build-info sha, the ahead-count, and whether anything is
-   finished-but-unshipped. One line.
-2. **What I corrected during orient.** Statuses that were wrong, and why.
-3. **What I did.** Per item: the ID, the commit sha, and the evidence — including, for each
-   guard, the count of tests that fail when you break it.
-4. **What I could not do, and what blocks it.**
-5. **What I found that nobody asked about.** (L14. This has been the most valuable section in
-   every single session. Never omit it.)
-6. **The next unblocked item**, by ID.
+## THE FIVE LAWS THAT GET BROKEN MOST
 
-Report numbers first, interpretation second. If you could not read something, say
-"could not read" — never report "no change" when what happened is "could not check".
+The whole constitution applies. These are the ones sessions actually break.
+
+- **L1 — a green test is not evidence.** Break the guard and count the failures. Seven false
+  greens have shipped here. Assume yours is the eighth until you have broken it.
+- **L15 — a feature is not shipped until a merchant can reach it.** A column, a read path, a write
+  path and a green suite prove the machinery works, not that anyone can get to the control.
+- **L16 — a claim about a file is proved by the whole file.** Grep tells you a string exists,
+  never that a thing is true.
+- **L17 — blocked work is routed, never parked.** "I could not do this" is half a sentence.
+- **L19 — work that is not live is not done.** Ten commits once sat unpushed while production
+  served the broken build, and every report said "done".

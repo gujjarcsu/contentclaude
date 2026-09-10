@@ -1,11 +1,37 @@
 # BACKLOG — the single source of truth for WHAT IS LEFT
 
-Status values: `OPEN` · `IN PROGRESS` · `DONE <sha>` · `VERIFIED <sha>` · `BLOCKED <by>`
+Status: `OPEN` · `IN PROGRESS` · `DONE <sha>` · `VERIFIED <sha>` · `BLOCKED <by>` · `CLOSED`
+Owner: **`CC`** code · **`CW`** browser + the owner's computer · **`COWORK`** research, strategy,
+copy, navaal.ai · **`OWNER`** a human: logins, money, recordings, decisions.
 
-**This file is authoritative for WHAT, not for STATUS.** At the start of every session,
-reconcile status against the code and `PROGRESS.md`, and say what you corrected (Protocol §1).
+**Authoritative for WHAT, never blindly for STATUS.** Reconcile against the code every session and
+report what you corrected (Protocol Step 0c).
 
-Phases are strictly ordered. Never start a later phase while an earlier one has OPEN items.
+**Phases are ordered.** Never start a later phase while an earlier one has an unblocked item *you
+own*. An item owned by someone else is **routed** to them (`06-QUEUE.md`) and does not stop you (L17).
+
+**Every phase closes on a gate**, not on its rows being ticked. The gate is the thing a merchant
+or the App Store can see.
+
+---
+
+## THE MAP
+
+| Phase | What it buys us | Gate that closes it | Status |
+|---|---|---|---|
+| **A** | We stop embarrassing ourselves in front of the merchants who would have reviewed us | Every defect fixed and **live**; deep health ok on the new sha | **CLOSED `d21b5bb`** |
+| **INFRA** | Incidents are traceable and deploys are safe | Log retention ≥30 days; a duplicate deploy is a no-op; a restore drill on record | 2 of 7 done |
+| **B** | Trust, and the Built for Shopify badge becomes reachable | A BFS audit with evidence per criterion, and no criterion failing for a reason we control | Not started |
+| **C** | We can take money, at the prices we decided | A merchant can subscribe, be billed, upgrade and downgrade — proved end to end on a real store | Not started |
+| **D** | **The moat.** We can prove the product worked | A merchant sees, on their own store, a number that went up because of us — and can check it | Not started |
+| **E** | Reach: the stores we currently refuse or mishandle | Multi-language, B2B and Markets each either work or refuse honestly and say so | Not started |
+| **G** | **Installs and reviews.** Gate 1 of the ladder | 50 net installs on paid Shopify plans, 5 reviews, rating ≥4.9 | Not started |
+| **R** | It keeps working, and merchants stay | Churn instrumented and ≤2%; an on-call story; support that does not need a human per merchant | Not started |
+| **F** | The fixture matrix — built continuously, not as a phase | Every axis in `05-EVIDENCE.md` §4 has a proved cell or a named gap | Ongoing |
+
+**Phase D contains the business. Phase G contains the revenue.** A and B are what stop us losing
+before we start. It is possible to finish every product item and still have zero installs — which
+is exactly why G exists as a phase with owners, and not as a wish.
 
 ---
 
@@ -79,6 +105,8 @@ Only A4.9 and A6.6 remain, both BLOCKED on human/infra tasks, not on code.
 
 ## PHASE INFRA — carry alongside A. These are cheap and they unblock other work.
 
+*Owner: `CC` for every INFRA row unless the row says otherwise.*
+
 | ID | Item | Status |
 |---|---|---|
 | INFRA1 | Deduplicate deploys. `ci.yml` on push + `deploy.yml` on dispatch; `concurrency` serialises without deduping. | **DONE, PROVED LIVE** (`64c703b`) — dispatched `deploy.yml` during a push of the same commit. Manual read `live sha: 693db1c` (old) and DEPLOYED; CI read `live sha == target sha` and logged *"This commit is already live — skipping a duplicate deploy (INFRA1)"*. **One deploy, not two.** Whichever runs second skips, so the order does not matter. BOTH paths now skip a commit that is already live. `deploy.yml` gains a `force` input for repairing a broken deploy and a post-deploy confirmation step; `ci.yml` needs no force because a re-run after a FAILED deploy self-selects (build-info still reports the old commit). **Fails safe**: an unreadable build-info deploys rather than skips — refusing to deploy because we could not check is how a broken production stays broken. Logic proved against four cases. |
@@ -92,67 +120,126 @@ Only A4.9 and A6.6 remain, both BLOCKED on human/infra tasks, not on code.
 
 ---
 
-## PHASE B — TRUST AND THE BADGE
+---
 
-| ID | Item | Status |
-|---|---|---|
-| B1 | Discoverable entry points for Collections, Jobs, Plans. Nav stays five items; add Home entries or a labelled secondary group. Say which and why. | OPEN |
-| B2 | Reorder Home: score → what we found → the one action that fixes the most. The ~200-word FAQ-schema setup block is premature (zero published content) and sits above everything; "Run audit" is last. | OPEN |
-| B3 | Collections: candidate count, filter, sort; stop instructing "generate for each" where 21 of 30 already have better copy; Enhance/Generate split (A4.3). | OPEN |
-| B4 | Empty collections: warn on the action, show the has-content indicator — do not block. Several empty brand collections carry deliberate hand-written copy. Exclude catch-all utility collections. | OPEN |
-| B5 | "Voice Override" on every collection row is undocumented. Say what it does, whether it is gated, selling point or dead weight. Then decide. | OPEN |
-| B6 | *(completed early, during Phase A — flagged not hidden)* Dev-store residue sweep: snowboard, ski, snow, wax and every Shopify demo example. Test that fails on those strings in user-facing copy. | DONE 2f8dd98 — done OUT OF PHASE ORDER while in Phase A; flagged rather than hidden. |
-| B7 | Built for Shopify audit with evidence per criterion: App Bridge latest via **script tag** · perf p75 needs ≥100 calls (report whether we have them — under 100 is *ungraded*, not passing) · storefront Lighthouse impact of `navaal-geo-schema` as a number · Asset API (confirm untouched or quote the SEO-tool exception) · Polaris · no dark patterns (A3.1 currently fails). | OPEN |
-| B8 | Contextual save bars — a named BFS requirement we do not use. Settings' bottom Save button means scrolling past six cards with no unsaved-changes indication. Audit every form. | OPEN |
-| B9 | Recount upsell surfaces against the Phase 3.4 budget of two. Six are visible today. | OPEN |
+## PHASE B — TRUST AND THE BADGE
+**Gate:** a Built for Shopify audit with evidence per criterion, and no criterion failing for a
+reason inside our control.
+
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| B1 | CC | Discoverable entry points for Collections, Jobs, Plans. Nav stays five items; add Home entries or a labelled secondary group. Say which and why. | OPEN |
+| B2 | CC | Reorder Home: score → what we found → the one action that fixes the most. The ~200-word FAQ-schema setup block is premature (zero published content) and sits above everything; "Run audit" is last. | OPEN |
+| B3 | CC | Collections: candidate count, filter, sort; stop instructing "generate for each" where 21 of 30 already have better copy; Enhance/Generate split (A4.3). | OPEN |
+| B4 | CC | Empty collections: warn on the action, show the has-content indicator — do not block. Several empty brand collections carry deliberate hand-written copy. Exclude catch-all utility collections. | OPEN |
+| B5 | CC | "Voice Override" on every collection row is undocumented. Say what it does, whether it is gated, selling point or dead weight. Then decide. | OPEN |
+| B6 | CC | *(completed early, during Phase A — flagged not hidden)* Dev-store residue sweep. | DONE 2f8dd98 |
+| B7 | CC + CW | Built for Shopify audit with evidence per criterion: App Bridge latest via **script tag** · perf p75 needs ≥100 calls (report whether we have them — under 100 is *ungraded*, not passing) · storefront Lighthouse impact of `navaal-geo-schema` as a number · Asset API · Polaris · no dark patterns. **CC audits the code; the dashboard reading is a CW task** — route it. | OPEN |
+| B8 | CC | Contextual save bars — a named BFS requirement we do not use. Settings' bottom Save button means scrolling past six cards with no unsaved-changes indication. Audit every form. | OPEN |
+| B9 | CC | Recount upsell surfaces against the budget of two. Six are visible today. | OPEN |
+| B10 | CC | **Reachability sweep of every merchant-facing setting and action** (L15, extends A4.7). Not one guard for one boolean: a test that enumerates every setting the rules read and asserts each has a control on a reachable screen. Then prove three of them on a rendered page — that part is a CW task. | OPEN |
+| B11 | CC | **Uninstall and reinstall is a first-class path.** What happens to a shop's content, quota and settings on `app/uninstalled` then reinstall? A merchant who reinstalls and finds their work gone leaves a one-star review. Prove it on a dev store. | OPEN |
+| B12 | CC | **Error states are a product surface.** Every failure a merchant can hit — throttled, model down, quota gone, no Search Console, Shopify 5xx — says what happened, what it means and what they can do. Never a stack trace, never a silent zero (L5). Enumerate them; fix the ones that lie. | OPEN |
 
 ---
 
-## PHASE C — PRICING. Decided. Implement as written in `04-DECISIONS.md`.
+## PHASE C — PRICING. Decided in `04-DECISIONS.md`; implement as written.
+**Gate:** a merchant can subscribe, be billed, upgrade and downgrade — proved end to end on a real
+store, with the money appearing where it should.
 
-| ID | Item | Status |
-|---|---|---|
-| C1 | Two-axis plan definitions in `billing-plans.js` (products AND generations). | OPEN |
-| C2 | Entitlements, `remainingGenerations`, `sliceToQuota`, product-cap checks in `plans.server.js`. | OPEN |
-| C3 | Rebuild the Plans page to the new table, annual default, 14-day trial. | OPEN |
-| C4 | Product-cap enforcement: **audit never capped, any plan, any size**; generation is what the cap limits; never block reviewing, publishing or restoring the merchant's own content. | OPEN |
-| C5 | Rollover one month, capped at one allowance. Gate-rejected generations never billed (explicit, tested, on the Plans page and the listing). | OPEN |
-| C6 | Add-on one-time purchases: generation packs, prompt packs, competitor slots. Done-for-you as a contact action, not self-serve. | OPEN |
-| C7 | BYO AI key, Enterprise only: encrypted at rest, never logged, never returned to the client, validated on save, honest banner on failure, **never silently falls back to our key**. Report how you stored it. | OPEN |
-| C8 | Verify against Shopify's current Billing API that 14 trial days, ANNUAL interval and one-time purchases all work as specified. Do not assume. | OPEN |
-| C9 | Migration: grandfather existing shops at their current price for 12 months, tell them in-app what changed. Cheap now, impossible later. | OPEN |
-| C10 | Report 12-month gross margin per tier at realistic (burst-then-maintenance) utilisation. Flag any tier under 70%. | OPEN |
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| C0.1 | CC | **Measure the real cost per generation**, per content type, and replace the `ASSUMED` figures in `08-ECONOMICS.md`. Everything in the pricing table rests on one unmeasured number (L3). Keep the constant in ONE place so a model price change is one edit. | OPEN |
+| C0.2 | CC | Instrument actual monthly quota utilisation per plan cohort. Alert if Scale's median sustained use passes break-even. | OPEN |
+| C0.3 | CC | Design the bring-your-own-key path so it can be offered **one tier below Enterprise** if C0.2 says Scale is being used as an unlimited plan. Build the switch, do not throw it. | OPEN |
+| C1 | CC | Two-axis plan definitions in `billing-plans.js` (products AND generations). | OPEN |
+| C2 | CC | Entitlements, `remainingGenerations`, `sliceToQuota`, product-cap checks in `plans.server.js`. | OPEN |
+| C3 | CC | Rebuild the Plans page to the new table, annual default, 14-day trial. | OPEN |
+| C4 | CC | Product-cap enforcement: **audit never capped, any plan, any size**; generation is what the cap limits; never block reviewing, publishing or restoring the merchant's own content. | OPEN |
+| C5 | CC | Rollover one month, capped at one allowance. Gate-rejected generations never billed — explicit, tested, on the Plans page and the listing. | OPEN |
+| C6 | CC | Add-on one-time purchases: generation packs, prompt packs, competitor slots. Done-for-you as a contact action, not self-serve. | OPEN |
+| C7 | CC | BYO AI key, Enterprise: encrypted at rest, never logged, never returned to the client, validated on save, honest banner on failure, **never silently falls back to our key** (L9). Report how you stored it. | OPEN |
+| C8 | CC | Verify against Shopify's **current** Billing API that 14 trial days, ANNUAL interval and one-time purchases work as specified. Read the docs; do not assume (L16). | OPEN |
+| C9 | CC | Migration: grandfather existing shops at their current price for 12 months and tell them in-app what changed. Cheap now, impossible later. | OPEN |
+| C10 | CC | Report 12-month gross margin per tier at realistic (burst-then-maintenance) utilisation. Flag any tier under 70%. | OPEN |
+| C11 | OWNER | **Prove the billing chain with real money**: subscribe on a dev store, upgrade, downgrade, cancel, and confirm each appears in the Partner Dashboard. A billing bug found by a merchant is a one-star review. | OPEN |
 
 ---
 
 ## PHASE D — THE MOAT. This is the business.
+**Gate:** a merchant sees, on their own store, a number that went up because of us — and can click
+through to check it themselves.
 
-| ID | Item | Status |
-|---|---|---|
-| D0 | **Plan and cost estimate for all of D before writing feature code.** What each part needs from the merchant, from Google, cost per shop per month, and what it shows when there is not enough data yet. STOP and report. | OPEN |
-| D1 | Port the AI-visibility probe from `navaal-platform` (`apps/bilby-workers/lib/ai-visibility.cjs` 185 lines, `apps/platform/lib/ai-visibility.ts` 41 lines, plus its test). **Port, do not rewrite.** Add: per-shop scoping · question seeding from the shop's own catalogue (merchant-editable — this is also what makes the prompt-pack add-on sellable) · cadence by plan · **preserve the honest method label exactly** · surface the `rivals` field prominently, it is the pitch. Report actual cost per shop per month. | OPEN |
-| D2 | Indexation proof: URL Inspection API + IndexNow. "38 of 40 indexed; these 2 are blocked and here is why." Binary, days not months. Starter+. | OPEN |
-| D3 | Rich-result eligibility for the FAQ schema we already emit. Instant, binary, and it gives the theme-embed step a visible payoff. | OPEN |
-| D4 | Search Console result proof: impressions, clicks, position for changed URLs, before vs after publish. Handle no property / unverified / domain mismatch / too little data honestly. Say the 2–3 day lag on screen. Growth+. | OPEN |
-| D5 | Control-group holdback: random 10%, visible and opt-out, held-back products clearly marked, refuses to report until both cohorts have data, merchant can end the experiment honestly. Scale+. | OPEN |
-| D6 | **The weekly report — the heartbeat and the anti-churn mechanism.** Send only when there is something to say · one email per week across the whole app · unsubscribe honoured immediately · every number links to the screen that proves it. Reuse `sendOperatorEmail` infrastructure, never its tone. | OPEN |
-| D7 | NOT DOING: a keyword rank tracker. Use Search Console's own position data. | CLOSED — do not reopen |
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| D0 | CC | **Plan and cost estimate for all of D before writing feature code.** What each part needs from the merchant, what it needs from Google, cost per shop per month, and what it shows when there is not enough data yet. STOP and report. | OPEN |
+| D1 | CC | Port the AI-visibility probe from `navaal-platform` (`apps/bilby-workers/lib/ai-visibility.cjs`, `apps/platform/lib/ai-visibility.ts`, plus its test). **Port, do not rewrite.** Add per-shop scoping · question seeding from the shop's own catalogue, merchant-editable (this is what makes the prompt-pack add-on sellable) · cadence by plan · **preserve the honest method label exactly** · surface `rivals` prominently, it is the pitch. Report actual cost per shop per month from the probe's own recorded cents. | OPEN |
+| D2 | CC | Indexation proof: URL Inspection API + IndexNow. "38 of 40 indexed; these 2 are blocked and here is why." Binary, days not months. Starter+. | OPEN |
+| D3 | CC | Rich-result eligibility for the FAQ schema we already emit. Instant, binary, and it gives the theme-embed step a visible payoff. | OPEN |
+| D4 | CC | Search Console result proof: impressions, clicks, position for changed URLs, before vs after publish. Handle no property / unverified / domain mismatch / too little data honestly. Say the 2–3 day lag on screen. Growth+. | OPEN |
+| D5 | CC | Control-group holdback: random 10%, visible and opt-out, held-back products clearly marked, refuses to report until both cohorts have data, merchant can end the experiment honestly. Scale+. | OPEN |
+| D6 | CC | **The weekly report — the heartbeat and the anti-churn mechanism.** Send only when there is something to say · one email per week across the whole app · unsubscribe honoured immediately · every number links to the screen that proves it. Reuse `sendOperatorEmail` infrastructure, never its tone. | OPEN |
+| D7 | — | NOT DOING: a keyword rank tracker. Search Console has position data. | CLOSED — do not reopen |
+| D8 | CC | **The proof must survive a merchant asking "how do you know?"** Every claim in D links to its raw source: the probe run, the Search Console row, the index status. If we cannot show the working, we cannot charge a premium for proof. | OPEN |
+| D9 | OWNER | Verify a Search Console property for a **merchant** store, not just navaal.ai, so D2/D4/D5 can be developed against real data (see H18 in `06-QUEUE.md`). | OPEN |
 
 ---
 
 ## PHASE E — REACH
+**Gate:** multi-language, B2B and Markets each either work, or refuse honestly and say so in the
+app and on the listing. Silence is the only unacceptable answer.
 
-| ID | Item | Status |
-|---|---|---|
-| E1 | Non-English: either extend generation and the gate to the languages we support with both-directions tests per language, or state the supported languages in the app AND the listing and refuse gracefully. Silence is the only unacceptable answer. Handle one catalogue in several languages via Translations. Scale+. | OPEN |
-| E2 | B2B / wholesale: detect B2B context (company accounts, publication scope, catalogues off the Online Store channel). Exclude unpublished products (A1.3); do not write consumer-voice copy for trade-only products. Report what Shopify actually exposes. | OPEN |
-| E3 | Markets, multiple storefronts, expansion stores. Never blend markets into one store score. | OPEN |
-| E4 | Enterprise operations: activity **audit trail** (say whether the Activity screen is one or just a feed), one-action **bulk undo**, safe concurrent staff use. | OPEN |
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| E1 | CC | Non-English: extend generation and the gate to the languages we support with both-directions tests per language, **or** state the supported languages in the app AND the listing and refuse gracefully. Handle one catalogue in several languages via Translations. Scale+. | OPEN |
+| E2 | CC | B2B / wholesale: detect B2B context (company accounts, publication scope, catalogues off the Online Store channel). Exclude unpublished products (A1.3); do not write consumer-voice copy for trade-only products. Report what Shopify actually exposes. | OPEN |
+| E3 | CC | Markets, multiple storefronts, expansion stores. Never blend markets into one store score. | OPEN |
+| E4 | CC | Enterprise operations: activity **audit trail**, one-action **bulk undo**, safe concurrent staff use. | OPEN |
 
 ---
 
-## PHASE F — THE FIXTURE MATRIX. Build as you go; it is a deliverable.
+## PHASE G — INSTALLS AND REVIEWS. Gate 1 of the ladder.
+**Gate:** 50 net installs from shops on **paid** Shopify plans · 5 reviews · rating ≥4.9 · perf p75
+graded over ≥100 calls.
 
-| ID | Item | Status |
-|---|---|---|
-| F1 | Store-shape fixture matrix over every axis in `05-EVIDENCE.md` §4. Report per phase which cells you proved and which you did not. A cell you did not test is a defect you have not found yet. | OPEN |
+Nothing in phases A–F produces a single install. This phase is the one that decides whether any of
+it earns money, and most of it is **not** CC's to do — which is exactly why every row has an owner.
+
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| G1 | COWORK | **Rewrite the App Store listing** on the current product: the five live bullets omit every Phase 4 capability, and the Professional tier still promises "Dedicated account manager" and "SLA support", which `04-DECISIONS.md` forbids by name. Draft; the upload is a CW task. | OPEN |
+| G2 | CW | Upload the rewritten listing: bullets, description, pricing display, and the re-captured screenshots. Read it back on a fresh load. | BLOCKED by H14 |
+| G3 | COWORK | **The positioning line, everywhere the same.** We are the only app that does both halves: generate → publish → prove the citation lift → regenerate what did not land. One sentence, used on the listing, the site, the emails and the first screen. | OPEN |
+| G4 | CC | **The first-run path is the review.** A merchant must reach one visibly correct result before they decide what they think of us. Measure it: install → first proposal → first publish. `ttv-report.mjs` exists and the cohort is empty. | OPEN |
+| G5 | OWNER | Five fresh dev-store installs, ≥10 products each, let the Start state run — populates the TTV cohort and unblocks the acceptance recording. | OPEN |
+| G6 | OWNER | Screen-record ONE install, URL bar visible, grant → first proposal, under 120 seconds. | BLOCKED by G5 |
+| G7 | COWORK | **The review-request moment**, designed: ask once, after a merchant has seen a result that worked, never before. Never a dark pattern, never a nag. At 0 reviews the first five are the hardest and the most valuable. | OPEN |
+| G8 | CC | Implement G7's ask, gated on a real success signal, once per shop, dismissible forever. | BLOCKED by G7 |
+| G9 | COWORK | **Install attribution end to end.** `/go?ref=` handles are placed on 67 static pages, 28 blog posts, home and tools. Still unplaced: `bilby-footer`, `bilby-report` (they live in `navaal-platform`, edited via `packages/tokens/footer.html`). Then: which ref actually converts? | OPEN |
+| G10 | COWORK | Launch surfaces that cost nothing and are ours: the navaal.ai blog, the tools pages, Bilby's audience. Write the three posts that a merchant searching for this problem would find. | OPEN |
+| G11 | OWNER | Submit for Built for Shopify once B7 says every criterion we control passes. | BLOCKED by B7 |
+| G12 | COWORK | **A one-page "why we are different" comparison** against the two apps that overlap us — IndexGPT ($45, tracking only, thin generation) and CartRank ($99, tracking only, zero reviews). Honest, checkable, no strawmen. | OPEN |
+
+---
+
+## PHASE R — IT KEEPS WORKING, AND THEY STAY
+**Gate:** churn instrumented and ≤2% · an on-call story that survives the owner being asleep ·
+support that does not need a human per merchant.
+
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| R1 | CC | **Instrument churn.** Install → paid → cancelled, with the reason where we can get it, and cohort by month. `05-EVIDENCE.md` §3 says halving churn is worth more than any price rise; today we cannot measure it at all. | OPEN |
+| R2 | CC | Define and measure three SLOs a merchant would notice: first-proposal latency, bulk-job completion, and the app's own uptime. Alert on the ones that matter, not on CPU. | OPEN |
+| R3 | CC | The incident story: `LogEvent` retention shipped (INFRA2) — now make it usable. One command that answers "what happened to shop X at time T". | OPEN |
+| R4 | COWORK | Support that scales: the eight questions a merchant will actually ask, answered in-app at the moment they would ask them. Deflection beats a help desk. | OPEN |
+| R5 | CC | **A merchant can leave with their work.** Export everything we generated for them, in a form they can use without us. It is the right thing, it is a listing line, and it removes the fear that blocks the first purchase. | OPEN |
+| R6 | OWNER | Decide the alert-contact route so alerts do not go to one inbox (see H2/H16 in `06-QUEUE.md` — those are queue IDs, not phase IDs). | OPEN |
+
+---
+
+## PHASE F — THE FIXTURE MATRIX. Continuous, not sequential.
+
+| ID | Owner | Item | Status |
+|---|---|---|---|
+| F1 | CC | Store-shape fixture matrix over every axis in `05-EVIDENCE.md` §4. Report per phase which cells you proved and which you did not. **A cell you did not test is a defect you have not found yet.** | OPEN |
+| F2 | CC | One real dev store per shape that matters most: all-draft · variant-heavy · non-English · B2B-only · catalogue above the plan cap. Fixtures model reality; a real store *is* reality. | OPEN |

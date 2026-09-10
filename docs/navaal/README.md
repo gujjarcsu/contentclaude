@@ -29,8 +29,8 @@ when the protocol says its trigger has fired.
 |---|---|
 | `04-DECISIONS.md` | ...any decision about pricing, plans, positioning or scope |
 | `05-EVIDENCE.md` | ...researching anything. If it is here, it is known. Do not re-research it. |
-| `08-VERIFICATION.md` | ...claiming anything is verified. It names the proof each claim class requires. |
-| `09-ECONOMICS.md` | ...anything touching cost, quota, model spend, plan limits or margin |
+| `07-VERIFICATION.md` | ...claiming anything is verified. It names the proof each claim class requires. |
+| `08-ECONOMICS.md` | ...anything touching cost, quota, model spend, plan limits or margin |
 
 ### WRITE TARGETS — you write these; other people and sessions read them
 

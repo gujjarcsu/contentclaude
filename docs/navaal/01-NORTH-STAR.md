@@ -33,21 +33,31 @@ Every promise the app, the listing or a plan makes must be one we keep on the wo
 
 ## 3. THE SCOREBOARD — the only numbers that matter
 
-Update these weekly. Nothing else belongs on this list.
+Read from the Partner Dashboard and the live listing on **2026-09-10**. Update weekly. Nothing
+else belongs on this list. **Every row names who moves it** — a number nobody owns does not move.
 
-| # | Metric | Now | Next gate | Source of truth |
-|---|---|---|---|---|
-| 1 | Paid-plan installs | **0** | 50 | Partner Dashboard |
-| 2 | Reviews | **0** | 5, then 150 | App Store listing |
-| 3 | Rating | **—** | stay ≥ 4.9 | App Store listing |
-| 4 | Built for Shopify | **No** | Yes | Dev Dashboard |
-| 5 | MRR | **$0** | $1k, then $9.9k | Partner Dashboard |
-| 6 | Monthly churn | **—** | ≤ 2% | our own data |
-| 7 | Perf calls counted | **<100?** | ≥100, then p75 pass | Dev Dashboard |
+| # | Metric | Now | Next gate | Who moves it | Source of truth |
+|---|---|---|---|---|---|
+| 1 | Net installs (paid Shopify plans) | **2** | 50 | Phase G — COWORK + OWNER | Partner Dashboard |
+| 2 | Merchants with the app | **5** | — | — | Partner Dashboard |
+| 3 | Reviews | **0** | 5, then ~150 | G7/G8 — the ask, after a result that worked | Listing |
+| 4 | Rating | **— (no feedback yet)** | stay ≥ 4.9 | Phases A, B, R — every kept promise | Listing |
+| 5 | Built for Shopify | **Not yet exposed** | Yes | B7, then G11 | Dev Dashboard |
+| 6 | MRR | **$0.00** | $1k, then $9.9k | Phase C, then G | Partner Dashboard |
+| 7 | Monthly churn | **not instrumented** | ≤ 2% | R1 | our own data — R1 builds it |
+| 8 | Perf calls counted | **~51 over 7 days** | ≥100 over 28 days | installs, i.e. Phase G | Dev Dashboard |
 
-Installs today: 1 real store (EBS, Free tier) + test stores. **Zero paying.**
-
----
+**The uncomfortable readings, 2026-09-10:**
+- **19 installs, 17 uninstalls — 16 of them same-day as the install.** People are arriving and
+  leaving within hours. That is a first-run problem, not a traffic problem, and it is why `G4`
+  (time to first visibly correct result) sits in the growth phase rather than the product one.
+- **No Built for Shopify section is exposed anywhere** in the dashboards — almost certainly because
+  the app is far below the 50-install eligibility bar. The badge is not a task we can start; it is
+  a consequence of Phase G.
+- **The performance grade rests on ~51 loads.** Under 100 calls the app is *ungraded*, not passing.
+  Installs are the input to that number too.
+- **CLS on Sep 10 alone was 0.17 over 9 loads**, well above the 0.1 threshold, while the 7-day p75
+  reads 0.02 Good. A small sample can hide a real regression.
 
 ## 4. THE STRATEGY IN ONE PARAGRAPH
 
@@ -100,21 +110,27 @@ This is the anti-distraction list. Every line here was a tempting idea we reject
 
 ## 7. THE PLAN — phases, in order
 
-Nothing new ships on top of a phase that is not finished.
+Nothing new ships on top of a phase that is not finished. Full detail, with owners and closing
+gates, is in `02-BACKLOG.md`.
 
-| Phase | What | Status |
+| Phase | What it buys | Status |
 |---|---|---|
-| **A** | 29 real-store defects: the candidate primitive, scale caps, entitlement honesty, pre-existing content, variant families, cross-screen contradictions | **CLOSED `d21b5bb`** (A4.9, A6.6 blocked) |
-| **B** | Discoverability, first-run order, Built for Shopify gaps (contextual save bars, dark pattern) | Not started |
-| **C** | Pricing implementation, two-axis plans, migration, BYO key | Not started |
-| **D** | The moat: port the AI-visibility probe, indexation proof, rich-result eligibility, Search Console proof, control-group holdback, **the weekly report** | Not started — plan first |
-| **E** | Reach: multi-language, B2B/wholesale, Markets, enterprise audit trail + bulk undo | Not started |
-| **Ongoing** | The store-shape fixture matrix | Not started |
+| **A** | 29 real-store defects — we stop embarrassing ourselves in front of the merchants who would have reviewed us | **CLOSED `d21b5bb`**, deployed and verified |
+| **INFRA** | Traceable incidents, safe deploys | 2 of 7 done |
+| **B** | Trust, and the badge becomes reachable | Not started |
+| **C** | We can take money at the prices we decided | Not started |
+| **D** | **The moat** — we can prove the product worked | Not started; plan first (D0) |
+| **E** | The stores we currently refuse or mishandle | Not started |
+| **G** | **Installs and reviews** — Gate 1 of the ladder | Not started |
+| **R** | It keeps working, and merchants stay | Not started |
+| **F** | The store-shape fixture matrix | Continuous |
 
-**Phase D contains the business.** Phase A is what stops us embarrassing ourselves in front of the
-merchants who would otherwise have reviewed us.
+**Phase D contains the business. Phase G contains the revenue.**
 
----
+The trap this plan is built to avoid: it is entirely possible to finish every product phase and
+still have **two net installs and zero reviews**. Phase A was necessary — 19 installs produced 17
+uninstalls, 16 of them the same day — but no amount of product work generates an install by itself.
+That is why G is a phase with named owners and not a hope, and why most of its rows are **not CC's**.
 
 ## 8. HOW WE WORK — rules that came from being wrong
 

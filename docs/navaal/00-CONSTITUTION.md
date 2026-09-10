@@ -137,7 +137,7 @@ blocker and stopped, instead of routing it to the one person who could clear it 
 A lesson that lives only in a session report is lost. If you were wrong, if a doc was wrong, if a
 tool lied, or if you found a shape of failure we have not seen before: **write it into the file
 that would have prevented it** — a law here, a fact in `05-EVIDENCE.md`, a technique in
-`08-VERIFICATION.md` — and say in your report that you did.
+`07-VERIFICATION.md` — and say in your report that you did.
 
 The measure of a session is not only what shipped. It is whether the next session is better armed.
 
