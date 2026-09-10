@@ -169,6 +169,12 @@ merchants who would otherwise have reviewed us.
 - Phase A, CC: standing commercial claims (`ea6ee27`) — a rewrite deleted the merchant's two-day
   dispatch, free pickup and price match and replaced them with "Available at EBS". Now two
   severities: compliance/certification hard-fail, commercial claims warn.
+- INFRA, CC: **log retention shipped** (INFRA2) — Fly keeps ~100 lines, so no incident was traceable
+  minutes later and A6.6 was blocked on it. A `LogEvent` table now keeps WARN-and-above plus tagged
+  events for **30 days**, written through a pino multistream so redaction has already run. No new
+  vendor, no new account. Read with `scripts/logs.mjs`.
+- INFRA, CC: **duplicate deploys are now a no-op** (INFRA1) — both `ci.yml` and `deploy.yml` skip a
+  commit that is already live. Fails safe: an unreadable `build-info` deploys rather than skips.
 - **PHASE A CLOSED and DEPLOYED as `d21b5bb`** — 19 commits, `0acb04a..d21b5bb`. Verified cache-busted
   from outside: build-info matches HEAD, deep health `ok`, schema columns 229 → 230 (exactly the one
   column the new migration adds). The P1 fix held: the deploy guard logged "2 web machines, all

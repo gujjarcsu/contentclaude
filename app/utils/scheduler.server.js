@@ -25,10 +25,13 @@ import { buildDailyDigest } from "./digest.server.js";
 import { getRedis } from "./cache.server.js";
 import { runNightlyBackup } from "./backup.server.js";
 import { sweepUnfinishedWebhookWork } from "./webhookWork.server.js";
+import { sweepOldLogs, RETENTION_DAYS } from "./logSink.server.js";
 
 const HEALTH_INTERVAL_MS = 5 * 60 * 1000;
 /** How often the worker looks for webhook work that was acknowledged but never finished. */
 const WEBHOOK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+/** INFRA2 — log retention sweep. Hourly, so a restart never skips a day. */
+const LOG_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const BASE_URL = (process.env.SHOPIFY_APP_URL || "https://app.navaal.ai").replace(/\/$/, "");
 const HEALTH_URL = `${BASE_URL}/api/health?deep=1`;
 /** The embedded admin shell. /api/health can be perfectly healthy while this 500s. */
@@ -70,6 +73,7 @@ const BACKUP_HOUR_SYDNEY = 3;
 let _healthTimer = null;
 let _digestTimer = null;
 let _sweepTimer = null;
+let _logSweepTimer = null;
 // In-memory is enough for the alert state: a worker restart re-alerting once on
 // a genuinely broken system is the correct behavior, not a bug.
 let _lastAlertAt = 0;
@@ -386,6 +390,24 @@ export function startScheduler() {
   }, WEBHOOK_SWEEP_INTERVAL_MS);
   _sweepTimer.unref?.();
 
+  // INFRA2 — retention. Without this the log table grows for ever, which turns
+  // a fix for missing history into a slow database problem. Hourly rather than
+  // daily so a restart never skips a day, and `deleteMany` on an indexed
+  // `createdAt` is cheap when there is nothing to delete.
+  _logSweepTimer = setInterval(() => {
+    sweepOldLogs()
+      .then((r) => {
+        if (r.deleted > 0) {
+          logger.info(
+            { deleted: r.deleted, cutoff: r.cutoff, event: "log_retention_swept" },
+            "Swept log events past the retention window",
+          );
+        }
+      })
+      .catch((err) => logger.error({ err }, "log retention sweep threw"));
+  }, LOG_SWEEP_INTERVAL_MS);
+  _logSweepTimer.unref?.();
+
   logger.info(
     {
       healthEveryMs: HEALTH_INTERVAL_MS,
@@ -394,6 +416,8 @@ export function startScheduler() {
       appUrl: APP_URL,
       degradedProbesBeforeAlert: DEGRADED_PROBES_BEFORE_ALERT,
       webhookSweepEveryMs: WEBHOOK_SWEEP_INTERVAL_MS,
+      logSweepEveryMs: LOG_SWEEP_INTERVAL_MS,
+      logRetentionDays: RETENTION_DAYS,
     },
     "Operator scheduler started",
   );

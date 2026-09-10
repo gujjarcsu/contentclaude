@@ -4100,3 +4100,74 @@ point. **One request in 3,035 exceeded a second, by 189 ms.**
 `deploy-watch` still exited **1**, because the pass condition set in P1 is zero non-200s AND a
 sub-second maximum, and 1,189 ms is not sub-second. Reported as a partial pass, as it was then. The
 tool has never been talked into a green.
+
+---
+
+## INFRA1 / INFRA2 (11 Sep 2026) — the two things that made every future incident un-investigable
+
+### INFRA1 — a duplicate deploy is now a no-op
+
+`ci.yml` deploys on push. `deploy.yml` deploys on dispatch. `concurrency: deploy-group` **serialises**
+them, which is not the same as deduplicating them — on 2026-09-10 one commit shipped as v176 and v177,
+79 seconds apart, each opening its own outage window.
+
+Both paths now read `/api/build-info` (cache-busted, L4) immediately after acquiring the concurrency
+slot, and skip if the target commit is already live. `deploy.yml` gains a `force` input for repairing a
+broken deploy, plus a step that confirms the deploy actually landed. `ci.yml` needs no force: a re-run
+after a **failed** deploy self-selects, because `build-info` still reports the old commit.
+
+**It fails safe.** An unreadable `build-info` deploys rather than skips — refusing to deploy because we
+could not check is how a broken production stays broken. Proved against four cases:
+
+| live sha | force | result |
+| --- | --- | --- |
+| same | false | **SKIP** |
+| same | true | DEPLOY |
+| different | false | DEPLOY |
+| *unreadable* | false | **DEPLOY** |
+
+### INFRA2 — 30 days of durable logs, without a new vendor
+
+Fly keeps roughly the last 100 lines: under ten seconds of history at four requests a second. The 03:45
+lost generation could not be investigated at 11:00, and A6.6 is blocked on exactly that.
+
+A log service needs an account, a token and an owner to create both — which makes it a human task and
+leaves the gap open meanwhile. We already have Neon, Prisma and a worker that can sweep, and what an
+investigation needs is 30 days of *incidents*, not of stdout.
+
+**What is stored, and what deliberately is not.** Not a copy of stdout: a table full of
+`GET /api/health 200` would bury the rows that matter. Two things go in — everything at WARN and above,
+and any line the app deliberately tagged with an `event` (`quality_gate_flagged`, `autopilot_withheld`,
+`install_link_click`, `brand_voice_inferred`). Measured on a real logger: of three lines, the tagged
+info and the warn were kept and the plain info was not.
+
+**Hooked at the STREAM, not the call site.** Pino applies `redact` on the way to the stream, so the
+sink sees copy in which an access token is already `[REDACTED]`. A call-site hook would see the raw
+object and put us one mistake away from a token in the database (L9).
+
+**Four properties it must never break**, each with a test: it never blocks a request (buffered, flushed
+on a timer); it never throws (a logging failure that breaks a request is worse than the missing logs);
+it is bounded (500 rows between flushes, and the excess is dropped with a `log_sink_dropped` row
+recording the count — a bounded gap, never a silent one); and it cannot leak a secret.
+
+Retention is an hourly sweep rather than daily, so a restart never skips a day.
+
+Read it with `scripts/logs.mjs --around 2026-09-10T03:45 --window 10m`, which prints the window and the
+filters when nothing matches — "no rows matched" and "nothing happened" are different statements.
+
+**Schema columns 230 → 237**, exactly the seven `LogEvent` adds.
+
+### The false-green answers (L1)
+
+| Check | Broken → |
+| --- | --- |
+| `shouldKeep` rejects plain info | keep everything → **2 fail** |
+| the buffer cap | remove it → **1 fails** |
+| INFRA1's skip logic | four cases run explicitly, including the fail-safe |
+
+### What none of this proves
+
+**That rows reach Postgres.** Prisma is mocked, so the tests prove what we hand it and that failures are
+swallowed — not that the table accepts it, nor that 30 days actually elapse. The first real read is
+queued. **INFRA1's live proof** — dispatch during a push and show one version — needs a real deploy and
+is pending.

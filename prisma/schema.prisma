@@ -449,3 +449,35 @@ model UpgradePrompt {
   @@index([shop, lastSeenAt])
   @@index([chargeId])
 }
+
+/// INFRA2 — durable log retention.
+///
+/// Fly keeps roughly the last 100 lines. At four requests a second that is under
+/// ten seconds of history, so no incident was traceable minutes after it
+/// happened: the 03:45 lost generation could not be investigated at 11:00, and
+/// A6.6 ("two drafts, not three") is blocked on exactly that.
+///
+/// This is NOT a copy of stdout. Storing every request would be a large table
+/// full of `GET /api/health 200`. It stores the two things an investigation
+/// actually needs: everything at WARN or above, and any line the app
+/// deliberately tagged with an `event` — `quality_gate_flagged`,
+/// `autopilot_withheld`, `install_link_click` and the rest.
+model LogEvent {
+  id        String   @id @default(cuid())
+  /// ISO level name: warn, error, fatal, or info for a tagged event.
+  level     String
+  /// The app's own event tag, when the call site set one.
+  event     String?
+  /// Which shop it concerned, when the call site knew.
+  shop      String?
+  msg       String
+  /// The rest of the log line, already redacted by pino before it reached here.
+  data      Json?
+  createdAt DateTime @default(now())
+
+  /// The retention sweep and "what happened around 03:45" both walk this.
+  @@index([createdAt])
+  @@index([shop, createdAt])
+  @@index([event, createdAt])
+  @@index([level, createdAt])
+}

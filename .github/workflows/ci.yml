@@ -143,8 +143,38 @@ jobs:
     concurrency: deploy-group
     steps:
       - uses: actions/checkout@v4
+
+      # INFRA1 — a duplicate deploy of an already-live commit is a no-op.
+      #
+      # A push always advances the SHA, so this never skips a normal deploy.
+      # What it catches is a workflow RE-RUN: "Re-run all jobs" on a run whose
+      # deploy already succeeded would ship the identical commit a second time,
+      # which is the v176/v177 double-deploy by another route.
+      #
+      # No force input is needed here, unlike deploy.yml: a re-run after a
+      # FAILED deploy self-selects, because build-info still reports the old
+      # commit and the check proceeds.
+      - name: Is this commit already live?
+        id: live
+        run: |
+          set -euo pipefail
+          # Cache-busted (L4): a cached read is not evidence.
+          live=$(curl -fsS --max-time 15 "https://app.navaal.ai/api/build-info?cb=${RANDOM}${RANDOM}" | jq -r .sha || echo "")
+          echo "live sha:   ${live:-<unreadable>}"
+          echo "target sha: ${GITHUB_SHA}"
+          # An UNREADABLE build-info must never cause a skip. Refusing to deploy
+          # because we could not check is how a broken production stays broken.
+          if [ -n "$live" ] && [ "$live" = "$GITHUB_SHA" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::This commit is already live — skipping a duplicate deploy (INFRA1)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.live.outputs.skip != 'true'
       - name: Deploy to Fly.io
+        if: steps.live.outputs.skip != 'true'
         run: flyctl deploy --remote-only --app contentclaude --build-arg GIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -166,6 +196,7 @@ jobs:
       # and "-lt 2" fails as well — it cannot pass by finding nothing, which is
       # the failure mode that makes a check decorative.
       - name: Every web machine is running
+        if: steps.live.outputs.skip != 'true'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |

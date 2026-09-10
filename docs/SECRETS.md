@@ -95,6 +95,10 @@ anywhere raises nothing. Worth knowing before trusting this file as an inventory
 
 | Variable | Default | What it does |
 | --- | --- | --- |
+| `LOG_SINK` | on | Set to `0` to stop writing durable log rows. INFRA2's sink is otherwise on whenever `DATABASE_URL` exists. Turning it off means no incident is traceable past Fly's ~100 lines again. |
+| `LOG_RETENTION_DAYS` | `30` | How long `LogEvent` rows are kept. The hourly sweep deletes past this. Lowering it below 30 breaks the retention INFRA2 promised. |
+| `LOG_SINK_FLUSH_MS` | `5000` | How often buffered log rows are written. Higher means fewer writes and a longer window in which a crash loses buffered rows. |
+| `LOG_SINK_MAX_BUFFER` | `500` | Hard cap on rows buffered between flushes. Beyond it rows are DROPPED, and a `log_sink_dropped` row records how many — a bounded gap, never a silent one. |
 | `WEB_DRAIN_MS` | `15000` | How long a **web** machine waits after SIGTERM for requests that are already running, before the process exits. Fly cordons the machine first, so nothing new arrives during the wait. Must stay below `kill_timeout` in `fly.toml` (60 s), or Fly SIGKILLs and the wait achieves nothing. |
 
 ---

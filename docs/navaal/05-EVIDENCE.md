@@ -85,6 +85,30 @@ un-finishable, which is why AI visibility sits in every paid tier.
 - Install attribution live on all 67 static pages (`navaal-nav`, `navaal-footer`), 28 blog posts
   (`blog-post`), plus `navaal-home` and `navaal-tools`. Still to place: `bilby-footer`, `bilby-report`.
 
+## 6b. CONTAMINATED MEASUREMENTS — do not baseline against these (INFRA5)
+
+**Every latency and time-to-value figure captured before commit `d272222` (2026-09-10) is
+deploy-contaminated and is not a baseline.** Until that commit a deploy left the app with **no running
+web machine**: the Fly proxy queued requests for up to 17.1 s, and a routine deploy produced two
+outages of 17.4 s and 16.8 s. Ten deploys happened in the two hours those numbers were gathered.
+
+Specifically not to be trusted as baselines:
+- the `app/uninstalled` webhook p90 of **5,911 ms** and the 7-day move from 1,039 ms to 1,403 ms
+- the "1 of 5 deliveries failed" figure
+- any TTV / first-draft timing from 2026-09-10 before `d272222`
+- the `navaal-ttv-05` lost generation at 03:45 — a P2034 quota conflict, not a latency event
+
+**The first clean baseline is the Phase A deploy, `d21b5bb`:** 3,035 samples, 0 non-200, p50 31 ms,
+p90 36 ms, p99 123 ms, max 1,189 ms, one request over a second, longest real outage 1.19 s.
+
+Also corrected (INFRA4): commit `4312a5b` claims the uninstall handler "answers in ~40 ms". **That was
+never measured.** What was measured is `/api/health` at ~5 ms on the same machine; ~40 ms was an
+inference from the handler's pre-200 work (an HMAC, a Redis `SET NX`, two queries). Measuring it for
+real needs either a forged signed webhook against a production write path — forbidden — or log
+retention, which is INFRA2.
+
+---
+
 ## 7. FIVE FALSE GREENS — the pattern to expect
 
 1. ESLint `--cache` reporting clean over broken code.

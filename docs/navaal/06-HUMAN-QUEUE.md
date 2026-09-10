@@ -18,6 +18,29 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
+- **Log in `flyctl` on this computer** (blocks INFRA6, and every local `fly` command). Run
+  `flyctl auth login` in a terminal and complete the browser flow. Why: the local token expired
+  mid-session on 2026-09-10 — `fly status -a contentclaude` returns `Error: no access token
+  available`. An agent cannot do this: the flow is interactive and an agent never types the owner's
+  credentials. CI is unaffected (it uses the `FLY_API_TOKEN` secret), so deploys still work; only
+  local inspection is blocked. Done looks like: `fly status -a contentclaude` lists four machines.
+- **Then run INFRA6:** `fly secrets unset FEATURE_MAGIC_MOMENT -a contentclaude`, then
+  `curl -s "https://app.navaal.ai/api/health?deep=1"` and confirm `status: ok`. Why: the flag is dead
+  and `unset` is correct because removal passes no value. Note it RESTARTS the machines, so do it when
+  a deploy would be acceptable. Done looks like: deep health `ok` and `fly secrets list` no longer
+  shows the name.
+- **Run the restore drill (INFRA7)** in the Neon console: restore the latest state into a **NEW
+  branch**, never production. Then against that branch run `npx prisma migrate status` and count rows
+  in `Shop` and `GeneratedContent`. Why: the runbook promises a restore path nobody has ever
+  exercised, and Neon retention was 6 hours until 2026-09-10 — the promise was false the whole time it
+  was written. An agent has no Neon credentials here (0 matches for `DATABASE_URL` in env). Done looks
+  like: the date, the branch name and the two row counts recorded in PROGRESS.md.
+- **Read the durable log once, to confirm it is really writing** (INFRA2's live half). After the next
+  deploy: `fly ssh console --app contentclaude -C "node /app/scripts/logs.mjs --since 2h"`. Why: the
+  sink is proved by unit tests with Prisma mocked — that proves what we hand Prisma, not that the
+  table accepts it. Done looks like: at least one row, and `--event log_retention_swept` returning
+  nothing yet (the sweep only logs when it actually deletes something).
+
 - **Verify the "partial run" banner on a rendered page (L15).** After the Phase A deploy, start a bulk
   run on a store with more than 20,000 products — or temporarily set `ENUM_MAX_PAGES` low on a dev
   store — and confirm the warning banner **"This run covers part of your catalog"** actually appears

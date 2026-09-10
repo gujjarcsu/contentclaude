@@ -1,7 +1,21 @@
 name: Manual Deploy to Fly.io
 
+# INFRA1 — this workflow exists to REPAIR a deploy, not to perform a routine one.
+#
+# A push to `main` already deploys (`ci.yml`, the `deploy` job). Running this as
+# well deploys the same commit twice: on 2026-09-10 one commit shipped as v176
+# and v177, 79 seconds apart, each opening its own outage window. `concurrency:
+# deploy-group` serialises the two — it never stopped the second one happening.
+#
+# So the second one is now a no-op unless the commit is not actually live.
+
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Deploy even if this commit is already live (only to repair a broken deploy)"
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -11,9 +25,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Runs AFTER the concurrency slot is acquired, so if a push-triggered
+      # deploy of this same commit was queued ahead of this one, this reads the
+      # state that deploy left behind rather than the state before it.
+      - name: Is this commit already live?
+        id: live
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          # Cache-busted (L4): a cached read is not evidence.
+          live=$(curl -fsS --max-time 15 "https://app.navaal.ai/api/build-info?cb=${RANDOM}${RANDOM}" | jq -r .sha || echo "")
+          echo "live sha:   ${live:-<unreadable>}"
+          echo "target sha: ${GITHUB_SHA}"
+          # An UNREADABLE build-info must never cause a skip. The safe direction
+          # is to deploy: refusing to deploy because we could not check is how a
+          # broken production stays broken.
+          if [ -n "$live" ] && [ "$live" = "$GITHUB_SHA" ] && [ "$FORCE" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::This commit is already live. Skipping — deploying it again is the INFRA1 double-deploy. Re-run with force:true only to repair a broken deploy."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.live.outputs.skip != 'true'
 
       - name: Deploy to Fly.io
+        if: steps.live.outputs.skip != 'true'
         run: flyctl deploy --remote-only --app contentclaude --build-arg GIT_SHA=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Confirm the deploy landed
+        if: steps.live.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            actual=$(curl -fsS --max-time 10 "https://app.navaal.ai/api/build-info?cb=${RANDOM}${RANDOM}" | jq -r .sha || echo "")
+            if [ "$actual" = "$GITHUB_SHA" ]; then
+              echo "build-info reports $actual after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "attempt $i: got '${actual:-<none>}'"
+            sleep 10
+          done
+          echo "::error::/api/build-info never reported $GITHUB_SHA — the deploy did not take effect"
+          exit 1

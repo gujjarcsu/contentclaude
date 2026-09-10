@@ -1,6 +1,6 @@
 # scripts — operational scripts that run on the machine
 
-Eight scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
+Nine scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
 already exist:
 
 ```bash
@@ -33,6 +33,7 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `diag-shop.cjs` | read-only | One shop's install, plan and session state. |
 | `shop-install-diag.cjs` | read-only | Install and reinstall history. |
 | `store-products-diag.cjs` | read-only | Product and generated-content counts for a shop. |
+| `logs.mjs` | read-only | **INFRA2 — the durable log.** `fly logs` keeps ~100 lines; this queries the 30-day `LogEvent` table (WARN-and-above plus tagged events). `--since 2h` · `--around 2026-09-10T03:45 --window 10m` · `--event autopilot_withheld` · `--shop x.myshopify.com` · `--level warn`. Never writes. |
 
 Anything with `--apply`: **run it without the flag first and read the output.** Both backfills print
 exactly what they would change.
