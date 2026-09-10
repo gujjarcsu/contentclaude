@@ -3500,3 +3500,178 @@ why, and there is a test asserting the query contains no `//`.
 That is the fourth false-green shape in this project, and it is worth naming precisely: *a check that
 never exercises the thing it appears to cover.* The tests around that query are thorough and would all
 have stayed green while the feature was completely broken in production.
+
+---
+
+## P1 (10 Sep 2026) — one defect wearing three masks: a deploy that left no web machine running
+
+Three anomalies were recorded inside the ten deploy windows of 10 Sep: `app/uninstalled` response
+p90 of **5,911 ms** (past Shopify's ~5 s delivery timeout), **one of five** new `app/uninstalled`
+deliveries failing, and `navaal-ttv-05` losing a generation to "Busy for a moment — no generation was
+used" with the AI circuit breaker closed and zero failures.
+
+A parallel session concluded the webhook handler was doing work before answering. **It is not.**
+Before its 200 it does an HMAC, a Redis `SET NX`, one `findUnique` and one `markShopUninstalled`.
+
+### What it actually was
+
+`auto_stop_machines = "stop"` with `min_machines_running = 1` means Fly keeps **exactly one** web
+machine running and stops the rest — and during a deploy, that one machine is the one being replaced.
+
+Fly's own event log for release v176:
+
+```
+05:58:19.539  81112eb  (the only RUNNING web machine)   pending/launch
+05:58:20.442  784eed   (the "spare")                    stopped/update
+05:58:23.468  81112eb                                   started
+```
+
+The spare was updated **in place while stopped** and left stopped. flyctl even reported
+`[1/4] Machine 784eed3dbe7158 reached stopped state` → `is now in a good state`. It was never a
+fallback; it was decoration.
+
+And the strategy did not roll. flyctl announced *"Updating existing machines in 'contentclaude' with
+rolling strategy"* and then updated **all four machines within the same millisecond**:
+
+```
+05:58:16.6003  [2/4] Updating machine config for d8d996d7b1ed28   (worker)
+05:58:16.6003  [3/4] Updating machine config for 874274c0235e48   (worker standby)
+05:58:16.6004  [4/4] Updating machine config for 81112eb9733578   (WEB — running)
+05:58:16.6005  [1/4] Updating machine config for 784eed3dbe7158   (WEB — stopped)
+```
+
+Requests arriving in that window queue at the Fly proxy until something can serve them, which is why
+the symptom was multi-second **latency** rather than a clean 5xx.
+
+### Measured from outside, not from the Fly dashboard
+
+`tools/proof/deploy-watch.mjs` polls the public URL every 250 ms on a fixed tick, with no keep-alive
+and a 30 s request timeout. Three runs, same instrument. The first two ran 600 s; the proof ran 780 s
+because a push-triggered deploy waits for CI first, and the window had to cover the rollover:
+
+| | before-fix (v176) | strategy only (v179) | both machines running (PROOF) |
+| --- | --- | --- | --- |
+| samples | 2,349 | 2,350 | 3,052 |
+| p50 | 33 ms | 33 ms | 32 ms |
+| p90 | 45 ms | 76 ms | 36 ms |
+| p99 | **14,190 ms** | **24,112** ms | 76 ms |
+| **max** | **17,085 ms** | **28,736** ms | **2,052** ms |
+| requests over 1 s | **125** | **208** | **4** |
+| window containing them | **95.2 s** | **168.7 s** | **31.7 s** |
+| non-200 on `/api/health` | 0 | 0 | **0** |
+| `/api/health?deep=1` | **503 twice** | **503 three times** | **none** |
+
+The shallow endpoint never returned a non-200 even at its worst: the Fly proxy **queued** those
+requests rather than refusing them. That is precisely why this looked like a slow handler instead of
+an outage, and why Shopify — which gives up at ~5 s — recorded a failed delivery instead.
+
+### The three changes
+
+1. **`fly.toml`** — `auto_stop_machines = "off"`, `min_machines_running = 2`, and an explicit
+   `[deploy] strategy = "rolling"` with `max_unavailable = 1`. `max_unavailable` is written down so a
+   third machine cannot silently make it two-at-a-time and reopen the hole. Price: one extra
+   shared-cpu-1x 512 MB machine.
+
+2. **`startup.server.js`** — `react-router-serve` installs its own SIGTERM handler that calls
+   `server.close()`, letting in-flight requests finish. Our `gracefulShutdown` was **racing it**: on a
+   web machine there is no BullMQ worker to drain, so everything completed in milliseconds and
+   `process.exit(0)` killed those requests. Web machines now wait `WEB_DRAIN_MS` (15 s, inside
+   `kill_timeout`'s 60 s) first.
+
+   A bounded timer, not a request counter, **deliberately**: React Router only routes document and
+   `.data` requests through `entry.server`, so a counter there would miss every resource route —
+   including the generation endpoint, the one request we least want to drop. A counter that misses the
+   important case is worse than an honest timer, because it reads as proof.
+
+3. **`plans.server.js`** — "Busy for a moment" is a **P2034** serialization failure on the SERIALIZABLE
+   quota transaction after the retry budget ran out. The budget was **one** retry, which is not a
+   budget, it is a coin flip: the dashboard fires **three** quick-start requests in parallel for the
+   same shop, each running `count()` then `create()` over the same predicate, so Postgres aborts all
+   but one. One wins, two retry, and the loser of *that* race was out of attempts. Now three retries
+   with exponential backoff plus jitter. Retrying cannot double-charge: the conflicting transaction
+   **aborted**, so it wrote no `UsageRecord`.
+
+### `auto_stop_machines = "off"` does not start a stopped machine
+
+Nothing in a deploy starts one either — flyctl updates it in place and calls it good. The second
+machine had to be started by hand (`fly machine start 784eed3dbe7158`), and that is exactly how this
+regresses silently. So `ci.yml`'s deploy job now asserts, after every deploy, that there are at least
+two `web` machines and that **all** of them are `state=started`.
+
+### Two things found that were not being looked for
+
+**Every push to `main` deploys, and there is a second workflow that deploys the same thing by hand.**
+`ci.yml` has a `deploy` job on push; `deploy.yml` is a `workflow_dispatch` doing the same `flyctl
+deploy`. They share `concurrency: deploy-group`, which **serialises** them — it does not deduplicate
+them. Dispatching the manual workflow after a push therefore produces **two full deploys of the same
+commit**, each opening its own window. That is what happened at 05:58:19 (v176, manual) and 05:59:38
+(v177, CI) — 79 seconds apart, both visible as separate holes in the before-fix measurement.
+
+**There is no log retention.** `fly logs --no-tail` returns roughly the last 100 lines — under ten
+seconds of traffic at four requests per second. The 03:45 `navaal-ttv-05` failure the investigation was
+asked to trace **cannot be recovered**, and neither can any incident more than seconds old. For an app
+that is meant to run for a hundred years, that is the gap that matters most in this entry.
+
+### A correction to the commit message
+
+Commit `4312a5b` says the uninstall handler "answers in ~40 ms". **That number was not measured.**
+What was measured is `/api/health` at ~5 ms on the same machine; ~40 ms is an inference from the
+handler's pre-200 work. Measuring it honestly would mean forging a signed webhook against a production
+write path, which is not worth the number.
+
+### The standing test, per check
+
+- **`deploy-watch.mjs`** — self-tested both ways before being trusted. Pointed at a path that 404s it
+  refuses at pre-flight (exit 2) rather than producing a clean report of an unreachable host; with the
+  slow threshold forced to 0 it counted all 19 samples and printed FAIL. Its tick is deliberately
+  independent of the response, because a poller that awaits each request **stops sampling during the
+  outage it exists to measure**, and the resulting gap in the data looks like nothing happened.
+- **`quotaContention.test.js`** — reverted to the old budget, three of its cases fail. The two burst
+  cases are written in terms of a conflict *count*, not `QUOTA_MAX_RETRIES`, because a test that reads
+  the constant it is checking passes at any value of it, including zero.
+- **"Every web machine is running"** — if the spare stops, it prints the states and fails. If flyctl
+  changes its JSON shape the `select` matches nothing, `count=0`, and `-lt 2` fails too: it cannot pass
+  by finding nothing.
+- **What none of them prove:** that a retry never double-charges. That rests on Postgres aborting the
+  transaction, and `$transaction` is a mock in the unit tests, so counting `create()` calls there would
+  measure the mock. Only an integration test against a real database could exercise it. Stated in the
+  test file rather than implied.
+- **`docs.test.js` is one-directional** — it asserts every environment variable the code *reads* is
+  documented, but a documented variable that exists nowhere raises nothing. That is how `SECRETS.md`
+  kept describing `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` long after it left `fly.toml`. Removed.
+
+### The verdict, against the pass condition that was set
+
+The condition was **zero non-200s and a sub-second maximum**. Half of it is met outright and half of it
+is not, so this is reported as a partial pass:
+
+- **Zero non-200s: met.** 3,052 samples, all 200, and the deep check never returned 503 once.
+- **Sub-second maximum: NOT met.** Four requests out of 3,052 (0.13 %) took between 1,257 ms and
+  2,052 ms, in two pairs about 30 s apart — one pair per web machine as it was replaced.
+
+`deploy-watch.mjs` exited **1** and printed FAIL for exactly that reason, which is the behaviour that
+makes it worth running: it was not going to be talked into a pass.
+
+What changed for a merchant: the worst request during a deploy went from **17,085 ms to 2,052 ms**, the
+number of requests over a second went from **125 to 4**, and the deep health check stopped failing.
+2 s is comfortably inside Shopify's ~5 s webhook budget, so a deploy should no longer cost a delivery.
+It is not, however, literally invisible, and it should not be described as such.
+
+One more thing the measurement shows, visible in the build timeline: during the rollover the two
+machines briefly serve **different builds** (`229fa44`, then `4312a5b`, then `229fa44` across four
+seconds). That is inherent to a rolling deploy and is the price of there being no gap. It matters for
+any change where an old and a new build must not both be live — a schema change relied on by the new
+code is the obvious one, which is why `release_command` runs migrations first and why migrations are
+additive.
+
+### Are today's webhook and TTV numbers contaminated?
+
+**Yes — treat them as contaminated, and do not spend a day optimising that handler.** The handler does
+almost nothing before its 200, and the machine serving it answers `/api/health` in 5 ms. A 5,911 ms p90
+cannot come from that code; it is consistent with deliveries landing inside measured windows where the
+proxy held requests for up to 17.1 s. One failed delivery in five is what Shopify's ~5 s timeout does
+to a request held that long.
+
+What **cannot** be attributed either way is the 7-day `app/uninstalled` move from 1,039 ms to 1,403 ms:
+that window contains both the old pre-fix handler and ten deploy windows, and there is no per-delivery
+breakdown to separate them.
