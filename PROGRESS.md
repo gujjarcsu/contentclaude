@@ -3261,3 +3261,88 @@ explain.
 
 New migration `20260910150000_before_after_score`: the `ProductScore` table plus
 `Shop.storeScoreAtInstall` / `storeScoreAtInstallAt`. All nullable, no backfill.
+
+## 4.1 — Quality gate before anything is saved
+
+The scorer already existed and produced a number. **A number is not a gate**: it was computed, stored,
+and never used to stop anything. This is the part that refuses.
+
+Rules are pure (`contentQuality.js`, no database, no Shopify); the server half (`qualityGate.server.js`)
+fetches the comparison window and retries once.
+
+### The duplicate check — the hard one, done properly
+
+The owner named this as the rule most likely to be quietly skipped. Here is exactly what was built and
+exactly where it is weaker than it looks.
+
+**The naive versions do not work.** Exact hashing catches nothing — two descriptions always differ by at
+least the product name. Comparing every new description against every previous one is O(N^2): 12.5 million
+comparisons on a 5,000-product run.
+
+**What was built: SimHash over product-agnostic shingles.**
+
+1. Normalise, then **remove the product's own words** (title, vendor, type). This is the load-bearing
+   step. Two descriptions written from one template differ mainly by those words; strip them and template
+   reuse collapses to an identical fingerprint. Without it every fingerprint is dominated by the product
+   name, nothing ever looks alike, and **the check silently passes everything** — which is how this rule
+   gets shipped broken.
+2. Overlapping 3-word shingles, each hashed to 64 bits.
+3. Weighted bit sum, producing a 64-bit fingerprint.
+4. Hamming distance against a **bounded** window (200 most recent fingerprints, 16 bytes each, one
+   indexed query per generation).
+
+**Measured on real template text:**
+
+| Case | Hamming distance | Threshold is 6 |
+|---|---|---|
+| Same template, product name swapped | **0** | caught |
+| Genuinely different product, same brand voice | **26** | correctly passes |
+| Same template with one phrase paraphrased | **11** | **NOT caught** |
+
+**Stated plainly, because the owner asked for honesty over a version that always passes:** this catches
+verbatim template reuse, which is the failure that actually happens in a bulk run. It does **not** catch a
+description paraphrased throughout — measured at distance 11, above the threshold of 6. Raising the
+threshold to about 14 would catch paraphrases and still clear the 26 of genuinely different content, but
+it narrows the margin against false positives, and a gate that blocks honest content is one a merchant
+turns off. The conservative threshold ships; the measured numbers are here so the decision is revisable
+rather than folklore. It is not a plagiarism detector and does not compare against the whole catalogue.
+
+**Both directions are tested.** A duplicate check that always passes is indistinguishable from no check.
+The pair — template reuse must be caught, different-products-same-voice must not be — cannot both pass on
+a broken implementation, which is what makes them worth having.
+
+### The hard rules
+
+| Rule | Fails when |
+|---|---|
+| Meta lengths | title over 70 or under 15; description over 160 or under 70 |
+| External links | any link outside the shop's own domain (relative and own-domain allowed) |
+| Placeholder text | lorem ipsum, `[PRODUCT]`, `{{...}}`, TODO, "insert ... here", "as an AI..." |
+| Language | English locales only, by stopword frequency |
+| Duplicate | as above |
+| Score | below 60 |
+
+**The language rule refuses to judge what it cannot check.** For non-English locales it returns
+`checked: false` and the gate does not judge. Shipping a check that cannot tell French from Spanish, and
+failing merchants on it, would be worse than admitting the limit.
+
+A hard failure fails **even with a perfect score** — the score is advisory, the hard rules are not.
+
+### What happens to a failing draft
+
+Regenerate **once**. Keep the better of the two — a retry that is worse is not an improvement and the
+merchant already paid for the first. If it still fails, the draft is **saved** with a plain-language note,
+because the merchant paid a generation for it and deleting it would leave them with nothing and no
+explanation.
+
+**Autopilot never publishes a flagged item.** The publish is guarded on `!qualityNote`, the withholding is
+logged, and the reason goes into the job's error log where the merchant reads it. Pushing content the gate
+rejected onto a live storefront with nobody reading it is the worst thing this app could do.
+
+A gate that cannot RUN (a database blip) does not withhold content either — there is no finding to justify
+it, and failing closed there would silently stop a merchant's whole job.
+
+New migration `20260910160000_quality_gate`: `GeneratedContent.simhash` and `qualityNote`, plus an index
+on `(shop, contentType, updatedAt DESC)` — the query the comparison window actually runs. No backfill: a
+row written before the gate has no fingerprint and is **excluded** from comparison rather than treated as
+unique, because treating unknown as unique is how a duplicate check stops working without anything failing.

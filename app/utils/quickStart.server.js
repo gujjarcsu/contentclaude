@@ -39,6 +39,7 @@ import {
   incrementQuickStartDrafts,
 } from "./firstValue.server.js";
 import { invalidateCatalogGaps } from "./catalogGaps.server.js";
+import { gateContent, fingerprintFor } from "./qualityGate.server.js";
 
 /** Worst-case life of one generation request: 45 s × 3 attempts + 2 × 60 s 429 backoff ≈ 255 s. */
 export const IN_FLIGHT_MS = 300_000;
@@ -329,6 +330,31 @@ export async function runQuickStartOne({ admin, shop, productId, mode = "generat
     );
     return failure({ refunded, error: friendly(err) });
   }
+  // Phase 4 item 4.1 — nothing is saved before the gate runs. A failure
+  // regenerates ONCE; if it still fails the draft is kept with a note rather
+  // than thrown away, because the merchant paid a generation for it and
+  // deleting it would leave them with nothing and no explanation.
+  let qualityNote = null;
+  if (generated?.description?.trim()) {
+    const gated = await gateContent({
+      shop,
+      productId,
+      generated,
+      product: { title: node.title, vendor: node.vendor, productType: node.productType },
+      shopDomain: shop,
+      scoreOf: (c) => scoreContent(c)?.score ?? null,
+      regenerate: async () =>
+        mode === "enhance"
+          ? await enhanceExistingContent(product, brandVoice || {}, QUICK_START_TYPES)
+          : await generateProductContent(product, brandVoice || {}, QUICK_START_TYPES, {
+              length: "standard",
+              recentTitles,
+            }),
+    });
+    generated = gated.content;
+    qualityNote = gated.note;
+  }
+
   if (!generated?.description?.trim()) {
     const refunded = await refund();
     logger.warn(
@@ -348,7 +374,21 @@ export async function runQuickStartOne({ admin, shop, productId, mode = "generat
       typesToSave.map((type) =>
         prisma.generatedContent.upsert({
           where: { shop_productId_contentType: { shop, productId, contentType: type } },
-          update: { generatedContent: generated[type], status: "draft", version: { increment: 1 } },
+          update: {
+            generatedContent: generated[type],
+            status: "draft",
+            version: { increment: 1 },
+            ...(type === "description"
+              ? {
+                  simhash: fingerprintFor(generated.description, {
+                    title: node.title,
+                    vendor: node.vendor,
+                    productType: node.productType,
+                  }),
+                  qualityNote,
+                }
+              : {}),
+          },
           create: {
             shop,
             productId,
@@ -357,6 +397,16 @@ export async function runQuickStartOne({ admin, shop, productId, mode = "generat
             originalContent: originalFor(type, node),
             generatedContent: generated[type],
             status: "draft",
+            ...(type === "description"
+              ? {
+                  simhash: fingerprintFor(generated.description, {
+                    title: node.title,
+                    vendor: node.vendor,
+                    productType: node.productType,
+                  }),
+                  qualityNote,
+                }
+              : {}),
           },
         }),
       ),
@@ -392,6 +442,7 @@ export async function runQuickStartOne({ admin, shop, productId, mode = "generat
     metaTitle,
     metaDescription,
     qualityScore: qualityOf({ description, metaTitle, metaDescription }),
+    qualityNote,
     credit: res.kind,
     remaining:
       res.kind === "new" && Number.isFinite(res.remaining)

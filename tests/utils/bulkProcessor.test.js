@@ -70,6 +70,24 @@ vi.mock("../../app/utils/offlineToken.server.js", () => ({
   refreshOfflineToken: vi.fn(async () => ({ accessToken: "tok2", expires: null })),
 }));
 
+// Phase 4 item 4.1 — the quality gate runs before anything is saved, and it
+// correctly REFUSES the one-line fixtures these tests use ("<p>new</p>" is not
+// publishable content). These tests are about the publish path, so the gate is
+// mocked to pass here and is exercised directly in its own describe block below
+// and exhaustively in tests/utils/contentQuality.test.js.
+const { gateContent } = vi.hoisted(() => ({
+  gateContent: vi.fn(async ({ generated }) => ({
+    content: generated,
+    assessment: { pass: true, reasons: [] },
+    regenerated: false,
+    note: null,
+  })),
+}));
+vi.mock("../../app/utils/qualityGate.server.js", () => ({
+  gateContent,
+  fingerprintFor: () => "0123456789abcdef",
+}));
+
 vi.mock("../../app/utils/errorMonitoring.server.js", () => ({
   captureException: vi.fn(),
 }));
@@ -861,6 +879,46 @@ describe("item 9 — auto-publish claims published only when Shopify accepted", 
     expect(unverified).toHaveLength(1);
     expect(unverified[0][0].data.verifyNote).toBeTruthy();
     expect(unverified[0][0].data.verifiedAt).toBeNull();
+  }, 30000);
+
+  it("AUTOPILOT NEVER PUBLISHES a draft the quality gate flagged", async () => {
+    // The whole point of item 4.1. Pushing content the gate rejected onto a
+    // live storefront without anybody reading it is the worst thing this app
+    // could do, and it is the failure a merchant would leave a one-star review
+    // about.
+    gateContent.mockResolvedValueOnce({
+      content: { description: "<p>new</p>" },
+      assessment: { pass: false, reasons: ["dup"] },
+      regenerated: true,
+      note: "It is almost the same as a description already written for another product.",
+    });
+    const prisma = await runAutoPublish([
+      { data: { productUpdate: { product: { id: "gid://shopify/Product/1" }, userErrors: [] } } },
+    ]);
+
+    // Nothing was published, in any status.
+    const promoted = prisma.generatedContent.updateMany.mock.calls.filter(([a]) =>
+      String(a?.data?.status || "").startsWith("published"),
+    );
+    expect(promoted).toHaveLength(0);
+  }, 30000);
+
+  it("still SAVES the flagged draft, with the reason — the merchant paid for it", async () => {
+    gateContent.mockResolvedValueOnce({
+      content: { description: "<p>new</p>" },
+      assessment: { pass: false, reasons: ["dup"] },
+      regenerated: true,
+      note: "It is almost the same as a description already written for another product.",
+    });
+    const prisma = await runAutoPublish([
+      { data: { productUpdate: { product: { id: "gid://shopify/Product/1" }, userErrors: [] } } },
+    ]);
+    const saved = prisma.generatedContent.upsert.mock.calls.find(
+      ([a]) => a?.create?.contentType === "description",
+    );
+    expect(saved).toBeTruthy();
+    expect(saved[0].create.qualityNote).toMatch(/almost the same/);
+    expect(saved[0].create.status).toBe("draft");
   }, 30000);
 
   it("marks them unverified when Shopify echoes back nothing to compare", async () => {

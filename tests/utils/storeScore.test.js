@@ -85,6 +85,7 @@ describe("the store score", () => {
     const r = await getStoreScore({}, SHOP, { now: NOW });
     expect(r.atInstall).toBe(61);
     expect(r.delta).toBe(23);
+    expect(r.baselineIsNew).toBe(false); // a real comparison, not a fresh stamp
   });
 
   it("shows no comparison on the very first scan, rather than 84 to 84", async () => {
@@ -93,6 +94,9 @@ describe("the store score", () => {
     const r = await getStoreScore({}, SHOP, { now: NOW });
     expect(r.delta).toBe(0);
     expect(r.since).toBeNull(); // "just now" is not history
+    // Caught by READING the screen: without this flag Home said "Unchanged
+    // since you installed" five seconds after first stamping the baseline.
+    expect(r.baselineIsNew).toBe(true);
   });
 
   it("reports a DROP honestly rather than hiding it", async () => {

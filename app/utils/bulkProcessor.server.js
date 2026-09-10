@@ -7,6 +7,8 @@ import { publishProductWithRetry } from "./adminGraphql.server.js";
 import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "./seo.server.js";
+import { gateContent, fingerprintFor } from "./qualityGate.server.js";
+import { scoreContent } from "./contentScorer.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // Configurable via BULK_THROTTLE_MS env var.
 // Default 2000ms: safe for claude-sonnet-4-6 with 3 concurrent workers.
@@ -353,6 +355,31 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           continue;
         }
 
+        // ── Phase 4 item 4.1: the quality gate, before anything is saved ──
+        // One regeneration on failure. A draft that still fails is KEPT with a
+        // note — the merchant paid for it — but autopilot will not publish it.
+        let qualityNote = null;
+        try {
+          const gated = await gateContent({
+            shop: job.shop,
+            productId,
+            generated,
+            product: { title: product.title, vendor: product.vendor, productType: product.productType },
+            shopDomain: job.shop,
+            scoreOf: (c) => scoreContent(c)?.score ?? null,
+            regenerate: async () =>
+              job.mode === "enhance"
+                ? await enhanceExistingContent(product, brandVoice || {}, contentTypes)
+                : await generateProductContent(product, brandVoice || {}, contentTypes),
+          });
+          generated = gated.content;
+          qualityNote = gated.note;
+        } catch (qErr) {
+          // A gate that cannot run must not stop a merchant's job, and must not
+          // withhold their content either — there is no finding to justify it.
+          jobLogger.warn({ shop: job.shop, productId, err: qErr?.message }, "quality gate failed to run");
+        }
+
         // ── SAVE CONTENT ──────────────────────────────────────────────────
         // Saved as a draft first even on an auto-publish job: the row is only
         // promoted to "published" once Shopify has actually accepted the write
@@ -371,7 +398,21 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                   : "";
           return prisma.generatedContent.upsert({
             where: { shop_productId_contentType: { shop: job.shop, productId, contentType: type } },
-            update: { generatedContent: generated[type], status: finalStatus, version: { increment: 1 } },
+            update: {
+              generatedContent: generated[type],
+              status: finalStatus,
+              version: { increment: 1 },
+              ...(type === "description"
+                ? {
+                    simhash: fingerprintFor(generated.description, {
+                      title: product.title,
+                      vendor: product.vendor,
+                      productType: product.productType,
+                    }),
+                    qualityNote,
+                  }
+                : {}),
+            },
             create: {
               shop: job.shop,
               productId,
@@ -380,6 +421,16 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
               originalContent,
               generatedContent: generated[type],
               status: finalStatus,
+              ...(type === "description"
+                ? {
+                    simhash: fingerprintFor(generated.description, {
+                      title: product.title,
+                      vendor: product.vendor,
+                      productType: product.productType,
+                    }),
+                    qualityNote,
+                  }
+                : {}),
             },
           });
         });
@@ -399,12 +450,25 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           // a top-level GraphQL error, so a THROTTLED or rejected update was
           // reported as a successful publish: the row said "published", the
           // credit was spent, and Shopify was never touched.
+          // Phase 4 item 4.1 — AUTOPILOT NEVER PUBLISHES A FAILING ITEM.
+          // Pushing content the gate rejected onto a live storefront without
+          // anybody reading it is the worst thing this app could do.
+          if (qualityNote) {
+            jobLogger.warn(
+              { shop: job.shop, productId, note: qualityNote, event: "autopilot_withheld" },
+              "Quality gate flagged this - saved as a draft, NOT auto-published",
+            );
+            if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
+              errorLog.push({ productId, error: `Saved as a draft for you to check: ${qualityNote}` });
+          }
           let published = Object.keys(input).length === 1; // nothing to publish → nothing to fail
           // Phase 4 item 4.2 — verified only when Shopify's own mutation
           // response echoed back what we sent. A publish nobody could confirm
           // is recorded as such rather than filed with the checked ones.
           let verifyNote = null;
-          if (!published) {
+          // `!qualityNote` is the autopilot refusal: a flagged draft is never
+          // published without a merchant reading it.
+          if (!published && !qualityNote) {
             const pub = await publishProductWithRetry(shopifyGraphql(session), productId, input);
             published = pub.ok;
             if (pub.ok && pub.verified === false) {

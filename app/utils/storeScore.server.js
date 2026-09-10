@@ -88,7 +88,11 @@ export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
       current: scan.storeScore,
       atInstall,
       delta: scan.storeScore - atInstall,
-      // A baseline stamped in this very call is "just now", not history.
+      // A baseline captured in THIS call is not history. Without this the card
+      // said "Unchanged since you installed" five seconds after first stamping
+      // the baseline — a comparison over time that never happened. Caught by
+      // reading the screen, not by a test.
+      baselineIsNew: stamped.count > 0,
       since: stamped.count > 0 ? null : (row?.storeScoreAtInstallAt?.toISOString() ?? null),
       scanned: scan.totalScanned,
     };

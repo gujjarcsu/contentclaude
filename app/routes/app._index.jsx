@@ -287,7 +287,9 @@ export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
 function StoreScoreCard({ score }) {
   if (!score?.available || !Number.isFinite(score.current)) return null;
 
-  const hasBaseline = Number.isFinite(score.atInstall);
+  // A baseline captured on THIS very load is not a comparison. Treating it as
+  // one produced "Unchanged since you installed" seconds after the first scan.
+  const hasBaseline = Number.isFinite(score.atInstall) && !score.baselineIsNew;
   const delta = hasBaseline ? score.current - score.atInstall : null;
   const improved = delta != null && delta > 0;
 
@@ -325,7 +327,9 @@ function StoreScoreCard({ score }) {
             ? `Up ${delta} points since you installed, across the ${score.scanned} products we scanned.`
             : hasBaseline && delta === 0
               ? `Unchanged since you installed, across the ${score.scanned} products we scanned.`
-              : `Across the ${score.scanned} products we scanned. We will show the change once there is one.`}
+              : hasBaseline && delta < 0
+                ? `Down ${Math.abs(delta)} points since you installed, across the ${score.scanned} products we scanned.`
+                : `Across the ${score.scanned} products we scanned. We will show the change once there is one.`}
         </Text>
       </BlockStack>
     </Card>

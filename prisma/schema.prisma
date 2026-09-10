@@ -95,11 +95,18 @@ model GeneratedContent {
   // older row means "published before verification existed", never "verified".
   verifiedAt       DateTime?
   verifyNote       String?
+  // Phase 4 item 4.1 — the quality gate. `simhash` is the product-agnostic
+  // fingerprint the duplicate check compares (16 bytes per row instead of the
+  // description itself); `qualityNote` is the plain-language reason a draft was
+  // flagged "needs a look". NULL note means it passed.
+  simhash          String?
+  qualityNote      String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@unique([shop, productId, contentType])
   @@index([shop, verifyNote])
+  @@index([shop, contentType, updatedAt(sort: Desc)])
   @@index([shop, productId])
   @@index([shop, status])
   @@index([shop, contentType, status])
