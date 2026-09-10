@@ -151,6 +151,8 @@ describe("one bulk action, one name", () => {
   it("the primary is not rendered at all when there is nothing to do", () => {
     // The brief: never render a disabled primary.
     const src = code("app/routes/app.products.jsx");
-    expect(src).toMatch(/noContentProducts > 0\s*\?[\s\S]{0,300}: undefined/);
+    // `noContentProducts` became `notOptimized` in Group 1: the number was never
+    // "products with no content", and naming it that was half the defect.
+    expect(src).toMatch(/notOptimized > 0\s*\?[\s\S]{0,900}: undefined/);
   });
 });

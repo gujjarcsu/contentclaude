@@ -46,7 +46,14 @@ import {
   sliceToQuota,
 } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
-import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
+import { getContentMetrics } from "../utils/metrics.server.js";
+import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
+import {
+  actionFor,
+  hasRealContent,
+  CONTENT_ACTION_LABEL,
+  CONTENT_ACTION_TONE,
+} from "../utils/candidates.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
@@ -97,13 +104,22 @@ export const loader = async ({ request }) => {
   // product-count parse could not start until the 50-product page had been
   // fully parsed. Reading the body is part of the round-trip, so both reads
   // now happen inside Promise.all.
-  const [gqlData, plan, usageCount, metrics, productCountData, publishWithoutReview] = await Promise.all([
+  const [gqlData, plan, usageCount, metrics, candidateCounts, publishWithoutReview, remaining] =
+    await Promise.all([
     shopifyQuery(admin.graphql, gqlQuery, { cursor }, { shop, label: "products page" }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     getContentMetrics(shop),
-    admin.graphql(`query { productsCount { count } }`).then((r) => r.json()),
+    // Group 1 — this was `productsCount { count }`, unfiltered, and it became
+    // the Products header, the "Need Content" card, the "Optimize store (N)"
+    // label, the confirmation modal and the SEO Audit population. On a 3,148
+    // product catalogue of which 1,350 were active, every one of them said
+    // 3,148. One line, five symptoms.
+    getCandidateCounts(admin, shop),
     publishesWithoutReview(shop),
+    // Group 3.3 — a confirmation that spends a merchant's money has to state
+    // what will actually happen, and what happens is decided by the quota.
+    remainingGenerations(shop),
   ]);
 
   // Phase 4 item 6 — this used to read `gqlData.data.products` directly. On a
@@ -134,7 +150,11 @@ export const loader = async ({ request }) => {
     tags: node.tags || [],
   }));
 
-  const totalStoreProducts = productCountData.data?.productsCount?.count ?? products.length;
+  // Group 1.5 — BOTH numbers survive, each labelled. "3,148 products in your
+  // catalog" is TRUE and must keep its meaning; replacing it with the candidate
+  // count would break a true sentence while leaving the bug in place.
+  const totalStoreProducts = candidateCounts.total?.count ?? null;
+  const candidateProducts = candidateCounts.candidates?.count ?? null;
 
   // Content status only for the products visible on THIS page — a bounded query
   // (≤ PAGE_SIZE rows) instead of loading every GeneratedContent row for the shop.
@@ -174,7 +194,20 @@ export const loader = async ({ request }) => {
   // sum to totalStoreProducts.
   const publishedProducts = metrics.publishedProducts;
   const draftProducts = metrics.draftProducts;
-  const noContentProducts = needsContentFrom(metrics, totalStoreProducts);
+
+  // Group 4.1 — "has no content at all" and "not yet optimized by us" are two
+  // different states and must never share a number, a label, a badge or a
+  // colour. This one is the SECOND: candidates we have not written for. It is
+  // no longer called "need content", because on a store whose every product
+  // already had a description that sentence was false about ~3,146 of them.
+  //
+  // Counted against CANDIDATES, not the catalogue: offering to optimize an
+  // archived product spends a generation on a page nobody can reach.
+  const notOptimized = notOptimizedFrom(candidateProducts, metrics.withContent);
+
+  // Group 3.3 — what will ACTUALLY happen when they press the button. The app
+  // already knew this before the click and still promised the whole catalogue.
+  const { now: willProcessNow, waiting: waitingForQuota } = splitByQuota(notOptimized, remaining);
 
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
@@ -202,7 +235,15 @@ export const loader = async ({ request }) => {
     totalStoreProducts,
     publishedProducts,
     draftProducts,
-    noContentProducts,
+    candidateProducts,
+    candidateLabel: candidateCounts.label,
+    candidateExact: candidateCounts.candidates?.exact ?? true,
+    totalExact: candidateCounts.total?.exact ?? true,
+    countsOk: candidateCounts.ok,
+    notOptimized,
+    willProcessNow,
+    waitingForQuota,
+    remaining,
     usageCount,
     usageRemaining,
     quotaWarning,
@@ -299,7 +340,7 @@ export const action = async ({ request }) => {
       pageCount++;
       // Phase 4 item 6 — with backoff. Enumerating 5,000 products is 20 pages,
       // and without a retry the first throttle silently truncated the run: the
-      // merchant asked to optimise everything and got whatever had been read
+      // merchant asked to optimize everything and got whatever had been read
       // before Shopify said no.
       const res = await shopifyQuery(
         admin.graphql,
@@ -447,9 +488,16 @@ export default function ProductsPage() {
     pageInfo,
     statusFilter,
     totalStoreProducts,
+    candidateProducts,
+    candidateLabel,
+    candidateExact,
+    totalExact,
+    countsOk,
     publishedProducts,
     draftProducts,
-    noContentProducts,
+    notOptimized,
+    willProcessNow,
+    waitingForQuota,
     usageCount,
     usageRemaining,
     quotaWarning,
@@ -510,6 +558,40 @@ export default function ProductsPage() {
     p.title.toLowerCase().includes(searchValue.toLowerCase()),
   );
 
+  /**
+   * Group 1.5 + 2.1. The old subtitle was
+   *   `${totalStoreProducts} products · ... · ${noContentProducts} need content`
+   * where BOTH numbers came from one unfiltered `productsCount`. On a catalogue
+   * of 3,148 products with 1,350 active it said "3,148 products ... 3,146 need
+   * content", and neither half was true.
+   *
+   * Now: the catalogue total (which is true, and stays), then the population the
+   * other numbers are actually about, named rather than implied. When Shopify
+   * could not give us a count we say so instead of printing a zero.
+   */
+  const subtitleText = useMemo(() => {
+    if (!countsOk || totalStoreProducts === null) {
+      return "We could not read your catalogue totals from Shopify just now.";
+    }
+    const total = totalExact ? `${totalStoreProducts}` : `${totalStoreProducts}+`;
+    const cand = candidateExact ? `${candidateProducts}` : `${candidateProducts}+`;
+    const scope = candidateProducts === totalStoreProducts ? "" : ` · ${cand} ${candidateLabel}`;
+    return (
+      `${total} products in your catalog${scope} · ` +
+      `${publishedProducts} live · ${draftProducts} ready to review · ${notOptimized} not yet optimized`
+    );
+  }, [
+    countsOk,
+    totalStoreProducts,
+    totalExact,
+    candidateProducts,
+    candidateExact,
+    candidateLabel,
+    publishedProducts,
+    draftProducts,
+    notOptimized,
+  ]);
+
   // Tab counts are scoped to the CURRENT page (the tabs filter only the
   // visible 50-product page). Using store-wide counts here made labels like
   // "Draft (120)" sit above an empty list — the store-wide totals live in the
@@ -531,7 +613,7 @@ export default function ProductsPage() {
   const tabs = useMemo(
     () => [
       { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
-      { id: "needsContent", content: `Needs Content (${pageCounts.none})`, panelID: "needsContent" },
+      { id: "needsContent", content: `Not optimized on this page (${pageCounts.none})`, panelID: "needsContent" },
       { id: "draft", content: `Draft (${pageCounts.draft})`, panelID: "draft" },
       { id: "published", content: `Published (${pageCounts.published})`, panelID: "published" },
     ],
@@ -562,9 +644,17 @@ export default function ProductsPage() {
     [PRODUCT_STATE.REJECTED]: "warning",
   };
 
-  function getStatusBadge(productId) {
+  function getStatusBadge(productId, description) {
     const state = stateOfContentMap(contentMap[productId]);
-    return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
+    if (state !== PRODUCT_STATE.NEEDS_CONTENT) {
+      return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
+    }
+    // Group 4.1 — NEEDS_CONTENT means "we hold nothing for this product". It
+    // does NOT mean the product has no description: on a store where all 100
+    // sampled products had one, every row still showed a red "Needs content".
+    // Whether this is a problem depends entirely on whose content is missing.
+    const action = actionFor({ hasOwnContent: hasRealContent(description) });
+    return <Badge tone={CONTENT_ACTION_TONE[action]}>{CONTENT_ACTION_LABEL[action]}</Badge>;
   }
 
   /**
@@ -691,7 +781,7 @@ export default function ProductsPage() {
   return (
     <Page
       title="Products"
-      subtitle={`${totalStoreProducts} products · ${publishedProducts} live · ${draftProducts} ready to review · ${noContentProducts} need content`}
+      subtitle={subtitleText}
       backAction={{ content: "Home", onAction: () => navigate("/app") }}
       /* Phase 2 item 2.3 — ONE bulk action, with ONE name.
          There were six labels for this job on this page alone: "Generate All
@@ -708,10 +798,19 @@ export default function ProductsPage() {
          Phase 2 item 2.7 — exactly one primary, chosen by state, never
          disabled. With nothing to do it is not rendered at all. */
       primaryAction={
-        noContentProducts > 0
+        notOptimized > 0
           ? {
-              content: `Optimize store (${noContentProducts})`,
-              onAction: () => (entitlements?.bulkJobs ? setGenerateAllModal(true) : navigate("/app/plans")),
+              // Group 3.1 — this used to be a bare `navigate("/app/plans")` for
+              // a shop without the entitlement: the highest-contrast control on
+              // the busiest screen, with no lock, no badge and no plan name,
+              // taking a Free merchant straight to a pricing page. Built for
+              // Shopify calls that a dark pattern and a reviewer finds it in
+              // thirty seconds. The plan is now named in the label, and the
+              // click opens a modal that explains rather than a checkout.
+              content: entitlements?.bulkJobs
+                ? `Optimize store (${notOptimized})`
+                : `Optimize store (${notOptimized}) · Starter`,
+              onAction: () => setGenerateAllModal(true),
             }
           : undefined
       }
@@ -788,18 +887,19 @@ export default function ProductsPage() {
             <Card>
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={AlertCircleIcon} tone={noContentProducts > 0 ? "critical" : "subdued"} />
-                  <Text
-                    as="p"
-                    variant="headingXl"
-                    fontWeight="bold"
-                    tone={noContentProducts > 0 ? "critical" : undefined}
-                  >
-                    {noContentProducts}
+                  {/* Group 4.1 — this said "Need Content" in critical red on a
+                      store where all 100 sampled products already had a
+                      description, an SEO title and an SEO description. The
+                      number was never "products with no content"; it was
+                      "products WE have not written for", which is not a fault
+                      of the merchant's and is not red. */}
+                  <Icon source={AlertCircleIcon} tone="subdued" />
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {notOptimized === null ? "—" : notOptimized}
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Need Content
+                  Not yet optimized
                 </Text>
               </BlockStack>
             </Card>
@@ -959,7 +1059,7 @@ export default function ProductsPage() {
               },
             ]}
             renderItem={(product) => {
-              const { id, numericId, title, imageUrl, price, productType } = product;
+              const { id, numericId, title, imageUrl, price, productType, description } = product;
               return (
                 <ResourceItem
                   id={id}
@@ -1006,7 +1106,7 @@ export default function ProductsPage() {
                       {getContentTypePills(id)}
                     </BlockStack>
                     <BlockStack gap="200" inlineAlign="end">
-                      {getStatusBadge(id)}
+                      {getStatusBadge(id, description)}
                       {getScoreDelta(id)}
                       <InlineStack gap="200">
                         {canRestore(id) && (
@@ -1080,16 +1180,47 @@ export default function ProductsPage() {
         <Modal
           open={generateAllModal}
           onClose={() => setGenerateAllModal(false)}
-          title={`Optimize ${noContentProducts} products?`}
-          primaryAction={{ content: "Optimize store", onAction: handleGenerateAll }}
+          title={
+            entitlements?.bulkJobs ? `Optimize ${willProcessNow} products now?` : "Bulk optimize is on Starter"
+          }
+          primaryAction={
+            entitlements?.bulkJobs
+              ? { content: "Optimize store", onAction: handleGenerateAll }
+              : { content: "See plans", onAction: () => navigate("/app/plans") }
+          }
           secondaryActions={[{ content: "Cancel", onAction: () => setGenerateAllModal(false) }]}
         >
           <Modal.Section>
             <BlockStack gap="300">
-              <Text as="p" variant="bodyMd">
-                This creates a background job for all {totalStoreProducts} products. Estimated time: ~
-                {Math.ceil((totalStoreProducts * 3.5) / 60)} minutes.
-              </Text>
+              {/* Group 3.1 — the merchant learns what the feature is and what it
+                  costs BEFORE they are moved to a pricing page, and the thing
+                  they CAN do today stays available. */}
+              {!entitlements?.bulkJobs && (
+                <Text as="p" variant="bodyMd">
+                  Bulk optimize writes content for every product in one background job. It is included from
+                  Starter. On your current plan you can still optimize products one at a time from the list
+                  below — nothing here is taken away.
+                </Text>
+              )}
+              {entitlements?.bulkJobs && (
+                <>
+                  {/* Group 3.3 — this said "a background job for all 3,148
+                      products ... ~184 minutes" while sliceToQuota was about to
+                      cut the run to whatever quota remained. The app knew before
+                      the click and promised the whole catalogue anyway. */}
+                  <Text as="p" variant="bodyMd">
+                    This starts a background job for {willProcessNow} of the {notOptimized} products not yet
+                    optimized. Estimated time: ~{Math.max(1, Math.ceil((willProcessNow * 3.5) / 60))} minutes.
+                  </Text>
+                  {waitingForQuota > 0 && (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      The remaining {waitingForQuota} need more generations than your plan has left this month.
+                      They stay untouched — nothing is lost, and you can run this again after your quota
+                      resets or on a larger plan.
+                    </Text>
+                  )}
+                </>
+              )}
               <Text as="p" variant="bodySm" fontWeight="semibold">
                 Content to generate:
               </Text>

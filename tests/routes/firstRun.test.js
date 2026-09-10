@@ -108,7 +108,7 @@ const hasSeenADraft = () => prisma.shop.findUnique.mockResolvedValue({ firstDraf
 beforeEach(() => {
   vi.clearAllMocks();
   authenticate.admin.mockResolvedValue({ session: { shop: SHOP }, admin: { graphql } });
-  graphql.mockResolvedValue({ json: async () => ({ data: { productsCount: { count: 12 } } }) });
+  graphql.mockResolvedValue({ json: async () => ({ data: { total: { count: 12, precision: "EXACT" }, candidates: { count: 12, precision: "EXACT" }, productsCount: { count: 12 } } }) });
   getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 0 });
   getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyLimit: 25 });
   getMonthlyUsageCount.mockResolvedValue(0);
@@ -211,7 +211,7 @@ describe("the Start state is honest about what it will spend", () => {
 
 describe("first-value instrumentation", () => {
   it("records the catalogue size on a first run, for the TTV report", async () => {
-    graphql.mockResolvedValue({ json: async () => ({ data: { productsCount: { count: 87 } } }) });
+    graphql.mockResolvedValue({ json: async () => ({ data: { total: { count: 87, precision: "EXACT" }, candidates: { count: 87, precision: "EXACT" }, productsCount: { count: 87 } } }) });
     await land();
     expect(stampProductCountAtFirstLoad).toHaveBeenCalledWith(SHOP, 87);
   });
@@ -266,16 +266,27 @@ describe("what the dashboard is given to render", () => {
   });
 
   it("does not invent a product count when Shopify will not answer", async () => {
-    // The loader lets this throw, and the route error boundary shows it. That
-    // is deliberate: rendering "0 products" to a merchant with four thousand
-    // would be a made-up number on the first screen they see, and they would
-    // reasonably conclude the app cannot see their catalogue.
+    // The guarantee is unchanged and is the one that matters: rendering
+    // "0 products" to a merchant with four thousand would be a made-up number
+    // on the first screen they see.
+    //
+    // What CHANGED in Group 1 is the failure mode. This used to let the loader
+    // throw, so the whole dashboard became an error boundary. The count now
+    // comes back as `null` and Home renders "—" with a line saying we could not
+    // read it — so the drafts, the store score and the next action still work
+    // while Shopify is unavailable. A stated unknown beats both a fabricated
+    // zero and a blank screen.
     graphql.mockRejectedValue(new Error("Shopify 503"));
-    await expect(land()).rejects.toThrow(/Shopify 503/);
+    const r = await land();
+    expect(r.data.totalProducts).toBeNull();
+    expect(r.data.candidateProducts).toBeNull();
+    expect(r.data.countsOk).toBe(false);
+    // The thing this test exists to forbid.
+    expect(r.data.totalProducts).not.toBe(0);
   });
 
   it("reports the real product count when Shopify does answer", async () => {
-    graphql.mockResolvedValue({ json: async () => ({ data: { productsCount: { count: 4212 } } }) });
+    graphql.mockResolvedValue({ json: async () => ({ data: { total: { count: 4212, precision: "EXACT" }, candidates: { count: 4212, precision: "EXACT" }, productsCount: { count: 4212 } } }) });
     const r = await land();
     expect(r.data.totalProducts).toBe(4212);
   });

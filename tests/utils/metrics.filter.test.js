@@ -72,7 +72,15 @@ describe("defect B: product counts exclude collection rows", () => {
       expect(src, `${f} re-derives needs-content`).not.toMatch(
         /total\w*\s*-\s*\w*[Pp]ublished\w*\s*-\s*\w*[Dd]raft/,
       );
-      expect(src, `${f} does not use needsContentFrom`).toMatch(/needsContentFrom/);
+      // Group 1 moved this arithmetic from `needsContentFrom(metrics, total)`
+      // to `notOptimizedFrom(candidates, withContent)`. The GUARD's intent is
+      // unchanged and is the reason it caught the move: no screen may do this
+      // subtraction inline. The name it must call is the only thing that moved.
+      expect(src, `${f} does not use notOptimizedFrom`).toMatch(/notOptimizedFrom/);
+      // And it may not go back to subtracting a candidate count by hand.
+      expect(src, `${f} subtracts a candidate count inline`).not.toMatch(
+        /candidate\w*\s*-\s*\w*[Ww]ithContent/,
+      );
     }
   });
 

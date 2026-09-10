@@ -32,6 +32,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "BrandVoice.brandTone",
   "BrandVoice.createdAt",
   "BrandVoice.id",
+  "BrandVoice.includeDraftProducts",
   "BrandVoice.keyDifferentiators",
   "BrandVoice.language",
   "BrandVoice.publishWithoutReview",

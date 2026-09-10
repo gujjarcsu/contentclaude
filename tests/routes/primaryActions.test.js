@@ -83,7 +83,7 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
   });
 
   it("then products with no content", () => {
-    expect(src).toMatch(/needsContentCount > 0[\s\S]{0,200}Optimize \$\{needsContentCount\}/);
+    expect(src).toMatch(/notOptimizedCount > 0[\s\S]{0,200}Optimize \$\{notOptimizedCount\}/);
   });
 
   it("and an audit when there is nothing else to do", () => {
@@ -96,7 +96,7 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
 
   it("the label counts the actual work, so it is never a bare verb", () => {
     expect(src).toMatch(/draftCount === 1 \? "" : "s"/);
-    expect(src).toMatch(/needsContentCount === 1 \? "" : "s"/);
+    expect(src).toMatch(/notOptimizedCount === 1 \? "" : "s"/);
   });
 });
 
@@ -131,6 +131,7 @@ describe("no primary is rendered disabled because input is missing", () => {
 
   it("the Products page primary is absent, not disabled, when there is nothing to do", () => {
     const src = code("app/routes/app.products.jsx");
-    expect(src).toMatch(/noContentProducts > 0\s*\?[\s\S]{0,300}: undefined/);
+    // Renamed in Group 1: the number was never "products with no content".
+    expect(src).toMatch(/notOptimized > 0\s*\?[\s\S]{0,900}: undefined/);
   });
 });

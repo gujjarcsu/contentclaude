@@ -37,13 +37,12 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
-import { getCache } from "../utils/cache.server.js";
-import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
+import { getContentMetrics } from "../utils/metrics.server.js";
+import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { getStoreScore } from "../utils/storeScore.server.js";
-import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 import { recentAutopilotWork } from "../utils/autopilot.server.js";
 
 export const loader = async ({ request }) => {
@@ -110,7 +109,7 @@ export const loader = async ({ request }) => {
   // everything else; folding it into Promise.all makes total latency ≈ the
   // single slowest call.
   const [
-    totalProducts,
+    candidateCounts,
     metrics,
     brandVoice,
     activeJobCount,
@@ -120,27 +119,13 @@ export const loader = async ({ request }) => {
     growthState,
     shopRow,
   ] = await Promise.all([
-    getCache(
-      `productCount:${shop}`,
-      async () => {
-        // Phase 4 item 6 — this was the third instance of the same crash, on
-        // the dashboard itself: `d.data.productsCount.count` with no errors
-        // check, so a THROTTLED response (where `data` is null) 500ed Home for
-        // a large catalogue. Found by the sweep, not by reading the file.
-        const r = await shopifyQuery(
-          admin.graphql,
-          `query { productsCount { count } }`,
-          {},
-          {
-            shop,
-            label: "product count",
-          },
-        );
-        if (!r.ok) throw new Error(r.error ?? "product count unavailable");
-        return r.data?.productsCount?.count ?? 0;
-      },
-      300,
-    ),
+    // Group 1 — this was a cached, UNFILTERED `productsCount { count }`. It
+    // became the "Total Products" card, the "N need content" figure and the
+    // "Optimize N products" primary. On a catalogue of 3,148 with 1,350 active
+    // it reported 3,148 to all three. The primitive answers both questions —
+    // the true catalogue total AND what this app may actually touch — and reads
+    // Shopify's `precision`, which we were ignoring.
+    getCandidateCounts(admin, shop),
     getContentMetrics(shop),
     prisma.brandVoice.findUnique({ where: { shop } }),
     prisma.generationJob.count({
@@ -174,9 +159,17 @@ export const loader = async ({ request }) => {
   // and Optimize. These are mutually exclusive and, with needsContent, sum to
   // totalProducts, so Home can never report a different number from Products
   // for the same store.
+  // Group 1.5 — "Total Products 3,148 — In your Shopify catalog" is a TRUE
+  // sentence and keeps its meaning. What changes is that the number the app
+  // ACTS on is no longer the same number.
+  const totalProducts = candidateCounts.total?.count ?? null;
+  const candidateProducts = candidateCounts.candidates?.count ?? null;
+
   const generatedCount = metrics.publishedProducts;
   const draftCount = metrics.draftProducts;
-  const needsContentCount = needsContentFrom(metrics, totalProducts);
+  // Group 4.1 — not "needs content". These are candidates WE have not written
+  // for, which on a store with its own copy is a completely different set.
+  const notOptimizedCount = notOptimizedFrom(candidateProducts, metrics.withContent);
 
   const hasBrandVoice = !!(
     brandVoice &&
@@ -240,7 +233,10 @@ export const loader = async ({ request }) => {
     totalProducts,
     generatedCount,
     draftCount,
-    needsContentCount,
+    notOptimizedCount,
+    candidateProducts,
+    candidateLabel: candidateCounts.label,
+    countsOk: candidateCounts.ok,
     geoNoteDismissed: !!growthState?.geoNoteDismissedAt,
     activeJobCount,
     hasBrandVoice,
@@ -538,7 +534,10 @@ export default function Dashboard() {
     totalProducts,
     generatedCount,
     draftCount,
-    needsContentCount,
+    notOptimizedCount,
+    candidateProducts,
+    candidateLabel,
+    countsOk,
     activeJobCount,
     hasBrandVoice,
     isNewShop,
@@ -621,9 +620,9 @@ export default function Dashboard() {
           content: `Review ${draftCount} draft${draftCount === 1 ? "" : "s"}`,
           onAction: () => navigate("/app/review"),
         }
-      : needsContentCount > 0
+      : notOptimizedCount > 0
         ? {
-            content: `Optimize ${needsContentCount} product${needsContentCount === 1 ? "" : "s"}`,
+            content: `Optimize ${notOptimizedCount} product${notOptimizedCount === 1 ? "" : "s"}`,
             onAction: () => navigate("/app/optimize"),
           }
         : { content: "Run audit", onAction: () => navigate("/app/seo-audit") };
@@ -631,7 +630,7 @@ export default function Dashboard() {
   // Never a disabled primary: when there is nothing to review and nothing to
   // generate, the primary becomes the audit and this becomes the second option.
   const secondaryActions =
-    draftCount === 0 && needsContentCount === 0
+    draftCount === 0 && notOptimizedCount === 0
       ? [{ content: "Write a blog post", onAction: () => navigate("/app/blog") }]
       : undefined;
 
@@ -790,8 +789,17 @@ export default function Dashboard() {
               icon={ProductIcon}
               iconTone="subdued"
               label="Total Products"
-              value={totalProducts}
-              subtext="In your Shopify catalog"
+              value={totalProducts === null ? "—" : totalProducts}
+              subtext={
+                /* Group 1.5 + 2.1 — the total is true and stays true; the
+                   population this app can actually act on is named beside it
+                   rather than silently substituted for it. */
+                !countsOk
+                  ? "We could not read this from Shopify just now"
+                  : candidateProducts === totalProducts
+                    ? "In your Shopify catalog"
+                    : `In your Shopify catalog · ${candidateProducts} ${candidateLabel}`
+              }
             />
           </Layout.Section>
           <Layout.Section variant="oneThird">
@@ -878,7 +886,11 @@ export default function Dashboard() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  Generate AI content for every product missing a description — one click, runs in the
+                  {/* Group 4.2 — this said "every product missing a description",
+                      but the action targets every product WE have not written
+                      for, which on a store with its own copy is a very
+                      different set and a much larger number. */}
+                  Write content for the products we have not optimized yet — one click, runs in the
                   background.
                 </Text>
               </BlockStack>

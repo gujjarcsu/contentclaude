@@ -12,8 +12,8 @@ generator client {
 // Connection pooling: add ?pgbouncer=true&connection_limit=1 to DATABASE_URL
 // when using Prisma with a serverless / edge deployment.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   // `prisma migrate deploy` takes a Postgres ADVISORY LOCK before it does
   // anything, and advisory locks are per-connection. Pointed at a pgbouncer in
   // transaction mode, where a connection is not sticky, the lock can never be
@@ -47,48 +47,55 @@ model Session {
   emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+
   @@index([shop])
 }
 
 // Brand voice configuration per shop
 model BrandVoice {
-  id                 String   @id @default(cuid())
-  shop               String   @unique
-  storeName          String   @default("")
-  brandTone          String   @default("professional")
-  targetAudience     String   @default("")
-  keyDifferentiators String   @default("")
-  avoidPhrases       String   @default("")
-  sampleContent      String   @default("")
-  additionalNotes    String   @default("")
-  targetKeywords         String   @default("") // comma-separated global SEO keywords
-  language               String   @default("en") // ISO 639-1 output language code
-  autopilotEnabled       Boolean  @default(false) // auto-generate on new product
-  autopilotAutoPublish   Boolean  @default(false) // publish immediately during autopilot
-  autopilotContentTypes  String   @default("description,metaTitle,metaDescription") // csv
+  id                    String   @id @default(cuid())
+  shop                  String   @unique
+  storeName             String   @default("")
+  brandTone             String   @default("professional")
+  targetAudience        String   @default("")
+  keyDifferentiators    String   @default("")
+  avoidPhrases          String   @default("")
+  sampleContent         String   @default("")
+  additionalNotes       String   @default("")
+  targetKeywords        String   @default("") // comma-separated global SEO keywords
+  language              String   @default("en") // ISO 639-1 output language code
+  autopilotEnabled      Boolean  @default(false) // auto-generate on new product
+  autopilotAutoPublish  Boolean  @default(false) // publish immediately during autopilot
+  autopilotContentTypes String   @default("description,metaTitle,metaDescription") // csv
   // Phase 2 item 2.6 — "Publish without review". ONE switch, in Settings.
   // Auto-publish used to be a per-run checkbox in five places, one of which had
   // no confirm at all. The listing promises nothing goes live until the
   // merchant approves it; that promise cannot depend on which box was last
   // ticked. Off by default, and turning it on asks first.
-  publishWithoutReview   Boolean  @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  publishWithoutReview  Boolean  @default(false)
+  // Group 1.2 — which products an action may touch. A DRAFT product has no
+  // public page, so writing SEO copy for one spends a generation on a page
+  // nobody can reach. Default off. But it is a default, not a law: merchants
+  // who draft in bulk and publish in batches legitimately want drafts included,
+  // and every label states which set the number refers to.
+  includeDraftProducts  Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 // AI-generated content per product per content type
 model GeneratedContent {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   shop             String
   productId        String
-  productTitle     String   @default("")
-  contentType      String   // "description" | "metaTitle" | "metaDescription" | "faq" | "altText"
-  originalContent  String   @default("")
-  generatedContent String   @default("")
-  publishedContent String   @default("")
+  productTitle     String    @default("")
+  contentType      String // "description" | "metaTitle" | "metaDescription" | "faq" | "altText"
+  originalContent  String    @default("")
+  generatedContent String    @default("")
+  publishedContent String    @default("")
   // "draft" | "approved" | "published" | "published_unverified" | "rejected"
-  status           String   @default("draft")
-  version          Int      @default(1)
+  status           String    @default("draft")
+  version          Int       @default(1)
   // Phase 4 item 4.2 — post-publish verification. verifiedAt is set only when
   // the value Shopify returned in the mutation response matched what we sent;
   // verifyNote carries the plain-language reason when it did not. NULL on an
@@ -101,8 +108,8 @@ model GeneratedContent {
   // flagged "needs a look". NULL note means it passed.
   simhash          String?
   qualityNote      String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([shop, productId, contentType])
   @@index([shop, verifyNote])
@@ -121,11 +128,11 @@ model GeneratedContent {
 model Plan {
   id               String    @id @default(cuid())
   shop             String    @unique
-  planName         String    @default("free")   // "free" | "starter" | "growth" | "pro"
+  planName         String    @default("free") // "free" | "starter" | "growth" | "pro"
   status           String    @default("active") // "active" | "cancelled" | "frozen"
-  monthlyLimit     Int       @default(25)       // max generations per calendar month (free plan)
-  shopifyChargeId  String?                      // Shopify AppSubscription GID
-  currentPeriodEnd DateTime?                    // when the current billing period ends
+  monthlyLimit     Int       @default(25) // max generations per calendar month (free plan)
+  shopifyChargeId  String? // Shopify AppSubscription GID
+  currentPeriodEnd DateTime? // when the current billing period ends
   trialEndsAt      DateTime?
   renewsAt         DateTime?
   createdAt        DateTime  @default(now())
@@ -136,8 +143,8 @@ model Plan {
 model UsageRecord {
   id          String   @id @default(cuid())
   shop        String
-  month       String   // "2026-05"  — YYYY-MM, makes monthly rollup trivial
-  contentType String   // "description" | "metaTitle" | etc.
+  month       String // "2026-05"  — YYYY-MM, makes monthly rollup trivial
+  contentType String // "description" | "metaTitle" | etc.
   productId   String?
   tokensUsed  Int      @default(0)
   createdAt   DateTime @default(now())
@@ -151,8 +158,8 @@ model UsageRecord {
 model GDPRRequest {
   id          String   @id @default(cuid())
   shop        String
-  requestType String   // "customer_data_request" | "customer_redact" | "shop_redact"
-  payload     String   // raw JSON of the webhook payload
+  requestType String // "customer_data_request" | "customer_redact" | "shop_redact"
+  payload     String // raw JSON of the webhook payload
   processedAt DateTime @default(now())
 
   @@index([shop])
@@ -165,7 +172,7 @@ model ContentVersion {
   id          String   @id @default(cuid())
   shop        String
   productId   String
-  contentType String   // "description" | "metaTitle" | "metaDescription" | "faq"
+  contentType String // "description" | "metaTitle" | "metaDescription" | "faq"
   content     String
   version     Int      @default(1)
   createdAt   DateTime @default(now())
@@ -195,19 +202,19 @@ model GenerationJob {
   // "quick_start". Nullable and never backfilled; the daily autopilot cap
   // counts only rows explicitly marked "autopilot", so an unknown row can
   // never be counted against a merchant's ceiling.
-  source           String?
+  source            String?
   id                String    @id @default(cuid())
   shop              String
   status            String    @default("queued") // "queued" | "processing" | "complete" | "failed"
   totalProducts     Int       @default(0)
   completedProducts Int       @default(0)
   failedProducts    Int       @default(0)
-  productIds        String    @default("[]")     // JSON array of Shopify Product GIDs
+  productIds        String    @default("[]") // JSON array of Shopify Product GIDs
   contentTypes      String    @default("description") // comma-separated
-  mode              String    @default("generate")     // "generate" (from scratch) | "enhance" (improve existing)
-  autoPublish       Boolean   @default(false)          // push to Shopify immediately after generation
-  quotaSkipped      Int       @default(0)              // products excluded before the run because the monthly quota could not cover them (disclosed pre-run)
-  errorLog          String?   // JSON array of { productId, error }
+  mode              String    @default("generate") // "generate" (from scratch) | "enhance" (improve existing)
+  autoPublish       Boolean   @default(false) // push to Shopify immediately after generation
+  quotaSkipped      Int       @default(0) // products excluded before the run because the monthly quota could not cover them (disclosed pre-run)
+  errorLog          String? // JSON array of { productId, error }
   startedAt         DateTime?
   completedAt       DateTime?
   createdAt         DateTime  @default(now())
@@ -236,37 +243,37 @@ model CollectionVoice {
 // Per-shop growth/engagement state — first-run flow, review ask, and
 // merchant-confirmed setup milestones.
 model GrowthState {
-  id                      String    @id @default(cuid())
-  shop                    String    @unique
+  id                 String    @id @default(cuid())
+  shop               String    @unique
   // Post-publish App Store review ask — set once we've asked (success OR decline),
   // so we NEVER ask the same shop twice, independent of App Bridge's own cooldown.
-  reviewRequestedAt       DateTime?
+  reviewRequestedAt  DateTime?
   // Theme app embed ("AI-search FAQ schema") — set when the merchant confirms
   // they enabled it in the theme editor. The FAQ JSON-LD only reaches the
   // storefront once the embed is on, so the app must disclose this step
   // (App Store requirement 5.1.3) and track whether it's done.
-  embedConfirmedAt        DateTime?
+  embedConfirmedAt   DateTime?
   // Phase 2 item 2.4 — the one explainer banner on Home. Dismissal is stored
   // per shop rather than in the browser, so it stays dismissed on the
   // merchant's other devices and does not come back when they clear site data.
-  geoNoteDismissedAt      DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  geoNoteDismissedAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 // AI-generated blog posts — saved before/after publishing to Shopify
 model BlogPost {
-  id               String    @id @default(cuid())
+  id               String   @id @default(cuid())
   shop             String
-  title            String    @default("")
-  content          String    @default("")
-  wordCount        Int       @default(0)
-  topic            String    @default("")
-  keywords         String    @default("")
-  status           String    @default("draft")  // "draft" | "published"
-  shopifyArticleId String?                       // Shopify article GID after publish
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  title            String   @default("")
+  content          String   @default("")
+  wordCount        Int      @default(0)
+  topic            String   @default("")
+  keywords         String   @default("")
+  status           String   @default("draft") // "draft" | "published"
+  shopifyArticleId String? // Shopify article GID after publish
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([shop, status])
   @@index([shop, createdAt])
@@ -281,67 +288,67 @@ model BlogPost {
 // shop/redact anonymises the row (shop → "redacted:<hash>", referer/detail
 // cleared) so aggregate install stats survive without identifying the store.
 model Shop {
-  id                   String    @id @default(cuid())
-  shop                 String    @unique
-  installedAt          DateTime  @default(now())
+  id                      String    @id @default(cuid())
+  shop                    String    @unique
+  installedAt             DateTime  @default(now())
   // "app_store:<surface_type>" | "ref:<ref>" | "utm:<utm_source>" |
   // "unknown" (no attribution on the install request) |
   // "pre_tracking" (shop was already installed before tracking shipped)
-  installSource        String    @default("unknown")
-  surfaceType          String?   // home | search | search_ad | category | collection | story | partners | app_details | app_group
-  surfaceDetail        String?   // search query / category title / section handle
-  surfaceIntraPosition String?
-  surfaceInterPosition String?
-  installRef           String?   // ?ref= on links we own (navaal.ai, Bilby, outreach)
-  utmSource            String?
-  utmMedium            String?
-  utmCampaign          String?
-  installReferer       String?   // HTTP referer of the first authenticated document request (origin+path only)
-  installLandingPath   String?   // path of that request
-  installCount         Int       @default(1)
+  installSource           String    @default("unknown")
+  surfaceType             String? // home | search | search_ad | category | collection | story | partners | app_details | app_group
+  surfaceDetail           String? // search query / category title / section handle
+  surfaceIntraPosition    String?
+  surfaceInterPosition    String?
+  installRef              String? // ?ref= on links we own (navaal.ai, Bilby, outreach)
+  utmSource               String?
+  utmMedium               String?
+  utmCampaign             String?
+  installReferer          String? // HTTP referer of the first authenticated document request (origin+path only)
+  installLandingPath      String? // path of that request
+  installCount            Int       @default(1)
   // Reinstalls are counted here; the first-install attribution above is immutable.
-  reinstalledAt        DateTime? // latest reinstall (installedAt keeps the first install)
-  reinstallSource      String?   // same vocabulary as installSource, for the latest reinstall
-  reinstallReferer     String?
-  uninstalledAt        DateTime?
-  redactedAt           DateTime?
+  reinstalledAt           DateTime? // latest reinstall (installedAt keeps the first install)
+  reinstallSource         String? // same vocabulary as installSource, for the latest reinstall
+  reinstallReferer        String?
+  uninstalledAt           DateTime?
+  redactedAt              DateTime?
   // ── Phase 0 item 10: state that must SURVIVE uninstall, or a merchant can
   // reset both the free allowance and the 7-day trial on demand by
   // uninstalling and reinstalling (Plan and UsageRecord are deleted; this row
   // is not). Numbers and timestamps only — nothing here identifies a customer,
   // and shop/redact anonymises this row like every other column.
-  trialUsedAt          DateTime? // first time this shop held a paid subscription; the next subscribe sends trialDays 0
-  usageMonth           String?   // "YYYY-MM" that usageCarryover belongs to
-  usageCarryover       Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
+  trialUsedAt             DateTime? // first time this shop held a paid subscription; the next subscribe sends trialDays 0
+  usageMonth              String? // "YYYY-MM" that usageCarryover belongs to
+  usageCarryover          Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
   // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).
   // Stamped first-writer-wins (updateMany where null) by the server at the moment the thing
   // happened; recordReinstall nulls them (the uninstall deleted the content).
-  productCountAtFirstLoad Int?      // catalog size on the first dashboard load (explains installs that cannot reach a draft)
-  quickStartStartedAt  DateTime?    // merchant pressed "Write N descriptions now"
-  quickStartDraftCount Int       @default(0)
-  firstDraftSeenAt     DateTime?    // first HTTP response that put an AI draft on the merchant screen
-  firstDraftSource     String?      // quick_start | quick_start_reload | product_page | review_page | welcome
-  firstPublishAt       DateTime?    // first Shopify-ACCEPTED productUpdate of AI content
-  firstPublishSource   String?      // review_page | product_page | product_page_auto | bulk_auto_publish
+  productCountAtFirstLoad Int? // catalog size on the first dashboard load (explains installs that cannot reach a draft)
+  quickStartStartedAt     DateTime? // merchant pressed "Write N descriptions now"
+  quickStartDraftCount    Int       @default(0)
+  firstDraftSeenAt        DateTime? // first HTTP response that put an AI draft on the merchant screen
+  firstDraftSource        String? // quick_start | quick_start_reload | product_page | review_page | welcome
+  firstPublishAt          DateTime? // first Shopify-ACCEPTED productUpdate of AI content
+  firstPublishSource      String? // review_page | product_page | product_page_auto | bulk_auto_publish
   // ── Item 4: durable review-ask summary. SURVIVES uninstall/reinstall (never reset); anonymised at shop/redact.
-  reviewAskCount       Int       @default(0)   // reviews.request() calls opened for this shop (optimistic-lock key)
-  reviewLastAskedAt    DateTime?
-  reviewLastCode       String?      // "pending" | success | <Shopify decline code> | unavailable | error | skipped-hidden | unknown
-  reviewNextEligibleAt DateTime?    // per-code hold; a 60-day pending hold is written at open time
-  reviewShownAt        DateTime?    // set only on "success" — the one displayed modal
-  reviewDoneAt         DateTime?    // terminal: success | already-reviewed | merchant-ineligible
+  reviewAskCount          Int       @default(0) // reviews.request() calls opened for this shop (optimistic-lock key)
+  reviewLastAskedAt       DateTime?
+  reviewLastCode          String? // "pending" | success | <Shopify decline code> | unavailable | error | skipped-hidden | unknown
+  reviewNextEligibleAt    DateTime? // per-code hold; a 60-day pending hold is written at open time
+  reviewShownAt           DateTime? // set only on "success" — the one displayed modal
+  reviewDoneAt            DateTime? // terminal: success | already-reviewed | merchant-ineligible
   // ── Item 3.4: which upsell surface the ACTIVE subscription came from
   // ("quota80" | "quota100"), stamped at activation. Null = organic, i.e. no
   // prompt was behind it — never guessed.
-  upgradePromptSource  String?
+  upgradePromptSource     String?
   // ── Item 4.3: the store-level before/after. Captured on the FIRST catalogue
   // scan and never updated — a "before" that moves is not a before. The
   // current score is computed live from the same scanner, so the two numbers
   // are always produced the same way and the comparison is honest.
-  storeScoreAtInstall   Int?
-  storeScoreAtInstallAt DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  storeScoreAtInstall     Int?
+  storeScoreAtInstallAt   DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@index([installedAt])
   @@index([installSource])
@@ -381,16 +388,16 @@ model ProductScore {
 model ReviewRequestAttempt {
   id                String    @id @default(cuid())
   shop              String
-  surface           String    // review_page | product_page
+  surface           String // review_page | product_page
   trigger           String    @default("publish") // first_publish | publish
   attemptNo         Int       @default(1)
   publishedCount    Int       @default(0)
   installAgeSeconds Int?
   requestedAt       DateTime  @default(now())
   respondedAt       DateTime?
-  code              String?   // null = pending
+  code              String? // null = pending
   success           Boolean?
-  message           String?   // the message Shopify returned, at most 200 chars
+  message           String? // the message Shopify returned, at most 200 chars
   nextEligibleAt    DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -406,19 +413,19 @@ model ReviewRequestAttempt {
 model UpgradePrompt {
   id                   String    @id @default(cuid())
   shop                 String
-  trigger              String    // quota_exhausted | optimize_coverage | bulk_gate
-  surface              String    // dashboard | products | product_page | optimize | seo_audit | quick_start
-  month                String    // "2026-09" (UTC — same key as UsageRecord.month)
+  trigger              String // quota_exhausted | optimize_coverage | bulk_gate
+  surface              String // dashboard | products | product_page | optimize | seo_audit | quick_start
+  month                String // "2026-09" (UTC — same key as UsageRecord.month)
   n                    Int       @default(0)
   nDefinition          String    @default("catalog_gaps") // catalog_gaps | no_ai_description | audit_missing_description
   truncated            Boolean   @default(false)
   remaining            Int       @default(0)
   monthlyLimit         Int       @default(0)
   currentPlan          String    @default("free")
-  fitPlanName          String?   // starter | growth | pro
+  fitPlanName          String? // starter | growth | pro
   monthsToCover        Int       @default(1)
   lastSeenAt           DateTime  @default(now())
-  shownCount           Int       @default(0)     // client-confirmed renders
+  shownCount           Int       @default(0) // client-confirmed renders
   firstShownAt         DateTime?
   lastShownAt          DateTime?
   openedAt             DateTime?
@@ -433,7 +440,7 @@ model UpgradePrompt {
   planChosen           String?
   planChosenFrom       String?
   planChosenAt         DateTime?
-  chargeId             String?   // AppSubscription GID
+  chargeId             String? // AppSubscription GID
   declinedAt           DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt

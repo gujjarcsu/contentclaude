@@ -26,10 +26,9 @@ import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
-import { getCache } from "../utils/cache.server.js";
-import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
+import { getContentMetrics } from "../utils/metrics.server.js";
+import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
-import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -41,27 +40,11 @@ export const loader = async ({ request }) => {
 
   // productsCount shares the dashboard/analytics 5-min cache and runs in parallel
   // with the DB queries, so the loader isn't blocked on a serial Admin API call.
-  const [totalProducts, metrics, plan, usageCount, publishWithoutReview] = await Promise.all([
-    getCache(
-      `productCount:${shop}`,
-      async () => {
-        // Phase 4 item 6 — `d.data.productsCount.count` with no errors check
-        // was the same crash as the Products page: on a THROTTLED response
-        // `data` is null and this threw, 500ing Optimize for a big catalogue.
-        const r = await shopifyQuery(
-          admin.graphql,
-          `query { productsCount { count } }`,
-          {},
-          {
-            shop,
-            label: "product count",
-          },
-        );
-        if (!r.ok) throw new Error(r.error ?? "product count unavailable");
-        return r.data?.productsCount?.count ?? 0;
-      },
-      300,
-    ),
+  const [candidateCounts, metrics, plan, usageCount, publishWithoutReview] = await Promise.all([
+    // Group 1 — the same unfiltered `productsCount` that produced five wrong
+    // numbers elsewhere. Optimize is the screen where it mattered most: it fed
+    // `canOptimize`, i.e. how many products a bulk run would be pointed at.
+    getCandidateCounts(admin, shop),
     getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
     prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
@@ -72,9 +55,16 @@ export const loader = async ({ request }) => {
   // Products. This used to count DESCRIPTION ROWS ONLY, which is why Optimize
   // said 14 where Products said 12: a product with a meta title but no
   // description read as needing content here and as having content there.
+  // Group 1.5 — the catalogue total stays true; the number the bulk run is
+  // pointed at is a different number and is now named as one.
+  const totalProducts = candidateCounts.total?.count ?? null;
+  const candidateProducts = candidateCounts.candidates?.count ?? null;
+
   const publishedCount = metrics.publishedProducts;
   const draftCount = metrics.draftProducts;
-  const needsContent = needsContentFrom(metrics, totalProducts);
+  // Group 4.1 — candidates we have not written for, not "products with no
+  // content". The two are only the same on a store that has written nothing.
+  const needsContent = notOptimizedFrom(candidateProducts, metrics.withContent) ?? 0;
   const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
@@ -84,6 +74,9 @@ export const loader = async ({ request }) => {
 
   return Response.json({
     totalProducts,
+    candidateProducts,
+    candidateLabel: candidateCounts.label,
+    countsOk: candidateCounts.ok,
     publishedCount,
     draftCount,
     needsContent,
