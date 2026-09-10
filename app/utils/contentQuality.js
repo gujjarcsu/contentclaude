@@ -51,7 +51,41 @@
 /** Below this, content is not saved as a clean draft. Out of 100. */
 export const QUALITY_THRESHOLD = 60;
 /** Hamming distance at or under this, out of 64 bits, is "the same text". */
+/**
+ * Group 5.4 — TWO numbers, because the two failures deserve different treatment.
+ *
+ * Measured on this codebase's own fixtures: verbatim template reuse with the
+ * name swapped scores 0; the same template with one phrase reworded scores 11;
+ * a genuinely different product in the same brand voice scores 26.
+ *
+ * A single threshold cannot serve those. At 6 the paraphrase passes silently; at
+ * 14 it is caught but the false-positive margin against 26 narrows badly, and a
+ * gate that blocks honest content is a gate the merchant switches off.
+ *
+ *   HARD FAIL 0-6   verbatim reuse. Regenerate once, keep the better, save with
+ *                   a note if it still fails. Autopilot never publishes it.
+ *   WARN      7-16  paraphrase territory. The draft SAVES and can be published
+ *                   manually, so it can never be the reason the gate is turned
+ *                   off — but it carries a note naming what it resembles, and
+ *                   AUTOPILOT DOES NOT PUBLISH IT. Autopilot is the only path
+ *                   where nobody is reading, and the only one where near
+ *                   duplicate content reaches a live storefront unseen.
+ *   PASS      >16   untouched.
+ *
+ * This matters more here than in a general content app: this IS an SEO app, and
+ * near-duplicate product descriptions are precisely what Google treats as thin
+ * content. Shipping a merchant 500 paraphrased-identical descriptions would be
+ * us causing the harm we were hired to prevent.
+ */
 export const DUPLICATE_MAX_DISTANCE = 6;
+export const DUPLICATE_WARN_DISTANCE = 16;
+
+/** What the duplicate check concluded. */
+export const DUPLICATE_VERDICT = Object.freeze({
+  FAIL: "fail",
+  WARN: "warn",
+  PASS: "pass",
+});
 /** How many recent fingerprints a new description is compared against. */
 export const DUPLICATE_WINDOW = 200;
 
@@ -60,6 +94,8 @@ export const META_TITLE_MAX = 70;
 export const META_DESCRIPTION_MAX = 160;
 export const META_TITLE_MIN = 15;
 export const META_DESCRIPTION_MIN = 70;
+
+import { familyKeyOf, axisTermsFor, namesItsAttribute } from "./variantFamily.js";
 
 /** Text a model leaves behind when it has not actually written anything. */
 const PLACEHOLDER_PATTERNS = [
@@ -184,16 +220,42 @@ export function hammingDistance(a, b) {
  * @param {Array<{productId?: string, simhash: string}>} recent
  * @returns {{duplicate: boolean, of?: string, distance?: number}}
  */
-export function findDuplicate(fingerprint, recent = []) {
-  if (!fingerprint) return { duplicate: false };
+export function findDuplicate(fingerprint, recent = [], { familyKey = "" } = {}) {
+  if (!fingerprint) return { duplicate: false, verdict: DUPLICATE_VERDICT.PASS, skippedFamily: 0 };
+
   let best = null;
+  let skippedFamily = 0;
+
   for (const r of recent) {
     if (!r?.simhash) continue;
+
+    // Group 5.3 — SIBLINGS ARE NOT COMPARED AT ALL.
+    //
+    // A merchant selling one hose in seven finishes has seven products whose
+    // descriptions are byte-identical apart from the finish word — correct
+    // merchandising. SimHash strips the product's own words, so the finish (which
+    // lives in the title) disappears and all seven collapse to distance 0: a hard
+    // fail on a legitimate catalogue. Within a family, near-identical copy is
+    // EXPECTED, so the question is not "is this a duplicate" but "does it name
+    // what makes it different" — which `namesItsAttribute` answers separately.
+    if (familyKey && r.familyKey && r.familyKey === familyKey) {
+      skippedFamily += 1;
+      continue;
+    }
+
     const d = hammingDistance(fingerprint, r.simhash);
     if (best === null || d < best.distance) best = { of: r.productId ?? null, distance: d };
   }
-  if (best && best.distance <= DUPLICATE_MAX_DISTANCE) return { duplicate: true, ...best };
-  return { duplicate: false };
+
+  if (best && best.distance <= DUPLICATE_MAX_DISTANCE) {
+    return { duplicate: true, verdict: DUPLICATE_VERDICT.FAIL, skippedFamily, ...best };
+  }
+  if (best && best.distance <= DUPLICATE_WARN_DISTANCE) {
+    // Saves, but never auto-publishes. `duplicate` stays FALSE so this does not
+    // land in hardFailures and block the draft.
+    return { duplicate: false, verdict: DUPLICATE_VERDICT.WARN, skippedFamily, ...best };
+  }
+  return { duplicate: false, verdict: DUPLICATE_VERDICT.PASS, skippedFamily, ...(best ?? {}) };
 }
 
 // ── The hard rules ─────────────────────────────────────────────────────────
@@ -260,6 +322,10 @@ export function assessContent({
   score = null,
   fingerprint = undefined,
 } = {}) {
+  // Group 5 — computed once here from whatever the caller knows about the
+  // product (title always; tags and options when it has them).
+  const familyKey = familyKeyOf(product);
+  const axisTerms = axisTermsFor(product);
   const reasons = [];
   const hardFailures = [];
 
@@ -300,9 +366,28 @@ export function assessContent({
 
   // ── duplicate ────────────────────────────────────────────────────────────
   const fp = fingerprint === undefined ? simhash(description, product) : fingerprint;
-  const dup = findDuplicate(fp, recent);
+  const dup = findDuplicate(fp, recent, { familyKey });
   if (dup.duplicate) {
     hardFailures.push("It is almost the same as a description already written for another product.");
+  } else if (dup.verdict === DUPLICATE_VERDICT.WARN) {
+    // A WARN does not block the draft — that is the point of the band. It is a
+    // reason the merchant should read before publishing, and a hard stop for
+    // autopilot, which publishes with nobody looking.
+    reasons.push("It closely resembles a description already written for another product.");
+  }
+
+  // ── does it name what makes it different from its siblings? ─────────────
+  // Inside a family this REPLACES the duplicate check. A Brushed Gold product
+  // whose description never says "brushed gold" cannot rank for it, however
+  // unique its fingerprint is — and that is the defect an SEO specialist cares
+  // about. Only asked when the product HAS siblings in the window: a lone
+  // product is not failed for omitting an attribute nothing contrasts it with.
+  const hasSiblings = dup.skippedFamily > 0;
+  const diff = hasSiblings ? namesItsAttribute(description, axisTerms) : { checked: false, ok: true };
+  if (diff.checked && !diff.ok) {
+    reasons.push(
+      `It never mentions ${diff.missing.slice(0, 2).join(" or ")}, which is what makes this product different from the others in its range.`,
+    );
   }
 
   // ── the score ────────────────────────────────────────────────────────────
@@ -317,14 +402,32 @@ export function assessContent({
     fingerprint: fp,
     reasons: [...hardFailures, ...reasons],
     hardFailures,
-    duplicateOf: dup.duplicate ? (dup.of ?? null) : null,
+    duplicateOf: dup.of ?? null,
+    duplicateDistance: Number.isFinite(dup.distance) ? dup.distance : null,
+    duplicateVerdict: dup.verdict,
+    /** Group 5.4 — saves, but autopilot must not publish it. */
+    warnOnly: dup.verdict === DUPLICATE_VERDICT.WARN,
+    familyKey,
+    familySiblingsSkipped: dup.skippedFamily ?? 0,
+    differentiationChecked: !!diff.checked,
+    differentiationOk: diff.ok !== false,
     languageChecked: lang.checked,
   };
 }
 
-/** One sentence a merchant can act on, from an assessment. Pure. */
+/**
+ * One sentence a merchant can act on, from an assessment. Pure.
+ *
+ * Group 5.4 — this used to return null for anything that PASSED, which was fine
+ * when passing meant "nothing to say". The WARN band changed that: a draft in
+ * 7-16 passes deliberately (it saves, and the merchant can publish it) but there
+ * IS something to say about it, and saying it is the whole point of the band.
+ *
+ * So the test is now "are there reasons", not "did it fail". A failing
+ * assessment always has reasons, so nothing about the old behaviour moved.
+ */
 export function describeAssessment(assessment) {
-  if (!assessment || assessment.pass) return null;
+  if (!assessment || !assessment.reasons?.length) return null;
   const first = assessment.reasons[0];
   const more = assessment.reasons.length - 1;
   return more > 0 ? `${first} (and ${more} other issue${more === 1 ? "" : "s"})` : first;

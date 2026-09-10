@@ -359,12 +359,25 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         // One regeneration on failure. A draft that still fails is KEPT with a
         // note — the merchant paid for it — but autopilot will not publish it.
         let qualityNote = null;
+        // Group 5.4 — a WARN-band draft SAVES and is publishable by hand, so it
+        // does not fail the gate. It must still never be auto-published, and
+        // that decision is this flag rather than the truthiness of a string.
+        let withholdFromAutopilot = false;
         try {
           const gated = await gateContent({
             shop: job.shop,
             productId,
             generated,
-            product: { title: product.title, vendor: product.vendor, productType: product.productType },
+            product: {
+              title: product.title,
+              vendor: product.vendor,
+              productType: product.productType,
+              // Group 5 — tags and options are what turn a guessed family into a
+              // known one: `colour:chrome`, `size:600mm`. Without them the family
+              // is still detected from the title, just less precisely.
+              tags: product.tags,
+              options: product.options,
+            },
             shopDomain: job.shop,
             scoreOf: (c) => scoreContent(c)?.score ?? null,
             regenerate: async () =>
@@ -374,6 +387,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           });
           generated = gated.content;
           qualityNote = gated.note;
+          withholdFromAutopilot = gated.withholdFromAutopilot;
         } catch (qErr) {
           // A gate that cannot run must not stop a merchant's job, and must not
           // withhold their content either — there is no finding to justify it.
@@ -453,7 +467,11 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           // Phase 4 item 4.1 — AUTOPILOT NEVER PUBLISHES A FAILING ITEM.
           // Pushing content the gate rejected onto a live storefront without
           // anybody reading it is the worst thing this app could do.
-          if (qualityNote) {
+          // Fail-safe on EITHER signal. `withholdFromAutopilot` is the explicit
+          // decision, but a note with no flag must still withhold: if the gate
+          // ever returns one without the other, the direction we want to be
+          // wrong in is "did not publish".
+          if (withholdFromAutopilot || qualityNote) {
             jobLogger.warn(
               { shop: job.shop, productId, note: qualityNote, event: "autopilot_withheld" },
               "Quality gate flagged this - saved as a draft, NOT auto-published",
@@ -468,7 +486,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           let verifyNote = null;
           // `!qualityNote` is the autopilot refusal: a flagged draft is never
           // published without a merchant reading it.
-          if (!published && !qualityNote) {
+          if (!published && !withholdFromAutopilot && !qualityNote) {
             const pub = await publishProductWithRetry(shopifyGraphql(session), productId, input);
             published = pub.ok;
             if (pub.ok && pub.verified === false) {

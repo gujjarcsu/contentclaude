@@ -26,6 +26,7 @@ import logger from "./logger.server.js";
 import { assessContent, describeAssessment, simhash, DUPLICATE_WINDOW } from "./contentQuality.js";
 
 export { QUALITY_THRESHOLD, DUPLICATE_WINDOW } from "./contentQuality.js";
+import { familyKeyOf } from "./variantFamily.js";
 
 /**
  * The shop's most recent description fingerprints, for duplicate comparison.
@@ -47,11 +48,16 @@ export async function recentFingerprints(shop, { excludeProductId = null, take =
         simhash: { not: null },
         ...(excludeProductId ? { productId: { not: excludeProductId } } : {}),
       },
-      select: { productId: true, simhash: true },
+      select: { productId: true, simhash: true, productTitle: true },
       orderBy: { updatedAt: "desc" },
       take,
     });
-    return rows;
+    // Group 5.3 — the family key travels with each fingerprint so the duplicate
+    // check can skip siblings. Computed from the stored title, which is all the
+    // window has: `familyKeyOf` is built to work from a title alone for exactly
+    // this reason. A row with no title yields "", which never matches anything,
+    // so an old row is compared normally rather than silently skipped.
+    return rows.map((r) => ({ ...r, familyKey: familyKeyOf({ title: r.productTitle }) }));
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "duplicate window unavailable (non-fatal)");
     return [];
@@ -123,7 +129,16 @@ export async function gateContent({
     }
   }
 
-  const note = assessment.pass ? null : describeAssessment(assessment);
+  // A note now exists for a passing draft that carries a WARN or a
+  // differentiation finding, which is what makes the band visible to the
+  // merchant AND what stops autopilot publishing it.
+  const note = describeAssessment(assessment);
+
+  // Group 5.4, stated rather than implied by a truthy string. Autopilot is the
+  // only path where nobody is reading, and the only one where near-duplicate
+  // content reaches a live storefront unseen.
+  const withholdFromAutopilot = !assessment.pass || !!assessment.warnOnly || assessment.differentiationOk === false;
+
   if (note) {
     logger.info(
       {
@@ -132,13 +147,17 @@ export async function gateContent({
         note,
         regenerated,
         duplicateOf: assessment.duplicateOf,
+        duplicateDistance: assessment.duplicateDistance,
+        verdict: assessment.duplicateVerdict,
+        familySiblingsSkipped: assessment.familySiblingsSkipped,
+        withholdFromAutopilot,
         event: "quality_gate_flagged",
       },
       "Saved as a draft that needs a look",
     );
   }
 
-  return { content, assessment, regenerated, note };
+  return { content, assessment, regenerated, note, withholdFromAutopilot };
 }
 
 /** The fingerprint to store alongside a saved description. Pure passthrough. */
