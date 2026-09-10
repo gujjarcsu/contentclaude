@@ -67,6 +67,11 @@ Never invent work; if it belongs in the backlog, add it with an owner and a reas
 
 Under the constitution. Small commits. Tests with every change.
 
+**The offer is settled.** `12-OFFER.md` carries the five plans, the per-tier feature allocation and
+both versions of the listing copy. Implement the table as written; do not invent a plan, a cap or a
+feature name. **Section 4 of that file is what may be advertised today; section 5 may not be
+published until the phase it names has actually shipped.**
+
 Hard limits, no exceptions: never write to the live EBS catalogue · never print a secret · always
 `fly secrets import` from a file, never `set` (Windows `cmd.exe` corrupts `%xx`) · never edit an
 applied migration · never type the owner's credentials.
@@ -99,6 +104,22 @@ Go back to PICK. **Do not stop after one item.** Only these four stop the loop:
 4. **Context is running out** — write back and hand off *first*, then say so.
 
 One blocked item is never a stop condition.
+
+### SHIP AT PHASE BOUNDARIES
+
+When a phase's gate is met, ship it, and **prove it shipped** (L19):
+
+1. Tree clean, full suite green, and you have broken at least one new guard and reported the count.
+2. `git push origin main` — **this deploys** (`ci.yml:140`). Do not also dispatch the manual workflow.
+3. Poll `https://app.navaal.ai/api/build-info` until `shortSha` equals the sha you pushed. If it
+   never does, the deploy did not take effect — say so and stop; do not report a phase closed.
+4. Then `https://app.navaal.ai/api/health?deep=1` must return `status: ok`, `schema.ok: true`, a
+   column count consistent with the migrations applied, `queue.workerRunning: true`, and
+   `jobs.failedLast10Min: 0`.
+5. Record all of it in `01-NORTH-STAR.md` §10 and `PROGRESS.md`: the sha, the timestamp, the column
+   count, and what you verified.
+
+**A phase is not closed until a merchant can use it in production.** Never push mid-phase.
 
 ### HAND OFF — always, before reporting
 
