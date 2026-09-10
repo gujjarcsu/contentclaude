@@ -11,7 +11,7 @@ and restarts both machines onto it.
 
 ## Open
 
-Nine items, all with the owner. Every one needs an account, a console or a
+Eleven items, all with the owner. Every one needs an account, a console or a
 browser session the agent cannot reach — no agent types credentials here. The
 code for each is shipped and degrades honestly without it, and items 8, 9 and 10
 are measurements rather than fixes: the mechanism is tested and deployed, and
@@ -166,6 +166,96 @@ what is missing is a real merchant session to record it against.
   showing `upgradePromptSource: "quota100"` on the `Shop` row. If it is `null`, the plan still activated
   correctly — attribution is deliberately non-fatal — but the chain did not join, and the place to look
   is whether `?prompt=` survived the round trip to Shopify's approval screen.
+
+### 11. Upload the new listing screenshots (Phase 5 item 7)
+- **Why:** the live listing shows the **pre-Phase-2 app** — dark gradient hero, thirteen-item sidebar,
+  "Optimise Store". None of it exists. Every merchant who reaches the listing sees five pictures of
+  software they will not receive and then installs something different. It is a conversion leak on the
+  one surface every install passes through, and it is the cheapest thing on this list to close.
+- **The files:** `listing-assets/` in this repo, with `README.md` naming each file, its caption and its
+  slot. Seven of eight are ready; the two gaps are described below and in that README.
+- **Click path:** Partner Dashboard → Apps → Navaal: AI SEO, AEO & GEO → **Distribution** → App Store
+  listing → **Screenshots** → replace the desktop set, then the mobile set → **Save** → **Submit for
+  review** (a listing change goes through Shopify review; it does not go live on save).
+- **Captions, ready to paste** (US English, all under 100 characters):
+
+  | Slot | File | Caption |
+  |---|---|---|
+  | Desktop 1 | `01-home-desktop.png` | See what is live, what is waiting for you, and what to do next. |
+  | Desktop 2 | `02-review-desktop.png` | Your current copy beside the proposed copy. Nothing goes live until you approve it. |
+  | Desktop 3 | `03-products-desktop.png` | Every product, and exactly where it stands. Generate one or hundreds. |
+  | Desktop 4 | `04-start-desktop.png` | We score your store on install, then write the three products holding it back. |
+  | Desktop 5 | `05-settings-desktop.png` | Set your brand voice once. Every description is written in it. |
+  | Mobile 1 | `06-home-mobile.png` | The whole app works on your phone. |
+  | Mobile 2 | `07-review-mobile.png` | Approve drafts from anywhere. |
+  | Mobile 3 | `08-products-mobile.png` | Your catalog and its status, on a phone. |
+
+- **TWO THINGS TO DO FIRST — the assets are not complete:**
+  1. **`04-start-desktop.png` does not exist.** The first-run screen only renders on a shop that has
+     never seen a draft, and it is only worth photographing on a shop that has products. No store is
+     currently both. The harness **refuses** to substitute the empty state it would otherwise capture,
+     which is why there are seven files. Item 9 above (five fresh dev-store installs) produces exactly
+     this screen — while one of those installs is on screen, run:
+     ```
+     FRESH_STORE=<store-handle> node tools/proof/listing-assets.mjs 04
+     ```
+  2. **Frames 1 and 6 greet the merchant as "E2E Test Store"** — that is the dev store's brand-voice
+     name. In the app on `contentpilot-dev2`: Settings → Brand voice → Store name → something plausible
+     for a snowboard catalog, Save, then:
+     ```
+     node tools/proof/listing-assets.mjs 01
+     node tools/proof/listing-assets.mjs 06
+     ```
+     Left to a human on purpose: an agent editing store records so a screenshot looks better is not a
+     habit worth starting.
+- **And one worth waiting for:** the brief asks for Home *with the SEO score*. Home has no store score
+  yet — that is Phase 4 item 4.3, two items away. **Re-capture `01-home-desktop.png` after 4.3 ships**;
+  a score moving from 61 to 84 is the most persuasive image this app can put on a listing.
+- **A parallel Cowork session is handling the upload itself** — this item is the assets and the captions,
+  not the click.
+
+### 12. Place the eight install links on navaal.ai and Bilby (Phase 5 item 6)
+- **Why:** `/go?ref=<handle>` was built in Phase 0 — redirector, cookie, sanitiser, attribution, all
+  tested — and **nothing has ever linked to it**. So every install to date arrived as `unknown` or as an
+  App Store surface, and the funnels we own are invisible. Eight anchors close that.
+- **Why a human:** navaal.ai and Bilby are a **different codebase**, not this repo. The snippets are
+  delivered rather than committed.
+- **The full reference:** `docs/INSTALL-CHANNELS.md` — the handles, the rule behind them, what the
+  attribution can and cannot see, and how to add a channel later.
+- **Placements, one per surface:**
+
+  | Page | Where on it | Paste this |
+  |---|---|---|
+  | navaal.ai homepage | primary hero call to action | `<a href="https://app.navaal.ai/go?ref=navaal-home" rel="noopener">Get it on the Shopify App Store</a>` |
+  | navaal.ai `/tools` | the card for the Shopify app | `<a href="https://app.navaal.ai/go?ref=navaal-tools" rel="noopener">Install the Shopify app</a>` |
+  | navaal.ai (all pages) | site header, the one persistent nav button | `<a href="https://app.navaal.ai/go?ref=navaal-nav" rel="noopener">Shopify app</a>` |
+  | navaal.ai (all pages) | global footer, under Products | `<a href="https://app.navaal.ai/go?ref=navaal-footer" rel="noopener">Shopify app: AI SEO, AEO &amp; GEO</a>` |
+  | navaal.ai blog posts | the end-of-post call to action block | `<a href="https://app.navaal.ai/go?ref=blog-post" rel="noopener">Do this automatically for every product</a>` |
+  | Bilby scan report | beside the product-content findings | `<a href="https://app.navaal.ai/go?ref=bilby-report" rel="noopener">Fix these with the Shopify app</a>` |
+  | Bilby (all pages) | global footer, Products column, first item | `<a href="https://app.navaal.ai/go?ref=bilby-footer" rel="noopener">Shopify app: AI SEO, AEO &amp; GEO</a>` |
+  | outreach emails | the single link in the body | `<a href="https://app.navaal.ai/go?ref=outreach-email" rel="noopener">See it on the Shopify App Store</a>` |
+
+- **Three rules worth keeping when you place them:**
+  1. **Never link straight to `apps.shopify.com`.** A direct listing link is an install nobody can
+     attribute. Every route to the App Store from a surface we own goes through `/go`.
+  2. **No `target="_blank"`.** Whether a link opens a new tab is the host page's decision.
+  3. **Never put a per-recipient token in a ref.** A handle is a CHANNEL. A per-recipient ref would make
+     the install record personal data, which `shop/redact` would then delete — destroying the only
+     attribution we have. The outreach link is the same for every recipient, deliberately.
+- **Check one before doing the rest:**
+  ```
+  curl -sI "https://app.navaal.ai/go?ref=navaal-home" | grep -iE "^(location|set-cookie)"
+  ```
+  Expect a 302 to `apps.shopify.com/navaal-ai-seo-geo-content?ref=navaal-home` and a `navaal_ref` cookie.
+- **How you will know it worked:** the daily digest now has a **WHERE THEY CAME FROM** section listing
+  installs by source, with registered channels named and their owner beside them. A handle you place but
+  never registered still appears, labelled `(unregistered ref)` — that is deliberate, so a typo in a link
+  shows up as a line in the digest rather than as silence.
+- **What it still will not tell you:** which App Store *surface* an organic install came from. Shopify
+  does not forward `surface_*` under managed installation; that is in the listing's GA4 property
+  (G-8H3DS31YQ8). And cookie-based attribution is partial by browser — Chrome and Edge send it in a
+  normal window, Safari and Firefox generally do not. An install we cannot attribute is recorded as
+  `unknown`, never guessed into a channel.
 
 ## Done
 

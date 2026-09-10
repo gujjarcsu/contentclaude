@@ -6,11 +6,19 @@
  * is estimated, and nothing that cannot be measured is reported.
  *
  * Deliberately NOT in here: traffic, revenue, or anything sourced from a system
- * we cannot see. The install-source split needs the listing's GA4 property and
- * is called out as unavailable rather than guessed at.
+ * we cannot see.
+ *
+ * Phase 5 item 6 — the install-source split IS in here now, with a caveat that
+ * matters. Shopify does not forward `surface_*` to the app under managed
+ * installation, so which App Store surface an organic install came from is
+ * still only in the listing's GA4 property. But installs through OUR OWN links
+ * (`/go?ref=<handle>`) are recorded as `ref:<handle>` by the install tracker,
+ * and those we can see exactly. So the split reports what we know, names what
+ * we do not, and never fills the gap with a guess.
  */
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
+import { describeSource } from "./installChannels.js";
 
 /** Formats a count and its comparison honestly, including when it is zero. */
 function line(label, value, extra = "") {
@@ -103,6 +111,28 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     month,
   };
 
+  // Phase 5 item 6 — where the last 24 hours of installs came from. Grouped
+  // rather than counted per channel so a handle nobody registered still shows
+  // up: an unrecognised ref is either a link somebody added without telling us
+  // or a typo losing installs, and both are worth seeing.
+  // `zero` catches a REJECTED promise; a missing method throws before there is
+  // one. The digest's own reason for existing is that it still arrives when
+  // something is broken, so the call itself is guarded too.
+  const sourceRows = await zero(
+    typeof db.shop?.groupBy === "function"
+      ? db.shop.groupBy({
+          by: ["installSource"],
+          where: { installedAt: { gte: since } },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
+    [],
+  );
+  const sourceSplit = (sourceRows ?? [])
+    .map((r) => ({ source: r.installSource, label: describeSource(r.installSource), n: r._count._all }))
+    .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  data.sourceSplit = sourceSplit;
+
   const net = installs - uninstalls;
   const subject =
     `Navaal daily — ${installs} install${installs === 1 ? "" : "s"}, ` +
@@ -119,6 +149,11 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     line("reinstalls", reinstalls),
     line("net", net >= 0 ? `+${net}` : String(net)),
     line("live shops", liveShops, `(${totalShops} ever)`),
+    "",
+    "WHERE THEY CAME FROM",
+    ...(sourceSplit.length
+      ? sourceSplit.map((r) => line(r.label, r.n))
+      : ["      -  no installs in the last 24 hours"]),
     "",
     "FIRST VALUE",
     line("shops that saw a first draft", firstDrafts),
@@ -139,8 +174,9 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     line("shops on a paid plan", paidShops),
     "",
     "Not in here, and why:",
-    "  install SOURCE split — Shopify does not forward surface_* to the app under",
-    "    managed installation; the listing's GA4 property (G-8H3DS31YQ8) has it.",
+    "  which App Store SURFACE an organic install came from — Shopify does not",
+    "    forward surface_* under managed installation; the listing's GA4 property",
+    "    (G-8H3DS31YQ8) has it. Installs through our own /go?ref= links ARE above.",
     "  traffic and revenue — this app cannot see either, so it does not guess.",
     "",
     "Health: https://app.navaal.ai/api/health?deep=1",

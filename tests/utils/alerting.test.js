@@ -27,9 +27,8 @@ vi.mock("../../app/utils/notify.server.js", () => ({
   }),
 }));
 
-const { checkHealthOnce, checkAppShellOnce, maybeSendDigest, maybeRunBackup, sydneyParts } = await import(
-  "../../app/utils/scheduler.server.js"
-);
+const { checkHealthOnce, checkAppShellOnce, maybeSendDigest, maybeRunBackup, sydneyParts } =
+  await import("../../app/utils/scheduler.server.js");
 const { buildDailyDigest } = await import("../../app/utils/digest.server.js");
 const { backupConfig, runNightlyBackup } = await import("../../app/utils/backup.server.js");
 
@@ -108,7 +107,10 @@ describe("item 5 — the daily digest goes at 07:00 Sydney, once", () => {
   });
 
   it("does nothing at any other hour", async () => {
-    const out = await maybeSendDigest({ now: at("2026-09-08T10:00:00Z"), build: async () => ({ subject: "s", text: "t" }) });
+    const out = await maybeSendDigest({
+      now: at("2026-09-08T10:00:00Z"),
+      build: async () => ({ subject: "s", text: "t" }),
+    });
     expect(out.sent).toBe(false);
     expect(emails).toHaveLength(0);
   });
@@ -138,7 +140,7 @@ describe("item 5 — the daily digest goes at 07:00 Sydney, once", () => {
 
 describe("item 5 — the digest reports what we can actually count", () => {
   const db = {
-    shop: { count: vi.fn(async () => 3) },
+    shop: { groupBy: vi.fn(async () => []), count: vi.fn(async () => 3) },
     generationJob: {
       count: vi.fn(async () => 2),
       aggregate: vi.fn(async () => ({ _sum: { quotaSkipped: 11 } })),
@@ -159,13 +161,64 @@ describe("item 5 — the digest reports what we can actually count", () => {
 
   it("says plainly what it is NOT reporting, rather than guessing", async () => {
     const { text } = await buildDailyDigest({ now: new Date("2026-09-09T21:00:00Z"), db });
-    expect(text).toMatch(/install SOURCE split/);
+    // Phase 5 item 6 narrowed this. The ref-channel split IS reported now,
+    // because installs through our own /go?ref= links are recorded as
+    // ref:<handle>. What is still invisible is which App Store SURFACE an
+    // organic install came from — Shopify does not forward surface_* under
+    // managed installation — and the digest says exactly that much.
+    expect(text).toMatch(/App Store SURFACE/);
+    expect(text).toMatch(/surface_\*/);
     expect(text).toMatch(/traffic and revenue/);
     expect(text).toMatch(/does not guess/);
+    // And it must not go back to claiming the whole split is unavailable.
+    expect(text).not.toMatch(/install SOURCE split . Shopify does not forward/);
+  });
+
+  it("reports where the last 24 hours of installs came from", async () => {
+    db.shop.groupBy.mockResolvedValueOnce([
+      { installSource: "ref:navaal-home", _count: { _all: 3 } },
+      { installSource: "app_store:search", _count: { _all: 2 } },
+      { installSource: "ref:not-registered", _count: { _all: 1 } },
+      { installSource: "unknown", _count: { _all: 1 } },
+    ]);
+
+    const { text, data } = await buildDailyDigest({ now: new Date("2026-09-09T21:00:00Z"), db });
+
+    expect(text).toMatch(/WHERE THEY CAME FROM/);
+    expect(text).toMatch(/navaal-home \(navaal\.ai\)/);
+    expect(text).toMatch(/App Store — search/);
+    // An unregistered ref is shown as itself, not folded into "other": it is
+    // either a link nobody told us about or a typo losing installs.
+    expect(text).toMatch(/not-registered \(unregistered ref\)/);
+    // Biggest first, so the useful line is the first one read.
+    expect(data.sourceSplit[0]).toMatchObject({ source: "ref:navaal-home", n: 3 });
+  });
+
+  it("says so plainly when nothing installed, rather than printing an empty heading", async () => {
+    db.shop.groupBy.mockResolvedValueOnce([]);
+    const { text } = await buildDailyDigest({ now: new Date("2026-09-09T21:00:00Z"), db });
+    expect(text).toMatch(/no installs in the last 24 hours/);
+  });
+
+  it("still sends when the split query is unavailable entirely", async () => {
+    // The digest exists to arrive when things are broken. A missing method
+    // throws before there is a promise to catch, which is a different failure
+    // from a rejected one and needs its own guard.
+    const crippled = { ...db, shop: { ...db.shop, groupBy: undefined } };
+    const { text } = await buildDailyDigest({ now: new Date("2026-09-09T21:00:00Z"), db: crippled });
+    expect(text).toMatch(/INSTALLS/);
+    expect(text).toMatch(/no installs in the last 24 hours/);
   });
 
   it("survives a query that fails rather than sending nothing at all", async () => {
-    const brokenDb = { ...db, shop: { count: vi.fn(async () => { throw new Error("db down"); }) } };
+    const brokenDb = {
+      ...db,
+      shop: {
+        count: vi.fn(async () => {
+          throw new Error("db down");
+        }),
+      },
+    };
     const { data } = await buildDailyDigest({ now: new Date("2026-09-09T21:00:00Z"), db: brokenDb });
     expect(data.installs).toBe(0);
   });
@@ -224,10 +277,16 @@ describe("item 7 — the nightly backup", () => {
   });
 
   it("runs at 03:00 Sydney and not at other hours", async () => {
-    const notYet = await maybeRunBackup({ now: new Date("2026-09-08T10:00:00Z"), run: async () => ({ ok: true }) });
+    const notYet = await maybeRunBackup({
+      now: new Date("2026-09-08T10:00:00Z"),
+      run: async () => ({ ok: true }),
+    });
     expect(notYet.ran).toBe(false);
     // 17:00 UTC is 03:00 the next day in Sydney.
-    const go = await maybeRunBackup({ now: new Date("2026-09-08T17:00:00Z"), run: async () => ({ ok: true }) });
+    const go = await maybeRunBackup({
+      now: new Date("2026-09-08T17:00:00Z"),
+      run: async () => ({ ok: true }),
+    });
     expect(go.ran).toBe(true);
   });
 });

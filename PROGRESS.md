@@ -2930,3 +2930,172 @@ the current one, and that Shopify prorates.
 The two acceptance recordings both require a browser somebody logs into, and no agent types credentials
 here. They are the same class of gap as the TTFV measurement in 3.2: the mechanism is tested, the
 end-to-end recording is a human step.
+
+---
+
+# PHASE 5 (taken before Phase 4, on the owner's instruction)
+
+The order was changed for a reason worth recording: the live App Store listing still showed the
+pre-Phase-2 app — dark gradient hero, thirteen-item sidebar, "Optimise Store". Every merchant reaching
+the listing saw five pictures of software that no longer exists and then installed something different.
+Phase 4 is about retaining merchants; there are none to retain yet, and its benefits cannot be measured
+against an empty cohort. Closing a leak on the one surface every install passes through comes first.
+
+## 5.7 — Listing assets that depict the app as it is
+
+### What was delivered
+
+`listing-assets/` — seven PNGs at 2× (a 1600×900 frame is a 3200×1800 file), a `README.md` naming each
+file, its caption and its listing slot, and a `manifest.json` recording what was on screen when each was
+taken. Captured by `tools/proof/listing-assets.mjs` against production, on a dev store with 17 real
+products and 13 products of published content, so the screens are populated rather than empty.
+
+Captions are US English, under 100 characters, and every one describes something visible in its own
+frame. None mentions rankings, traffic or revenue — the app cannot promise any of them.
+
+Uploading is HUMAN-NEEDED item 11, with the click path and the captions ready to paste.
+
+### The three defects the screenshots found
+
+This is the part worth keeping. **1,062 tests were passing.** Every screen rendered perfectly. Looking at
+them found three things no test in the suite could have:
+
+**1. The Start state told a paying merchant their allowance was free.** On a Professional-plan store:
+*"that uses 3 of your 1000 remaining **free** generations this month."* The word was hardcoded. Telling
+somebody the thing they pay $79.99/mo for is free is not a rounding error in trust — and it would have
+gone into the listing images. Fixed to read the plan; a test asserts the old string cannot return.
+
+**2. The Products screen contradicted itself.** Stat cards: *"13 live · 4 ready to review"*. Directly
+beneath them, the tabs: *"Draft (3) · Published (14)"*. Same store, same second. This is the exact defect
+Phase 2 item 2.1 exists to prevent, and 2.1's own tests passed throughout.
+
+The root cause is the interesting bit. The shared rule lived in `metrics.server.js`, which imports Prisma,
+so **no component could import it**. Faced with a rule it could not reach, `app.products.jsx` wrote its
+own from the description row alone — so a product with a published description and a draft meta title was
+"Published" to the tabs and "draft" to the cards. A shared definition that half the app cannot import is
+not shared. The pure rule now lives in `app/utils/productState.js` with no server imports, and
+`metrics.server.js` re-exports it.
+
+**3. Having fixed the tabs, the row badge was still a third classifier.** "Gift Card — Desc ✓, Meta ·
+draft" carried a green "Published" badge while sitting under the "Draft (4)" tab one line above. It also
+invented its own vocabulary — "No AI Content", "Unknown" — where `PRODUCT_STATE_LABEL` is what every
+other screen says. Now one rule and one vocabulary, three consumers.
+
+Guards for all three, each verified to bite by reintroducing the bug and watching the test fail:
+
+| Guard | What it stops |
+|---|---|
+| `app.products.jsx` may not match `contentMap[…]?.description?.status` | a fourth classifier |
+| the screen must route ≥ 3 classifications through `stateOfContentMap` | the badge drifting again |
+| `app.products.jsx` may not contain `>No AI Content<` or `>Unknown<` | invented vocabulary |
+| `productState.js` may not import anything `.server` | the root cause returning |
+| `StartState.jsx` must pick the allowance word from the plan | the "free" copy returning |
+
+### What the harness refuses to do
+
+Three times in this project a proof harness printed a confident pass over a broken capture. So each frame
+must clear four hurdles, and each **fails the run** rather than warning: the app's own iframe exists (no
+`mainFrame()` fallback), the frame is not a 4xx page, the frame contains a string only that screen
+renders, and the PNG is a plausible size and not byte-identical to another frame in the run.
+
+**Those four are still not proof, and one of them proved it on this very run.** The first-run frame was
+captured against a store with no products, and the "is this the right screen" pattern was loose enough
+(`/scores \d+\/100|Add a product/i`) to accept the empty state. A technically-correct capture, useless as
+a listing image, waved through by its own guard. The pattern was tightened to require a real score, and
+the harness now correctly refuses that frame rather than shipping it.
+
+### What is NOT delivered, and why
+
+| | Status |
+|---|---|
+| 5 desktop frames | **4 of 5.** The first-run frame is refused, see below |
+| 3 mobile frames at 375px | **Done** — clean, no overflow |
+| Captions, US English, < 100 chars | **Done**, in the README and HUMAN-NEEDED item 11 |
+| Uploaded | **No, and deliberately** — the owner's step, a parallel session has it |
+
+**`04-start-desktop.png` does not exist.** The first-run screen renders only while a shop has never seen
+a draft, and is only worth photographing on a shop that has products. No store is currently both: the
+populated dev store passed its first run (my own session probe triggered it), and the fresh store has no
+products.
+
+I could have manufactured the state by nulling `firstDraftSeenAt` on the dev store. I did not, and when I
+tried, the sandbox classifier blocked the write — correctly. Rewriting production records so a screenshot
+looks better is not a habit worth starting, and the honest alternative already exists: HUMAN-NEEDED item
+9 asks for five fresh dev-store installs for the TTFV number, and any one of those **is** this
+screenshot. The command is in item 11.
+
+**Frames 1 and 6 greet the merchant as "E2E Test Store"**, which is the dev store's brand-voice name.
+Honest, and it looks like what it is. Fixing it is a Settings change on the dev store, left to a human
+for the same reason. Frames 2, 3, 5, 7 and 8 are unaffected.
+
+**Home has no store SEO score yet.** The brief asks for "Home (with the SEO score…)". That is Phase 4
+item 4.3, two items away in the current order. Frame 1 shows the state-driven primary action and the
+live/draft/needs-content counts, which is the rest of what was asked. **Re-capture frame 1 after 4.3** —
+a score moving from 61 to 84 is the most persuasive image this app can put on a listing.
+
+## 5.6 — Install funnels on surfaces we own
+
+`/go?ref=<handle>` was built in Phase 0 — redirector, cookie, sanitiser, attribution, all tested — and
+**nothing has ever linked to it.** So every install to date arrived as `unknown` or as an App Store
+surface, and the funnels we own were invisible. That is the third thing this week that was carefully
+built and never called, after `getUpsell`, `attributePlanChoice` and `reviewAsk.server.js`.
+
+### The channel inventory
+
+`app/utils/installChannels.js` — the canonical list, client-safe so the digest, the docs test and any
+future admin surface read one thing. `docs/INSTALL-CHANNELS.md` is the human-facing version and a test
+fails if the two drift.
+
+Eight handles: `navaal-home`, `navaal-tools`, `navaal-nav`, `navaal-footer`, `blog-post`,
+`bilby-report`, `bilby-footer`, `outreach-email`.
+
+**One handle per SURFACE, and a surface is a place, not a campaign.** "The Bilby report page" is a
+surface; "the September push" is not. A handle answers *where was the merchant standing when they
+clicked*, which still means something in three years; a campaign handle stops meaning anything the day
+the campaign ends, and then nobody can read last year's numbers.
+
+**Never per-recipient.** A handle is a channel, so it survives `shop/redact` as aggregate data. A
+per-recipient token would make the install record personal data, which redaction would then have to
+delete — destroying the only attribution we have. A test greps the docs for template placeholders.
+
+### The snippets
+
+Delivered, not committed: **navaal.ai and Bilby are a different codebase.** Placement list, page by page
+and spot by spot, is HUMAN-NEEDED item 12. Every snippet points at `/go`, never straight at
+`apps.shopify.com` — a direct listing link is an install nobody can attribute — and none forces
+`target="_blank"`.
+
+Verified live before delivering them:
+
+```
+$ curl -sI "https://app.navaal.ai/go?ref=navaal-home"
+HTTP/1.1 302 Found
+location: https://apps.shopify.com/navaal-ai-seo-geo-content?ref=navaal-home
+set-cookie: navaal_ref=navaal-home; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=None
+
+$ curl -sI "https://app.navaal.ai/go?ref=%3Cscript%3E"
+HTTP/1.1 302 Found
+location: https://apps.shopify.com/navaal-ai-seo-geo-content     ← junk ref dropped, no cookie
+```
+
+### The digest now reports the split
+
+New **WHERE THEY CAME FROM** section, grouped by `installSource`, biggest first, with registered channels
+named and their owner beside them. So the funnels are measurable the day they go live rather than a
+quarter later.
+
+An **unregistered** ref appears as itself, labelled `(unregistered ref)`, rather than folded into
+"other". A handle nobody registered is either a link somebody added without telling us or a typo quietly
+losing installs, and hiding it would hide both.
+
+The digest's honesty note was **narrowed, not removed**. It used to say the whole install-source split
+was unavailable. That is no longer true — ref channels are visible to us. What is still invisible is
+which App Store *surface* an organic install came from, because Shopify does not forward `surface_*`
+under managed installation, and the note now says exactly that much and no more. Cookie attribution is
+also partial by browser (Chrome and Edge send it in a normal window; Safari and Firefox generally do
+not), which `docs/INSTALL-CHANNELS.md` states plainly — an install we cannot attribute is recorded as
+`unknown`, never guessed into a channel, because a funnel that flatters itself is worse than no funnel.
+
+The digest is also now guarded against the split query being unavailable **entirely**: `zero()` catches a
+rejected promise, but a missing method throws before there is one. The digest's whole reason for existing
+is that it still arrives when something is broken.

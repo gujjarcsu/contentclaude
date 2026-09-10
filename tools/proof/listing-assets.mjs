@@ -142,7 +142,9 @@ const FRAMES = [
 ];
 
 if (!existsSync(AUTH)) {
-  console.error(`NO SESSION at ${AUTH}\nRun: node tools/proof/login-cdp.mjs  (a human types the credentials)`);
+  console.error(
+    `NO SESSION at ${AUTH}\nRun: node tools/proof/login-cdp.mjs  (a human types the credentials)`,
+  );
   process.exit(2);
 }
 mkdirSync(OUT, { recursive: true });
@@ -175,10 +177,13 @@ for (const f of SELECTED) {
   const row = { ...f, ok: false };
 
   try {
-    await page.goto(`https://admin.shopify.com/store/${f.store}${f.path.replace("/app", `/${APP_PATH}/app`)}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
+    await page.goto(
+      `https://admin.shopify.com/store/${f.store}${f.path.replace("/app", `/${APP_PATH}/app`)}`,
+      {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      },
+    );
 
     // 1. the app's own frame must exist. No mainFrame() fallback, ever.
     await page.waitForFunction(
@@ -209,7 +214,8 @@ for (const f of SELECTED) {
     const size = statSync(`${OUT}/${f.file}`).size;
     if (size < 20_000) throw new Error(`PNG is implausibly small (${size} bytes) — probably a blank page`);
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-    if (hashes.has(hash)) throw new Error(`byte-identical to ${hashes.get(hash)} — the run captured one page twice`);
+    if (hashes.has(hash))
+      throw new Error(`byte-identical to ${hashes.get(hash)} — the run captured one page twice`);
     hashes.set(hash, f.file);
 
     row.ok = true;
@@ -239,9 +245,12 @@ try {
 const merged = [...prior.filter((p) => !results.some((r) => r.file === p.file)), ...results].sort((a, b) =>
   a.file.localeCompare(b.file),
 );
-writeFileSync(`${OUT}/manifest.json`, JSON.stringify({ at: new Date().toISOString(), results: merged }, null, 2));
+writeFileSync(
+  `${OUT}/manifest.json`,
+  JSON.stringify({ at: new Date().toISOString(), results: merged }, null, 2),
+);
 
-console.log(`\n${results.filter((r) => r.ok).length}/${FRAMES.length} frames captured`);
+console.log(`\n${results.filter((r) => r.ok).length}/${SELECTED.length} frames captured`);
 console.log("NOW LOOK AT THEM. Every guard above can be satisfied by a page that is");
 console.log("technically fine and visually wrong; only a human eye catches that.");
 process.exit(failed > 0 ? 1 : 0);

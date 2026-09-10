@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-10T03:35:35.705Z",
+  "at": "2026-09-10T03:43:15.165Z",
   "results": [
     {
       "file": "01-home-desktop.png",
@@ -36,8 +36,8 @@
       "must": {},
       "label": "Products — every product and where it stands",
       "ok": true,
-      "bytes": 336749,
-      "hash": "eb96390b38da2d30",
+      "bytes": 334942,
+      "hash": "8e35e845a7b2a2fa",
       "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content Review 4 drafts Collections Activity 13"
     },
     {
@@ -102,8 +102,8 @@
       "must": {},
       "label": "Products on a phone",
       "ok": true,
-      "bytes": 85168,
-      "hash": "8e3ee17c6a1e1bf8",
+      "bytes": 85403,
+      "hash": "d56719eacb1d1e80",
       "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content 13 AI Content Published 4 Drafts to R"
     }
   ]
