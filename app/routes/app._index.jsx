@@ -204,6 +204,9 @@ export const loader = async ({ request }) => {
         targetCount: START_TARGETS,
         remaining: Math.max(0, plan.monthlyLimit - usageCount),
         monthlyLimit: plan.monthlyLimit,
+        // The Start copy says "free generations" only on the free plan; a
+        // merchant paying for Pro must not be told their allowance is free.
+        planName: plan.planName,
         scan: scanStoreForStart(admin, shop),
       }
     : null;

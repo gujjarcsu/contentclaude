@@ -241,6 +241,13 @@ function StartBody({ scan, start, navigate, onRetry }) {
     );
   }
 
+  // "free generations" is only true on the free plan. A merchant paying for
+  // Pro reading "1000 remaining free generations" is being told something
+  // false about the thing they are paying for — caught on a real store while
+  // capturing listing screenshots, which is exactly what looking at the
+  // screen is for.
+  const allowanceWord = start.planName === "free" ? "free generations" : "generations";
+
   const targets = scan?.targets ?? [];
   // Only start as many as the quota can actually pay for, so a merchant near
   // their limit is never shown three spinners that resolve into two refusals.
@@ -292,8 +299,8 @@ function StartBody({ scan, start, navigate, onRetry }) {
         <BlockStack gap="200">
           <Text as="p" variant="bodySm" tone="subdued">
             {canStart > 0
-              ? `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — that uses ${canStart} of your ${start.remaining} remaining free generations this month. Nothing is published until you approve it.`
-              : "You have no free generations left this month. Your drafts are still here to review and publish."}
+              ? `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — that uses ${canStart} of your ${start.remaining} remaining ${allowanceWord} this month. Nothing is published until you approve it.`
+              : `You have no ${allowanceWord} left this month. Your drafts are still here to review and publish.`}
           </Text>
           {done > 0 && (
             <ProgressBar

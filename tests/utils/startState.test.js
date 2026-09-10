@@ -219,6 +219,15 @@ describe("the Start screen itself — structural guarantees", () => {
     expect(code).not.toMatch(/<TextField|<Form\b|<Select\b|<Checkbox/);
   });
 
+  it("calls the allowance FREE only on the free plan", () => {
+    // Caught on a real Pro store while capturing listing screenshots: the copy
+    // read "1000 remaining free generations" to a merchant who is paying for
+    // them. Telling somebody the thing they bought is free is not a rounding
+    // error in trust.
+    expect(code).toMatch(/start\.planName === "free" \? "free generations" : "generations"/);
+    expect(code).not.toMatch(/remaining free generations/);
+  });
+
   it("says what it will spend, in the same breath as what is left", () => {
     // Auto-spending credits without saying so would be indefensible. This is
     // the sentence that makes it defensible, so it is pinned.
