@@ -3712,3 +3712,91 @@ Second proof run in full: 3,061 samples, **0 non-200**, p50 32 ms, p90 36 ms, p9
 Its deep check did return 503 twice for about two seconds each as a machine came back — the first proof
 run's did not. Merchants never call `deep=1`, but the post-deploy smoke job does, so that is a
 narrow race worth knowing about; it passed on both runs.
+
+
+---
+
+## A1.2 (10 Sep 2026) — a setting with a column, a read path, a green suite, and no way in
+
+`BrandVoice.includeDraftProducts` and `scopeForShop` shipped in `2d9c37d`. The **Settings control did
+not**. The column existed, the read path worked, 1,374 tests passed, and **no merchant could ever turn
+it on**. The default was not a default; it was a law — no shop could include its drafts, however it
+merchandises.
+
+It was found by doing the reconcile step properly: grepping `includeDraftProducts` across the repo
+returned exactly two files plus the generated schema list, and none of them was a screen. Reading my
+own previous report would have told me it was done.
+
+### What shipped
+
+- A `Checkbox` in Settings beside "Publish without review" — **and the hidden input that posts it**. A
+  Polaris `Checkbox` is not a form field. Without the hidden input the control renders, toggles, looks
+  saved and posts nothing: the same end state as having no control, and far harder to notice.
+- **Archived is deliberately not offered.** An archived product is not for sale and has no storefront
+  page at any setting, so there is no honest reason to offer it. A test asserts the word never appears
+  in that route.
+- **No confirmation dialog.** `publishWithoutReview` asks first because it writes to a live storefront.
+  This only widens a *count*, and a confirm there is ceremony that teaches merchants to click through
+  dialogs — which makes the confirm that matters worth less.
+
+### A1.2's second half — every label states which set it means
+
+- **Optimize was sending `candidateLabel` in its loader payload and never rendering it.** Receiving a
+  label is not showing one, and for one commit that screen's numbers named no population at all.
+- Optimize's card also still read **"Needs Content" in critical red** — the same false label already
+  fixed on Products and Home. It counts what *we* have not written for, not products with no content.
+  Now "Not yet optimized", population named, not red.
+
+### The false-green answer, per check (L1)
+
+| Check | What it prints if the watched thing is broken |
+| --- | --- |
+| "renders a control for it" | **2 failures** — verified by deleting the checkbox, which is the original defect |
+| "is submitted with the form" | **1 failure** — verified by deleting the hidden input |
+| "Optimize renders the scope label" | **1 failure** — verified by replacing it with a literal |
+| "the source really is the Settings route" | Guards the guard: a source sweep over an empty string passes, so it asserts length and a known marker |
+| "does NOT offer archived" | Would pass if the whole file were empty — which is why the length assertion above exists |
+
+The reachability guard is the point. **A test that only checked the action would have passed for the
+entire time the setting was unreachable.**
+
+### Store shapes (L2)
+
+**Proved:** all-draft with the opt-in on and off · all-active (setting changes nothing) ·
+majority-archived · a shop with no `BrandVoice` row · a settings read that throws. Plus a new cell:
+**opting into drafts must never opt into archived**, and a draft that *is* admitted still needs a
+public page.
+
+**Not proved:** that the control is **visible on a rendered page**. These are source assertions, not a
+browser. A control inside a collapsed section or behind a plan gate would pass every one of them and
+still be invisible — which is the exact failure class this item fixed. Queued as **H13**.
+
+### Measurements (L3)
+
+Byte delta of the change: `app.settings.jsx` +24 lines, `app.optimize.jsx` +4/-3,
+`tests/utils/candidates.test.js` +12. 1,386 tests. Lint clean from a cleared cache; typecheck and
+build clean.
+
+**Not measured:** anything about production behaviour. This is not deployed (L11 — Phase A has not
+closed) and `/api/build-info` still reports `0acb04a`, confirmed cache-busted. Nothing in this entry is
+live.
+
+### Backlog reconciliation performed this session
+
+Corrected to DONE with evidence: A1.1, A1.3, A1.4, A1.5, A1.6, A3.1, A3.3, A4.1, A5.1, A5.2, A5.3,
+A6.1, A6.2, A6.3, A6.4, A6.5. A1.4 needed a check I had not done: **Blog counts no products at all**,
+so there was nothing to wire there.
+
+Corrected the other way — items I would otherwise have wrongly claimed: **A1.2** (this one), **A3.2**
+(Home still navigates to `/app/optimize`, Products opens a modal — two behaviours, one label),
+**A4.2** ("rewrite existing" has no separate labelled action), **A4.3** (Products row actions have
+zero Enhance routing; Collections has the button label only).
+
+**B6 was done out of phase order** during Phase A. Flagged rather than hidden.
+
+### New item found that nobody asked for
+
+**A4.7** — a setting can ship with a column, a read path and a green test suite and still be
+unreachable. `autopilotAutoPublish` and `autopilotContentTypes` have never been audited for this.
+A guard should assert that every `BrandVoice` boolean a rule reads has both a control in Settings and
+a hidden input that posts it.
