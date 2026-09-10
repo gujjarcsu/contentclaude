@@ -14,6 +14,18 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // `prisma migrate deploy` takes a Postgres ADVISORY LOCK before it does
+  // anything, and advisory locks are per-connection. Pointed at a pgbouncer in
+  // transaction mode, where a connection is not sticky, the lock can never be
+  // acquired and the release command dies with "P1002 ... Timed out trying to
+  // acquire a postgres advisory lock", aborting the deploy.
+  //
+  // The documented fix, from both Prisma and Neon, is this: migrations use an
+  // UNPOOLED connection while the app keeps the pooled one. DIRECT_URL is
+  // Neon's unpooled endpoint. It replaces PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK,
+  // which worked by simply not taking the lock — acceptable only because
+  // nothing here can race, and never a fix.
+  directUrl = env("DIRECT_URL")
 }
 
 // Required by Shopify app template
