@@ -149,6 +149,38 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
+      # P1, 2026-09-10. A STOPPED web machine is not a spare, it is decoration:
+      # flyctl updates it in place while stopped, prints "is now in a good
+      # state", and moves on — so a deploy has no second machine to serve
+      # traffic while the first one is being replaced. Measured from outside on
+      # release v176: a 95.2 s window containing 125 requests over one second
+      # and a 17.1 s worst case, on an app whose health endpoint answers in 5 ms.
+      #
+      # fly.toml's auto_stop_machines = "off" stops the proxy from STOPPING a
+      # machine. It does not START one that is already stopped, and no part of a
+      # deploy does either — which is exactly how this comes back silently.
+      #
+      # What this prints if the thing it watches is broken: the second machine
+      # stopped again gives count=2 notStarted=1 and a red job naming the states.
+      # If flyctl changed its JSON shape, the select matches nothing, count=0,
+      # and "-lt 2" fails as well — it cannot pass by finding nothing, which is
+      # the failure mode that makes a check decorative.
+      - name: Every web machine is running
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          states=$(flyctl machine list --app contentclaude --json | jq -r '.[] | select(.config.metadata.fly_process_group == "web") | .state')
+          echo "web machine states:"
+          echo "$states"
+          count=$(echo "$states" | grep -c . || true)
+          notstarted=$(echo "$states" | grep -vc '^started$' || true)
+          if [ "$count" -lt 2 ] || [ "$notstarted" -ne 0 ]; then
+            echo "::error::expected at least 2 web machines, all state=started; got count=$count notStarted=$notstarted"
+            exit 1
+          fi
+          echo "$count web machines, all started - a deploy has somewhere else to send traffic."
+
   # Phase 1 item 4 — a green deploy is not a working app. This asks production
   # the questions that would have caught every deploy-shaped failure this app has
   # had, and fails loudly when an answer is wrong.

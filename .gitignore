@@ -63,3 +63,7 @@ test-results/
 # docs/history/worktree-recovery/.
 .claude/worktrees/
 
+
+# deploy-watch raw samples: thousands of rows per run. The .summary.json
+# beside each one is the evidence and IS committed.
+tools/proof/out/*.samples.json
