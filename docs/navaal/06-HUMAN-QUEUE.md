@@ -18,13 +18,13 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
-- **COWORK — two guiding docs point at files that do not exist.** `00-CONSTITUTION.md` L17 tells every
-  session to route blocked work into **`06-QUEUE.md`**; the file is actually `06-HUMAN-QUEUE.md`.
-  `README.md`'s new REFERENCE tier lists **`08-VERIFICATION.md`** ("read it before claiming anything is
-  verified"), and that file does not exist at all. Why it matters: a session that follows the laws
-  literally either writes to a file nobody reads, or stops looking for a verification standard it was
-  told exists. Found 2026-09-11 by CC while following L17 for the first time. Done looks like: either
-  the two references are corrected to the real filenames, or the files are created.
+- **COWORK — the laws point at `06-QUEUE.md`; the file is `06-HUMAN-QUEUE.md`.** Three references:
+  `00-CONSTITUTION.md:127` (L17), `README.md:39` and `README.md:59`. A session following L17 literally
+  routes blocked work to a filename that does not exist. Either rename the file or correct the three
+  references — either is fine, but right now they disagree. Found 2026-09-11 by CC while following L17
+  for the first time. *(An earlier version of this entry also said `08-VERIFICATION.md` was missing.
+  It was, when I wrote it, and it existed twenty minutes later — that session created it mid-session.
+  Corrected rather than left standing.)*
 
 - **OWNER — Log in `flyctl` on this computer** (blocks INFRA6, and every local `fly` command). Run
   `flyctl auth login` in a terminal and complete the browser flow. Why: the local token expired
