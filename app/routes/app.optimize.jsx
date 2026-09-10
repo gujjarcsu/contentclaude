@@ -28,6 +28,8 @@ import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
+import { getUpsell } from "../utils/upgradePrompts.server.js";
+import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -64,6 +66,10 @@ export const loader = async ({ request }) => {
   const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
+  // Phase 3 item 3.4 — null unless the quota is exhausted, in which case the
+  // optimise action is replaced by a card. Server-computed and never throws.
+  const upsell = await getUpsell({ admin, shop, plan, usageCount, surface: "optimize" });
+
   return Response.json({
     totalProducts,
     publishedCount,
@@ -71,6 +77,7 @@ export const loader = async ({ request }) => {
     needsContent,
     remaining,
     canOptimize,
+    upsell,
     publishWithoutReview,
     planName: plan?.planName ?? "free",
     monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
@@ -233,6 +240,7 @@ export default function OptimizePage() {
     planName,
     monthlyLimit,
     publishWithoutReview,
+    upsell,
   } = useLoaderData();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -422,12 +430,12 @@ export default function OptimizePage() {
             <p>All {totalProducts} products have AI content. New products will appear here.</p>
           </Banner>
         ) : remaining === 0 ? (
-          <Banner tone="warning" title="Monthly quota reached">
-            <p>Upgrade your plan to generate more content this month.</p>
-            <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/plans")}>View plans</Button>
-            </Box>
-          </Banner>
+          /* Phase 3 item 3.4, surface (b) — the optimise action is REPLACED by
+             this card rather than hidden. A button that vanishes reads as a
+             bug; a card in its place says why it cannot run and what would
+             make it run. Auditing, reviewing and publishing existing drafts
+             all keep working. */
+          <QuotaReachedCard upsell={upsell} surface="optimize" />
         ) : (
           <Card>
             <BlockStack gap="400">

@@ -24,7 +24,8 @@ import { BlogIcon, FileIcon, CheckCircleIcon, LightbulbIcon } from "@shopify/pol
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
-import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
+import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
+import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 import blogPreviewStyles from "../blog-preview.css?url";
@@ -60,10 +61,18 @@ export const loader = async ({ request }) => {
 
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
+  // Phase 3 item 3.4 — null unless the quota is exhausted, in which case the
+  // blog generate form is replaced by a card. Never throws.
+  // n: 0 deliberately — "N products still need content" is not a true or
+  // relevant claim on the blog screen, so this resolves to a neutral card
+  // that states the quota and the reset date and sells nothing.
+  const upsell = await getUpsell({ shop, plan, usageCount, surface: "blog", n: 0 });
+
   return Response.json({
     brandVoice,
     usageRemaining,
     usageCount,
+    upsell,
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
     recentPosts: recentPosts.map((p) => ({
@@ -304,7 +313,7 @@ const LOADING_MESSAGES = [
 ];
 
 export default function BlogPage() {
-  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost } =
+  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost, upsell } =
     useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -437,12 +446,7 @@ export default function BlogPage() {
                   </InlineStack>
 
                   {isOutOfUsage ? (
-                    <UpgradePrompt
-                      tone="warning"
-                      title="Monthly limit reached"
-                      message="Upgrade your plan to generate more blog posts"
-                      onUpgrade={() => navigate("/app/plans")}
-                    />
+                    <QuotaReachedCard upsell={upsell} surface="blog" />
                   ) : (
                     <Form method="post">
                       <input type="hidden" name="actionType" value="generate" />
@@ -529,14 +533,7 @@ export default function BlogPage() {
                           {isGenerating ? "Generating..." : "Generate Blog Post"}
                         </Button>
 
-                        {actionData?.limitReached && (
-                          <UpgradePrompt
-                            tone="warning"
-                            title="Monthly limit reached"
-                            message="Upgrade your plan to generate more content"
-                            onUpgrade={() => navigate("/app/plans")}
-                          />
-                        )}
+                        {actionData?.limitReached && <QuotaReachedCard upsell={upsell} surface="blog" />}
                       </BlockStack>
                     </Form>
                   )}

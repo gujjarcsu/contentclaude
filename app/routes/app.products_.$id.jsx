@@ -25,14 +25,15 @@ import {
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
-import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
+import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
+import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import logger from "../utils/logger.server.js";
-import { getOrCreatePlan } from "../utils/plans.server.js";
+import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
 import { sanitizeHtml } from "../utils/ai.server.js";
@@ -76,6 +77,7 @@ export async function loader({ request, params }) {
     versions,
     templates,
     plan,
+    usageCount,
     publishWithoutReview,
     { scoreContent },
   ] = await Promise.all([
@@ -111,13 +113,18 @@ export async function loader({ request, params }) {
       take: 50,
     }),
     getOrCreatePlan(shop),
-
+    getMonthlyUsageCount(shop),
     publishesWithoutReview(shop),
     import("../utils/contentScorer.server.js"),
   ]);
 
   const product = productPayload?.data?.product;
   if (!product) throw new Response("Product not found", { status: 404 });
+
+  // Phase 3 item 3.4 — null unless the quota is actually exhausted, in which
+  // case the generate controls are replaced by a card that says so. Never
+  // throws; an upsell is never worth a broken product page.
+  const upsell = await getUpsell({ admin, shop, plan, usageCount, surface: "product_page" });
 
   const contentMap = existingContent.reduce((acc, c) => {
     acc[c.contentType] = c;
@@ -189,6 +196,7 @@ export async function loader({ request, params }) {
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
     publishWithoutReview,
+    upsell,
     shopDomain: shop,
   };
 }
@@ -1239,6 +1247,7 @@ export default function ProductGeneratePage() {
     entitlements,
     publishWithoutReview,
     shopDomain,
+    upsell,
   } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -1766,13 +1775,8 @@ export default function ProductGeneratePage() {
                     </Box>
                   )}
 
-                  {actionData?.limitReached && (
-                    <UpgradePrompt
-                      tone="warning"
-                      title="Monthly limit reached"
-                      message="Upgrade your plan to keep generating content"
-                      onUpgrade={() => navigate("/app/plans")}
-                    />
+                  {(upsell || actionData?.limitReached) && (
+                    <QuotaReachedCard upsell={upsell} surface="product_page" />
                   )}
                 </BlockStack>
               </Card>
@@ -1920,13 +1924,8 @@ export default function ProductGeneratePage() {
                           </Button>
                         )}
 
-                        {actionData?.limitReached && (
-                          <UpgradePrompt
-                            tone="warning"
-                            title="Monthly limit reached"
-                            message="Upgrade your plan to keep generating content"
-                            onUpgrade={() => navigate("/app/plans")}
-                          />
+                        {(upsell || actionData?.limitReached) && (
+                          <QuotaReachedCard upsell={upsell} surface="product_page" />
                         )}
                       </BlockStack>
                     </Card>

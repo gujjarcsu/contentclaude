@@ -2814,3 +2814,119 @@ network/console trace at the trigger and the `Shop` row update are **not capture
 | Third approve enforced, fails closed | **Verified** — unit tests at 0, 1, 2 and 3 approves |
 | Terminal codes never re-fire | **Verified** — existing `holdFor` / `decideReviewAsk` tests |
 | Network trace at the trigger, `Shop` row updated live | **Not captured** — needs a merchant session and a real ask |
+
+## 3.4 — Quota-aware conversion, two surfaces
+
+### Six, and why that was worse than any one of them
+
+A merchant who hit their quota met six upsell surfaces: the Home hero, the Home usage card, a Products
+banner, the Products bulk panel, the product page twice, and Optimize. Each was defensible on its own.
+The sum was not. The app spent a merchant's worst moment — the moment it stopped doing the thing they
+were trying to do — asking them for money six times.
+
+Worth noting how they got there: **`getUpsell` and `QuotaUpgradePrompt` existed, were careful, and were
+called by nothing.** Every one of the six was ad-hoc, written where it was needed, with its own copy and
+its own threshold. That is the same pattern as the review ask in 3.3 — a considered implementation sat
+unused beside a scattering of improvised ones. Both are now wired to the considered one.
+
+### The two that survive
+
+| | When | Where | What it does |
+|---|---|---|---|
+| **(a) warning banner** | 80–99% used | Home and Products **only** | One `Banner`, dismissible for 7 days, `?from=quota80` |
+| **(b) quota-reached card** | 100% | wherever the generate/optimise action is | **Replaces** the action, `?from=quota100` |
+
+**Replaced, not hidden**, is the load-bearing half of (b). A button that vanishes reads as a bug and
+sends a merchant looking for what they broke. A card standing where the button was, saying why it cannot
+run and what would make it run, is the app being honest about its own limit. On Blog the pattern was
+already right (`isOutOfUsage ? prompt : form`) and only the component changed; on Optimize and the
+Products bulk panel the action is now swapped the same way.
+
+And **everything that does not cost a generation keeps working at 100%** — the audit still runs, and
+existing drafts can still be reviewed, edited, approved and published. The card says so in as many
+words. Being out of quota stops new generation, not the app.
+
+### Where the numbers come from
+
+Both surfaces are computed on the server (`quotaSurfaces.server.js`, `getUpsell`), so the count and the
+recommended plan are measured rather than written into a template. Neither ever throws — an upsell is
+not worth a broken screen, and both return null on any failure.
+
+Three restraints worth naming, each with a test:
+
+- **A limit of 0 is `ok`, not `exhausted`.** An unmetered or misconfigured plan must not put every screen
+  into the out-of-quota state.
+- **The banner is silent on the top plan.** There is nothing honest left to sell a Pro shop.
+- **The recommended plan is the one that actually covers them.** The brief's illustrative copy says
+  "Growth includes 200/month"; the shipped copy says whatever `fitPlanFor` returns, which for a merchant
+  using ~25/month is **Starter at $9.99**. Naming a $29.99 plan they do not need would be exactly the
+  thing the "honest copy" rule is for. **This is a deliberate deviation from the example copy**, and it
+  is the only one.
+
+The reset date sits beside the CTA on both surfaces. Without it the only way out of the banner is to
+pay, which is untrue — waiting works — and a merchant told only about the paid option has been misled by
+omission.
+
+Dismissal is stored on the `UpgradePrompt` row, not in the browser, so it holds across the merchant's
+devices and survives clearing site data. It rides the existing `markPromptEvent(shop, id, "dismissed")`
+path; there is deliberately no second writer, because two functions setting one column is how they drift.
+
+### Attribution — the chain that did not exist
+
+`attributePlanChoice` was also dead code. So there was no way to answer "which surface produced this
+upgrade", which is the whole point of cutting six down to two.
+
+The chain is now joined end to end:
+
+```
+banner/card  →  /app/plans?from=quota80|quota100&prompt=<id>
+                   ↓  loader: markPromptArrived + recordArrivedFrom
+                subscribe form carries promptId
+                   ↓  action: markSubscribeRequested
+                Shopify approval → /billing/callback → syncBillingToPlan
+                   ↓  attributePlanChoice → stampUpgradeSource
+                Shop.upgradePromptSource = "quota80" | "quota100"
+```
+
+New migration `20260910130000_upgrade_prompt_source` adds `UpgradePrompt.arrivedFrom` and
+`Shop.upgradePromptSource`. Both nullable with no default, and that matters: **an upgrade with no prompt
+behind it is an organic upgrade, and it is recorded as `null` rather than credited to whatever prompt
+happened to be nearest.** A `from=` value we did not mint is discarded — an attribution a merchant can
+type into their own URL bar is not an attribution.
+
+The whole attribution block runs **after** the plan write and swallows its own errors, deliberately:
+getting an attribution wrong must never be able to cost a merchant the plan they just paid for. The
+previous-plan read is wrapped in its own try/catch for the same reason.
+
+### The Plans page
+
+Already Polaris (Phase 2.5 — `polaris-only.test.js` covers it). Two changes:
+
+**The downgrade copy was untrue.** It said *"Cancel current plan to switch"*, and rendered as plain text
+with no control. Shopify **replaces** an app subscription when the merchant approves a new one; there is
+no cancellation step. A merchant who followed that instruction and stopped there would have been left
+with no plan at all. It is now a real button — *"Switch to {plan}"* — with the line *"Approving this
+replaces your current plan — no need to cancel first."* The existing subscribe action already accepted
+any valid plan key, so nothing else had to change.
+
+The FAQ said downgrades "take effect at the end of the current billing period with prorated credit",
+which described a cancellation flow that does not exist here. It now says approving a new plan replaces
+the current one, and that Shopify prorates.
+
+### What is verified, and what is not
+
+| | Status |
+|---|---|
+| Six surfaces reduced to two | **Verified** — a sweep asserts no file renders the ad-hoc `<UpgradePrompt>`, and that exactly Home and Products carry the banner |
+| 80% banner, dismissible 7 days, server-side | **Verified** — 42 unit tests incl. the boundaries at 19/20/24/25 of 25 |
+| 100% card replaces (not hides) the action | **Verified** — source guards on all four generate surfaces |
+| Audit/review/publish keep working at 100% | **Verified structurally** — no quota gate on those paths; stated in the card copy |
+| `from=` recorded on activation | **Verified** — unit tests through `stampUpgradeSource`, including the refusal to guess |
+| Honest copy: no countdown, urgency or scarcity | **Verified** — regex sweep in two test files |
+| Downgrade copy corrected | **Verified** — source guard |
+| **Drive a dev store 0 → 20 → 25 with the URL bar visible** | **NOT recorded** — needs a merchant session and 25 real generations |
+| **Upgrade from the 100% card → Approve → plan active, source recorded** | **NOT recorded** — needs a human to approve a Shopify charge |
+
+The two acceptance recordings both require a browser somebody logs into, and no agent types credentials
+here. They are the same class of gap as the TTFV measurement in 3.2: the mechanism is tested, the
+end-to-end recording is a human step.

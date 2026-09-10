@@ -309,6 +309,10 @@ model Shop {
   reviewNextEligibleAt DateTime?    // per-code hold; a 60-day pending hold is written at open time
   reviewShownAt        DateTime?    // set only on "success" — the one displayed modal
   reviewDoneAt         DateTime?    // terminal: success | already-reviewed | merchant-ineligible
+  // ── Item 3.4: which upsell surface the ACTIVE subscription came from
+  // ("quota80" | "quota100"), stamped at activation. Null = organic, i.e. no
+  // prompt was behind it — never guessed.
+  upgradePromptSource  String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -368,6 +372,9 @@ model UpgradePrompt {
   dismissedAt          DateTime?
   ctaClickedAt         DateTime?
   arrivedAtPlansAt     DateTime?
+  // Phase 3 item 3.4 — the `from=` on the link the merchant followed to Plans:
+  // "quota80" (the 80%-used banner) or "quota100" (the quota-reached card).
+  arrivedFrom          String?
   subscribeRequestedAt DateTime?
   planKeyRequested     String?
   planChosen           String?

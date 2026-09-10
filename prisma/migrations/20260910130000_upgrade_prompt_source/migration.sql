@@ -1,0 +1,25 @@
+-- Phase 3 item 3.4 — record WHICH upsell surface a subscription came from.
+--
+-- The brief asks for the `from=` on the upgrade link to be persisted when a
+-- subscription activates, so the two surfaces that survive can be told apart:
+-- the 80%-used banner (`from=quota80`) and the 100%-reached card
+-- (`from=quota100`). Without it every upgrade looks the same and there is no
+-- way to know which of the two is doing the work — which is the whole reason
+-- for cutting six surfaces down to two.
+--
+--   UpgradePrompt.arrivedFrom     the `from=` value when the merchant landed on
+--                                 Plans, on the prompt row they came from
+--   Shop.upgradePromptSource      stamped when the subscription actually
+--                                 ACTIVATES, so it survives on a row that is
+--                                 not deleted at uninstall and is anonymised
+--                                 (not dropped) at shop/redact
+--
+-- Both are nullable with no default: an upgrade with no prompt behind it is an
+-- organic upgrade, and recording it as anything else would be inventing an
+-- attribution. NULL means "we do not know", which is the truth.
+--
+-- A NEW migration file. Nothing already applied is touched — docs/RUNBOOK.md
+-- Rule 1, and the 2026-09-09 incident that wrote it. IF NOT EXISTS so a re-run
+-- is a no-op. Additive and nullable, so it cannot break a running deploy.
+ALTER TABLE "UpgradePrompt" ADD COLUMN IF NOT EXISTS "arrivedFrom" TEXT;
+ALTER TABLE "Shop" ADD COLUMN IF NOT EXISTS "upgradePromptSource" TEXT;

@@ -4,6 +4,7 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import { StartState } from "../components/StartState.jsx";
+import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
 import {
   Page,
   Layout,
@@ -16,7 +17,6 @@ import {
   Badge,
   ProgressBar,
   Banner,
-  Divider,
   Icon,
   SkeletonBodyText,
   SkeletonDisplayText,
@@ -39,7 +39,7 @@ import { getCache } from "../utils/cache.server.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
-import { BILLING_PLANS } from "../utils/billing-plans.js";
+import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -188,6 +188,17 @@ export const loader = async ({ request }) => {
   // quota line paint immediately and the score reveal arrives behind a
   // skeleton. Resolved, never rejected — scanStoreForStart returns
   // { error: true } rather than throwing, so the card can offer a retry.
+  // Phase 3 item 3.4 — the ONE upsell Home carries, and only between 80% and
+  // 100% used. Null when the shop is below the threshold, already out (that is
+  // the card's job, on the screens where the action lives), or dismissed it in
+  // the last 7 days. Never throws.
+  const quotaWarning = await getQuotaWarning({
+    shop,
+    plan,
+    usageCount,
+    surface: "dashboard",
+  });
+
   const start = isFirstRun
     ? {
         targetCount: START_TARGETS,
@@ -211,6 +222,7 @@ export const loader = async ({ request }) => {
     hasBrandVoice,
     isNewShop,
     start,
+    quotaWarning,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
     storeName,
@@ -430,6 +442,7 @@ export default function Dashboard() {
     hasBrandVoice,
     isNewShop,
     start,
+    quotaWarning,
     plan,
     usageCount,
     storeName,
@@ -468,7 +481,6 @@ export default function Dashboard() {
   const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
   const remaining = Math.max(0, plan.monthlyLimit - usageCount);
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
-  const isFreePlan = plan.planName === "free";
 
   // Reaching the monthly quota is "complete", not an error — so the high-usage
   // state is amber/neutral, never alarming red (usagePct is capped at 100).
@@ -523,6 +535,9 @@ export default function Dashboard() {
   return (
     <Page primaryAction={primaryAction} secondaryActions={secondaryActions}>
       <BlockStack gap="600">
+        {/* Phase 3 item 3.4, surface (a) — the only upsell on this screen. */}
+        <QuotaWarningBanner warning={quotaWarning} />
+
         {/* ── Job completion banner ──────────────────────────────────────── */}
         {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
           <Banner
@@ -705,36 +720,16 @@ export default function Dashboard() {
 
             <ProgressBar progress={usagePct} tone={usageTone} size="medium" />
 
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="p" variant="bodySm" tone="subdued">
-                {remaining === 0
-                  ? `You've used all ${plan.monthlyLimit} generations this month. Upgrade for more.`
-                  : usagePct >= 90
-                    ? "Almost at your limit — upgrade to keep generating without interruption."
-                    : usagePct >= 60
-                      ? "You're more than halfway through your monthly quota."
-                      : "You're in good shape for this month."}
-              </Text>
-              {isFreePlan && (
-                <Button size="slim" onClick={() => navigate("/app/plans")}>
-                  Upgrade Plan
-                </Button>
-              )}
-            </InlineStack>
-
-            {isFreePlan && <Divider />}
-            {isFreePlan && (
-              <InlineStack gap="200" blockAlign="center">
-                <Icon source={PlanIcon} tone="info" />
-                <Text as="p" variant="bodySm">
-                  <strong>Starter plan</strong> gives you {BILLING_PLANS.starter.monthlyLimit}{" "}
-                  generations/month for ${BILLING_PLANS.starter.amount}.{""}
-                  <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                    View all plans
-                  </Button>
-                </Text>
-              </InlineStack>
-            )}
+            {/* Phase 3 item 3.4 — a readout, not an upsell. This card and the
+                Home hero were two of the six surfaces a quota-hit merchant met.
+                It still says exactly where they stand, and the single upgrade
+                path is the banner above, which appears once and can be
+                dismissed for a week. */}
+            <Text as="p" variant="bodySm" tone="subdued">
+              {remaining === 0
+                ? `You've used all ${plan.monthlyLimit} generations for this month. They reset on the 1st.`
+                : `${remaining} of ${plan.monthlyLimit} left this month.`}
+            </Text>
           </BlockStack>
         </Box>
 

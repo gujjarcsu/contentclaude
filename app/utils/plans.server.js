@@ -10,9 +10,7 @@ export { FREE_PLAN };
 // the monthly key and the annual key, so an annual subscription resolves to the
 // same plan (same generation limit + entitlements; only the billing interval differs).
 export function getPlanByKey(shopifyKey) {
-  return Object.values(BILLING_PLANS).find(
-    (p) => p.key === shopifyKey || p.annualKey === shopifyKey
-  ) ?? null;
+  return Object.values(BILLING_PLANS).find((p) => p.key === shopifyKey || p.annualKey === shopifyKey) ?? null;
 }
 
 /**
@@ -32,23 +30,27 @@ export async function checkEntitlement(shop, feature) {
 }
 
 export async function getOrCreatePlan(shop) {
-  const plan = await getCache(`plan:${shop}`, async () => {
-    // Phase 0 item 16 — findUnique-then-create is a read-modify-write race. On a
-    // fresh install the dashboard loader, the jobs-status poll and the billing
-    // reconcile all fire within milliseconds of each other, all miss, and all
-    // try to create the row: two of them get P2002 and the merchant's very
-    // first page load is a 500. upsert makes it one atomic statement.
-    return prisma.plan.upsert({
-      where: { shop },
-      update: {},
-      create: {
-        shop,
-        planName: FREE_PLAN.planName,
-        status: "active",
-        monthlyLimit: FREE_PLAN.monthlyLimit,
-      },
-    });
-  }, 60); // 60-second TTL — plan changes only via billing webhooks which call syncBillingToPlan
+  const plan = await getCache(
+    `plan:${shop}`,
+    async () => {
+      // Phase 0 item 16 — findUnique-then-create is a read-modify-write race. On a
+      // fresh install the dashboard loader, the jobs-status poll and the billing
+      // reconcile all fire within milliseconds of each other, all miss, and all
+      // try to create the row: two of them get P2002 and the merchant's very
+      // first page load is a 500. upsert makes it one atomic statement.
+      return prisma.plan.upsert({
+        where: { shop },
+        update: {},
+        create: {
+          shop,
+          planName: FREE_PLAN.planName,
+          status: "active",
+          monthlyLimit: FREE_PLAN.monthlyLimit,
+        },
+      });
+    },
+    60,
+  ); // 60-second TTL — plan changes only via billing webhooks which call syncBillingToPlan
   // The Redis cache round-trips values through JSON, so Prisma DateTime fields
   // come back as ISO STRINGS on cache hits — while cache misses return live
   // Date objects. Every consumer must see the same shape, so rehydrate the
@@ -79,20 +81,21 @@ export async function getMonthlyUsageCount(shop) {
 export async function canGenerate(shop) {
   const month = new Date().toISOString().slice(0, 7);
   const cacheKey = `canGenerate:${shop}:${month}`;
-  return getCache(cacheKey, async () => {
-    const [plan, usageCount] = await Promise.all([
-      getOrCreatePlan(shop),
-      getMonthlyUsageCount(shop),
-    ]);
-    const allowed = plan.status === "active" && usageCount < plan.monthlyLimit;
-    return {
-      allowed,
-      usageCount,
-      monthlyLimit: plan.monthlyLimit,
-      planName: plan.planName,
-      remaining: Math.max(0, plan.monthlyLimit - usageCount),
-    };
-  }, 60);
+  return getCache(
+    cacheKey,
+    async () => {
+      const [plan, usageCount] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
+      const allowed = plan.status === "active" && usageCount < plan.monthlyLimit;
+      return {
+        allowed,
+        usageCount,
+        monthlyLimit: plan.monthlyLimit,
+        planName: plan.planName,
+        remaining: Math.max(0, plan.monthlyLimit - usageCount),
+      };
+    },
+    60,
+  );
 }
 
 /**
@@ -155,7 +158,7 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // SQLite ignores this option (it's always serializable due to write lock).
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         timeout: 10_000,
-      }
+      },
     );
     if (result.allowed) {
       await invalidateCache(`canGenerate:${shop}:${month}`);
@@ -174,7 +177,10 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         return tryConsumeGeneration(shop, contentType, productId, attempt + 1);
       }
       // Second failure — return safe denial with distinct error tag
-      logger.warn({ shop, err: err.message }, "tryConsumeGeneration: P2034 write conflict after retry — denying safely");
+      logger.warn(
+        { shop, err: err.message },
+        "tryConsumeGeneration: P2034 write conflict after retry — denying safely",
+      );
       return {
         allowed: false,
         planName: "contention",
@@ -358,7 +364,10 @@ export async function captureUsageCarryover(shop) {
   try {
     const used = await prisma.usageRecord.count({ where: { shop, month } });
     await prisma.shop.updateMany({ where: { shop }, data: { usageMonth: month, usageCarryover: used } });
-    logger.info({ shop, month, used, event: "usage_carryover_captured" }, "Usage carried over for a possible reinstall");
+    logger.info(
+      { shop, month, used, event: "usage_carryover_captured" },
+      "Usage carried over for a possible reinstall",
+    );
     return used;
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "captureUsageCarryover failed (non-fatal)");
@@ -395,7 +404,10 @@ export async function restoreUsageCarryover(shop) {
       })),
     });
     await invalidateCache(`canGenerate:${shop}:${month}`);
-    logger.info({ shop, month, restored: missing, event: "usage_carryover_restored" }, "Reinstall did not reset this month's usage");
+    logger.info(
+      { shop, month, restored: missing, event: "usage_carryover_restored" },
+      "Reinstall did not reset this month's usage",
+    );
     return missing;
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "restoreUsageCarryover failed (non-fatal)");
@@ -413,6 +425,19 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
   if (activeSub) {
     const planDef = getPlanByKey(activeSub.name);
     if (planDef) {
+      // What the shop was on BEFORE this write — needed to tell a genuine plan
+      // change from the same subscription being re-synced. Read defensively:
+      // this exists only to improve an ATTRIBUTION, and nothing about it is
+      // allowed to interfere with recording the plan the merchant just bought.
+      let prev = null;
+      try {
+        prev = await prisma.plan.findUnique({
+          where: { shop },
+          select: { planName: true, shopifyChargeId: true },
+        });
+      } catch {
+        prev = null;
+      }
       await prisma.plan.upsert({
         where: { shop },
         update: {
@@ -420,9 +445,7 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
           status: "active",
           monthlyLimit: planDef.monthlyLimit,
           shopifyChargeId: activeSub.id,
-          currentPeriodEnd: activeSub.currentPeriodEnd
-            ? new Date(activeSub.currentPeriodEnd)
-            : null,
+          currentPeriodEnd: activeSub.currentPeriodEnd ? new Date(activeSub.currentPeriodEnd) : null,
         },
         create: {
           shop,
@@ -430,15 +453,39 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
           status: "active",
           monthlyLimit: planDef.monthlyLimit,
           shopifyChargeId: activeSub.id,
-          currentPeriodEnd: activeSub.currentPeriodEnd
-            ? new Date(activeSub.currentPeriodEnd)
-            : null,
+          currentPeriodEnd: activeSub.currentPeriodEnd ? new Date(activeSub.currentPeriodEnd) : null,
         },
       });
       // The shop has now held a paid subscription, so its one trial is spent
       // (item 10 — otherwise cancel + resubscribe grants another).
       await markTrialUsed(shop, activeSub.trialEndsAt ? new Date(activeSub.trialEndsAt) : null);
       await invalidatePlanCaches(shop);
+
+      // Phase 3 item 3.4 — attribute the subscription to the prompt the
+      // merchant actually acted on, and record WHICH of the two upsell
+      // surfaces it was. This runs AFTER the plan write and both calls swallow
+      // their own errors, deliberately: getting an attribution wrong must
+      // never be able to cost a merchant the plan they just paid for.
+      //
+      // attributePlanChoice returns null for a re-sync of the same
+      // subscription and for an upgrade with no prompt behind it — an organic
+      // upgrade, which is recorded as such rather than credited to whatever
+      // prompt happened to be nearest.
+      try {
+        const { attributePlanChoice } = await import("./upgradePrompts.server.js");
+        const promptId = await attributePlanChoice(shop, {
+          planName: planDef.planName,
+          chargeId: activeSub.id,
+          prevChargeId: prev?.shopifyChargeId ?? null,
+          prevPlanName: prev?.planName ?? "free",
+        });
+        if (promptId) {
+          const { stampUpgradeSource } = await import("./quotaSurfaces.server.js");
+          await stampUpgradeSource(shop, promptId);
+        }
+      } catch (err) {
+        logger.warn({ shop, err: err?.message }, "upgrade attribution failed (non-fatal)");
+      }
       return;
     }
   }
@@ -450,8 +497,12 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
   // lookup succeeded; the cancel action passes [] only after billing.cancel
   // genuinely succeeded; the webhook writes Free directly on CANCELLED/EXPIRED.
   logger.warn(
-    { shop, subCount: (appSubscriptions ?? []).length, subs: (appSubscriptions ?? []).map((s) => ({ name: s.name, status: s.status, test: s.test })) },
-    "billing: downgrading plan to Free (no ACTIVE subscription in authoritative list)"
+    {
+      shop,
+      subCount: (appSubscriptions ?? []).length,
+      subs: (appSubscriptions ?? []).map((s) => ({ name: s.name, status: s.status, test: s.test })),
+    },
+    "billing: downgrading plan to Free (no ACTIVE subscription in authoritative list)",
   );
   await prisma.plan.upsert({
     where: { shop },

@@ -47,7 +47,9 @@ import {
 import { getEntitlements } from "../utils/billing-plans.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
-import { UpgradePrompt } from "../components/UpgradePrompt.jsx";
+import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
+import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
+import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 const PAGE_SIZE = 50;
@@ -146,6 +148,16 @@ export const loader = async ({ request }) => {
 
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
 
+  // Phase 3 item 3.4 — the two surviving conversion surfaces, both computed on
+  // the server so the count and the fit plan are measured rather than guessed.
+  // getQuotaWarning returns null below 80%, at 100%, or while dismissed;
+  // getUpsell returns null unless the quota is actually exhausted. Neither
+  // throws — an upsell is never worth a broken screen.
+  const [quotaWarning, upsell] = await Promise.all([
+    getQuotaWarning({ shop, plan, usageCount, surface: "products" }),
+    getUpsell({ admin, shop, plan, usageCount, surface: "products" }),
+  ]);
+
   return Response.json({
     products,
     contentMap,
@@ -157,6 +169,8 @@ export const loader = async ({ request }) => {
     noContentProducts,
     usageCount,
     usageRemaining,
+    quotaWarning,
+    upsell,
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
@@ -344,6 +358,8 @@ export default function ProductsPage() {
     noContentProducts,
     usageCount,
     usageRemaining,
+    quotaWarning,
+    upsell,
     monthlyLimit,
     planName,
     entitlements,
@@ -375,7 +391,6 @@ export default function ProductsPage() {
   // Store-wide coverage counts come from the loader (aggregated, accurate across
   // all pages). contentMap below is scoped to the visible page for per-row pills.
   const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
-  const isLowUsage = usageRemaining > 0 && usageRemaining <= 5;
   const isOutOfUsage = usageRemaining === 0;
 
   const tabFilteredProducts = products.filter((p) => {
@@ -576,30 +591,12 @@ export default function ProductsPage() {
           </Banner>
         )}
 
-        {/* Usage alert "" only when critical */}
-        {isOutOfUsage && (
-          <Banner tone="critical" title="Monthly generation limit reached">
-            <p>
-              You've used all {monthlyLimit} generations for this month. Upgrade to keep optimizing your
-              store.
-            </p>
-            <Box paddingBlockStart="200">
-              <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                View plans
-              </Button>
-            </Box>
-          </Banner>
-        )}
-        {isLowUsage && (
-          <UpgradePrompt
-            tone="warning"
-            title={`Only ${usageRemaining} generation${usageRemaining !== 1 ? "s" : ""} left this month`}
-            message={`You've used ${usageCount} of ${monthlyLimit}. Upgrade now to keep generating without interruption.`}
-            ctaLabel="Upgrade plan"
-            onUpgrade={() => navigate("/app/plans")}
-          />
-        )}
-
+        {/* Phase 3 item 3.4, surface (a) — the only upsell banner on this
+            screen, 80%-100%, dismissible for a week. The critical "Monthly
+            generation limit reached" banner that used to sit here is gone:
+            reaching a quota is completion, not an error, and at 100% the
+            message belongs where the action was, not at the top of the page. */}
+        <QuotaWarningBanner warning={quotaWarning} />
         {/* Stat bar */}
         <Layout>
           <Layout.Section variant="oneThird">
@@ -666,11 +663,6 @@ export default function ProductsPage() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     {usageCount} / {monthlyLimit} used
                   </Text>
-                  {planName === "free" && (
-                    <Button size="slim" variant="plain" onClick={() => navigate("/app/plans")}>
-                      Upgrade
-                    </Button>
-                  )}
                 </InlineStack>
               </InlineStack>
               <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />
@@ -692,12 +684,7 @@ export default function ProductsPage() {
               </InlineStack>
 
               {isOutOfUsage ? (
-                <UpgradePrompt
-                  tone="warning"
-                  title="No generations remaining"
-                  message="Upgrade your plan to generate content for these products"
-                  onUpgrade={() => navigate("/app/plans")}
-                />
+                <QuotaReachedCard upsell={upsell} surface="products" />
               ) : (
                 <>
                   {bulkError && (

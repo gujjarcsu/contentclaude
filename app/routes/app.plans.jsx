@@ -35,6 +35,8 @@ import {
   OrganizationIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
+import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePrompts.server.js";
+import { recordArrivedFrom } from "../utils/quotaSurfaces.server.js";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
 import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
@@ -74,7 +76,22 @@ export const loader = async ({ request }) => {
         ? "error"
         : null;
 
+  // Phase 3 item 3.4 — which of the two upsell surfaces sent them here.
+  // Recorded on arrival so it survives the round trip out to Shopify's approval
+  // screen and back through /billing/callback, where the subscription actually
+  // activates. Both writes are shop-scoped, never throw, and a `from` we did
+  // not mint is discarded — an attribution a merchant can type into their own
+  // URL bar is not an attribution.
+  const promptId = url.searchParams.get("prompt");
+  const from = url.searchParams.get("from");
+  if (promptId) {
+    await Promise.all([markPromptArrived(shop, promptId), recordArrivedFrom(shop, promptId, from)]);
+  }
+
   return {
+    // Carried into the subscribe form so a subscribe REQUEST can be attributed
+    // to the prompt the merchant came from, not just the arrival.
+    promptId: promptId || null,
     plan: {
       planName: plan.planName,
       status: plan.status,
@@ -102,6 +119,11 @@ export const action = async ({ request }) => {
     // charges; real merchants get real charges. Resolved per shop — only the
     // subscribe path needs it (test-vs-real must be decided before the sub
     // exists); cancel reads the sub's real test flag instead.
+    // Phase 3 item 3.4 — a subscribe REQUEST is the strongest signal short of
+    // an activation, and it is what attributePlanChoice matches on first.
+    const promptId = formData.get("promptId");
+    if (promptId) await markSubscribeRequested(session.shop, String(promptId), planKey);
+
     const isTest = await resolveBillingTest(admin, session.shop);
     // Phase 0 item 10 — the 7-day trial is once per shop, for the life of the
     // shop. trialDays: 7 is baked into every plan in the billing config, so
@@ -317,7 +339,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Can I upgrade or downgrade at any time?",
-    a: "Yes. Upgrades take effect immediately. Downgrades take effect at the end of the current billing period with prorated credit.",
+    a: "Yes. Approving a new plan replaces your current one — there is no cancellation step. Upgrades take effect immediately; a change to a cheaper plan is prorated by Shopify.",
   },
   {
     q: "What counts as one 'generation'?",
@@ -350,6 +372,7 @@ function PlanCard({
   isSubmitting,
   submittingPlan,
   billingPeriod,
+  promptId,
 }) {
   const isAnnual = billingPeriod === "annual" && !!displayPlan.annualPlanKey;
   const shownPrice = isAnnual ? displayPlan.annualPrice : displayPlan.price;
@@ -430,6 +453,7 @@ function PlanCard({
             <Form method="post">
               <input type="hidden" name="actionType" value="subscribe" />
               <input type="hidden" name="planKey" value={activeKey} />
+              {promptId && <input type="hidden" name="promptId" value={promptId} />}
               <Button
                 variant="primary"
                 submit
@@ -440,16 +464,31 @@ function PlanCard({
                 Upgrade to {displayPlan.label}
               </Button>
             </Form>
-          ) : isDowngrade ? (
-            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-              Cancel current plan to switch
-            </Text>
+          ) : displayPlan.planKey && isDowngrade ? (
+            /* Phase 3 item 3.4 — this used to say "Cancel current plan to
+               switch", which was not true. Shopify REPLACES an app
+               subscription when the merchant approves a new one; there is no
+               cancellation step, and telling a merchant to cancel first would
+               have left them with no plan at all if they stopped there. */
+            <Form method="post">
+              <input type="hidden" name="actionType" value="subscribe" />
+              <input type="hidden" name="planKey" value={activeKey} />
+              {promptId && <input type="hidden" name="promptId" value={promptId} />}
+              <Button submit fullWidth loading={isSubmittingThisPlan} disabled={isSubmitting}>
+                Switch to {displayPlan.label}
+              </Button>
+            </Form>
           ) : (
             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
               Free forever
             </Text>
           )}
-          {displayPlan.planKey && !isCurrent && (
+          {displayPlan.planKey && isDowngrade && (
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              Approving this replaces your current plan — no need to cancel first.
+            </Text>
+          )}
+          {displayPlan.planKey && !isCurrent && !isDowngrade && (
             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
               7-day free trial · Cancel anytime
             </Text>
@@ -461,7 +500,7 @@ function PlanCard({
 }
 
 export default function PlansPage() {
-  const { plan, usageCount, currentMonth, billingNotice } = useLoaderData();
+  const { plan, usageCount, currentMonth, billingNotice, promptId } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -631,6 +670,7 @@ export default function PlansPage() {
                   isCurrent={isCurrent}
                   isUpgrade={isUpgrade}
                   isDowngrade={isDowngrade}
+                  promptId={promptId}
                   isSubmitting={isSubmitting}
                   submittingPlan={submittingPlan}
                   billingPeriod={billingPeriod}
