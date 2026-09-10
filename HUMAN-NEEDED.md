@@ -15,31 +15,6 @@ Six items, all with the owner. Every one needs an account or a console the
 agent cannot reach. The code for each is shipped and degrades honestly without
 it.
 
-### 1. `DIRECT_URL` — unblock real migrations (Phase 1 item 1)
-- **Why:** `prisma migrate deploy` takes a Postgres advisory lock, and advisory locks do not survive
-  pgbouncer's transaction pooling, so the release command failed with `P1002 ... Timed out trying to
-  acquire a postgres advisory lock` and aborted the deploy. It is currently unblocked with
-  `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true` in `fly.toml`, which is safe **only while there are no
-  pending migrations** — the command is then a read of `_prisma_migrations`. Before the first real
-  migration, migrations need a direct (unpooled) connection.
-- **Steps:**
-  1. Neon console → the project → Connection string → choose the **direct** (non-pooled) endpoint. It is
-     the same host without `-pooler`.
-  2. ```
-     printf 'DIRECT_URL=%s\n' 'postgresql://…direct-host…/neondb?sslmode=require' > s.env
-     fly secrets import -a contentclaude < s.env && rm s.env
-     ```
-     (**Never** `fly secrets set` — see Rule 0 in `docs/RUNBOOK.md`.)
-  3. Tell me, and I will add `directUrl = env("DIRECT_URL")` to the datasource and remove the
-     advisory-lock override in the same commit.
-
-**Status 2026-09-09, after the owner set the other three:** `DIRECT_URL` is **still not set**.
-`fly secrets list -a contentclaude` returns seventeen names and this is not among them, and
-`printenv` on the machine confirms it. `WORKER_DATABASE_URL`, `RESEND_API_KEY` and the four `R2_*`
-secrets all landed in the same sitting, so the import worked; this one did not make it. Until it
-exists, `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` has to stay in `fly.toml`, and the datasource cannot
-take `directUrl`.
-
 ### 2. Uptime monitor from two regions (Phase 1 item 5)
 - **Why:** this is the gap the 2026-09-09 incident exposed. A five-minute in-app check now exists and
   emails on failure, but it runs *inside* the same infrastructure — if Fly itself is unreachable, the
@@ -88,14 +63,17 @@ take `directUrl`.
   node tools/proof/web-vitals.mjs --label after
   node tools/proof/web-vitals.mjs --compare
   ```
-- **What to expect:** the harness emulates a 200 ms US-to-Sydney round trip, because measuring from
-  Sydney would flatter the app by the width of the Pacific. Targets are LCP p75 <= 2.5 s, CLS <= 0.1,
-  INP <= 200 ms. `mobile-375.mjs` exits non-zero if any screen scrolls horizontally and writes both the
-  screenshots and a `results.json` naming the widest offending element.
-- **The one partial reading I did get**, before the session degraded, on the deploy carrying increments
-  1-3: Home LCP p75 4012 ms, Products 2660 ms, Review 2344 ms, CLS 0 on all three, INP 16-24 ms. It is a
-  single sample per screen, not the p75-over-10 the brief asks for, and it is recorded as an indication
-  rather than a result.
+- **What to expect:** `mobile-375.mjs` exits non-zero if any screen scrolls horizontally and writes both
+  the screenshots and a `results.json` naming the widest offending element. That one still matters.
+- **IMPORTANT — `web-vitals.mjs` is now a regression detector only, and this item is no longer about
+  Built for Shopify.** Shopify's own field data (App Bridge, real merchant sessions, p75 over 28 days —
+  the measurement BFS actually grades) reads **LCP 895 ms and INP 16 ms, both Good**. The harness reads
+  4644-5892 ms because it measures the TOP-LEVEL document, which is `admin.shopify.com` rather than this
+  app, and adds 200 ms of emulated latency on top. Its numbers are **not comparable to the 2.5 s
+  threshold** and must never be quoted against it. The harness prints that on every run now, and the
+  earlier "LCP fails on all three screens" conclusion is withdrawn in `PROGRESS.md`.
+  So: run it if you want a before/after around a change, not to find out whether the app is fast enough.
+  The answer to that is in the Dev Dashboard, and it is yes.
 
 ### 6. Change the App Store listing to US spelling (Phase 2 item 2.9)
 - **Why:** the app was split between British and US spelling of the same word — 20 user-visible
@@ -108,7 +86,48 @@ take `directUrl`.
   (`Navaal: AI SEO, AEO & GEO`) is unaffected.
 - **Verify:** the listing and the in-app copy use one spelling. Nothing in the app needs redeploying.
 
+### 7. Remove the retired `FEATURE_MAGIC_MOMENT` Fly secret (Phase 3 item 3.1)
+- **Why:** the flag is gone from the code. `magicMoment` gated the first-run auto-scan behind an
+  environment variable, which meant the first thing a new merchant saw depended on a setting nobody had
+  turned on in production — so nobody ever saw it. That engine is now the Start state on Home and runs
+  for every shop unconditionally. The secret is inert, but a secret that nothing reads is a trap for the
+  next person who finds it and assumes it does something.
+- **Steps:**
+  ```
+  fly secrets unset FEATURE_MAGIC_MOMENT -a contentclaude
+  ```
+  `unset` (not `import`) is correct here — the runbook's import-from-file rule exists because `secrets
+  set` on Windows `cmd.exe` mangles `%xx` sequences in a VALUE. Removal passes no value.
+- **Then, because unset restarts every machine:**
+  ```
+  curl -s "https://app.navaal.ai/api/health?deep=1"
+  ```
+  Expect `"status":"ok"` and `"schema":{"ok":true,...}`.
+- **Confirm it is gone:** `fly secrets list -a contentclaude | grep FEATURE_MAGIC_MOMENT` → no output.
+- **Safe to leave for now.** Nothing reads it, and a test asserts no source file does
+  (`tests/utils/featureFlags.test.js`). This is tidiness, not a fix.
+
 ## Done
+
+### 1. `DIRECT_URL` — real migrations take the advisory lock again (Phase 1 item 1)
+Done 2026-09-10 by the owner; verified by the agent the same day. `fly secrets list` shows `DIRECT_URL`,
+and `printenv` on the machine shows Neon's **unpooled** endpoint (`ep-wild-mode-a755klmb`, no `-pooler`).
+
+`prisma/schema.prisma` now declares `directUrl = env("DIRECT_URL")` and
+`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` is out of `fly.toml`. Deploy `e730fd3` ran the release command with
+the lock enabled:
+
+```
+3 migrations found in prisma/migrations
+No pending migrations to apply.
+```
+
+No `P1002`, and `printenv | grep -c PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` → `0` on the machine.
+
+Checked before shipping, because a datasource that cannot resolve its env vars fails the Docker build and
+breaks every deploy: `prisma generate` runs at build time with neither `DATABASE_URL` nor `DIRECT_URL`
+present, and succeeds with both unset. If the lock ever cannot be taken, the release command fails and
+Fly keeps serving the previous version — a refused deploy, not an outage.
 
 ### `WORKER_DATABASE_URL` — the worker's own connection budget (Phase 1 item 2)
 **Done 2026-09-09.** Set via `fly secrets import`. Confirmed from production logs: the worker's

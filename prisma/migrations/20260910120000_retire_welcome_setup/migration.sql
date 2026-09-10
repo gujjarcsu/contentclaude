@@ -1,0 +1,23 @@
+-- Phase 3 item 3.1 — retire the welcome (magic moment) and setup wizard routes.
+--
+-- Both routes are gone. `/app/welcome` and `/app/setup` now answer a same-origin
+-- 302 to `/app`, and the first-run experience is the Start state rendered by
+-- Home itself. These two columns were the state those routes kept:
+--
+--   welcomeSeenAt     "this shop has seen the magic moment, do not redirect again"
+--   setupCompletedAt  "the 5-step brand-voice wizard finished"
+--
+-- Neither has a reader left. First-value state now lives on the Shop row
+-- (firstDraftSeenAt, firstPublishAt, quickStartStartedAt, …), which is where it
+-- belongs: it survives uninstall/reinstall the way GrowthState never did, and
+-- it is what ttvReport.server.js measures.
+--
+-- This is a NEW migration file. The one that has already run is not touched —
+-- see docs/RUNBOOK.md "Rule 1", and the 2026-09-09 incident that wrote it.
+--
+-- Dropping a column is destructive and not reversible by re-running a migration.
+-- It is safe here because the data has no consumer: both columns are booleans
+-- in disguise ("has this one-time screen been shown"), the screens no longer
+-- exist, and nothing reports on them. IF EXISTS so a re-run is a no-op.
+ALTER TABLE "GrowthState" DROP COLUMN IF EXISTS "welcomeSeenAt";
+ALTER TABLE "GrowthState" DROP COLUMN IF EXISTS "setupCompletedAt";

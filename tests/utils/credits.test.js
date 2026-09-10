@@ -127,27 +127,48 @@ describe("item 4 — the balance is checked before the money is spent", () => {
     expect(check).toBeLessThan(generate);
   });
 
-  it("the welcome flow still slices — stated plainly as a source guard", () => {
-    // This one IS text matching, and is left that way on purpose. The welcome
-    // route sits behind FEATURE_MAGIC_MOMENT and Phase 3 retires it, so a full
-    // action test would be written in order to be deleted. Losing the slice here
-    // would let a first-run flow spend past a merchant's limit, and a weak check
-    // beats none.
-    const src = code("app/routes/app.welcome.jsx");
-    expect(src).toMatch(/sliceToQuota\(/);
-    expect(src).toMatch(/quotaSkipped/);
+  it("quick start reserves a credit per product, and refunds every failure", () => {
+    // This replaces the welcome-flow guard. /app/welcome is retired; its
+    // generation moved into quickStart.server.js, which is where a merchant's
+    // first three credits are now spent — so this is the source guard that
+    // matters.
+    const src = readFileSync("app/utils/quickStart.server.js", "utf8");
+    // Charged through the quota gate, never by writing a UsageRecord directly.
+    expect(src).toMatch(/tryConsumeGeneration\(/);
+    // Every failure path hands the credit back.
+    expect(src).toMatch(/refundGeneration\(/);
+    // And a refresh must not charge twice: the three non-charging branches.
+    expect(src).toMatch(/reuse_draft/);
+    expect(src).toMatch(/in_flight/);
+    expect(src).toMatch(/orphan/);
   });
 });
 
 describe("item 5 — a failed or empty generation is never charged", () => {
-  const allow = () => prisma.$transaction.mockResolvedValue({ allowed: true, planName: "free", monthlyLimit: 25, remaining: 24 });
-  const deny = () => prisma.$transaction.mockResolvedValue({ allowed: false, planName: "free", monthlyLimit: 25, remaining: 0 });
+  const allow = () =>
+    prisma.$transaction.mockResolvedValue({
+      allowed: true,
+      planName: "free",
+      monthlyLimit: 25,
+      remaining: 24,
+    });
+  const deny = () =>
+    prisma.$transaction.mockResolvedValue({
+      allowed: false,
+      planName: "free",
+      monthlyLimit: 25,
+      remaining: 0,
+    });
 
   it("keeps the credit when the work succeeds", async () => {
     allow();
-    const out = await withGenerationCredit(SHOP, { contentType: "description", productId: "p1" }, async () => ({
-      description: "real copy",
-    }));
+    const out = await withGenerationCredit(
+      SHOP,
+      { contentType: "description", productId: "p1" },
+      async () => ({
+        description: "real copy",
+      }),
+    );
     expect(out).toMatchObject({ allowed: true, refunded: false });
     expect(prisma.usageRecord.delete).not.toHaveBeenCalled();
   });
@@ -164,10 +185,14 @@ describe("item 5 — a failed or empty generation is never charged", () => {
 
   it("refunds when the model returns nothing usable", async () => {
     allow();
-    const out = await withGenerationCredit(SHOP, { contentType: "description", productId: "p1" }, async () => ({
-      description: "   ",
-      metaTitle: "",
-    }));
+    const out = await withGenerationCredit(
+      SHOP,
+      { contentType: "description", productId: "p1" },
+      async () => ({
+        description: "   ",
+        metaTitle: "",
+      }),
+    );
     expect(out.refunded).toBe(true);
     expect(prisma.usageRecord.delete).toHaveBeenCalled();
   });

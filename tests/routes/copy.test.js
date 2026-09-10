@@ -118,11 +118,15 @@ describe("quota is stated once, as a fact", () => {
 });
 
 describe("claims are gone but the facts remain", () => {
-  it("the results page states what happened, without the flourish", () => {
+  it("the retired results page has no copy left to be wrong", () => {
+    // /app/results is gone (the owner's five-item nav: Home, Products, Review,
+    // Blog, Settings). It answers a same-origin 302 to /app rather than a 404,
+    // because merchants and App Store reviewers follow old links — so the file
+    // still exists and must contain nothing but the redirect.
     const src = code("app/routes/app.results.jsx");
+    expect(src).toMatch(/retiredRouteLoader\("\/app"\)/);
     expect(src).not.toMatch(/difference between being/);
     expect(src).not.toMatch(/answer-first/);
-    // and it still reports the number it is about
-    expect(src).toMatch(/faqSchemaProducts/);
+    expect(src).not.toMatch(/faqSchemaProducts/);
   });
 });

@@ -70,8 +70,6 @@ describe("nothing was made unreachable", () => {
   const merged = {
     "/app/optimize": ["app/routes/app.products.jsx", "app/routes/app._index.jsx"],
     "/app/seo-audit": ["app/routes/app._index.jsx"],
-    "/app/analytics": ["app/routes/app._index.jsx"],
-    "/app/results": ["app/routes/app._index.jsx"],
     "/app/jobs": ["app/routes/app.products.jsx"],
     "/app/collections": ["app/routes/app.products.jsx"],
     "/app/plans": ["app/routes/app._index.jsx", "app/routes/app.products.jsx"],

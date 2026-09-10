@@ -220,16 +220,11 @@ model GrowthState {
   // Post-publish App Store review ask — set once we've asked (success OR decline),
   // so we NEVER ask the same shop twice, independent of App Bridge's own cooldown.
   reviewRequestedAt       DateTime?
-  // First-run: set once the merchant has seen the welcome / magic-moment flow,
-  // so it shows exactly once and "Skip" sticks (no redirect loop).
-  welcomeSeenAt           DateTime?
   // Theme app embed ("AI-search FAQ schema") — set when the merchant confirms
   // they enabled it in the theme editor. The FAQ JSON-LD only reaches the
   // storefront once the embed is on, so the app must disclose this step
   // (App Store requirement 5.1.3) and track whether it's done.
   embedConfirmedAt        DateTime?
-  // Setup wizard finished (step 5 completed)
-  setupCompletedAt        DateTime?
   // Phase 2 item 2.4 — the one explainer banner on Home. Dismissal is stored
   // per shop rather than in the browser, so it stays dismissed on the
   // merchant's other devices and does not come back when they clear site data.

@@ -1,37 +1,56 @@
 /**
- * Phase 1 item 10 — where a brand-new shop lands, and where a returning one does.
+ * Phase 3 items 3.1 / 3.2 — where a brand-new shop lands, and where a returning
+ * one does.
  *
- * This is the first screen a merchant ever sees, and getting it wrong is
- * expensive in both directions. Send a returning merchant back to a welcome
- * screen and the app looks broken. Send a brand-new merchant to a dashboard of
- * empty states and they leave without generating anything.
+ * This is the first screen a merchant ever sees, and it used to be a routing
+ * decision made from four independent inputs: whether any content existed,
+ * whether a brand voice existed, a feature flag, and a one-shot `welcomeSeenAt`
+ * stamp. A brand-new shop was redirected to `/app/welcome` (magic moment) or
+ * `/app/setup` (a five-step form), depending on an environment variable that
+ * was never set in production — so in practice every new merchant got the form.
  *
- * It is also a routing decision made from four independent inputs — whether any
- * content exists, whether a brand voice exists, a feature flag, and a one-shot
- * `welcomeSeenAt` stamp — which is exactly the shape of logic that quietly
- * inverts during a refactor.
+ * All of that is gone. Home renders the Start state itself. The tests that
+ * matter now are about what did NOT survive:
  *
- * The auth parameters are the other half. `/app/*` is an embedded route: a
- * redirect that drops `host` or `id_token` lands the merchant on a page that
- * cannot authenticate, which reads to them as the app logging them out.
+ *  - **No redirect.** `/app` is the whole embedded chain. Four App Store
+ *    rejections were about redirects out of that chain, and the safest version
+ *    of this screen is the one that has none.
+ *  - **One input, not four.** `Shop.firstDraftSeenAt` — the same first-value
+ *    milestone `ttvReport.server.js` measures. Not "has no content" (a merchant
+ *    who deleted every draft is not new) and not a `GrowthState` flag (those did
+ *    not survive uninstall/reinstall).
+ *  - **A shop with no `Shop` row is NOT a first run.** That is a shop installed
+ *    before tracking shipped and not seen since. Restarting onboarding for an
+ *    established merchant is the expensive direction of this mistake.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { prisma, authenticate, getContentMetrics, getOrCreatePlan, getMonthlyUsageCount, graphql } =
-  vi.hoisted(() => ({
-    prisma: {
-      brandVoice: { findUnique: vi.fn(async () => null) },
-      generationJob: { count: vi.fn(async () => 0), findFirst: vi.fn(async () => null) },
-      generatedContent: { groupBy: vi.fn(async () => []) },
-      growthState: { findUnique: vi.fn(async () => null) },
-      blogPost: { groupBy: vi.fn(async () => []) },
-    },
-    authenticate: { admin: vi.fn() },
-    getContentMetrics: vi.fn(async () => ({ publishedProducts: 0, draftProducts: 0 })),
-    getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })),
-    getMonthlyUsageCount: vi.fn(async () => 0),
-    graphql: vi.fn(),
-  }));
+const {
+  prisma,
+  authenticate,
+  getContentMetrics,
+  getOrCreatePlan,
+  getMonthlyUsageCount,
+  graphql,
+  scanStoreForStart,
+  stampProductCountAtFirstLoad,
+} = vi.hoisted(() => ({
+  prisma: {
+    brandVoice: { findUnique: vi.fn(async () => null) },
+    generationJob: { count: vi.fn(async () => 0), findFirst: vi.fn(async () => null) },
+    generatedContent: { groupBy: vi.fn(async () => []) },
+    growthState: { findUnique: vi.fn(async () => null) },
+    blogPost: { groupBy: vi.fn(async () => []) },
+    shop: { findUnique: vi.fn(async () => ({ firstDraftSeenAt: null })) },
+  },
+  authenticate: { admin: vi.fn() },
+  getContentMetrics: vi.fn(async () => ({ publishedProducts: 0, draftProducts: 0 })),
+  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })),
+  getMonthlyUsageCount: vi.fn(async () => 0),
+  graphql: vi.fn(),
+  scanStoreForStart: vi.fn(async () => ({ empty: false, storeScore: 41, targets: [] })),
+  stampProductCountAtFirstLoad: vi.fn(async () => true),
+}));
 
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate, apiVersion: "2026-04" }));
@@ -43,23 +62,26 @@ vi.mock("../../app/utils/metrics.server.js", async () => {
 });
 vi.mock("../../app/utils/plans.server.js", () => ({ getOrCreatePlan, getMonthlyUsageCount }));
 vi.mock("../../app/utils/cache.server.js", () => ({ getCache: vi.fn(async (k, fn) => fn()) }));
+vi.mock("../../app/utils/startState.server.js", async () => {
+  const actual = await vi.importActual("../../app/utils/startState.server.js");
+  return { ...actual, scanStoreForStart };
+});
+vi.mock("../../app/utils/firstValue.server.js", () => ({ stampProductCountAtFirstLoad }));
 
 const { loader } = await import("../../app/routes/app._index.jsx");
 
 const SHOP = "brand-new.myshopify.com";
 const HOST = Buffer.from("brand-new.myshopify.com/admin").toString("base64url");
 
-/** Run the loader and normalise a thrown redirect into something inspectable. */
+/** Run the loader; a thrown redirect becomes something inspectable. */
 async function land(query = `?host=${HOST}&id_token=tok&embedded=1&shop=${SHOP}`) {
   try {
     const res = await loader({ request: new Request(`https://app.test/app${query}`) });
     if (res instanceof Response && res.status >= 300 && res.status < 400) {
       return { redirected: true, to: res.headers.get("location") };
     }
-    // Phase 2 item 2.11 - this loader returns a plain object now, not a
-    // Response: a Response body cannot carry the promise that streams the
-    // below-the-fold data. Production code should not grow a fake json() to
-    // keep a test helper happy, so the helper handles both shapes.
+    // The loader returns a plain object, not a Response: a Response body cannot
+    // carry the promises that stream the scan and the below-the-fold data.
     return { redirected: false, data: res instanceof Response ? await res.json() : res };
   } catch (e) {
     if (e instanceof Response) return { redirected: true, to: e.headers.get("location") };
@@ -68,162 +90,156 @@ async function land(query = `?host=${HOST}&id_token=tok&embedded=1&shop=${SHOP}`
 }
 
 const withContent = () => getContentMetrics.mockResolvedValue({ publishedProducts: 4, draftProducts: 2 });
-const hasBrandVoice = () =>
-  prisma.brandVoice.findUnique.mockResolvedValue({
-    storeName: "A shop",
-    targetAudience: "",
-    sampleContent: "",
-  });
+const hasSeenADraft = () => prisma.shop.findUnique.mockResolvedValue({ firstDraftSeenAt: new Date() });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  delete process.env.FEATURE_MAGIC_MOMENT;
   authenticate.admin.mockResolvedValue({ session: { shop: SHOP }, admin: { graphql } });
   graphql.mockResolvedValue({ json: async () => ({ data: { productsCount: { count: 12 } } }) });
   getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 0 });
+  getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyLimit: 25 });
+  getMonthlyUsageCount.mockResolvedValue(0);
   prisma.brandVoice.findUnique.mockResolvedValue(null);
   prisma.growthState.findUnique.mockResolvedValue(null);
   prisma.generatedContent.groupBy.mockResolvedValue([]);
   prisma.generationJob.findFirst.mockResolvedValue(null);
   prisma.generationJob.count.mockResolvedValue(0);
   prisma.blogPost.groupBy.mockResolvedValue([]);
+  prisma.shop.findUnique.mockResolvedValue({ firstDraftSeenAt: null });
+  scanStoreForStart.mockResolvedValue({ empty: false, storeScore: 41, targets: [] });
 });
 
-afterEach(() => {
-  delete process.env.FEATURE_MAGIC_MOMENT;
-});
-
-describe("a brand-new shop, with the magic-moment flow switched off", () => {
-  it("goes to setup, because there is nothing to put on a dashboard", async () => {
-    const r = await land();
-    expect(r.redirected).toBe(true);
-    expect(r.to).toMatch(/^\/app\/setup\?/);
-  });
-
-  it("does not go to setup once a brand voice exists — setup is done", async () => {
-    hasBrandVoice();
+describe("the first run never leaves /app", () => {
+  it("a brand-new shop is not redirected anywhere", async () => {
     const r = await land();
     expect(r.redirected).toBe(false);
-    expect(r.data.isNewShop).toBe(true);
-    expect(r.data.hasBrandVoice).toBe(true);
   });
 
-  it("a brand voice of empty strings reaches the dashboard, but is not reported as configured", async () => {
-    // Worth pinning because the two conditions differ deliberately. The setup
-    // redirect asks whether a BrandVoice ROW exists; `hasBrandVoice`, which the
-    // dashboard uses to decide whether to prompt, asks whether any field in it
-    // has content. So a merchant who opened setup and saved nothing is not sent
-    // back round the loop — the dashboard prompts them instead.
-    prisma.brandVoice.findUnique.mockResolvedValue({
-      storeName: "   ",
-      targetAudience: "",
-      sampleContent: null,
-    });
-
+  it("renders the Start state instead", async () => {
     const r = await land();
+    expect(r.data.start).toBeTruthy();
+    expect(r.data.start.scan).toBeInstanceOf(Promise);
+  });
 
+  it("does not redirect even with no brand voice and no content at all", async () => {
+    // The two conditions that used to send a merchant to /app/setup.
+    prisma.brandVoice.findUnique.mockResolvedValue(null);
+    getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 0 });
+    const r = await land();
     expect(r.redirected).toBe(false);
     expect(r.data.hasBrandVoice).toBe(false);
   });
+
+  it("the loader source contains no redirect to the retired routes", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("app/routes/app._index.jsx", "utf8").replace(/\/\/.*$/gm, "");
+    expect(src).not.toMatch(/redirect\(`\/app\/welcome/);
+    expect(src).not.toMatch(/redirect\(`\/app\/setup/);
+  });
 });
 
-describe("a brand-new shop, with the magic-moment flow switched on", () => {
-  beforeEach(() => {
-    process.env.FEATURE_MAGIC_MOMENT = "1";
+describe("what decides a first run", () => {
+  it("is firstDraftSeenAt being null, not the absence of content", async () => {
+    // A merchant who HAS been stamped is never shown Start again, even with
+    // content counts that the old rule would have called brand new.
+    hasSeenADraft();
+    withContent();
+    const r = await land();
+    expect(r.data.start).toBeNull();
   });
 
-  it("goes to the welcome screen instead of setup", async () => {
+  it("a shop that has seen a draft but deleted all its content is not new", async () => {
+    // The old rule ("no published and no drafts") would have restarted
+    // onboarding for this merchant.
+    hasSeenADraft();
+    getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 0 });
     const r = await land();
-    expect(r.redirected).toBe(true);
-    expect(r.to).toMatch(/^\/app\/welcome\?/);
-  });
-
-  it("is shown once — a merchant who has seen it lands on the dashboard", async () => {
-    // This is the whole point of welcomeSeenAt: "Skip to dashboard" must stick.
-    // Without it the merchant is thrown back to the welcome screen every visit.
-    prisma.growthState.findUnique.mockResolvedValue({ welcomeSeenAt: new Date() });
-
-    const r = await land();
-
-    expect(r.redirected).toBe(false);
+    expect(r.data.start).toBeNull();
+    // Still "new" for the hero copy — a different question, deliberately.
     expect(r.data.isNewShop).toBe(true);
   });
 
-  it("never sends a new shop to setup while the flag is on", async () => {
-    // Both branches test isNewShop; only one may fire.
+  it("a shop with NO Shop row is not treated as a first run", async () => {
+    // Installed before tracking shipped and not seen since. Absent evidence,
+    // the safe default is the dashboard, not restarting onboarding.
+    prisma.shop.findUnique.mockResolvedValue(null);
     const r = await land();
-    expect(r.to).not.toMatch(/\/app\/setup/);
+    expect(r.data.start).toBeNull();
+  });
+
+  it("a failed Shop lookup degrades to the dashboard, not to Start", async () => {
+    prisma.shop.findUnique.mockRejectedValue(new Error("connection lost"));
+    const r = await land();
+    expect(r.redirected).toBe(false);
+    expect(r.data.start).toBeNull();
   });
 });
 
-describe("a shop that has done something", () => {
-  it("with published content, goes straight to the dashboard", async () => {
-    withContent();
+describe("the Start state is honest about what it will spend", () => {
+  it("reports what is left of the free quota", async () => {
+    getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyLimit: 25 });
+    getMonthlyUsageCount.mockResolvedValue(22);
     const r = await land();
-    expect(r.redirected).toBe(false);
-    expect(r.data.isNewShop).toBe(false);
-    expect(r.data.generatedCount).toBe(4);
+    expect(r.data.start.remaining).toBe(3);
+    expect(r.data.start.monthlyLimit).toBe(25);
   });
 
-  it("with drafts only, is still not new", async () => {
-    // A merchant who generated drafts and did not publish has used the app.
-    getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 3 });
+  it("never reports a negative balance", async () => {
+    getMonthlyUsageCount.mockResolvedValue(40);
     const r = await land();
-    expect(r.redirected).toBe(false);
-    expect(r.data.draftCount).toBe(3);
+    expect(r.data.start.remaining).toBe(0);
   });
 
-  it("is not sent to welcome even with the flag on", async () => {
-    process.env.FEATURE_MAGIC_MOMENT = "1";
-    withContent();
+  it("offers at most three products — that is the credit ceiling", async () => {
     const r = await land();
-    expect(r.redirected).toBe(false);
+    expect(r.data.start.targetCount).toBe(3);
   });
 });
 
-describe("the redirect carries the embedded session with it", () => {
-  const keys = ["host", "shop", "id_token", "embedded"];
-
-  it("every auth parameter survives the redirect to setup", async () => {
-    const r = await land(`?host=${HOST}&shop=${SHOP}&id_token=tok123&embedded=1&locale=en`);
-
-    expect(r.redirected).toBe(true);
-    const q = new URLSearchParams(r.to.split("?")[1]);
-    for (const k of keys) {
-      expect(q.get(k), `${k} must survive the redirect`).toBeTruthy();
-    }
-    expect(q.get("id_token")).toBe("tok123");
-    expect(q.get("locale")).toBe("en");
+describe("first-value instrumentation", () => {
+  it("records the catalogue size on a first run, for the TTV report", async () => {
+    graphql.mockResolvedValue({ json: async () => ({ data: { productsCount: { count: 87 } } }) });
+    await land();
+    expect(stampProductCountAtFirstLoad).toHaveBeenCalledWith(SHOP, 87);
   });
 
-  it("the same is true of the redirect to welcome", async () => {
-    process.env.FEATURE_MAGIC_MOMENT = "1";
-    const r = await land(`?host=${HOST}&shop=${SHOP}&id_token=tok123&embedded=1`);
-    const q = new URLSearchParams(r.to.split("?")[1]);
-    expect(q.get("host")).toBe(HOST);
-    expect(q.get("id_token")).toBe("tok123");
-  });
-
-  it("does not invent parameters that were not in the request", async () => {
-    const r = await land(`?host=${HOST}&shop=${SHOP}`);
-    const q = new URLSearchParams(r.to.split("?")[1]);
-    expect(q.get("id_token")).toBeNull();
-    expect(q.get("hmac")).toBeNull();
+  it("does not re-record it for a shop that is past its first run", async () => {
+    hasSeenADraft();
+    await land();
+    expect(stampProductCountAtFirstLoad).not.toHaveBeenCalled();
   });
 });
 
 describe("what the dashboard is given to render", () => {
-  beforeEach(withContent);
+  beforeEach(() => {
+    withContent();
+    hasSeenADraft();
+  });
 
   it("reports the shop's own name, not a placeholder", async () => {
-    hasBrandVoice();
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      storeName: "A shop",
+      targetAudience: "",
+      sampleContent: "",
+    });
     const r = await land();
     expect(r.data.storeName).toBe("A shop");
+    expect(r.data.hasBrandVoice).toBe(true);
   });
 
   it("falls back to the shop handle when no name was ever set", async () => {
     const r = await land();
     expect(r.data.storeName).toBe("brand-new");
+  });
+
+  it("a brand voice of empty strings is not reported as configured", async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      storeName: "   ",
+      targetAudience: "",
+      sampleContent: null,
+    });
+    const r = await land();
+    expect(r.data.hasBrandVoice).toBe(false);
   });
 
   it("reports the plan and what is left of it", async () => {

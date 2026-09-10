@@ -595,20 +595,6 @@ export default function SettingsPage() {
         </Form>
 
         {/* Re-run wizard */}
-        <Card>
-          <InlineStack align="space-between" blockAlign="center">
-            <BlockStack gap="100">
-              <Text as="h2" variant="headingMd">
-                Brand Voice Setup Wizard
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Re-run the guided setup to update your brand voice settings.
-              </Text>
-            </BlockStack>
-            <Button onClick={() => navigate("/app/setup")}>Re-run onboarding wizard</Button>
-          </InlineStack>
-        </Card>
-
         {/* Content Templates — Starter+ (matches the pricing table) */}
         {!entitlements?.contentTemplates ? (
           <Card>

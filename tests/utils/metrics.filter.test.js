@@ -8,7 +8,7 @@
  * assert the filter is present at each counting site.
  */
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -67,7 +67,6 @@ describe("defect B: product counts exclude collection rows", () => {
       "app/routes/app.optimize.jsx",
       "app/routes/app.products.jsx",
       "app/routes/app._index.jsx",
-      "app/routes/app.analytics.jsx",
     ]) {
       const src = code(f);
       expect(src, `${f} re-derives needs-content`).not.toMatch(
@@ -77,16 +76,24 @@ describe("defect B: product counts exclude collection rows", () => {
     }
   });
 
-  it("welcome loader counts filter to Product GIDs", () => {
-    // Counts the whole file rather than each line. The original checked that
-    // every LINE containing `generatedContent.count` also contained the GID
-    // filter, which broke the moment a formatter split the call across lines —
-    // the guard failed while the code was still correct. Every count must have
-    // a filter; where they sit relative to each other is formatting.
-    const src = code("app/routes/app.welcome.jsx");
-    const counts = (src.match(/generatedContent\.count\(/g) || []).length;
-    const filters = (src.match(/startsWith: "gid:\/\/shopify\/Product\/"/g) || []).length;
-    expect(counts, "welcome.jsx no longer counts content").toBeGreaterThan(0);
-    expect(filters, "a content count is missing its Product GID filter").toBeGreaterThanOrEqual(counts);
+  it("no route counts GeneratedContent at all — that lives in getContentMetrics", () => {
+    // This replaces a guard that checked app.welcome.jsx specifically, which
+    // Phase 3 retired. The underlying defect was never about that screen:
+    // GeneratedContent holds collection rows as well as product rows, so a
+    // count without the Product GID filter reports collections as products.
+    //
+    // The durable fix is not "filter every count correctly" — it is that no
+    // screen has a count of its own. getContentMetrics is the single place
+    // that query is written, and the test above pins its GID filter. Sweeping
+    // every route means this cannot be retired by deleting one file, and
+    // cannot pass because its subject went away.
+    const routes = readdirSync(join(repoRoot, "app/routes")).filter((f) => /\.(js|jsx)$/.test(f));
+    expect(routes.length, "no route files were swept").toBeGreaterThan(10);
+    for (const name of routes) {
+      const src = code(`app/routes/${name}`);
+      expect(src, `app/routes/${name} counts GeneratedContent itself`).not.toMatch(
+        /generatedContent\.count\(/,
+      );
+    }
   });
 });

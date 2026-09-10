@@ -1,8 +1,9 @@
 import { Suspense, useState } from "react";
-import { Await, useLoaderData, useNavigate, useFetcher, redirect } from "react-router";
+import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
+import { StartState } from "../components/StartState.jsx";
 import {
   Page,
   Layout,
@@ -26,7 +27,6 @@ import {
   ClockIcon,
   PlanIcon,
   ChartHistogramGrowthIcon,
-  ChartVerticalIcon,
   BlogIcon,
   SearchIcon,
   MagicIcon,
@@ -37,8 +37,9 @@ import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getCache } from "../utils/cache.server.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
+import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
+import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { BILLING_PLANS } from "../utils/billing-plans.js";
-import { isFeatureEnabled } from "../utils/featureFlags.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -112,6 +113,7 @@ export const loader = async ({ request }) => {
     usageCount,
     recentlyCompletedJob,
     growthState,
+    shopRow,
   ] = await Promise.all([
     getCache(
       `productCount:${shop}`,
@@ -139,12 +141,16 @@ export const loader = async ({ request }) => {
       orderBy: { completedAt: "desc" },
       select: { completedProducts: true, completedAt: true },
     }),
-    // First-run: has this shop already seen the welcome / magic-moment flow?
     // embedConfirmedAt drives the theme-embed setup card (requirement 5.1.3).
     prisma.growthState.findUnique({
       where: { shop },
-      select: { welcomeSeenAt: true, embedConfirmedAt: true, geoNoteDismissedAt: true },
+      select: { embedConfirmedAt: true, geoNoteDismissedAt: true },
     }),
+    // Phase 3 item 3.2 — the ONE fact that decides whether this is a first run.
+    // Not "has no content" (a merchant who deleted every draft is not new) and
+    // not a GrowthState flag (those did not survive uninstall/reinstall): the
+    // first-value milestone on the Shop row, which ttvReport measures.
+    prisma.shop.findUnique({ where: { shop }, select: { firstDraftSeenAt: true } }).catch(() => null),
   ]);
 
   // Phase 2 item 2.1 - one definition of product state, shared with Products
@@ -161,17 +167,35 @@ export const loader = async ({ request }) => {
   );
   const isNewShop = generatedCount === 0 && draftCount === 0;
 
-  // Phase 1 magic moment: a brand-new shop lands on the auto-scan + live
-  // before→after first-run experience — but ONLY once (welcomeSeenAt), so
-  // "Skip to dashboard" sticks and we never trap the merchant in a redirect loop.
-  if (isNewShop && isFeatureEnabled("magicMoment") && !growthState?.welcomeSeenAt) {
-    throw redirect(`/app/welcome?${authParams.toString()}`);
-  }
-  // Fallback onboarding when the magic moment is off or already seen: nudge a
-  // brand-new shop with no brand voice into the quick setup wizard.
-  if (isNewShop && !brandVoice && !isFeatureEnabled("magicMoment")) {
-    throw redirect(`/app/setup?${authParams.toString()}`);
-  }
+  // Phase 3 items 3.1/3.2 — Home IS the first run. A brand-new shop used to be
+  // redirected to /app/welcome (magic moment) or /app/setup (a form wizard).
+  // Both are gone: the Start state renders here, on /app, with no redirect and
+  // no new top-level route, so the embedded chain stays exactly as proven.
+  //
+  // A shop with no Shop row (installed before tracking shipped and not seen
+  // since) is NOT treated as a first run — it would restart onboarding for an
+  // established merchant. Absent evidence of a first draft, the safe default is
+  // the normal dashboard.
+  const isFirstRun = !!shopRow && shopRow.firstDraftSeenAt == null;
+
+  // Context for the time-to-value report: how big was the catalogue when this
+  // merchant first arrived? It explains an install that never reaches a draft.
+  // First-writer-wins, never throws, not awaited — nothing renders from it.
+  if (isFirstRun) void stampProductCountAtFirstLoad(shop, totalProducts);
+
+  // The scan is the slow part (an Admin GraphQL page plus scoring), so it is
+  // streamed exactly like the below-fold queries: the Start shell and the
+  // quota line paint immediately and the score reveal arrives behind a
+  // skeleton. Resolved, never rejected — scanStoreForStart returns
+  // { error: true } rather than throwing, so the card can offer a retry.
+  const start = isFirstRun
+    ? {
+        targetCount: START_TARGETS,
+        remaining: Math.max(0, plan.monthlyLimit - usageCount),
+        monthlyLimit: plan.monthlyLimit,
+        scan: scanStoreForStart(admin, shop),
+      }
+    : null;
 
   const storeName = brandVoice?.storeName || shop.split(".")[0];
 
@@ -186,6 +210,7 @@ export const loader = async ({ request }) => {
     activeJobCount,
     hasBrandVoice,
     isNewShop,
+    start,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
     storeName,
@@ -203,6 +228,27 @@ export const loader = async ({ request }) => {
   // cannot carry one, so this returns the object itself.
   return payload;
 };
+
+/**
+ * Phase 3 item 3.2 — do not re-run this loader for a quick-start submission.
+ *
+ * The Start state fires up to three fetchers at /app/quick-start, one per
+ * product. By default React Router revalidates every loader after any fetcher
+ * submission, which here would mean three full re-runs of this loader — and the
+ * first one is actively harmful: `runQuickStartOne` stamps
+ * `Shop.firstDraftSeenAt` as soon as a draft is written, so the reloaded loader
+ * would decide this shop is no longer on its first run and replace the Start
+ * state with the dashboard while the other two generations were still in
+ * flight. The merchant would watch their screen change out from under them and
+ * lose sight of the drafts they were waiting for.
+ *
+ * The cards render their own results, so nothing is lost by staying put. Real
+ * navigation and the retry button's explicit revalidate still refresh normally.
+ */
+export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
+  if (formAction && formAction.startsWith("/app/quick-start")) return false;
+  return defaultShouldRevalidate;
+}
 
 function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
   return (
@@ -308,9 +354,6 @@ function RecentActivityCard({ items, navigate }) {
               Recent Activity
             </Text>
           </InlineStack>
-          <Button variant="plain" onClick={() => navigate("/app/analytics")}>
-            View all activity
-          </Button>
         </InlineStack>
 
         <BlockStack gap="200">
@@ -386,6 +429,7 @@ export default function Dashboard() {
     activeJobCount,
     hasBrandVoice,
     isNewShop,
+    start,
     plan,
     usageCount,
     storeName,
@@ -408,9 +452,17 @@ export default function Dashboard() {
     }
   });
 
+  const revalidator = useRevalidator();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) {
     return <AppSkeleton title="Dashboard" sections={3} layout="full" />;
+  }
+
+  // Phase 3 items 3.1/3.2 — the first run IS Home. While this shop has never
+  // seen a draft, /app renders the Start state instead of the dashboard: same
+  // route, same embedded chain, no redirect.
+  if (start) {
+    return <StartState start={start} navigate={navigate} onRetry={() => revalidator.revalidate()} />;
   }
 
   const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
@@ -738,27 +790,6 @@ export default function Dashboard() {
                   Scan your entire catalog for missing descriptions, meta tags, and alt text.
                 </Text>
                 <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ChartVerticalIcon} tone="info" />
-                  <Text as="h2" variant="headingMd">
-                    Analytics
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Track generation activity and usage trends month by month.
-                </Text>
-                <InlineStack gap="200">
-                  <Button onClick={() => navigate("/app/analytics")}>View analytics</Button>
-                  <Button variant="plain" onClick={() => navigate("/app/results")}>
-                    Results
-                  </Button>
-                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>

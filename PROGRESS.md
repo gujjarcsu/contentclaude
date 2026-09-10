@@ -2530,3 +2530,173 @@ dashboard is what proves the outcome.
 | `shop/redact` | 100.0% of 9 | _pending_ |
 | Probe: retry at 25 h / 47 h | **401 / 401** | **200 / 200** (verified live) |
 | Probe: `shop/redact` at 25 h / 47 h / 10 d | **401 / 401 / —** | **200 / 200 / 200** (verified live) |
+
+---
+
+# PHASE 3 — FIRST VALUE, REVIEWS, CONVERSION
+
+## 3.1 — Retire `app.welcome.jsx` and `app.setup.jsx`; absorb the engine
+
+### The nav, as approved
+
+Owner decision, taken: **Home · Products · Review · Blog · Settings.** `/app/results` and `/app/analytics`
+are retired alongside the two first-run routes. `seo-audit`, `jobs`, `plans` and `collections` stay as
+routes reached from in-page links, exactly as specified.
+
+All four retired routes answer a **same-origin 302 to `/app`** rather than 404ing. That is deliberate and
+it is tested: a merchant with a bookmark or an open tab, and an App Store reviewer following a link from
+an earlier submission, must land somewhere sensible. Two properties of that redirect are load-bearing and
+both were the subject of the four App Store rejections — it is same-origin (a redirect to
+`admin.shopify.com` from inside the frame is a cross-origin top-level navigation), and it carries the
+Shopify auth params (third-party cookies are blocked in the iframe, so `id_token` and `session` have to
+survive the hop or the merchant lands on a page that cannot authenticate, which reads to them as being
+logged out).
+
+`authenticate.admin` still runs first on every one of them, so this is not a hole in G3.
+
+### What was absorbed, and what was dropped
+
+From the magic-moment engine at `/app/welcome`, one line each as asked:
+
+| From the welcome engine | Verdict |
+|---|---|
+| Catalogue scan + GEO/SEO scoring of the merchant's own products | **Absorbed** — `startState.server.js`, now scanning ACTIVE products only |
+| Store-wide score reveal as the headline | **Absorbed** — "Your store scores N/100", streamed behind a skeleton |
+| Weakest-product before/after | **Absorbed**, and widened from one product to three |
+| Never-recharge-on-refresh idempotency, keyed shop+product | **Absorbed** — and strengthened: `reserveCredit` has four non-charging outcomes where welcome had one |
+| 55 s watchdog into a retry state | **Absorbed** — per card, so one hung product does not block the other two |
+| Credit refunded on failure or empty draft | **Absorbed** — every failure path in `runQuickStartOne` refunds |
+| `FEATURE_MAGIC_MOMENT` flag | **Dropped** — a first-run experience is not a feature to toggle, and it was OFF in production, so no merchant ever saw this engine |
+| The route itself | **Dropped** — Home renders it; no redirect, no extra route in the embedded chain |
+| First-run setup checklist ("configure brand voice / generate / publish") | **Dropped** — the brief says no checklist; the drafts on screen are the progress |
+| "Skip to dashboard" | **Dropped** — there is nothing to skip; this IS the dashboard |
+| "Optimize my whole store" bulk CTA on first run | **Dropped** — a bulk run before the merchant has read a single draft is the opposite of first value |
+| Plan split (Free vs paid flows) | **Dropped** — owner decision: both get the 3-product flow |
+| `GrowthState.welcomeSeenAt` / `setupCompletedAt` | **Dropped** — new migration, below |
+| The 5-step brand-voice wizard at `/app/setup` | **Dropped** — brand voice stays in Settings with inferred defaults |
+
+`GROWTH_ENGINE_REPORT.md` recovered from `679828c` (deleted in `87c5966`) to
+`docs/history/GROWTH_ENGINE_REPORT.md`. The quick-start route and its 427-line helper were already pulled
+out of the abandoned agent worktrees into `docs/history/worktree-recovery/` before the prune; both are
+now restored as live code, with one real defect fixed on the way in — `app.quick-start.jsx` imported
+`"../shopify.server"` without the file extension, which breaks `node worker.js`, and the extension guard
+in `processRole.test.js` caught it.
+
+### The migration
+
+`prisma/migrations/20260910120000_retire_welcome_setup/` drops `GrowthState.welcomeSeenAt` and
+`GrowthState.setupCompletedAt`. A **new file**; the applied migrations are untouched, per RUNBOOK Rule 1
+and the incident that wrote it. `IF EXISTS` on both, so a re-run is a no-op. The expected-column list
+regenerated from 210 to 208.
+
+Dropping a column is destructive and worth justifying: both were booleans in disguise ("has this
+one-time screen been shown"), the screens no longer exist, and nothing reports on them. First-value state
+now lives on the `Shop` row, which survives uninstall/reinstall the way `GrowthState` never did and is
+what `ttvReport.server.js` measures.
+
+### The feature flag
+
+`FEATURE_MAGIC_MOMENT` is out of the code. `FEATURE_FLAGS` is now **empty**, and a test asserts it —
+along with a sweep asserting no source file still reads `isFeatureEnabled("magicMoment")`. The machinery
+stays, because the rule it enforces is worth keeping: add a flag back in the same commit that ships its
+feature. Removing the inert Fly secret is **HUMAN-NEEDED item 7** with the exact command.
+
+## 3.2 — Time to first value
+
+### The shape
+
+While `Shop.firstDraftSeenAt` is null, `/app` renders the Start state. **No redirect and no new
+top-level route** — the embedded chain on a fresh install is admin → `/app`, and nothing else.
+
+The single input is deliberate. The old decision read four things: whether any content existed, whether a
+brand voice existed, a feature flag, and a one-shot `welcomeSeenAt` stamp. It now reads one, and it is
+the first-value milestone the TTV report already measures. Two consequences worth stating because they
+are the failure modes of the old rule:
+
+- A merchant who has seen a draft and then deleted all their content is **not** shown Start again. The
+  old rule ("no published and no drafts") would have restarted onboarding for them.
+- A shop with **no `Shop` row at all** is not treated as a first run. That is a shop installed before
+  tracking shipped and not seen since — see the install-count reconciliation above — and restarting
+  onboarding for an established merchant is the expensive direction of this mistake. Absent evidence, the
+  safe default is the dashboard. A failed `Shop` lookup degrades the same way.
+
+What the merchant gets: no forms; the score reveal streamed behind a skeleton; the three weakest products
+picked by the existing scorer; generation fired immediately with inferred defaults, one fetcher per
+product so one slow product cannot hold up the other two; and "Review and publish" the moment the first
+draft lands, into the Phase 2.8 Review screen. A store with no products gets the Phase 2.10 empty state
+rather than a score of zero. A failed scan gets a retry rather than a fabricated number.
+
+### Spending a merchant's credits without them pressing anything
+
+Three generations start on their own. That is what the brief asks for and it is the right call — a first
+run that waits for a click is a first run most merchants never finish — but it is only defensible if two
+things hold, and both are tested:
+
+**It is said before it is spent.** One sentence, above the cards: *"Writing 3 drafts now — that uses 3 of
+your 25 remaining free generations this month. Nothing is published until you approve it."* Nothing is
+published; the drafts go to Review.
+
+**A refresh never charges twice.** The idempotency is server-side, keyed by shop + product, and it has
+four non-charging outcomes:
+
+| Outcome | Condition | Charge |
+|---|---|---|
+| `reuse_draft` | a usable draft < 24 h old exists | none — returned as-is |
+| `in_flight` | a credit taken < 300 s ago, no draft yet — the first request may still be running | none |
+| `orphan` | a credit taken 300 s–24 h ago, no draft — that request died | none, the paid credit is reused |
+| `denied` | quota exhausted | none |
+| `new` | the SERIALIZABLE quota gate wrote a `UsageRecord` | **the only charge** |
+
+And every failure after a charge refunds it: model throw, empty draft, vanished product, failed save.
+Every merchant-facing failure message says *"no generation was used"*, and none of them leaks an internal
+error — a merchant reading `ECONNRESET at 10.0.0.4:443` learns nothing and worries about their credit.
+
+Only as many generations start as the quota can pay for, so a merchant with two credits left is never
+shown three spinners that resolve into one refusal.
+
+### `shouldRevalidate`, and a bug it prevents
+
+The Start state fires three fetchers at `/app/quick-start`. React Router revalidates every loader after
+any fetcher submission by default, and here the **first** one would have been actively harmful:
+`runQuickStartOne` stamps `firstDraftSeenAt` as soon as a draft is written, so the reloaded Home loader
+would have decided this shop was no longer on its first run and swapped the Start state out for the
+dashboard **while the other two generations were still in flight** — the merchant watching their screen
+change out from under them and losing sight of the drafts they were waiting for. `shouldRevalidate`
+returns false for quick-start submissions. Navigation and the retry button's explicit revalidate still
+refresh normally.
+
+### TTFV measurement — NOT YET MEASURED
+
+The brief asks for **p50/p90 from ≥ 5 fresh dev-store installs**, and for the acceptance run to be
+recorded from the install grant screen with the URL bar visible.
+
+**That number does not exist yet and is not being reported as if it did.** `ttvReport.server.js` and
+`scripts/ttv-report.mjs` are in place and the instrumentation is live (`quickStartStartedAt`,
+`firstDraftSeenAt`, `firstPublishAt`, `productCountAtFirstLoad` are all stamped by this deploy), but the
+cohort is empty: the report deliberately excludes `pre_tracking` shops, and **every** shop in the
+database is `pre_tracking`. There are no measured installs at all — see the install-count reconciliation
+above, where all four installs turn out to be ours or Shopify's.
+
+Five fresh dev-store installs are needed to produce it, and an install is a human action: it requires the
+Shopify Partner console and a browser somebody logs into, which no agent does here. This is recorded as
+an open item rather than reported as done, and the acceptance criterion is unchanged: fresh install, ≥ 10
+products, first proposal < 120 s wall-clock.
+
+| | Status |
+|---|---|
+| Instrumentation live (first-load → `firstDraftSeenAt`, in ms) | **Yes**, this deploy |
+| `ttvReport.server.js` cohort query + `scripts/ttv-report.mjs` | **Yes**, already existed |
+| p50 / p90 over ≥ 5 fresh installs | **Not measured** — no measured install exists to include |
+| 120 s acceptance recording | **Not recorded** — needs a human install |
+
+The report, run against production on 2026-09-10 (`e730fd3`), before this deploy:
+
+```
+cohortSize: 0            measuredInstallsTotal: 0
+draft:   { n: 0, note: "no install has reached this milestone yet" }
+publish: { n: 0, note: "no install has reached this milestone yet" }
+```
+
+That is not a broken report. `computeTtvReport` excludes `installSource: "pre_tracking"` because those
+shops predate measurement, and all three `Shop` rows carry it — so the cohort is correctly empty rather
+than wrongly full of shops whose install moment is unknown.
