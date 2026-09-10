@@ -67,3 +67,6 @@ test-results/
 # deploy-watch raw samples: thousands of rows per run. The .summary.json
 # beside each one is the evidence and IS committed.
 tools/proof/out/*.samples.json
+
+# Backups of the guiding docs. A stale copy of a live doc gets read by mistake.
+docs/navaal/*.bak-*
