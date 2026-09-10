@@ -21,7 +21,7 @@ vi.mock("../../app/utils/logger.server.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { ensureInferredBrandVoice, pickVoiceSamples, buildSampleContent, MIN_SAMPLE_CHARS, MAX_SAMPLE_CHARS } =
+const { ensureInferredBrandVoice, pickVoiceSamples, buildSampleContent, inferDifferentiators, MIN_SAMPLE_CHARS, MAX_SAMPLE_CHARS } =
   await import("../../app/utils/brandVoiceInfer.server.js");
 
 const SHOP = "alpine-supply.myshopify.com";
@@ -117,5 +117,107 @@ describe("writing it", () => {
     // Charging for a brand voice means deliberately shipping worse writing to
     // free shops.
     expect(src).not.toMatch(/checkEntitlement|getEntitlements|planName/);
+  });
+});
+
+/**
+ * A4.6 — the inference was reading the wrong source.
+ *
+ * On the real store every product description was templated boilerplate
+ * ("...is a quality accessories product, supplied by..."), while 21 of 30
+ * sampled COLLECTIONS carried full hand-written copy naming certifications, the
+ * trade counter and 25 years of trading. Sampling only products learned the
+ * boilerplate and called it the merchant's voice.
+ *
+ * What these print if it is broken: drop `collectionCopy` from
+ * `pickVoiceSamples` and "prefers hand-written collection copy" fails, showing
+ * the boilerplate it picked instead.
+ */
+describe("A4.6 — reading collection copy, not just product copy", () => {
+  const BOILERPLATE = Array.from({ length: 6 }, (_, i) => ({
+    title: `NOBLE ITEM ${i}`,
+    description:
+      `The NOBLE ITEM ${i} is a quality accessories product, supplied by a specialist merchant. ` +
+      "Designed for lasting performance and everyday reliability in homes and bathrooms everywhere.",
+    scores: { combined: 45 },
+  }));
+
+  const COLLECTIONS = [
+    {
+      title: "Astra Walker",
+      text:
+        "Astra Walker tapware is designed and made in Australia and carries WaterMark certification. " +
+        "We have supplied the trade for 25 years and hold trade pricing for licensed plumbers. " +
+        "Ships in 2 business days with free local pickup and our price match promise.",
+    },
+    {
+      title: "ADP",
+      text:
+        "ADP vanities are made in Australia to order and carry WaterMark certification. " +
+        "We have supplied the trade for 25 years and hold trade pricing for licensed plumbers. " +
+        "Ships in 2 business days with free local pickup and our price match promise.",
+    },
+    {
+      title: "Aullic",
+      text:
+        "Aullic basins are imported and carry WaterMark certification for Australian installation. " +
+        "We have supplied the trade for 25 years and hold trade pricing for licensed plumbers. " +
+        "Ships in 2 business days with free local pickup and our price match promise.",
+    },
+  ];
+
+  it("prefers hand-written collection copy over templated product copy", () => {
+    const picked = pickVoiceSamples(BOILERPLATE, { collectionCopy: COLLECTIONS });
+    const joined = picked.map((p) => p.text).join(" ");
+    expect(joined).toMatch(/25 years/);
+    expect(joined).toMatch(/WaterMark/);
+  });
+
+  it("still prefers genuinely good product copy over a collection", () => {
+    // A store whose product descriptions are excellent must not be overridden
+    // by range copy — a collection describes a RANGE, and a voice built only
+    // from collections writes range copy for single products.
+    const good = [
+      {
+        title: "Agena Cistern",
+        description:
+          "The Agena cistern pairs a clean square profile with dual flush efficiency, WaterMark " +
+          "certified and WELS rated for modern bathrooms where space and water use both matter.",
+        scores: { combined: 92 },
+      },
+    ];
+    expect(pickVoiceSamples(good, { collectionCopy: COLLECTIONS })[0].title).toBe("Agena Cistern");
+  });
+
+  it("works with no collections at all, exactly as before", () => {
+    expect(pickVoiceSamples(BOILERPLATE, { collectionCopy: [] }).length).toBeGreaterThan(0);
+    expect(pickVoiceSamples(BOILERPLATE).length).toBeGreaterThan(0);
+  });
+
+  it("extracts the repeated promises as Key Differentiators", () => {
+    // Repeated across the catalogue = a policy the shop makes, not prose about
+    // one range. No pattern list is required for that judgement.
+    const d = inferDifferentiators(COLLECTIONS.map((c) => c.text));
+    expect(d).toMatch(/25 years/);
+    expect(d).toMatch(/price match/i);
+    // The line that appears on only ONE collection is not a policy.
+    expect(d).not.toMatch(/Aullic basins are imported/);
+  });
+
+  it("invents nothing for a shop that repeats nothing", () => {
+    expect(inferDifferentiators(["One.", "Two.", "Three."])).toBe("");
+    expect(inferDifferentiators([])).toBe("");
+  });
+
+  it("writes differentiators create-only, so Settings still always wins", async () => {
+    await ensureInferredBrandVoice(SHOP, {
+      scored: BOILERPLATE,
+      shopName: "EBS",
+      collectionCopy: COLLECTIONS,
+    });
+    const call = prisma.brandVoice.upsert.mock.calls[0][0];
+    expect(call.create.keyDifferentiators).toMatch(/25 years/);
+    // The half that matters: an existing row is never overwritten.
+    expect(call.update).toEqual({});
   });
 });

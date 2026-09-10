@@ -75,7 +75,12 @@ export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
     // contains, riding the same scan. Create-only: a merchant who has set
     // theirs in Settings keeps it. Not awaited; a brand voice is not worth
     // delaying the dashboard for.
-    void ensureInferredBrandVoice(shop, { scored: scan.scored ?? [], shopName: scan.shopName });
+    void ensureInferredBrandVoice(shop, {
+      scored: scan.scored ?? [],
+      shopName: scan.shopName,
+      // A4.6 — where the merchant's differentiators actually live.
+      collectionCopy: scan.collectionCopy ?? [],
+    });
 
     const atInstall = row?.storeScoreAtInstall;
     if (!Number.isFinite(atInstall)) {

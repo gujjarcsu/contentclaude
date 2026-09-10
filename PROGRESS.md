@@ -3945,3 +3945,35 @@ labelled action for rewriting existing content".
 Guard broken: reverting the button to a literal "Generate" fails **1 test**.
 
 **Not proved:** the labels on a rendered page (L15).
+
+### A4.6 — the voice inference was reading the wrong source
+
+On the real store every product description was templated boilerplate — *"…is a quality accessories
+product, supplied by…"* — while **21 of 30 sampled collections** carried full hand-written copy naming
+certifications, the trade counter and 25 years of trading. Sampling only product descriptions learned
+the boilerplate and called it the merchant's voice.
+
+Collections now ride the scan that already runs, exactly as `shop { name }` does, so this costs **no
+extra Shopify request**. They are scored at 55 — above the midpoint, below a genuinely well-scored
+product — because a collection describes a RANGE, and a voice built purely from collections writes
+range copy for a single product. A test pins both directions: templated products lose to collection
+copy, and a 92-scoring product description still wins.
+
+`keyDifferentiators` is populated from `recurringClaims`, which needs no pattern list at all: a
+sentence repeated across a fifth of a shop's copy is a policy, not prose. Create-only through the same
+empty-`update` upsert, so a merchant who wrote their own keeps them for ever. A shop that repeats
+nothing gets `""` — it invents nothing.
+
+**The GraphQL was verified against the live schema, not assumed.** `CollectionSortKeys` includes
+`UPDATED_AT`, and the root `collections` field accepts `sortKey` and `reverse`. Every test in this
+repo mocks the transport, so a wrong argument name would have passed all 1,419 of them and failed on
+every scan in production — that is false green number four, and it is why the check was made.
+
+Guard broken: ignoring `collectionCopy` fails **1 test**, printing the boilerplate it picked instead.
+
+**Two parts of A4.6 NOT done, logged rather than glossed:**
+- **Pages and blog copy are still unread** (new item A4.8). Collections were free because they ride an
+  existing query; Pages and Articles are separate connections and would each cost a request on the
+  dashboard's hot path. That needs a decision, not a quiet extra query.
+- **The Agena before/after is not shown** (new item A4.9, BLOCKED by H3). It needs a real generation
+  against a real catalogue — a model call and a store to run it on, not a code change.

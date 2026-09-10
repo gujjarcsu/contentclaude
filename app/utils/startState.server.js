@@ -45,6 +45,9 @@ export const START_SCAN_TTL_S = 120;
 // never parse the query.
 export const START_SCAN_QUERY = `query startScan($n: Int!) {
   shop { name }
+  collections(first: 20, sortKey: UPDATED_AT, reverse: true) {
+    edges { node { title description } }
+  }
   products(first: $n, sortKey: UPDATED_AT, query: "status:active") {
     edges { node {
       id title description productType vendor tags
@@ -151,6 +154,14 @@ export async function scanStoreForStart(
     if (!r.ok) throw new Error(r.error ?? "scan unavailable");
 
     const shopName = r.data?.shop?.name ?? null;
+    // A4.6 — a merchant's differentiators live in their COLLECTION copy far more
+    // often than in a product description: 21 of 30 sampled collections on the
+    // real store carried full hand-written text naming certifications, the trade
+    // counter and 25 years of trading, and the voice inference never read any of
+    // it. Riding the scan that already runs, so no extra Shopify request.
+    const collectionCopy = (r.data?.collections?.edges ?? [])
+      .map((e) => ({ title: e?.node?.title ?? "", text: String(e?.node?.description ?? "").trim() }))
+      .filter((c) => c.text.length > 0);
     const nodes = (r.data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
     if (nodes.length === 0) return { empty: true, shopName };
 
@@ -177,6 +188,7 @@ export async function scanStoreForStart(
     return {
       empty: false,
       shopName,
+      collectionCopy,
       // Phase 4 item 4.3 — every scored product, so the store score and the
       // per-product before/after come from ONE scan. A "before" measured by a
       // different code path from the "after" is not a delta.

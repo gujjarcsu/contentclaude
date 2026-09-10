@@ -153,6 +153,21 @@ describe("the score is computed from the merchant's own catalogue", () => {
     expect(START_SCAN_QUERY).toMatch(/shop \{ name \}/);
   });
 
+  it("asks for collection copy on the SAME request (A4.6)", () => {
+    // The merchant's differentiators live in collection descriptions far more
+    // often than in product ones. Riding the scan that already runs, exactly as
+    // `shop { name }` does, so this costs no extra Shopify request.
+    //
+    // `sortKey: UPDATED_AT` and `reverse` were verified against the live Admin
+    // schema (CollectionSortKeys includes UPDATED_AT; the `collections` field
+    // accepts both arguments). Every test here mocks the transport, so a wrong
+    // argument name would pass all of them and fail in production — that is
+    // false green number four, and it is why the check was done against the
+    // schema rather than assumed.
+    expect(START_SCAN_QUERY).toMatch(/collections\(first: 20, sortKey: UPDATED_AT, reverse: true\)/);
+    expect(START_SCAN_QUERY).toMatch(/edges \{ node \{ title description \} \}/);
+  });
+
   it("asks for the store's own name, for the inferred brand voice", async () => {
     const r = await scanStoreForStart(adminReturning([node(1)], "Alpine Supply"), SHOP);
     expect(r.shopName).toBe("Alpine Supply");
