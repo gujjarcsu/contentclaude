@@ -24,6 +24,7 @@ import { BlogIcon, FileIcon, CheckCircleIcon, LightbulbIcon } from "@shopify/pol
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { quotaPct } from "../utils/quota.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -388,7 +389,7 @@ export default function BlogPage() {
     }
   }, [generated]);
 
-  const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
+  const usagePct = quotaPct(usageCount, monthlyLimit);
   const isOutOfUsage = usageRemaining === 0;
 
   const lengthOptions = [

@@ -164,14 +164,20 @@ describe("item 15 — the connection budget", () => {
 describe("item 16 — no self-race on first load, no double-run of a supplier", () => {
   it("getOrCreatePlan is a single upsert, not findUnique-then-create", () => {
     const src = code("app/utils/plans.server.js");
-    const fn = src.slice(src.indexOf("export async function getOrCreatePlan"), src.indexOf("export async function getMonthlyUsageCount"));
+    const fn = src.slice(
+      src.indexOf("export async function getOrCreatePlan"),
+      src.indexOf("export async function getMonthlyUsageCount"),
+    );
     expect(fn).toMatch(/plan\.upsert\(/);
     expect(fn).not.toMatch(/plan\.create\(/);
   });
 
   it("the cache runs its supplier exactly once when Redis fails mid-way", () => {
     const src = code("app/utils/cache.server.js");
-    const fn = src.slice(src.indexOf("export async function getCache"), src.indexOf("export async function setCache"));
+    const fn = src.slice(
+      src.indexOf("export async function getCache"),
+      src.indexOf("export async function setCache"),
+    );
     // The supplier must not sit inside a try whose catch falls through to a
     // second supplier call.
     const supplierCalls = fn.match(/await supplier\(\)/g) ?? [];

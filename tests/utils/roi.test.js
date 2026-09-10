@@ -3,9 +3,12 @@ import { computeRoiSummary, MINUTES_PER_PIECE_MANUAL } from "../../app/utils/roi
 
 describe("computeRoiSummary", () => {
   const base = {
-    seoBefore: 40, seoAfter: 78,
-    geoBefore: 22, geoAfter: 84,
-    totalProducts: 50, optimizedProducts: 40,
+    seoBefore: 40,
+    seoAfter: 78,
+    geoBefore: 22,
+    geoAfter: 84,
+    totalProducts: 50,
+    optimizedProducts: 40,
     contentPieces: 120,
     schemaTypes: ["Product", "FAQPage", "Offer", "Product"],
   };

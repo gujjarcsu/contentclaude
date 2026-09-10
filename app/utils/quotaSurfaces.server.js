@@ -30,12 +30,13 @@ import logger from "./logger.server.js";
 import prisma from "../db.server.js";
 import { fitPlanFor, PLAN_LABELS, quotaResetDate, fmtDay, fmtMonth } from "./planFit.js";
 import { monthKey, recordPromptCondition } from "./upgradePrompts.server.js";
+import { quotaLevel, quotaPct, dismissalActive } from "./quota.js";
 
-/** The banner appears from here up. Below it, quota is reported and not sold. */
-export const WARN_AT_PCT = 80;
-/** How long a dismissal of the warning banner lasts. The brief's number. */
-export const DISMISS_DAYS = 7;
-const DAY_MS = 86_400_000;
+// The pure arithmetic now lives in quota.js so COMPONENTS can import it. It
+// used to live here, behind a Prisma import, and four screens re-derived it by
+// hand — two of them without the zero guard, so an unmetered plan rendered as
+// 100% used. Same shape as the productState.js bug.
+export { WARN_AT_PCT, DISMISS_DAYS, quotaLevel, quotaPct, quotaRemaining, dismissalActive } from "./quota.js";
 
 /** Where the `from=` values come from, so the two surfaces stay tellable apart. */
 export const FROM_WARN = "quota80";
@@ -44,39 +45,6 @@ export const KNOWN_FROM = Object.freeze([FROM_WARN, FROM_EXHAUSTED]);
 
 /** Only these two screens carry the warning banner. Everything else stays quiet. */
 export const WARN_SURFACES = Object.freeze(["dashboard", "products"]);
-
-/**
- * Which of the three states this shop is in. Pure.
- *
- * A limit of 0 or less is "ok", not "exhausted": an unmetered or misconfigured
- * plan must not put every screen into the out-of-quota state.
- */
-export function quotaLevel(usageCount, monthlyLimit) {
-  const limit = Number(monthlyLimit) || 0;
-  if (limit <= 0) return "ok";
-  const used = Math.max(0, Number(usageCount) || 0);
-  if (used >= limit) return "exhausted";
-  return Math.round((used / limit) * 100) >= WARN_AT_PCT ? "warn" : "ok";
-}
-
-/** Percent used, capped at 100 — reaching the quota is 100%, never 104%. Pure. */
-export function quotaPct(usageCount, monthlyLimit) {
-  const limit = Number(monthlyLimit) || 0;
-  if (limit <= 0) return 0;
-  return Math.min(100, Math.round(((Number(usageCount) || 0) / limit) * 100));
-}
-
-/**
- * Is a dismissal of this prompt still in force? Pure.
- * A missing dismissal is not dismissed; a dismissal older than the window has
- * expired and the banner comes back.
- */
-export function dismissalActive(dismissedAt, now = new Date(), days = DISMISS_DAYS) {
-  if (!dismissedAt) return false;
-  const t = new Date(dismissedAt).getTime();
-  if (!Number.isFinite(t)) return false;
-  return now.getTime() - t < days * DAY_MS;
-}
 
 /**
  * The 80%-used warning banner for one surface, or null.

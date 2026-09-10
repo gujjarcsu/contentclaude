@@ -58,7 +58,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
       alreadyDone = new Set(rows.map((r) => r.productId));
       jobLogger.warn(
         { shop: job.shop, attempt: (bullJob?.attemptsMade ?? 0) + 1, alreadyDone: alreadyDone.size },
-        "Resuming an interrupted job — products already written will be skipped"
+        "Resuming an interrupted job — products already written will be skipped",
       );
     }
 
@@ -105,7 +105,10 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
     const keepTokenFresh = async () => {
       if (session.expires && session.expires.getTime() - Date.now() < 5 * 60 * 1000 && session.refreshToken) {
         const r = await refreshOfflineToken(job.shop);
-        if (r) { session.accessToken = r.accessToken; session.expires = r.expires; }
+        if (r) {
+          session.accessToken = r.accessToken;
+          session.expires = r.expires;
+        }
       }
     };
 
@@ -127,7 +130,13 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         data: {
           status: "failed",
           completedAt: new Date(),
-          errorLog: JSON.stringify([{ productId: "all", error: "Brand voice not configured. Go to Settings to set up your brand voice before running a bulk job." }]),
+          errorLog: JSON.stringify([
+            {
+              productId: "all",
+              error:
+                "Brand voice not configured. Go to Settings to set up your brand voice before running a bulk job.",
+            },
+          ]),
         },
       });
       return;
@@ -175,7 +184,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         await flushCounters(true);
         jobLogger.info(
           { shop: job.shop, status: currentJob?.status, processed: completedCount + failedCount },
-          "Bulk job no longer processing (cancelled or superseded) — aborting loop"
+          "Bulk job no longer processing (cancelled or superseded) — aborting loop",
         );
         return; // never touch the status the merchant set
       }
@@ -196,7 +205,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         });
         jobLogger.info(
           { shop: job.shop, skipped: notRun, event: "bulk_quota_exhausted" },
-          "Monthly quota reached — remaining products recorded as skipped, job finishing"
+          "Monthly quota reached — remaining products recorded as skipped, job finishing",
         );
         break;
       }
@@ -206,7 +215,8 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         const product = await fetchShopifyProduct(session, productId);
         if (!product) {
           jobLogger.warn({ shop: job.shop, productId }, "Product not found in Shopify during bulk job");
-          if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: "Product not found in Shopify" });
+          if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
+            errorLog.push({ productId, error: "Product not found in Shopify" });
           failedCount++;
           pendingFailed++;
           await flushCounters();
@@ -214,7 +224,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         }
 
         const recentTitles = recentTitlesBase.filter((t) => t !== product.title);
-        const productCollectionIds = (product.collections?.edges || []).map((e) => e.node?.id).filter(Boolean);
+        const productCollectionIds = (product.collections?.edges || [])
+          .map((e) => e.node?.id)
+          .filter(Boolean);
         const collectionVoice = productCollectionIds
           .map((id) => collectionVoiceMap[id])
           .find((cv) => cv && (cv.brandTone || cv.targetAudience || cv.keywords));
@@ -227,7 +239,10 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         if (isEnhance && !(product.descriptionHtml || product.description)) {
           effectiveTypes = contentTypes.filter((t) => t !== "description");
           if (effectiveTypes.length === 0) {
-            jobLogger.warn({ shop: job.shop, productId }, "Enhance skipped — product has no existing description");
+            jobLogger.warn(
+              { shop: job.shop, productId },
+              "Enhance skipped — product has no existing description",
+            );
             if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
               errorLog.push({ productId, error: "[NO CHARGE] No existing description to enhance" });
             failedCount++;
@@ -259,7 +274,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                 effectiveTypes,
                 // A bulk run has nobody waiting on it, so it can afford the longer
                 // rate-limit backoff (Phase 0 item 23).
-                { interactive: false }
+                { interactive: false },
               )
             : await generateProductContent(
                 {
@@ -275,7 +290,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
                 },
                 brandVoice,
                 effectiveTypes,
-                { recentTitles, collectionVoice, interactive: false }
+                { recentTitles, collectionVoice, interactive: false },
               );
         } catch (genErr) {
           // Circuit breaker open — pause the entire job for 65s then retry same product
@@ -288,7 +303,10 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           // Content policy refusal or Anthropic rate limit exhausted — skip without charging
           const isApiRefusal = genErr.isContentPolicy || genErr.isRateLimit || genErr.isAnthropicClientError;
           if (isApiRefusal) {
-            jobLogger.warn({ shop: job.shop, productId, err: genErr.message }, "API refused content — skipping without credit charge");
+            jobLogger.warn(
+              { shop: job.shop, productId, err: genErr.message },
+              "API refused content — skipping without credit charge",
+            );
             if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
               errorLog.push({ productId, error: `[NO CHARGE] ${genErr.message}` });
             failedCount++;
@@ -306,9 +324,15 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         // credit for a row that does not exist.
         const generatedTypes = contentTypes.filter((t) => generated?.[t]);
         if (generatedTypes.length === 0) {
-          jobLogger.warn({ shop: job.shop, productId }, "AI returned no usable content — skipping without credit charge");
+          jobLogger.warn(
+            { shop: job.shop, productId },
+            "AI returned no usable content — skipping without credit charge",
+          );
           if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
-            errorLog.push({ productId, error: "[NO CHARGE] The AI returned no usable content for this product." });
+            errorLog.push({
+              productId,
+              error: "[NO CHARGE] The AI returned no usable content for this product.",
+            });
           failedCount++;
           pendingFailed++;
           await flushCounters();
@@ -338,13 +362,25 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
         const saveOps = generatedTypes.map((type) => {
           const originalContent =
-            type === "description" ? product.descriptionHtml || "" :
-            type === "metaTitle" ? product.seo?.title || "" :
-            type === "metaDescription" ? product.seo?.description || "" : "";
+            type === "description"
+              ? product.descriptionHtml || ""
+              : type === "metaTitle"
+                ? product.seo?.title || ""
+                : type === "metaDescription"
+                  ? product.seo?.description || ""
+                  : "";
           return prisma.generatedContent.upsert({
             where: { shop_productId_contentType: { shop: job.shop, productId, contentType: type } },
             update: { generatedContent: generated[type], status: finalStatus, version: { increment: 1 } },
-            create: { shop: job.shop, productId, productTitle: product.title, contentType: type, originalContent, generatedContent: generated[type], status: finalStatus },
+            create: {
+              shop: job.shop,
+              productId,
+              productTitle: product.title,
+              contentType: type,
+              originalContent,
+              generatedContent: generated[type],
+              status: finalStatus,
+            },
           });
         });
         await Promise.all(saveOps);
@@ -364,16 +400,30 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           // reported as a successful publish: the row said "published", the
           // credit was spent, and Shopify was never touched.
           let published = Object.keys(input).length === 1; // nothing to publish → nothing to fail
+          // Phase 4 item 4.2 — verified only when Shopify's own mutation
+          // response echoed back what we sent. A publish nobody could confirm
+          // is recorded as such rather than filed with the checked ones.
+          let verifyNote = null;
           if (!published) {
             const pub = await publishProductWithRetry(shopifyGraphql(session), productId, input);
             published = pub.ok;
+            if (pub.ok && pub.verified === false) {
+              verifyNote = pub.verifyNote ?? "Shopify stored something different from what we sent.";
+              jobLogger.warn(
+                { shop: job.shop, productId, note: verifyNote, event: "publish_unverified" },
+                "Published but not verified - the merchant is told to check it",
+              );
+            }
             if (!pub.ok) {
               jobLogger.warn(
                 { shop: job.shop, productId, throttled: !!pub.throttled, err: pub.error },
-                "Auto-publish failed — content stays a draft"
+                "Auto-publish failed — content stays a draft",
               );
               if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
-                errorLog.push({ productId, error: `Saved as a draft — publishing to Shopify failed: ${pub.error}` });
+                errorLog.push({
+                  productId,
+                  error: `Saved as a draft — publishing to Shopify failed: ${pub.error}`,
+                });
             }
           }
 
@@ -382,7 +432,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           if (published) {
             await prisma.generatedContent.updateMany({
               where: { shop: job.shop, productId, contentType: { in: generatedTypes }, status: "draft" },
-              data: { status: "published" },
+              data: verifyNote
+                ? { status: "published_unverified", verifiedAt: null, verifyNote }
+                : { status: "published", verifiedAt: new Date(), verifyNote: null },
             });
           }
 
@@ -395,7 +447,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
             await setFaqMetafield(session, productId, generated.faq).catch(async (err) => {
               jobLogger.warn(
                 { shop: job.shop, productId, err: err.message },
-                "FAQ metafield write failed — downgrading FAQ status so UI doesn't overclaim"
+                "FAQ metafield write failed — downgrading FAQ status so UI doesn't overclaim",
               );
               await prisma.generatedContent
                 .update({
@@ -417,19 +469,27 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           await bullJob.extendLock(token, 5 * 60 * 1000).catch(() => {});
         }
 
-        jobLogger.debug({ shop: job.shop, productId, productTitle: product.title }, "Product content generated");
+        jobLogger.debug(
+          { shop: job.shop, productId, productTitle: product.title },
+          "Product content generated",
+        );
       } catch (err) {
         // Phase 0 item 14 — the app is gone; there is nothing left to do for
         // any remaining product. Stop now instead of grinding through 401s.
         if (err.isAuthGone) {
           await flushCounters(true);
-          jobLogger.warn({ shop: job.shop, event: "bulk_auth_gone" }, "Access token is no longer valid — ending the job");
+          jobLogger.warn(
+            { shop: job.shop, event: "bulk_auth_gone" },
+            "Access token is no longer valid — ending the job",
+          );
           await prisma.generationJob.updateMany({
             where: { id: jobId, status: "processing" },
             data: {
               status: "failed",
               completedAt: new Date(),
-              errorLog: JSON.stringify([...errorLog, { productId: "N/A", error: err.message }].slice(-MAX_ERROR_LOG_ENTRIES)),
+              errorLog: JSON.stringify(
+                [...errorLog, { productId: "N/A", error: err.message }].slice(-MAX_ERROR_LOG_ENTRIES),
+              ),
             },
           });
           return;
@@ -457,12 +517,15 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
       data: { status: "complete", completedAt: new Date() },
     });
     if (completed.count === 0) {
-      jobLogger.info({ shop: job.shop }, "Bulk job finished but status changed mid-run (cancelled) — leaving status as-is");
+      jobLogger.info(
+        { shop: job.shop },
+        "Bulk job finished but status changed mid-run (cancelled) — leaving status as-is",
+      );
       return;
     }
     jobLogger.info(
       { shop: job.shop, completedProducts: completedCount, failedProducts: failedCount },
-      "Bulk job complete"
+      "Bulk job complete",
     );
   } catch (err) {
     jobLogger.error({ err, shop: job?.shop }, "Bulk job failed with unhandled error");
@@ -503,18 +566,16 @@ function shopifyGraphql(session) {
 async function fetchShopifyProduct(session, productId, attempt = 0) {
   let res;
   try {
-    res = await fetch(
-      `https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": session.accessToken,
-        },
-        body: JSON.stringify({
-          // media/featuredMedia (Product.images/featuredImage are deprecated
-          // in 2026-04). Only MediaImage nodes carry an image.
-          query: `query getProduct($id: ID!) {
+    res = await fetch(`https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken,
+      },
+      body: JSON.stringify({
+        // media/featuredMedia (Product.images/featuredImage are deprecated
+        // in 2026-04). Only MediaImage nodes carry an image.
+        query: `query getProduct($id: ID!) {
             product(id: $id) {
               id title productType vendor description descriptionHtml
               seo { title description }
@@ -525,14 +586,16 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
               collections(first: 5) { edges { node { id } } }
             }
           }`,
-          variables: { id: productId },
-        }),
-      }
-    );
+        variables: { id: productId },
+      }),
+    });
   } catch (networkErr) {
     if (attempt < MAX_SHOPIFY_RETRIES) {
       const delay = SHOPIFY_BACKOFF_BASE_MS * Math.pow(2, attempt);
-      logger.warn({ productId, attempt, err: networkErr.message }, `Shopify network error — retrying in ${delay}ms`);
+      logger.warn(
+        { productId, attempt, err: networkErr.message },
+        `Shopify network error — retrying in ${delay}ms`,
+      );
       await new Promise((r) => setTimeout(r, delay));
       return fetchShopifyProduct(session, productId, attempt + 1);
     }
@@ -547,7 +610,9 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
       await new Promise((r) => setTimeout(r, delay));
       return fetchShopifyProduct(session, productId, attempt + 1);
     }
-    throw new Error(`Shopify rate limit exceeded fetching product ${productId} after ${MAX_SHOPIFY_RETRIES} retries`);
+    throw new Error(
+      `Shopify rate limit exceeded fetching product ${productId} after ${MAX_SHOPIFY_RETRIES} retries`,
+    );
   }
 
   if (res.status === 401) {
@@ -558,7 +623,9 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
     // failed refresh aborts the whole run.
     const r = await refreshOfflineToken(session.shop);
     if (!r) {
-      const err = new Error("Shopify rejected our access token and it could not be refreshed — the app may have been uninstalled.");
+      const err = new Error(
+        "Shopify rejected our access token and it could not be refreshed — the app may have been uninstalled.",
+      );
       err.isAuthGone = true;
       throw err;
     }
@@ -593,7 +660,9 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
   }
 
   if (topLevelErrors.length > 0 && !body?.data?.product) {
-    throw new Error(`Shopify GraphQL error fetching product: ${topLevelErrors.map((e) => e.message).join("; ")}`);
+    throw new Error(
+      `Shopify GraphQL error fetching product: ${topLevelErrors.map((e) => e.message).join("; ")}`,
+    );
   }
 
   return body?.data?.product ?? null;
@@ -607,22 +676,19 @@ async function fetchShopifyProduct(session, productId, attempt = 0) {
 async function setFaqMetafield(session, productId, faqContent) {
   const metafield = buildFaqSchemaMetafield(productId, faqContent);
   if (!metafield) return;
-  const res = await fetch(
-    `https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": session.accessToken,
-      },
-      body: JSON.stringify({
-        query: `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
+  const res = await fetch(`https://${session.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": session.accessToken,
+    },
+    body: JSON.stringify({
+      query: `mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
           metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message } }
         }`,
-        variables: { metafields: [metafield] },
-      }),
-    }
-  );
+      variables: { metafields: [metafield] },
+    }),
+  });
   // A rejected mutation (bad owner id, invalid JSON, permission issue, etc.)
   // still comes back as HTTP 200 — res.ok alone can't detect it. Must inspect
   // the GraphQL body's userErrors, otherwise a rejected write looks identical
@@ -635,7 +701,7 @@ async function setFaqMetafield(session, productId, faqContent) {
   const userErrors = data?.metafieldsSet?.userErrors ?? [];
   if (userErrors.length > 0) {
     throw new Error(
-      `metafieldsSet rejected: ${userErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ")}`
+      `metafieldsSet rejected: ${userErrors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join("; ")}`,
     );
   }
 }

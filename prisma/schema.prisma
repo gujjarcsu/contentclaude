@@ -86,12 +86,20 @@ model GeneratedContent {
   originalContent  String   @default("")
   generatedContent String   @default("")
   publishedContent String   @default("")
-  status           String   @default("draft") // "draft" | "approved" | "published" | "rejected"
+  // "draft" | "approved" | "published" | "published_unverified" | "rejected"
+  status           String   @default("draft")
   version          Int      @default(1)
+  // Phase 4 item 4.2 — post-publish verification. verifiedAt is set only when
+  // the value Shopify returned in the mutation response matched what we sent;
+  // verifyNote carries the plain-language reason when it did not. NULL on an
+  // older row means "published before verification existed", never "verified".
+  verifiedAt       DateTime?
+  verifyNote       String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@unique([shop, productId, contentType])
+  @@index([shop, verifyNote])
   @@index([shop, productId])
   @@index([shop, status])
   @@index([shop, contentType, status])

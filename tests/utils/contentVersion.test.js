@@ -32,7 +32,7 @@ describe("snapshotAndPrune", () => {
   it("creates version snapshots for provided records", async () => {
     prisma.contentVersion.createMany.mockResolvedValue({ count: 2 });
     prisma.contentVersion.findMany.mockResolvedValue(
-      Array.from({ length: 5 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() }))
+      Array.from({ length: 5 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() })),
     );
 
     const records = [
@@ -44,8 +44,20 @@ describe("snapshotAndPrune", () => {
 
     expect(prisma.contentVersion.createMany).toHaveBeenCalledWith({
       data: [
-        { shop: "shop.com", productId: "gid://shopify/Product/1", contentType: "description", content: "<p>Old desc</p>", version: 3 },
-        { shop: "shop.com", productId: "gid://shopify/Product/1", contentType: "metaTitle", content: "Old title", version: 2 },
+        {
+          shop: "shop.com",
+          productId: "gid://shopify/Product/1",
+          contentType: "description",
+          content: "<p>Old desc</p>",
+          version: 3,
+        },
+        {
+          shop: "shop.com",
+          productId: "gid://shopify/Product/1",
+          contentType: "metaTitle",
+          content: "Old title",
+          version: 2,
+        },
       ],
       skipDuplicates: true,
     });
@@ -55,7 +67,7 @@ describe("snapshotAndPrune", () => {
     prisma.contentVersion.createMany.mockResolvedValue({ count: 1 });
     // Return 15 versions — below the 20 limit
     prisma.contentVersion.findMany.mockResolvedValue(
-      Array.from({ length: 15 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() }))
+      Array.from({ length: 15 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() })),
     );
 
     const records = [{ contentType: "description", generatedContent: "<p>Content</p>", version: 1 }];
@@ -68,7 +80,7 @@ describe("snapshotAndPrune", () => {
     prisma.contentVersion.createMany.mockResolvedValue({ count: 1 });
     // Return 25 versions — 5 should be pruned
     prisma.contentVersion.findMany.mockResolvedValue(
-      Array.from({ length: 25 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() }))
+      Array.from({ length: 25 }, (_, i) => ({ id: `v${i}`, createdAt: new Date() })),
     );
 
     const records = [{ contentType: "description", generatedContent: "<p>Content</p>", version: 1 }];

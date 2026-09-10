@@ -23,9 +23,7 @@ function makeApiResponse(text) {
 
 // ─── Import after mocking globals ────────────────────────────────────────────
 
-const { generateProductContent, generateAltText, extractTag } = await import(
-  "../../app/utils/ai.server.js"
-);
+const { generateProductContent, generateAltText, extractTag } = await import("../../app/utils/ai.server.js");
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -40,8 +38,8 @@ describe("generateProductContent", () => {
       makeApiResponse(
         `<DESCRIPTION><p>Great product!</p></DESCRIPTION>
          <META_TITLE>My Product | Best Choice</META_TITLE>
-         <META_DESCRIPTION>Buy this great product today.</META_DESCRIPTION>`
-      )
+         <META_DESCRIPTION>Buy this great product today.</META_DESCRIPTION>`,
+      ),
     );
 
     const product = {
@@ -70,15 +68,22 @@ describe("generateProductContent", () => {
 
   it("strips script tags from AI-generated HTML (XSS prevention)", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse(
-        `<DESCRIPTION><p>Good product</p><script>alert('xss')</script></DESCRIPTION>`
-      )
+      makeApiResponse(`<DESCRIPTION><p>Good product</p><script>alert('xss')</script></DESCRIPTION>`),
     );
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     expect(result.description).not.toContain("<script>");
@@ -88,15 +93,22 @@ describe("generateProductContent", () => {
 
   it("strips inline event handlers from AI HTML", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse(
-        `<DESCRIPTION><p onclick="evil()">Click me</p></DESCRIPTION>`
-      )
+      makeApiResponse(`<DESCRIPTION><p onclick="evil()">Click me</p></DESCRIPTION>`),
     );
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     expect(result.description).not.toContain("onclick");
@@ -105,15 +117,22 @@ describe("generateProductContent", () => {
 
   it("strips style tags from AI-generated HTML (CSS injection prevention)", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse(
-        `<DESCRIPTION><p>Good product</p><style>body{display:none}</style></DESCRIPTION>`
-      )
+      makeApiResponse(`<DESCRIPTION><p>Good product</p><style>body{display:none}</style></DESCRIPTION>`),
     );
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     expect(result.description).not.toContain("<style>");
@@ -123,29 +142,43 @@ describe("generateProductContent", () => {
 
   it("blocks javascript: URIs in AI output", async () => {
     mockFetch.mockResolvedValueOnce(
-      makeApiResponse(
-        `<DESCRIPTION><a href="javascript:alert(1)">link</a></DESCRIPTION>`
-      )
+      makeApiResponse(`<DESCRIPTION><a href="javascript:alert(1)">link</a></DESCRIPTION>`),
     );
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     expect(result.description).not.toContain("javascript:");
   });
 
   it("returns empty strings for missing tags", async () => {
-    mockFetch.mockResolvedValueOnce(
-      makeApiResponse(`<META_TITLE>Only Title</META_TITLE>`)
-    );
+    mockFetch.mockResolvedValueOnce(makeApiResponse(`<META_TITLE>Only Title</META_TITLE>`));
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description", "metaTitle"]
+      ["description", "metaTitle"],
     );
 
     expect(result.description).toBe("");
@@ -154,9 +187,9 @@ describe("generateProductContent", () => {
 
   it("throws when ANTHROPIC_API_KEY is missing", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    await expect(
-      generateProductContent({ title: "T" }, {}, ["description"])
-    ).rejects.toThrow("ANTHROPIC_API_KEY is not configured");
+    await expect(generateProductContent({ title: "T" }, {}, ["description"])).rejects.toThrow(
+      "ANTHROPIC_API_KEY is not configured",
+    );
   });
 
   it("retries on 5xx response", async () => {
@@ -165,9 +198,18 @@ describe("generateProductContent", () => {
       .mockResolvedValueOnce(makeApiResponse("<META_TITLE>Retry Works</META_TITLE>"));
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["metaTitle"]
+      ["metaTitle"],
     );
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -186,9 +228,18 @@ describe("generateProductContent", () => {
       .mockResolvedValueOnce(makeApiResponse("<META_TITLE>After 429</META_TITLE>"));
 
     const promise = generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["metaTitle"]
+      ["metaTitle"],
     );
     await vi.runAllTimersAsync();
     const result = await promise;
@@ -206,15 +257,21 @@ describe("generateProductContent", () => {
       headers: { get: (h) => (h === "Retry-After" ? "1" : null) },
       text: async () => "rate limited",
     };
-    mockFetch
-      .mockResolvedValueOnce(rate429)
-      .mockResolvedValueOnce(rate429)
-      .mockResolvedValueOnce(rate429);
+    mockFetch.mockResolvedValueOnce(rate429).mockResolvedValueOnce(rate429).mockResolvedValueOnce(rate429);
 
     const promise = generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     // Catch before advancing timers so the rejection doesn't propagate as unhandled
@@ -236,10 +293,19 @@ describe("generateProductContent", () => {
 
     await expect(
       generateProductContent(
-        { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+        {
+          title: "T",
+          productType: "",
+          vendor: "",
+          description: "",
+          descriptionHtml: "",
+          imageUrl: "",
+          variants: [],
+          tags: [],
+        },
         {},
-        ["description"]
-      )
+        ["description"],
+      ),
     ).rejects.toMatchObject({ isContentPolicy: true });
   });
 
@@ -253,10 +319,19 @@ describe("generateProductContent", () => {
 
     await expect(
       generateProductContent(
-        { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+        {
+          title: "T",
+          productType: "",
+          vendor: "",
+          description: "",
+          descriptionHtml: "",
+          imageUrl: "",
+          variants: [],
+          tags: [],
+        },
         {},
-        ["description"]
-      )
+        ["description"],
+      ),
     ).rejects.toThrow();
 
     // 400 should never retry — only one call
@@ -266,9 +341,7 @@ describe("generateProductContent", () => {
 
 describe("extractTag — truncation safety", () => {
   it("extracts content when both opening and closing tags are present", () => {
-    expect(extractTag("<DESCRIPTION><p>Hello</p></DESCRIPTION>", "DESCRIPTION")).toBe(
-      "<p>Hello</p>"
-    );
+    expect(extractTag("<DESCRIPTION><p>Hello</p></DESCRIPTION>", "DESCRIPTION")).toBe("<p>Hello</p>");
   });
 
   it("recovers content when the closing tag is missing (response cut at max_tokens)", () => {
@@ -289,8 +362,7 @@ describe("extractTag — truncation safety", () => {
   });
 
   it("sanitises truncated content too (no script survives the fallback path)", () => {
-    const malicious =
-      "<DESCRIPTION><p>ok</p><script>alert('xss')</script><p>more text without a closing tag";
+    const malicious = "<DESCRIPTION><p>ok</p><script>alert('xss')</script><p>more text without a closing tag";
     const result = extractTag(malicious, "DESCRIPTION");
     expect(result).not.toContain("<script>");
     expect(result).not.toContain("alert");
@@ -313,14 +385,23 @@ describe("generateProductContent — truncated generation is not dropped", () =>
   it("returns the partial description when Claude stops before the closing tag", async () => {
     mockFetch.mockResolvedValueOnce(
       makeApiResponse(
-        "<DESCRIPTION><p>A detailed, structured description that keeps going and going until the token budget runs out mid-sentence and"
-      )
+        "<DESCRIPTION><p>A detailed, structured description that keeps going and going until the token budget runs out mid-sentence and",
+      ),
     );
 
     const result = await generateProductContent(
-      { title: "T", productType: "", vendor: "", description: "", descriptionHtml: "", imageUrl: "", variants: [], tags: [] },
+      {
+        title: "T",
+        productType: "",
+        vendor: "",
+        description: "",
+        descriptionHtml: "",
+        imageUrl: "",
+        variants: [],
+        tags: [],
+      },
       {},
-      ["description"]
+      ["description"],
     );
 
     expect(result.description).toContain("detailed, structured description");
@@ -335,17 +416,15 @@ describe("generateAltText", () => {
   });
 
   it("returns trimmed alt text from Claude", async () => {
-    mockFetch.mockResolvedValueOnce(
-      makeApiResponse("  Red running shoe on white background  ")
-    );
+    mockFetch.mockResolvedValueOnce(makeApiResponse("  Red running shoe on white background  "));
 
     const result = await generateAltText("https://cdn.shopify.com/s/files/1/img.jpg", "Red Shoe");
     expect(result).toBe("Red running shoe on white background");
   });
 
   it("rejects non-Shopify image URLs (SSRF guard)", async () => {
-    await expect(
-      generateAltText("https://evil.example.com/img.jpg", "Red Shoe")
-    ).rejects.toThrow(/Shopify CDN/);
+    await expect(generateAltText("https://evil.example.com/img.jpg", "Red Shoe")).rejects.toThrow(
+      /Shopify CDN/,
+    );
   });
 });

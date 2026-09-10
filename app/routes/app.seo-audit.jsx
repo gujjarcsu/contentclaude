@@ -21,6 +21,7 @@ import {
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
+import { scoreTone } from "../utils/scoreBands.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ export const loader = async ({ request }) => {
 
 function ScoreRing({ score }) {
   // Unified color rule: >=70 green, 40–69 amber (highlight), <40 red.
-  const tone = score >= 70 ? "success" : score >= 40 ? "highlight" : "critical";
+  const tone = scoreTone(score);
   return (
     <BlockStack gap="200" inlineAlign="center">
       <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
@@ -275,12 +276,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
       </Button>
       {p.isStale && <Badge tone="attention">Stale</Badge>}
     </InlineStack>,
-    <Text
-      key={`${p.id}-score`}
-      as="span"
-      fontWeight="bold"
-      tone={p.score >= 70 ? "success" : p.score >= 40 ? undefined : "critical"}
-    >
+    <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={scoreTone(p.score)}>
       {p.score}
     </Text>,
     <CheckIcon label="Description" key={`${p.id}-desc`} pass={p.checks.hasDescription} />,

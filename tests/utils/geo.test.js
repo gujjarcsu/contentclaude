@@ -129,7 +129,10 @@ describe("buildProductJsonLd", () => {
 
 describe("jsonLdScriptTag", () => {
   it("wraps schema in a script tag and escapes closing tags", () => {
-    const tag = jsonLdScriptTag({ "@context": "https://schema.org", "@graph": [{ "@type": "Product", name: "</script>x" }] });
+    const tag = jsonLdScriptTag({
+      "@context": "https://schema.org",
+      "@graph": [{ "@type": "Product", name: "</script>x" }],
+    });
     expect(tag.startsWith('<script type="application/ld+json">')).toBe(true);
     expect(tag).not.toContain("</script>x"); // the injected closer is escaped
     expect(tag).toContain("<\\/script>x");
@@ -142,7 +145,12 @@ describe("jsonLdScriptTag", () => {
 describe("generateLlmsTxt", () => {
   const store = { name: "Atelier Co", description: "Leather goods for commuters." };
   const items = [
-    { type: "product", title: "Heritage Satchel", url: "https://x/products/sat", summary: "Full-grain leather work bag." },
+    {
+      type: "product",
+      title: "Heritage Satchel",
+      url: "https://x/products/sat",
+      summary: "Full-grain leather work bag.",
+    },
     { type: "product", title: "Card Wallet", url: "https://x/products/wal", summary: "Slim card holder." },
   ];
 
@@ -155,9 +163,19 @@ describe("generateLlmsTxt", () => {
   });
 
   it("full mode includes attributes when provided", () => {
-    const out = generateLlmsTxt(store, [
-      { type: "product", title: "Satchel", url: "https://x/s", summary: "Bag", attributes: { Material: "Leather", Price: "$189" } },
-    ], { full: true });
+    const out = generateLlmsTxt(
+      store,
+      [
+        {
+          type: "product",
+          title: "Satchel",
+          url: "https://x/s",
+          summary: "Bag",
+          attributes: { Material: "Leather", Price: "$189" },
+        },
+      ],
+      { full: true },
+    );
     expect(out).toContain("Material: Leather");
     expect(out).toContain("Price: $189");
   });

@@ -39,22 +39,50 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 
 vi.mock("../../app/utils/billing-plans.js", () => ({
   BILLING_PLANS: {
-    starter: { key: "Starter Plan", planName: "starter", amount: 9.99, monthlyLimit: 50, entitlements: { bulkJobs: false, abVariants: false, autopilot: false } },
-    growth:  { key: "Growth Plan",  planName: "growth",  amount: 29.99, monthlyLimit: 200, entitlements: { bulkJobs: true, abVariants: true, autopilot: true } },
-    pro:     { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000, entitlements: { bulkJobs: true, abVariants: true, autopilot: true } },
+    starter: {
+      key: "Starter Plan",
+      planName: "starter",
+      amount: 9.99,
+      monthlyLimit: 50,
+      entitlements: { bulkJobs: false, abVariants: false, autopilot: false },
+    },
+    growth: {
+      key: "Growth Plan",
+      planName: "growth",
+      amount: 29.99,
+      monthlyLimit: 200,
+      entitlements: { bulkJobs: true, abVariants: true, autopilot: true },
+    },
+    pro: {
+      key: "Professional Plan",
+      planName: "pro",
+      amount: 79.99,
+      monthlyLimit: 1000,
+      entitlements: { bulkJobs: true, abVariants: true, autopilot: true },
+    },
   },
-  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 25, entitlements: { bulkJobs: false, abVariants: false, autopilot: false } },
+  FREE_PLAN: {
+    key: null,
+    planName: "free",
+    amount: 0,
+    monthlyLimit: 25,
+    entitlements: { bulkJobs: false, abVariants: false, autopilot: false },
+  },
   getEntitlements: vi.fn((planName) => {
-    const map = { free: { bulkJobs: false, abVariants: false }, starter: { bulkJobs: false, abVariants: false }, growth: { bulkJobs: true, abVariants: true }, pro: { bulkJobs: true, abVariants: true } };
+    const map = {
+      free: { bulkJobs: false, abVariants: false },
+      starter: { bulkJobs: false, abVariants: false },
+      growth: { bulkJobs: true, abVariants: true },
+      pro: { bulkJobs: true, abVariants: true },
+    };
     return map[planName] ?? map.free;
   }),
 }));
 
 // Import after mocks
 const prisma = (await import("../../app/db.server.js")).default;
-const { tryConsumeGeneration, syncBillingToPlan, getPlanByKey, refundGeneration } = await import(
-  "../../app/utils/plans.server.js"
-);
+const { tryConsumeGeneration, syncBillingToPlan, getPlanByKey, refundGeneration } =
+  await import("../../app/utils/plans.server.js");
 const { invalidateCache } = await import("../../app/utils/cache.server.js");
 
 // ─── Billing action helpers ───────────────────────────────────────────────────
@@ -67,8 +95,8 @@ const { invalidateCache } = await import("../../app/utils/cache.server.js");
 function makeBillingAction(billingMock) {
   const BILLING_PLANS = {
     starter: { key: "Starter Plan" },
-    growth:  { key: "Growth Plan" },
-    pro:     { key: "Professional Plan" },
+    growth: { key: "Growth Plan" },
+    pro: { key: "Professional Plan" },
   };
   const BILLING_TEST = true;
 
@@ -80,11 +108,20 @@ function makeBillingAction(billingMock) {
         return { status: 400, body: { error: "Invalid plan selected." } };
       }
       try {
-        await billingMock.request({ plan: planKey, isTest: BILLING_TEST, returnUrl: "https://example.com/app/plans" });
+        await billingMock.request({
+          plan: planKey,
+          isTest: BILLING_TEST,
+          returnUrl: "https://example.com/app/plans",
+        });
         return { status: 200, body: {} }; // normally unreachable — billing.request throws redirect
       } catch (err) {
         if (err instanceof Response) throw err; // re-throw redirects
-        return { status: 500, body: { error: `Could not start subscription: ${err?.message ?? String(err)}. Please try again or contact support.` } };
+        return {
+          status: 500,
+          body: {
+            error: `Could not start subscription: ${err?.message ?? String(err)}. Please try again or contact support.`,
+          },
+        };
       }
     }
 
@@ -110,11 +147,16 @@ function makeBillingAction(billingMock) {
 
 describe("billing action — subscribe branch (F1)", () => {
   it("re-throws a Response redirect (success path → Shopify approval screen)", async () => {
-    const redirectResponse = new Response(null, { status: 302, headers: { Location: "https://shopify.com/billing/approve" } });
+    const redirectResponse = new Response(null, {
+      status: 302,
+      headers: { Location: "https://shopify.com/billing/approve" },
+    });
     const billing = { request: vi.fn().mockRejectedValue(redirectResponse) };
     const action = makeBillingAction(billing);
     await expect(action("subscribe", "Starter Plan")).rejects.toStrictEqual(redirectResponse);
-    expect(billing.request).toHaveBeenCalledWith(expect.objectContaining({ plan: "Starter Plan", isTest: true }));
+    expect(billing.request).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: "Starter Plan", isTest: true }),
+    );
   });
 
   it("returns 500 with specific message when billing.request throws a plain Error", async () => {
@@ -160,7 +202,9 @@ describe("billing action — cancel branch (F1)", () => {
     const result = await action("cancel", null);
     expect(result.status).toBe(200);
     expect(result.body.cancelled).toBe(true);
-    expect(billing.cancel).toHaveBeenCalledWith(expect.objectContaining({ subscriptionId: "sub_123", prorate: true }));
+    expect(billing.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: "sub_123", prorate: true }),
+    );
   });
 
   it("returns cancelled:true even when no active subscription exists (graceful)", async () => {
@@ -216,7 +260,7 @@ describe("refundGeneration — rollback of a consumed credit", () => {
           contentType: "description",
         }),
         orderBy: { createdAt: "desc" },
-      })
+      }),
     );
     expect(prisma.usageRecord.delete).toHaveBeenCalledWith({ where: { id: "ur_1" } });
     expect(invalidateCache).toHaveBeenCalledWith(expect.stringMatching(/^canGenerate:shop\.myshopify\.com:/));
@@ -238,9 +282,11 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
   it("blocks generation when usageCount equals monthlyLimit (free plan, 25/25)", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
-        plan: { findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }) },
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
+        },
         usageRecord: { count: vi.fn().mockResolvedValue(25), create: vi.fn() },
-      })
+      }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
     expect(result.allowed).toBe(false);
@@ -250,9 +296,11 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
   it("blocks at exactly 50/50 for Starter plan", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
-        plan: { findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "active", monthlyLimit: 50 }) },
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "active", monthlyLimit: 50 }),
+        },
         usageRecord: { count: vi.fn().mockResolvedValue(50), create: vi.fn() },
-      })
+      }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
     expect(result.allowed).toBe(false);
@@ -261,9 +309,11 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
   it("allows generation at 24/25 (one under the cap)", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
-        plan: { findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }) },
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
+        },
         usageRecord: { count: vi.fn().mockResolvedValue(24), create: vi.fn().mockResolvedValue({}) },
-      })
+      }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
     expect(result.allowed).toBe(true);
@@ -273,9 +323,11 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
   it("blocks when plan status is not 'active' (frozen/cancelled)", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
-        plan: { findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "frozen", monthlyLimit: 50 }) },
+        plan: {
+          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "frozen", monthlyLimit: 50 }),
+        },
         usageRecord: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
-      })
+      }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
     expect(result.allowed).toBe(false);
@@ -286,7 +338,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
       fn({
         plan: { findUnique: vi.fn().mockResolvedValue(null) },
         usageRecord: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
-      })
+      }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
     expect(result.allowed).toBe(false);
@@ -300,11 +352,13 @@ describe("syncBillingToPlan — state machine (F1 + F4)", () => {
 
   it("activates Growth plan when Shopify reports ACTIVE Growth subscription", async () => {
     prisma.plan.upsert.mockResolvedValue({});
-    await syncBillingToPlan("shop.myshopify.com", [{ name: "Growth Plan", status: "ACTIVE", id: "sub_g", currentPeriodEnd: "2026-07-01" }]);
+    await syncBillingToPlan("shop.myshopify.com", [
+      { name: "Growth Plan", status: "ACTIVE", id: "sub_g", currentPeriodEnd: "2026-07-01" },
+    ]);
     expect(prisma.plan.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ planName: "growth", monthlyLimit: 200 }),
-      })
+      }),
     );
   });
 
@@ -314,7 +368,7 @@ describe("syncBillingToPlan — state machine (F1 + F4)", () => {
     expect(prisma.plan.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ planName: "free", monthlyLimit: 25 }),
-      })
+      }),
     );
   });
 
@@ -344,8 +398,8 @@ describe("tryConsumeGeneration — P2034 retry", () => {
   it("returns isContention:true on second P2034 failure", async () => {
     const p2034 = Object.assign(new Error("Write conflict"), { code: "P2034" });
     prisma.$transaction
-      .mockRejectedValueOnce(p2034)   // first call
-      .mockRejectedValueOnce(p2034);  // retry call
+      .mockRejectedValueOnce(p2034) // first call
+      .mockRejectedValueOnce(p2034); // retry call
 
     const result = await tryConsumeGeneration("shop.com", "description", null);
 

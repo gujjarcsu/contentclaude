@@ -37,6 +37,7 @@ import { CheckCircleIcon, ClockIcon, AlertCircleIcon } from "@shopify/polaris-ic
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
+import { quotaPct } from "../utils/quota.js";
 import {
   getOrCreatePlan,
   getMonthlyUsageCount,
@@ -391,7 +392,7 @@ export default function ProductsPage() {
 
   // Store-wide coverage counts come from the loader (aggregated, accurate across
   // all pages). contentMap below is scoped to the visible page for per-row pills.
-  const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
+  const usagePct = quotaPct(usageCount, monthlyLimit);
   const isOutOfUsage = usageRemaining === 0;
 
   // The SHARED rule — the same one the stat cards above are counted with.

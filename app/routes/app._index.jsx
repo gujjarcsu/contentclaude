@@ -5,6 +5,7 @@ import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import { StartState } from "../components/StartState.jsx";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
+import { quotaPct } from "../utils/quota.js";
 import {
   Page,
   Layout,
@@ -481,7 +482,7 @@ export default function Dashboard() {
     return <StartState start={start} navigate={navigate} onRetry={() => revalidator.revalidate()} />;
   }
 
-  const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
+  const usagePct = quotaPct(usageCount, plan.monthlyLimit);
   const remaining = Math.max(0, plan.monthlyLimit - usageCount);
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
 

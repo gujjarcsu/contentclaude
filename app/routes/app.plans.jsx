@@ -35,6 +35,7 @@ import {
   OrganizationIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
+import { quotaPct } from "../utils/quota.js";
 import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePrompts.server.js";
 import { recordArrivedFrom } from "../utils/quotaSurfaces.server.js";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
@@ -548,7 +549,7 @@ export default function PlansPage() {
   const submittingPlan = navigation.formData?.get("planKey");
   const isCancelling = navigation.formData?.get("actionType") === "cancel";
 
-  const usagePct = Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100));
+  const usagePct = quotaPct(usageCount, plan.monthlyLimit);
   const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
   const currentPlanIndex = PLAN_ORDER.indexOf(plan.planName);
   const currentDisplay = PLAN_DISPLAY.find((p) => p.planName === plan.planName);

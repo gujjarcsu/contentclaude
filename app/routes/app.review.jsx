@@ -119,7 +119,7 @@ export const loader = async ({ request }) => {
 
   // Page by DISTINCT product: order rows by recency, derive the ordered
   // distinct product list, slice the page, then fetch that page's full rows.
-  const [draftIdRows, growthState] = await Promise.all([
+  const [draftIdRows, growthState, unverifiedRows] = await Promise.all([
     prisma.generatedContent.findMany({
       where: draftWhere,
       select: { productId: true },
@@ -129,7 +129,38 @@ export const loader = async ({ request }) => {
       where: { shop },
       select: { embedConfirmedAt: true },
     }),
+    // Phase 4 item 4.2 — content Shopify accepted but did not echo back
+    // unchanged. It IS live; what is unconfirmed is that it is the content the
+    // merchant approved. Surfaced here, at the top of the screen where they
+    // approve things, because this is where they would look.
+    prisma.generatedContent
+      .findMany({
+        where: {
+          shop,
+          status: "published_unverified",
+          productId: { startsWith: PRODUCT_GID_PREFIX },
+        },
+        select: { productId: true, productTitle: true, verifyNote: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+        take: 100,
+      })
+      .catch(() => []),
   ]);
+
+  // One entry per product — a product whose description and meta title both
+  // came back different is one thing for the merchant to look at, not two.
+  const needsCheck = [];
+  const seenNeedsCheck = new Set();
+  for (const r of unverifiedRows ?? []) {
+    if (seenNeedsCheck.has(r.productId)) continue;
+    seenNeedsCheck.add(r.productId);
+    needsCheck.push({
+      productId: r.productId,
+      numericId: String(r.productId).split("/").pop(),
+      productTitle: r.productTitle || "Untitled product",
+      note: r.verifyNote || "Shopify stored something different from what we sent.",
+    });
+  }
 
   const embedConfirmed = !!growthState?.embedConfirmedAt;
 
@@ -150,6 +181,7 @@ export const loader = async ({ request }) => {
       page: 1,
       totalPages: 1,
       totalDraftCount: 0,
+      needsCheck,
       embedConfirmed,
       shopDomain: shop,
     });
@@ -199,6 +231,7 @@ export const loader = async ({ request }) => {
     page,
     totalPages: Math.ceil(totalDraftCount / PAGE_SIZE),
     totalDraftCount,
+    needsCheck,
     embedConfirmed,
     shopDomain: shop,
   });
@@ -353,9 +386,15 @@ export const action = async ({ request }) => {
     );
 
     const faqFailedIds = [];
+    // Phase 4 item 4.2 — a publish Shopify accepted but whose returned value did
+    // not match what we sent is LIVE but unconfirmed. It is recorded
+    // separately so Review can tell the merchant to look, rather than being
+    // filed alongside publishes we actually checked.
+    const unverified = [];
     for (const r of results) {
       if (r.ok) {
         successfulProductIds.push(r.productId);
+        if (r.verified === false) unverified.push({ productId: r.productId, note: r.verifyNote });
         if (r.faqFailed) faqFailedIds.push(r.productId);
         if (edits[r.productId]) successfulEdits[r.productId] = edits[r.productId];
       } else {
@@ -372,17 +411,39 @@ export const action = async ({ request }) => {
     // BATCH all DB status updates in a single transaction
     if (successfulProductIds.length > 0) {
       await prisma.$transaction(async (tx) => {
-        await tx.generatedContent.updateMany({
-          where: { shop, productId: { in: successfulProductIds }, status: "draft" },
-          data: { status: "published" },
-        });
+        const unverifiedIds = unverified.map((u) => u.productId);
+        const verifiedIds = successfulProductIds.filter((id) => !unverifiedIds.includes(id));
+
+        if (verifiedIds.length > 0) {
+          await tx.generatedContent.updateMany({
+            where: { shop, productId: { in: verifiedIds }, status: "draft" },
+            data: { status: "published", verifiedAt: new Date(), verifyNote: null },
+          });
+        }
+        // One update per product because the note differs per product — there
+        // is no useful single note for "these four all went wrong differently".
+        for (const u of unverified) {
+          await tx.generatedContent.updateMany({
+            where: { shop, productId: u.productId, status: "draft" },
+            data: {
+              status: "published_unverified",
+              verifiedAt: null,
+              verifyNote: u.note ?? "Shopify stored something different from what we sent.",
+            },
+          });
+        }
 
         // A product whose FAQ metafield write failed must NOT show "FAQ ✓" —
         // downgrade just the FAQ row so the UI stays honest and the next
         // publish retries the metafield.
         if (faqFailedIds.length > 0) {
           await tx.generatedContent.updateMany({
-            where: { shop, productId: { in: faqFailedIds }, contentType: "faq", status: "published" },
+            where: {
+              shop,
+              productId: { in: faqFailedIds },
+              contentType: "faq",
+              status: { in: ["published", "published_unverified"] },
+            },
             data: { status: "draft" },
           });
         }
@@ -395,7 +456,12 @@ export const action = async ({ request }) => {
             editedProductIds.flatMap((productId) =>
               Object.entries(successfulEdits[productId]).map(([type, content]) =>
                 tx.generatedContent.updateMany({
-                  where: { shop, productId, contentType: type, status: "published" },
+                  where: {
+                    shop,
+                    productId,
+                    contentType: type,
+                    status: { in: ["published", "published_unverified"] },
+                  },
                   data: { generatedContent: content },
                 }),
               ),
@@ -443,7 +509,14 @@ export const action = async ({ request }) => {
       failed,
       errors,
       reviewAsk,
-      message: `Published content for ${published} product${published !== 1 ? "s" : ""}${failed > 0 ? `, ${failed} failed` : ""}.${faqWarning}${embedNotice}`,
+      unverified: unverified.length,
+      message:
+        `Published content for ${published} product${published !== 1 ? "s" : ""}` +
+        `${failed > 0 ? `, ${failed} failed` : ""}.` +
+        (unverified.length > 0
+          ? ` ${unverified.length} went live but Shopify stored something different — check ${unverified.length === 1 ? "it" : "them"} below.`
+          : "") +
+        `${faqWarning}${embedNotice}`,
     });
   }
 
@@ -511,10 +584,60 @@ export const shouldRevalidate = ({ formData, defaultShouldRevalidate }) => {
   return defaultShouldRevalidate;
 };
 
+/**
+ * Phase 4 item 4.2 — content that went live but could not be confirmed.
+ *
+ * Shopify accepted the write and returned success, but the value it echoed back
+ * in the same response was not the value we sent. The content IS on the
+ * storefront; what is unconfirmed is that it is the content the merchant
+ * approved. Most often that is Shopify truncating a page title.
+ *
+ * Tone is `warning`, not `critical`. Nothing is broken and nothing was lost —
+ * something needs a look. Crying wolf here would teach merchants to dismiss the
+ * one banner in the app that says "your storefront may not say what you think".
+ */
+function NeedsCheckBanner({ items, navigate }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <Banner
+      tone="warning"
+      title={
+        items.length === 1
+          ? "1 product went live, but Shopify stored something different"
+          : `${items.length} products went live, but Shopify stored something different`
+      }
+    >
+      <BlockStack gap="200">
+        <Text as="p" variant="bodyMd">
+          These are on your storefront now. We checked what Shopify saved against what we sent, and they do
+          not match — usually because Shopify shortened something. Open one to compare.
+        </Text>
+        <BlockStack gap="100">
+          {items.slice(0, 5).map((it) => (
+            <InlineStack key={it.productId} align="space-between" blockAlign="center" wrap gap="200">
+              <Text as="p" variant="bodySm">
+                <strong>{it.productTitle}</strong> — {it.note}
+              </Text>
+              <Button variant="plain" onClick={() => navigate(`/app/products/${it.numericId}`)}>
+                Open
+              </Button>
+            </InlineStack>
+          ))}
+          {items.length > 5 && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              {`and ${items.length - 5} more`}
+            </Text>
+          )}
+        </BlockStack>
+      </BlockStack>
+    </Banner>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products, page, totalPages, embedConfirmed, shopDomain } = useLoaderData();
+  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -699,6 +822,7 @@ export default function ReviewPage() {
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
+        <NeedsCheckBanner items={needsCheck} navigate={navigate} />
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
           Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ

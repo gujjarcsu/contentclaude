@@ -111,7 +111,9 @@ describe("verifyShopifyWebhook — authenticity", () => {
 
   it("rejects non-POST with 405 and a bad shop header with 400", async () => {
     expect((await run(delivery("", { method: "GET" }))).status).toBe(405);
-    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-shop-domain": "evil.example.com" } }))).status).toBe(400);
+    expect(
+      (await run(delivery({ a: 1 }, { headers: { "x-shopify-shop-domain": "evil.example.com" } }))).status,
+    ).toBe(400);
   });
 
   it("rejects a non-JSON body with 400 and tolerates an empty body", async () => {
@@ -170,14 +172,20 @@ describe("item 2 — replay window", () => {
 
   it("rejects a delivery implausibly far in the future", async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": future } }))).status).toBe(401);
+    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": future } }))).status).toBe(
+      401,
+    );
   });
 
   it("accepts a delivery just inside the window, and small clock skew", async () => {
     const justInside = new Date(Date.now() - MAX_WEBHOOK_AGE_MS + 60_000).toISOString();
-    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": justInside } }))).shop).toBe(SHOP);
+    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": justInside } }))).shop).toBe(
+      SHOP,
+    );
     const slightlyAhead = new Date(Date.now() + 60_000).toISOString();
-    expect((await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": slightlyAhead } }))).shop).toBe(SHOP);
+    expect(
+      (await run(delivery({ a: 1 }, { headers: { "x-shopify-triggered-at": slightlyAhead } }))).shop,
+    ).toBe(SHOP);
   });
 
   it("never rejects a genuine delivery for a missing or unparseable timestamp", () => {
@@ -223,7 +231,9 @@ describe("item 2 — delivery-id dedup", () => {
 
 describe("item 3 — app/scopes_update payload shapes", () => {
   it("joins an array, trims a string, and returns null when there is nothing to write", () => {
-    expect(scopesFromPayload({ current: ["write_products", "write_content"] })).toBe("write_products,write_content");
+    expect(scopesFromPayload({ current: ["write_products", "write_content"] })).toBe(
+      "write_products,write_content",
+    );
     expect(scopesFromPayload({ current: " write_products " })).toBe("write_products");
     expect(scopesFromPayload({ current: [] })).toBeNull();
     expect(scopesFromPayload({ current: null })).toBeNull();

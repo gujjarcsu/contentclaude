@@ -3099,3 +3099,113 @@ not), which `docs/INSTALL-CHANNELS.md` states plainly — an install we cannot a
 The digest is also now guarded against the split query being unavailable **entirely**: `zero()` catches a
 rejected promise, but a missing method throws before there is one. The digest's whole reason for existing
 is that it still arrives when something is broken.
+
+---
+
+# PHASE 4 — A SMART APP THAT DELIVERS
+
+Order taken, on the owner's instruction: 4.2 → 4.3 → 4.1 → 6 → 5 → 7 → 4. Verification and proof before
+refinement, and THROTTLED handling before the large-catalogue work that needs it.
+
+## Before 4.2 — the audit the owner asked for
+
+The Products counting bug had a root cause that generalises: a shared rule living in a Prisma-importing
+module is not shareable, so the screen wrote its own and the two disagreed in public. Grepping for the
+same shape across quota thresholds, plan entitlements, content-type labels and score bands found **two
+more, both with live defects.**
+
+**Quota percent, re-derived in four components.** `app._index.jsx`, `app.plans.jsx`, `app.products.jsx`
+and `app.blog.jsx` each computed `Math.min(100, Math.round((usageCount / monthlyLimit) * 100))` by hand.
+Two of the four had no `monthlyLimit > 0` guard, so on a plan with no limit the division is `n / 0` →
+`Infinity` → capped to **100**. Home and Plans told a merchant on an unmetered plan they had used 100% of
+their quota, with a full progress bar, while Products and Blog on the same store said 0%. Nobody wrote
+that twice on purpose; it is what happens when the correct rule is one unreachable import away.
+
+**Score bands, re-derived in three places with three different middle tones** — `caution` in
+`StartState.jsx`, `highlight` on the audit ring, and `undefined` on the audit row badge directly beneath
+that ring. A product scoring 55 was amber on one screen, blue on another, and uncoloured in the list
+under the thing that had just coloured it.
+
+Both pure rules now live in client-safe modules — `app/utils/quota.js`, `app/utils/scoreBands.js` — with
+the server modules re-exporting them so existing imports keep working. Plan entitlements were already
+client-safe (`billing-plans.js`); content-type labels are local to one screen and have no second reader.
+
+Guards: the pure modules may not import anything `.server`, no `.jsx` may compute a usage percentage or
+draw a score band by hand, and the sweeps fail if they inspect nothing.
+
+## 4.2 — Post-publish verification
+
+**The difference between "we think it is live" and "it is live."** A publish was called successful when
+Shopify's mutation returned no errors. That proves the request was *accepted*; it does not prove the
+field now holds what was sent. The app was making the stronger claim.
+
+### Cost: zero extra requests
+
+`productUpdate` returns the updated product in its own response, and the mutation was asking for
+`product { id }` and discarding the rest. It now asks for `descriptionHtml` and `seo { title description }`
+— the fields it just wrote — and compares against what it sent.
+
+| | Before | After |
+|---|---|---|
+| Shopify requests per publish | 1 | **1** |
+| Round trips per publish | 1 | **1** |
+| Added latency | — | **none measurable** — same request, ~1-3 KB more response |
+| Added GraphQL cost points | 10 (mutation) | 10 — returned scalar fields on a mutation payload are not separately charged |
+
+A test pins this: the publish path must issue **exactly one** `await graphql(` call. The alternative — a
+second query per publish to read the product back — would double the API calls of a 5,000-product bulk
+run and turn a trust feature into a rate-limit incident.
+
+### Why the comparison is not `===`
+
+Shopify normalises what it stores: HTML is re-serialised, attributes dropped, whitespace changed. A
+strict string comparison would report a mismatch on nearly every publish, merchants would learn to ignore
+the warning, and the feature would be **worse than not having it**. So each field is compared on what
+matters:
+
+- **descriptionHtml** — the *text* survives (tags stripped, whitespace collapsed, entities decoded).
+  Markup Shopify rewrote is fine; words that went missing are not.
+- **seo.title / seo.description** — exact after trim. Shopify stores these verbatim, so a difference is
+  real, and is most often truncation, which the merchant needs to know about.
+
+### The failure direction, which is the whole feature
+
+A verifier that passes when it cannot see anything is decorative, and would be the fourth false-green in
+this project. So **unverified is the default** whenever a comparison could not be made:
+
+| Situation | Verdict |
+|---|---|
+| Shopify returned no product | unverified — "could not be confirmed" |
+| Shopify returned no value for a field we sent | unverified — not `undefined === undefined` |
+| Nothing was sent that we know how to check | unverified — "nothing to verify", never vacuously true |
+| An empty string was sent | treated as nothing sent |
+
+Nine of the twenty-four unit tests are this direction.
+
+### What the merchant gets
+
+An unverified publish is still `ok: true` — **it is live**, and reporting it as a failure would put the
+row back to draft and have the merchant republish content already on their storefront. Instead the row
+becomes `published_unverified` with a plain-language `verifyNote`, and Review shows a warning banner at
+the top listing the affected products and why, with an Open button for each.
+
+Tone is `warning`, not `critical`: nothing is broken and nothing was lost, something needs a look. Crying
+wolf would teach merchants to dismiss the one banner in the app that says *your storefront may not say
+what you think*.
+
+The notes name no fields or codes — "Shopify shortened the page title", not "seoTitle mismatch". A test
+asserts the note contains none of `seoTitle`, `descriptionHtml`, `productUpdate`, `null`, `undefined`.
+
+### The trap this opened, and how it was closed
+
+`published_unverified` is a new `status` value, and `stateOf` would have fallen through to
+`needs_content` for it — a live product reading as untouched, on every screen at once. So the state was
+added properly: `PRODUCT_STATE.UNVERIFIED`, precedence **between draft and published** (it needs an eye,
+a clean publish does not), the label "Live, needs a check", and the `getContentMetrics` SQL `CASE` and
+piece-count filter both taught about it. `unverifiedProducts` is now part of `byState` and of
+`withContent`, so the counts still sum.
+
+New migration `20260910140000_publish_verification` adds `GeneratedContent.verifiedAt` and `verifyNote`,
+both nullable with no default and no backfill: NULL on an older row means *published before verification
+existed*, which is the truth. Backfilling them as verified would have been a lie about rows nobody
+checked.

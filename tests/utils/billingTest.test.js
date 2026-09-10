@@ -32,7 +32,11 @@ describe("resolveBillingTest", () => {
   });
 
   it("fails closed (real charge) when the plan lookup throws", async () => {
-    const admin = { graphql: vi.fn(async () => { throw new Error("boom"); }) };
+    const admin = {
+      graphql: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    };
     expect(await resolveBillingTest(admin, "err-a.myshopify.com")).toBe(false);
   });
 

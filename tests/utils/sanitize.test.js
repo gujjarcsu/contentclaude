@@ -51,7 +51,10 @@ describe("sanitizeHtml — allowlist (svg/math/handler bypass)", () => {
   });
 
   it("removes <script> and <iframe>", () => {
-    const out = extractTag(wrap('<script>alert(1)</script><iframe src="x"></iframe><p>ok</p>'), "DESCRIPTION");
+    const out = extractTag(
+      wrap('<script>alert(1)</script><iframe src="x"></iframe><p>ok</p>'),
+      "DESCRIPTION",
+    );
     expect(out).not.toMatch(/<script/i);
     expect(out).not.toMatch(/<iframe/i);
     expect(out).toContain("<p>ok</p>");

@@ -17,9 +17,14 @@ process.env.ANTHROPIC_API_KEY = "sk-test-key";
 const { generateProductContent } = await import("../../app/utils/ai.server.js");
 
 const minProduct = {
-  title: "T", productType: "", vendor: "",
-  description: "", descriptionHtml: "",
-  imageUrl: "", variants: [], tags: [],
+  title: "T",
+  productType: "",
+  vendor: "",
+  description: "",
+  descriptionHtml: "",
+  imageUrl: "",
+  variants: [],
+  tags: [],
 };
 
 const fail503 = { ok: false, status: 503, text: async () => "Service Unavailable" };
@@ -52,16 +57,16 @@ describe("circuit breaker (ai.server.js)", () => {
 
     // Call 3 — attempt 0 triggers 5th failure → circuit opens; attempt 1 is blocked
     const p3 = expect(generateProductContent(minProduct, {}, ["metaTitle"])).rejects.toThrow(
-      "AI service temporarily unavailable"
+      "AI service temporarily unavailable",
     );
     await vi.runAllTimersAsync();
     await p3;
 
     // Call 4 — circuit is open, blocked immediately with no fetch
     const fetchCountBefore = mockFetch.mock.calls.length;
-    await expect(
-      generateProductContent(minProduct, {}, ["metaTitle"])
-    ).rejects.toThrow("AI service temporarily unavailable");
+    await expect(generateProductContent(minProduct, {}, ["metaTitle"])).rejects.toThrow(
+      "AI service temporarily unavailable",
+    );
     expect(mockFetch.mock.calls.length).toBe(fetchCountBefore);
   });
 

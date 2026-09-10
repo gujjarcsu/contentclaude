@@ -85,9 +85,10 @@ export async function getContentMetrics(shop, { totalProducts } = {}) {
     WITH per_product AS (
       SELECT "productId",
              CASE
-               WHEN bool_or(status = 'draft')     THEN 'draft'
-               WHEN bool_or(status = 'published') THEN 'published'
-               WHEN bool_or(status = 'rejected')  THEN 'rejected'
+               WHEN bool_or(status = 'draft')                THEN 'draft'
+               WHEN bool_or(status = 'published_unverified') THEN 'published_unverified'
+               WHEN bool_or(status = 'published')            THEN 'published'
+               WHEN bool_or(status = 'rejected')             THEN 'rejected'
                ELSE 'needs_content'
              END AS state
       FROM "GeneratedContent"
@@ -103,7 +104,7 @@ export async function getContentMetrics(shop, { totalProducts } = {}) {
     FROM "GeneratedContent"
     WHERE shop = ${shop}
       AND "productId" LIKE ${PRODUCT_GID}
-      AND status IN ('published', 'draft')
+      AND status IN ('published', 'published_unverified', 'draft')
     GROUP BY status
   `;
 
@@ -113,8 +114,9 @@ export async function getContentMetrics(shop, { totalProducts } = {}) {
 
   const draftProducts = pick("state", PRODUCT_STATE.DRAFT);
   const publishedProducts = pick("state", PRODUCT_STATE.PUBLISHED);
+  const unverifiedProducts = pick("state", PRODUCT_STATE.UNVERIFIED);
   const rejectedProducts = pick("state", PRODUCT_STATE.REJECTED);
-  const withContent = draftProducts + publishedProducts + rejectedProducts;
+  const withContent = draftProducts + publishedProducts + unverifiedProducts + rejectedProducts;
 
   const hasTotal = Number.isFinite(totalProducts) && totalProducts >= 0;
   const needsContentProducts = hasTotal ? Math.max(0, totalProducts - withContent) : null;
@@ -125,12 +127,15 @@ export async function getContentMetrics(shop, { totalProducts } = {}) {
     byState: {
       [PRODUCT_STATE.NEEDS_CONTENT]: needsContentProducts,
       [PRODUCT_STATE.DRAFT]: draftProducts,
+      [PRODUCT_STATE.UNVERIFIED]: unverifiedProducts,
       [PRODUCT_STATE.PUBLISHED]: publishedProducts,
       [PRODUCT_STATE.REJECTED]: rejectedProducts,
     },
     needsContentProducts,
     draftProducts,
     publishedProducts,
+    /** Live, but Shopify returned something different from what we sent. */
+    unverifiedProducts,
     rejectedProducts,
     /** Products that have any AI content at all, in any state. */
     withContent,

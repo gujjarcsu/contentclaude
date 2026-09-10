@@ -27,7 +27,12 @@ describe("scoreContent", () => {
     const structured = `<p>${"word ".repeat(50)}</p><ul><li>feature</li></ul>`;
 
     const sPlain = scoreContent({ description: plain, metaTitle: "", metaDescription: "", faq: "" });
-    const sStructured = scoreContent({ description: structured, metaTitle: "", metaDescription: "", faq: "" });
+    const sStructured = scoreContent({
+      description: structured,
+      metaTitle: "",
+      metaDescription: "",
+      faq: "",
+    });
     expect(sStructured.score).toBeGreaterThan(sPlain.score);
   });
 
@@ -35,13 +40,28 @@ describe("scoreContent", () => {
     const withFiller = `<p>Whether you are looking for the best product, look no further. ${"word ".repeat(50)}</p><ul><li>x</li></ul>`;
     const withoutFiller = `<p>This product is built for performance. ${"word ".repeat(50)}</p><ul><li>x</li></ul>`;
 
-    const sWithFiller = scoreContent({ description: withFiller, metaTitle: "", metaDescription: "", faq: "" });
-    const sWithout = scoreContent({ description: withoutFiller, metaTitle: "", metaDescription: "", faq: "" });
+    const sWithFiller = scoreContent({
+      description: withFiller,
+      metaTitle: "",
+      metaDescription: "",
+      faq: "",
+    });
+    const sWithout = scoreContent({
+      description: withoutFiller,
+      metaTitle: "",
+      metaDescription: "",
+      faq: "",
+    });
     expect(sWithout.score).toBeGreaterThan(sWithFiller.score);
   });
 
   it("awards full meta title points for a title under 60 chars", () => {
-    const result = scoreContent({ description: "", metaTitle: "Short Title Under Sixty Chars", metaDescription: "", faq: "" });
+    const result = scoreContent({
+      description: "",
+      metaTitle: "Short Title Under Sixty Chars",
+      metaDescription: "",
+      faq: "",
+    });
     expect(result.score).toBe(20);
   });
 
@@ -54,18 +74,33 @@ describe("scoreContent", () => {
   });
 
   it("awards full meta description points for description under 155 chars", () => {
-    const result = scoreContent({ description: "", metaTitle: "", metaDescription: "Good meta desc.", faq: "" });
+    const result = scoreContent({
+      description: "",
+      metaTitle: "",
+      metaDescription: "Good meta desc.",
+      faq: "",
+    });
     expect(result.score).toBe(20);
   });
 
   it("penalises meta description over 155 chars", () => {
-    const short = scoreContent({ description: "", metaTitle: "", metaDescription: "Good meta desc.", faq: "" });
+    const short = scoreContent({
+      description: "",
+      metaTitle: "",
+      metaDescription: "Good meta desc.",
+      faq: "",
+    });
     const long = scoreContent({ description: "", metaTitle: "", metaDescription: "A".repeat(156), faq: "" });
     expect(short.score).toBeGreaterThan(long.score);
   });
 
   it("awards FAQ points when FAQ content is substantial (>50 chars)", () => {
-    const withFaq = scoreContent({ description: "", metaTitle: "", metaDescription: "", faq: "Q: What is it? A: It is a product that helps you achieve your goals every day." });
+    const withFaq = scoreContent({
+      description: "",
+      metaTitle: "",
+      metaDescription: "",
+      faq: "Q: What is it? A: It is a product that helps you achieve your goals every day.",
+    });
     const withoutFaq = scoreContent({ description: "", metaTitle: "", metaDescription: "", faq: "" });
     expect(withFaq.score).toBe(10);
     expect(withoutFaq.score).toBe(0);

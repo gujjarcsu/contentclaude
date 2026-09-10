@@ -22,6 +22,7 @@
  * @param {string[]} [opts.userErrorKeys] - payload keys holding user errors
  * @returns {Promise<{ok: boolean, payload: object|null, userErrors: object[], topLevelErrors: object[], errorMessages: string[]}>}
  */
+import { verifyProductUpdate } from "./publishVerify.js";
 export async function readMutationResult(response, payloadKey, { userErrorKeys = ["userErrors"] } = {}) {
   let json;
   try {
@@ -65,9 +66,24 @@ export async function readMutationResult(response, payloadKey, { userErrorKeys =
 
 // productUpdate's `input` argument is deprecated in 2026-04 — use `product`
 // with ProductUpdateInput (same field shape: id, descriptionHtml, seo).
+// Phase 4 item 4.2 — ask for the fields we just wrote BACK in the same
+// response. `productUpdate` returns the updated product anyway; this was
+// requesting `product { id }` and discarding the rest, which is why a publish
+// could only ever prove "Shopify accepted the request", never "the field now
+// holds what we sent".
+//
+// Cost of the change: ZERO extra requests and zero extra round trips. Three
+// more scalar fields on a response we were already receiving. The alternative —
+// a second query per publish to read the product back — would double the API
+// calls of a 5,000-product bulk run and turn a trust feature into a rate-limit
+// incident.
 export const PRODUCT_UPDATE_MUTATION = `mutation updateProduct($product: ProductUpdateInput!) {
   productUpdate(product: $product) {
-    product { id }
+    product {
+      id
+      descriptionHtml
+      seo { title description }
+    }
     userErrors { field message }
   }
 }`;
@@ -120,8 +136,8 @@ export async function publishProductWithRetry(graphql, productId, input, attempt
     return { productId, ok: false, error: `Invalid response (HTTP ${res.status})` };
   }
 
-  const throttled = Array.isArray(json?.errors)
-    && json.errors.some((e) => e?.extensions?.code === "THROTTLED");
+  const throttled =
+    Array.isArray(json?.errors) && json.errors.some((e) => e?.extensions?.code === "THROTTLED");
   if (throttled && attempt < PUBLISH_MAX_RETRIES) {
     await sleep(PUBLISH_BACKOFF_BASE_MS * 2 ** (attempt + 1));
     return publishProductWithRetry(graphql, productId, input, attempt + 1);
@@ -149,5 +165,17 @@ export async function publishProductWithRetry(graphql, productId, input, attempt
   if (!json?.data?.productUpdate) {
     return { productId, ok: false, error: "Shopify returned no result for this update." };
   }
-  return { productId, ok: true };
+
+  // Accepted. Now: did it actually land? Compared against the product Shopify
+  // returned in THIS response — no second read. An unverified publish is still
+  // `ok` (Shopify took it and it is live), but the caller records it
+  // differently so the merchant is told to look.
+  const verdict = verifyProductUpdate(input, json.data.productUpdate.product);
+  return {
+    productId,
+    ok: true,
+    verified: verdict.verified,
+    verifyNote: verdict.note,
+    mismatches: verdict.mismatches,
+  };
 }

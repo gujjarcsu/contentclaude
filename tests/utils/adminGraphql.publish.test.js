@@ -17,6 +17,13 @@ import { publishProductWithRetry, PUBLISH_MAX_RETRIES } from "../../app/utils/ad
 const PID = "gid://shopify/Product/1";
 const INPUT = { id: PID, descriptionHtml: "<p>new</p>" };
 
+// Phase 4 item 4.2 — the mutation now asks for the fields it wrote back, and
+// compares. A fixture that echoes ONLY `{ id }` is therefore an unverified
+// publish, which is correct: Shopify returned nothing to check against.
+const echoed = { product: { id: PID, descriptionHtml: "<p>new</p>" }, userErrors: [] };
+const idOnly = { product: { id: PID }, userErrors: [] };
+const OK_VERIFIED = { productId: PID, ok: true, verified: true, verifyNote: null, mismatches: [] };
+
 const res = (body, { status = 200, retryAfter = null } = {}) => ({
   status,
   headers: { get: (h) => (h === "Retry-After" ? retryAfter : null) },
@@ -35,9 +42,34 @@ async function run(graphql) {
 }
 
 describe("publishProductWithRetry", () => {
+  it("does NOT claim verified when Shopify echoed back only the id", async () => {
+    // Phase 4 item 4.2, the failure direction that matters. There is nothing to
+    // compare against, so this is UNVERIFIED — not verified-by-default. A
+    // verifier that passes when it cannot see anything is decorative.
+    const graphql = vi.fn(async () => res({ data: { productUpdate: idOnly } }));
+    const r = await run(graphql);
+    expect(r.ok).toBe(true); // it IS live — Shopify accepted it
+    expect(r.verified).toBe(false);
+    expect(r.verifyNote).toMatch(/could not be confirmed/i);
+  });
+
+  it("reports a mismatch when Shopify stored something different", async () => {
+    const graphql = vi.fn(async () =>
+      res({
+        data: {
+          productUpdate: { product: { id: PID, descriptionHtml: "<p>something else</p>" }, userErrors: [] },
+        },
+      }),
+    );
+    const r = await run(graphql);
+    expect(r.ok).toBe(true);
+    expect(r.verified).toBe(false);
+    expect(r.mismatches.map((m) => m.field)).toContain("descriptionHtml");
+  });
+
   it("reports success only when Shopify returned a productUpdate payload", async () => {
-    const graphql = vi.fn(async () => res({ data: { productUpdate: { product: { id: PID }, userErrors: [] } } }));
-    await expect(run(graphql)).resolves.toEqual({ productId: PID, ok: true });
+    const graphql = vi.fn(async () => res({ data: { productUpdate: echoed } }));
+    await expect(run(graphql)).resolves.toEqual(OK_VERIFIED);
     expect(graphql).toHaveBeenCalledTimes(1);
   });
 
@@ -51,7 +83,9 @@ describe("publishProductWithRetry", () => {
   });
 
   it("retries a THROTTLED response and gives up as a failure, never a success", async () => {
-    const graphql = vi.fn(async () => res({ data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] }));
+    const graphql = vi.fn(async () =>
+      res({ data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] }),
+    );
     const out = await run(graphql);
     expect(out.ok).toBe(false);
     expect(out.throttled).toBe(true);
@@ -61,15 +95,24 @@ describe("publishProductWithRetry", () => {
   it("retries a THROTTLED response and succeeds when Shopify recovers", async () => {
     const graphql = vi
       .fn()
-      .mockResolvedValueOnce(res({ data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] }))
-      .mockResolvedValueOnce(res({ data: { productUpdate: { product: { id: PID }, userErrors: [] } } }));
-    await expect(run(graphql)).resolves.toEqual({ productId: PID, ok: true });
+      .mockResolvedValueOnce(
+        res({ data: null, errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }] }),
+      )
+      .mockResolvedValueOnce(res({ data: { productUpdate: echoed } }));
+    await expect(run(graphql)).resolves.toEqual(OK_VERIFIED);
     expect(graphql).toHaveBeenCalledTimes(2);
   });
 
   it("fails on userErrors", async () => {
     const graphql = vi.fn(async () =>
-      res({ data: { productUpdate: { product: null, userErrors: [{ field: ["seo", "title"], message: "Title is too long" }] } } }),
+      res({
+        data: {
+          productUpdate: {
+            product: null,
+            userErrors: [{ field: ["seo", "title"], message: "Title is too long" }],
+          },
+        },
+      }),
     );
     const out = await run(graphql);
     expect(out.ok).toBe(false);
@@ -87,8 +130,8 @@ describe("publishProductWithRetry", () => {
     const graphql = vi
       .fn()
       .mockResolvedValueOnce(res({}, { status: 429, retryAfter: "1" }))
-      .mockResolvedValueOnce(res({ data: { productUpdate: { product: { id: PID }, userErrors: [] } } }));
-    await expect(run(graphql)).resolves.toEqual({ productId: PID, ok: true });
+      .mockResolvedValueOnce(res({ data: { productUpdate: echoed } }));
+    await expect(run(graphql)).resolves.toEqual(OK_VERIFIED);
     expect(graphql).toHaveBeenCalledTimes(2);
   });
 

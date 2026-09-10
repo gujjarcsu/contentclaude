@@ -35,6 +35,11 @@
 export const PRODUCT_STATE = Object.freeze({
   NEEDS_CONTENT: "needs_content",
   DRAFT: "draft",
+  // Phase 4 item 4.2 — Shopify accepted the write, but the value it returned
+  // did not match what we sent. The content IS live; what is unconfirmed is
+  // that it is the content the merchant approved. It ranks above `published`
+  // in precedence because it needs an eye and a clean publish does not.
+  UNVERIFIED: "published_unverified",
   PUBLISHED: "published",
   REJECTED: "rejected",
 });
@@ -43,6 +48,7 @@ export const PRODUCT_STATE = Object.freeze({
 export const PRODUCT_STATE_LABEL = Object.freeze({
   needs_content: "Needs content",
   draft: "Ready to review",
+  published_unverified: "Live, needs a check",
   published: "Live",
   rejected: "Rejected",
 });
@@ -53,6 +59,7 @@ export const PRODUCT_STATE_LABEL = Object.freeze({
  */
 export const STATE_PRECEDENCE = Object.freeze([
   PRODUCT_STATE.DRAFT,
+  PRODUCT_STATE.UNVERIFIED,
   PRODUCT_STATE.PUBLISHED,
   PRODUCT_STATE.REJECTED,
 ]);

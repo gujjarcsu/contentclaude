@@ -79,7 +79,10 @@ describe("who runs the jobs", () => {
 describe("the split is actually wired up (source guards)", () => {
   it("the worker is started only by the process whose job it is", () => {
     const src = code("app/queues/generationQueue.server.js");
-    const fn = src.slice(src.indexOf("export async function startWorker"), src.indexOf("_worker = new Worker"));
+    const fn = src.slice(
+      src.indexOf("export async function startWorker"),
+      src.indexOf("_worker = new Worker"),
+    );
     expect(fn).toMatch(/if \(!RUNS_JOBS\)/);
   });
 

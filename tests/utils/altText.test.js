@@ -7,9 +7,22 @@ import { describe, it, expect } from "vitest";
 import { normalizeAltTextResults, isLegacyAltTextEntry, LEGACY_ALT_ERROR } from "../../app/utils/altText.js";
 
 describe("defect A: legacy alt-text rows can never render success", () => {
-  const legacyEntry = { imageId: "gid://shopify/ProductImage/123", url: "https://cdn/x.jpg", altText: "A nice photo" };
-  const modernOk = { imageId: "gid://shopify/MediaImage/456", url: "https://cdn/y.jpg", altText: "Applied for real" };
-  const modernFailed = { imageId: "gid://shopify/MediaImage/789", url: "https://cdn/z.jpg", altText: "x", error: "Shopify couldn't apply this alt text. Please try again." };
+  const legacyEntry = {
+    imageId: "gid://shopify/ProductImage/123",
+    url: "https://cdn/x.jpg",
+    altText: "A nice photo",
+  };
+  const modernOk = {
+    imageId: "gid://shopify/MediaImage/456",
+    url: "https://cdn/y.jpg",
+    altText: "Applied for real",
+  };
+  const modernFailed = {
+    imageId: "gid://shopify/MediaImage/789",
+    url: "https://cdn/z.jpg",
+    altText: "x",
+    error: "Shopify couldn't apply this alt text. Please try again.",
+  };
 
   it("marks success-shaped legacy ProductImage entries as failed", () => {
     const out = normalizeAltTextResults([legacyEntry]);
@@ -39,7 +52,12 @@ describe("defect A: legacy alt-text rows can never render success", () => {
 
   it("replaces raw GraphQL error strings stored in legacy rows (no technical leak)", () => {
     // The legacy row that shipped to prod stored this verbatim in `error`.
-    const rawErrRow = { imageId: "gid://shopify/MediaImage/1", url: "u", altText: "", error: "Field 'productImageUpdate' doesn't exist on type 'Mutation'" };
+    const rawErrRow = {
+      imageId: "gid://shopify/MediaImage/1",
+      url: "u",
+      altText: "",
+      error: "Field 'productImageUpdate' doesn't exist on type 'Mutation'",
+    };
     const out = normalizeAltTextResults([rawErrRow]);
     expect(out[0].error).toBe(LEGACY_ALT_ERROR);
     expect(out[0].error).not.toMatch(/productImageUpdate|doesn't exist on type/);
@@ -47,7 +65,12 @@ describe("defect A: legacy alt-text rows can never render success", () => {
   });
 
   it("keeps a genuine, merchant-safe error message as-is", () => {
-    const safe = { imageId: "gid://shopify/MediaImage/2", url: "u", altText: "x", error: "Shopify couldn't apply this alt text. Please try again." };
+    const safe = {
+      imageId: "gid://shopify/MediaImage/2",
+      url: "u",
+      altText: "x",
+      error: "Shopify couldn't apply this alt text. Please try again.",
+    };
     expect(normalizeAltTextResults([safe])[0].error).toBe(safe.error);
   });
 });

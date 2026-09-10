@@ -21,10 +21,19 @@ global.fetch = mockFetch;
 
 vi.mock("../../app/db.server.js", () => ({
   default: {
-    generationJob: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })) },
+    generationJob: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(() => Promise.resolve({ count: 1 })),
+    },
     session: { findFirst: vi.fn() },
     brandVoice: { findUnique: vi.fn() },
-    generatedContent: { findMany: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })), update: vi.fn(() => Promise.resolve({})) },
+    generatedContent: {
+      findMany: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(() => Promise.resolve({ count: 1 })),
+      update: vi.fn(() => Promise.resolve({})),
+    },
     collectionVoice: { findMany: vi.fn() },
   },
 }));
@@ -37,7 +46,10 @@ vi.mock("../../app/utils/ai.server.js", () => ({
 vi.mock("../../app/utils/plans.server.js", () => ({
   tryConsumeGeneration: vi.fn(() => Promise.resolve({ allowed: true })),
   remainingGenerations: vi.fn(() => Promise.resolve(999)),
-  sliceToQuota: (ids, remaining) => ({ targetIds: ids.slice(0, Math.max(0, remaining)), quotaSkipped: Math.max(0, ids.length - Math.max(0, remaining)) }),
+  sliceToQuota: (ids, remaining) => ({
+    targetIds: ids.slice(0, Math.max(0, remaining)),
+    quotaSkipped: Math.max(0, ids.length - Math.max(0, remaining)),
+  }),
   withGenerationCredit: vi.fn(async (shop, key, work, opts) => {
     const gate = { allowed: true, remaining: 10 };
     const result = await work(gate);
@@ -49,7 +61,12 @@ vi.mock("../../app/utils/plans.server.js", () => ({
 // The offline session/token layer is mocked so a test can decide what happens
 // when Shopify rejects the token (Phase 0 item 14).
 vi.mock("../../app/utils/offlineToken.server.js", () => ({
-  getFreshOfflineSession: vi.fn(async (shop) => ({ shop, accessToken: "tok", expires: null, refreshToken: null })),
+  getFreshOfflineSession: vi.fn(async (shop) => ({
+    shop,
+    accessToken: "tok",
+    expires: null,
+    refreshToken: null,
+  })),
   refreshOfflineToken: vi.fn(async () => ({ accessToken: "tok2", expires: null })),
 }));
 
@@ -116,7 +133,20 @@ describe("fetchShopifyProduct retry logic", () => {
   });
 
   it("retries on 429 and succeeds on second attempt", async () => {
-    const productData = { id: "gid://shopify/Product/1", title: "Test", productType: "", vendor: "", description: "", descriptionHtml: "", seo: {}, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    const productData = {
+      id: "gid://shopify/Product/1",
+      title: "Test",
+      productType: "",
+      vendor: "",
+      description: "",
+      descriptionHtml: "",
+      seo: {},
+      featuredImage: null,
+      images: { edges: [] },
+      variants: { edges: [] },
+      tags: [],
+      collections: { edges: [] },
+    };
 
     mockFetch
       .mockResolvedValueOnce(make429Response("1"))
@@ -139,7 +169,18 @@ describe("fetchShopifyProduct retry logic", () => {
     prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: "test.myshopify.com",
+      storeName: "Test",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      sampleContent: "",
+      autopilotEnabled: false,
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
     prisma.generatedContent.upsert.mockResolvedValue({});
@@ -172,7 +213,18 @@ describe("fetchShopifyProduct retry logic", () => {
     prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: "test.myshopify.com",
+      storeName: "Test",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      sampleContent: "",
+      autopilotEnabled: false,
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
 
@@ -186,7 +238,7 @@ describe("fetchShopifyProduct retry logic", () => {
     // The job should be updated with failedProducts
     const updateCalls = prisma.generationJob.update.mock.calls;
     const failUpdate = updateCalls.find(
-      ([args]) => args.data?.failedProducts || args.data?.status === "complete"
+      ([args]) => args.data?.failedProducts || args.data?.status === "complete",
     );
     expect(failUpdate).toBeTruthy();
   });
@@ -212,7 +264,18 @@ describe("fetchShopifyProduct retry logic", () => {
     prisma.generationJob.findUnique.mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: "test3.myshopify.com", accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test3.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: "test3.myshopify.com",
+      storeName: "Test",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      sampleContent: "",
+      autopilotEnabled: false,
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
 
@@ -257,7 +320,18 @@ describe("P1-1: job cancellation is honoured mid-run", () => {
     prisma.generationJob.update.mockResolvedValue({});
     prisma.generationJob.updateMany.mockResolvedValue({ count: 0 });
     prisma.session.findFirst.mockResolvedValue({ shop: "test.myshopify.com", accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: "test.myshopify.com", storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: "test.myshopify.com",
+      storeName: "Test",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      sampleContent: "",
+      autopilotEnabled: false,
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
 
@@ -270,12 +344,12 @@ describe("P1-1: job cancellation is honoured mid-run", () => {
     expect(generateProductContent).not.toHaveBeenCalled();
     // The cancelled status was never overwritten to "complete" via update()
     const completeOverwrite = prisma.generationJob.update.mock.calls.find(
-      ([args]) => args.data?.status === "complete"
+      ([args]) => args.data?.status === "complete",
     );
     expect(completeOverwrite).toBeUndefined();
     // And the guarded updateMany only targets still-processing rows
     const guardedCalls = prisma.generationJob.updateMany.mock.calls.filter(
-      ([args]) => args.data?.status === "complete"
+      ([args]) => args.data?.status === "complete",
     );
     for (const [args] of guardedCalls) {
       expect(args.where.status).toBe("processing");
@@ -295,14 +369,38 @@ describe("enhance mode (mode: 'enhance')", () => {
     prisma.generationJob.findUnique.mockResolvedValueOnce(job).mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: job.shop, accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: job.shop, storeName: "Test", brandTone: "professional", targetAudience: "", keyDifferentiators: "", avoidPhrases: "", additionalNotes: "", targetKeywords: "", sampleContent: "", autopilotEnabled: false });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: job.shop,
+      storeName: "Test",
+      brandTone: "professional",
+      targetAudience: "",
+      keyDifferentiators: "",
+      avoidPhrases: "",
+      additionalNotes: "",
+      targetKeywords: "",
+      sampleContent: "",
+      autopilotEnabled: false,
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
     prisma.generatedContent.upsert.mockResolvedValue({});
   }
 
   it("uses enhanceExistingContent (not generateProductContent) and saves drafts", async () => {
-    const productData = { id: "gid://shopify/Product/10", title: "Kettle", productType: "Kitchen", vendor: "Acme", description: "Old text", descriptionHtml: "<p>Old text</p>", seo: { title: "Old SEO", description: "Old meta" }, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    const productData = {
+      id: "gid://shopify/Product/10",
+      title: "Kettle",
+      productType: "Kitchen",
+      vendor: "Acme",
+      description: "Old text",
+      descriptionHtml: "<p>Old text</p>",
+      seo: { title: "Old SEO", description: "Old meta" },
+      featuredImage: null,
+      images: { edges: [] },
+      variants: { edges: [] },
+      tags: [],
+      collections: { edges: [] },
+    };
     mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
 
     const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
@@ -319,7 +417,11 @@ describe("enhance mode (mode: 'enhance')", () => {
       autoPublish: false,
       totalProducts: 1,
     });
-    enhanceExistingContent.mockResolvedValue({ description: "<p>Better text</p>", metaTitle: "Better", metaDescription: "Better meta" });
+    enhanceExistingContent.mockResolvedValue({
+      description: "<p>Better text</p>",
+      metaTitle: "Better",
+      metaDescription: "Better meta",
+    });
 
     const processPromise = processBulkJob("jobE1");
     await vi.runAllTimersAsync();
@@ -339,7 +441,20 @@ describe("enhance mode (mode: 'enhance')", () => {
   });
 
   it("skips a product with no existing description WITHOUT consuming a credit", async () => {
-    const productData = { id: "gid://shopify/Product/11", title: "Blank", productType: "", vendor: "", description: "", descriptionHtml: "", seo: {}, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    const productData = {
+      id: "gid://shopify/Product/11",
+      title: "Blank",
+      productType: "",
+      vendor: "",
+      description: "",
+      descriptionHtml: "",
+      seo: {},
+      featuredImage: null,
+      images: { edges: [] },
+      variants: { edges: [] },
+      tags: [],
+      collections: { edges: [] },
+    };
     mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
 
     const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
@@ -374,7 +489,20 @@ describe("enhance mode (mode: 'enhance')", () => {
   });
 
   it("still enhances meta when description is missing but meta types are selected", async () => {
-    const productData = { id: "gid://shopify/Product/12", title: "NoDesc", productType: "", vendor: "", description: "", descriptionHtml: "", seo: { title: "T", description: "D" }, featuredImage: null, images: { edges: [] }, variants: { edges: [] }, tags: [], collections: { edges: [] } };
+    const productData = {
+      id: "gid://shopify/Product/12",
+      title: "NoDesc",
+      productType: "",
+      vendor: "",
+      description: "",
+      descriptionHtml: "",
+      seo: { title: "T", description: "D" },
+      featuredImage: null,
+      images: { edges: [] },
+      variants: { edges: [] },
+      tags: [],
+      collections: { edges: [] },
+    };
     mockFetch.mockResolvedValue(makeJsonResponse({ data: { product: productData } }));
 
     const { processBulkJob } = await import("../../app/utils/bulkProcessor.server.js");
@@ -412,7 +540,11 @@ describe("item 4 — the model is never called without a credit to pay for it", 
       id: "jobQ",
       shop: "test.myshopify.com",
       status: "queued",
-      productIds: JSON.stringify(["gid://shopify/Product/1", "gid://shopify/Product/2", "gid://shopify/Product/3"]),
+      productIds: JSON.stringify([
+        "gid://shopify/Product/1",
+        "gid://shopify/Product/2",
+        "gid://shopify/Product/3",
+      ]),
       contentTypes: "description",
       mode: "generate",
       autoPublish: false,
@@ -424,7 +556,11 @@ describe("item 4 — the model is never called without a credit to pay for it", 
     prisma.generationJob.findUnique.mockResolvedValueOnce(job).mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
     prisma.session.findFirst.mockResolvedValue({ shop: job.shop, accessToken: "tok" });
-    prisma.brandVoice.findUnique.mockResolvedValue({ shop: job.shop, storeName: "Test", brandTone: "professional" });
+    prisma.brandVoice.findUnique.mockResolvedValue({
+      shop: job.shop,
+      storeName: "Test",
+      brandTone: "professional",
+    });
     prisma.generatedContent.findMany.mockResolvedValue([]);
     prisma.collectionVoice.findMany.mockResolvedValue([]);
     prisma.generatedContent.upsert.mockResolvedValue({});
@@ -470,9 +606,18 @@ describe("item 4 — the model is never called without a credit to pay for it", 
       makeJsonResponse({
         data: {
           product: {
-            id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
-            descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
-            variants: { edges: [] }, tags: [], collections: { edges: [] },
+            id: "gid://shopify/Product/1",
+            title: "T",
+            productType: "",
+            vendor: "",
+            description: "d",
+            descriptionHtml: "<p>d</p>",
+            seo: {},
+            featuredMedia: null,
+            media: { edges: [] },
+            variants: { edges: [] },
+            tags: [],
+            collections: { edges: [] },
           },
         },
       }),
@@ -508,9 +653,14 @@ describe("item 6 — an empty completion is not charged", () => {
 
     prisma.generationJob.findUnique
       .mockResolvedValueOnce({
-        id: "jobEmpty", shop: "test.myshopify.com", status: "queued",
+        id: "jobEmpty",
+        shop: "test.myshopify.com",
+        status: "queued",
         productIds: JSON.stringify(["gid://shopify/Product/1"]),
-        contentTypes: "description", mode: "generate", autoPublish: false, totalProducts: 1,
+        contentTypes: "description",
+        mode: "generate",
+        autoPublish: false,
+        totalProducts: 1,
       })
       .mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
@@ -523,9 +673,18 @@ describe("item 6 — an empty completion is not charged", () => {
       makeJsonResponse({
         data: {
           product: {
-            id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
-            descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
-            variants: { edges: [] }, tags: [], collections: { edges: [] },
+            id: "gid://shopify/Product/1",
+            title: "T",
+            productType: "",
+            vendor: "",
+            description: "d",
+            descriptionHtml: "<p>d</p>",
+            seo: {},
+            featuredMedia: null,
+            media: { edges: [] },
+            variants: { edges: [] },
+            tags: [],
+            collections: { edges: [] },
           },
         },
       }),
@@ -565,9 +724,14 @@ describe("item 9 — auto-publish claims published only when Shopify accepted", 
 
     prisma.generationJob.findUnique
       .mockResolvedValueOnce({
-        id: "jobPub", shop: "test.myshopify.com", status: "queued",
+        id: "jobPub",
+        shop: "test.myshopify.com",
+        status: "queued",
         productIds: JSON.stringify(["gid://shopify/Product/1"]),
-        contentTypes: "description", mode: "generate", autoPublish: true, totalProducts: 1,
+        contentTypes: "description",
+        mode: "generate",
+        autoPublish: true,
+        totalProducts: 1,
       })
       .mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
@@ -580,9 +744,18 @@ describe("item 9 — auto-publish claims published only when Shopify accepted", 
     generateProductContent.mockResolvedValue({ description: "<p>new</p>" });
 
     const product = {
-      id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
-      descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
-      variants: { edges: [] }, tags: [], collections: { edges: [] },
+      id: "gid://shopify/Product/1",
+      title: "T",
+      productType: "",
+      vendor: "",
+      description: "d",
+      descriptionHtml: "<p>d</p>",
+      seo: {},
+      featuredMedia: null,
+      media: { edges: [] },
+      variants: { edges: [] },
+      tags: [],
+      collections: { edges: [] },
     };
     let publishCall = 0;
     mockFetch.mockImplementation(async (_url, opts) => {
@@ -604,7 +777,14 @@ describe("item 9 — auto-publish claims published only when Shopify accepted", 
     // time in steps yields to the microtask queue between each step.
     const p = processBulkJob("jobPub");
     let settled = false;
-    p.then(() => { settled = true; }, () => { settled = true; });
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     for (let i = 0; i < 500 && !settled; i++) await vi.advanceTimersByTimeAsync(1000);
     await p;
     return prisma;
@@ -634,14 +814,63 @@ describe("item 9 — auto-publish claims published only when Shopify accepted", 
     expect(promotions).toHaveLength(0);
   }, 30000);
 
-  it("promotes the rows to published when Shopify accepts the update", async () => {
+  it("promotes the rows to published when Shopify accepts AND echoes the content back", async () => {
+    // Phase 4 item 4.2 — the mutation now returns the fields it wrote and the
+    // helper compares them. `generateProductContent` is mocked to "<p>new</p>",
+    // so an echo of the same value is a VERIFIED publish.
     const prisma = await runAutoPublish([
-      { data: { productUpdate: { product: { id: "gid://shopify/Product/1" }, userErrors: [] } } },
+      {
+        data: {
+          productUpdate: {
+            product: { id: "gid://shopify/Product/1", descriptionHtml: "<p>new</p>" },
+            userErrors: [],
+          },
+        },
+      },
     ]);
     const promotions = prisma.generatedContent.updateMany.mock.calls.filter(
       ([a]) => a?.data?.status === "published",
     );
     expect(promotions).toHaveLength(1);
+    expect(promotions[0][0].data.verifiedAt).toBeInstanceOf(Date);
+    expect(promotions[0][0].data.verifyNote).toBeNull();
+  }, 30000);
+
+  it("marks the rows published_unverified when Shopify stores something different", async () => {
+    // Live, but not the content the merchant approved. The row must NOT read
+    // as a clean publish, and it must NOT go back to draft either — going back
+    // to draft would have the merchant republish content already on their
+    // storefront.
+    const prisma = await runAutoPublish([
+      {
+        data: {
+          productUpdate: {
+            product: { id: "gid://shopify/Product/1", descriptionHtml: "<p>something else entirely</p>" },
+            userErrors: [],
+          },
+        },
+      },
+    ]);
+    const clean = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published",
+    );
+    const unverified = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published_unverified",
+    );
+    expect(clean).toHaveLength(0);
+    expect(unverified).toHaveLength(1);
+    expect(unverified[0][0].data.verifyNote).toBeTruthy();
+    expect(unverified[0][0].data.verifiedAt).toBeNull();
+  }, 30000);
+
+  it("marks them unverified when Shopify echoes back nothing to compare", async () => {
+    const prisma = await runAutoPublish([
+      { data: { productUpdate: { product: { id: "gid://shopify/Product/1" }, userErrors: [] } } },
+    ]);
+    const unverified = prisma.generatedContent.updateMany.mock.calls.filter(
+      ([a]) => a?.data?.status === "published_unverified",
+    );
+    expect(unverified).toHaveLength(1);
   }, 30000);
 });
 
@@ -655,10 +884,16 @@ describe("item 12 — a killed job resumes without redoing paid work", () => {
   function primeInterrupted(prisma, { status, alreadyWritten }) {
     prisma.generationJob.findUnique
       .mockResolvedValueOnce({
-        id: "jobR", shop: "test.myshopify.com", status,
+        id: "jobR",
+        shop: "test.myshopify.com",
+        status,
         productIds: JSON.stringify(IDS),
-        contentTypes: "description", mode: "generate", autoPublish: false,
-        totalProducts: 3, startedAt: STARTED, createdAt: STARTED,
+        contentTypes: "description",
+        mode: "generate",
+        autoPublish: false,
+        totalProducts: 3,
+        startedAt: STARTED,
+        createdAt: STARTED,
       })
       .mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
@@ -680,9 +915,18 @@ describe("item 12 — a killed job resumes without redoing paid work", () => {
       makeJsonResponse({
         data: {
           product: {
-            id: "gid://shopify/Product/1", title: "T", productType: "", vendor: "", description: "d",
-            descriptionHtml: "<p>d</p>", seo: {}, featuredMedia: null, media: { edges: [] },
-            variants: { edges: [] }, tags: [], collections: { edges: [] },
+            id: "gid://shopify/Product/1",
+            title: "T",
+            productType: "",
+            vendor: "",
+            description: "d",
+            descriptionHtml: "<p>d</p>",
+            seo: {},
+            featuredMedia: null,
+            media: { edges: [] },
+            variants: { edges: [] },
+            tags: [],
+            collections: { edges: [] },
           },
         },
       }),
@@ -699,7 +943,14 @@ describe("item 12 — a killed job resumes without redoing paid work", () => {
 
     const p = processBulkJob("jobR", { attemptsMade: 1, extendLock: vi.fn() }, "token");
     let settled = false;
-    p.then(() => { settled = true; }, () => { settled = true; });
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     for (let i = 0; i < 200 && !settled; i++) await vi.advanceTimersByTimeAsync(1000);
     await p;
 
@@ -733,7 +984,14 @@ describe("item 12 — a killed job resumes without redoing paid work", () => {
 
     const p = processBulkJob("jobR");
     let settled = false;
-    p.then(() => { settled = true; }, () => { settled = true; });
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     for (let i = 0; i < 200 && !settled; i++) await vi.advanceTimersByTimeAsync(1000);
     await p;
 
@@ -755,9 +1013,18 @@ describe("item 14 — a run whose shop is gone stops instead of grinding through
 
     prisma.generationJob.findUnique
       .mockResolvedValueOnce({
-        id: "jobGone", shop: "test.myshopify.com", status: "queued",
-        productIds: JSON.stringify(["gid://shopify/Product/1", "gid://shopify/Product/2", "gid://shopify/Product/3"]),
-        contentTypes: "description", mode: "generate", autoPublish: false, totalProducts: 3,
+        id: "jobGone",
+        shop: "test.myshopify.com",
+        status: "queued",
+        productIds: JSON.stringify([
+          "gid://shopify/Product/1",
+          "gid://shopify/Product/2",
+          "gid://shopify/Product/3",
+        ]),
+        contentTypes: "description",
+        mode: "generate",
+        autoPublish: false,
+        totalProducts: 3,
       })
       .mockResolvedValue({ status: "processing" });
     prisma.generationJob.update.mockResolvedValue({});
@@ -768,12 +1035,24 @@ describe("item 14 — a run whose shop is gone stops instead of grinding through
     prisma.collectionVoice.findMany.mockResolvedValue([]);
 
     // Shopify rejects the token and the refresh cannot recover it — the app is gone.
-    mockFetch.mockResolvedValue({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({}) });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({}),
+    });
     refreshOfflineToken.mockResolvedValue(null);
 
     const p = processBulkJob("jobGone");
     let settled = false;
-    p.then(() => { settled = true; }, () => { settled = true; });
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     for (let i = 0; i < 200 && !settled; i++) await vi.advanceTimersByTimeAsync(1000);
     await p;
 

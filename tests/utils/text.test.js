@@ -16,7 +16,9 @@ describe("P1-10: decodeHtmlEntities", () => {
   });
 
   it("decodes named, numeric, and hex entities", () => {
-    expect(decodeHtmlEntities("A &lt;tag&gt; &quot;quoted&quot; &apos;text&apos;&nbsp;end")).toBe("A <tag> \"quoted\" 'text' end");
+    expect(decodeHtmlEntities("A &lt;tag&gt; &quot;quoted&quot; &apos;text&apos;&nbsp;end")).toBe(
+      "A <tag> \"quoted\" 'text' end",
+    );
     expect(decodeHtmlEntities("&#65;&#x42;")).toBe("AB");
   });
 

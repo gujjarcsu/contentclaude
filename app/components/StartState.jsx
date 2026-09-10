@@ -29,6 +29,7 @@
  */
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { Await, useFetcher } from "react-router";
+import { scoreTone } from "../utils/scoreBands.js";
 import {
   Page,
   Card,
@@ -49,11 +50,6 @@ import {
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
-
-/** >=70 green, 40-69 amber, <40 red. The same rule the rest of the app uses. */
-function scoreTone(v) {
-  return v >= 70 ? "success" : v >= 40 ? "caution" : "critical";
-}
 
 function ScanSkeleton() {
   return (

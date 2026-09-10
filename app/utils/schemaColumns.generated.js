@@ -79,6 +79,8 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "GeneratedContent.shop",
   "GeneratedContent.status",
   "GeneratedContent.updatedAt",
+  "GeneratedContent.verifiedAt",
+  "GeneratedContent.verifyNote",
   "GeneratedContent.version",
   "GenerationJob.autoPublish",
   "GenerationJob.completedAt",

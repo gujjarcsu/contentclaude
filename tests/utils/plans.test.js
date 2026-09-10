@@ -34,8 +34,8 @@ vi.mock("../../app/db.server.js", () => ({
 vi.mock("../../app/utils/billing-plans.js", () => ({
   BILLING_PLANS: {
     starter: { key: "Starter Plan", planName: "starter", amount: 9.99, monthlyLimit: 50 },
-    growth:  { key: "Growth Plan",  planName: "growth",  amount: 29.99, monthlyLimit: 200 },
-    pro:     { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000 },
+    growth: { key: "Growth Plan", planName: "growth", amount: 29.99, monthlyLimit: 200 },
+    pro: { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000 },
   },
   FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 25 },
 }));
@@ -53,9 +53,8 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
 const prisma = (await import("../../app/db.server.js")).default;
-const { canGenerate, tryConsumeGeneration, getPlanByKey, FREE_PLAN } = await import(
-  "../../app/utils/plans.server.js"
-);
+const { canGenerate, tryConsumeGeneration, getPlanByKey, FREE_PLAN } =
+  await import("../../app/utils/plans.server.js");
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -137,10 +136,14 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           count: vi.fn().mockResolvedValue(10),
           create: vi.fn().mockResolvedValue({}),
         },
-      })
+      }),
     );
 
-    const result = await tryConsumeGeneration("shop.myshopify.com", "description", "gid://shopify/Product/123");
+    const result = await tryConsumeGeneration(
+      "shop.myshopify.com",
+      "description",
+      "gid://shopify/Product/123",
+    );
 
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(39);
@@ -160,7 +163,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           count: vi.fn().mockResolvedValue(10),
           create: vi.fn(),
         },
-      })
+      }),
     );
 
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -174,7 +177,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
       fn({
         plan: { findUnique: vi.fn().mockResolvedValue(null) },
         usageRecord: { count: vi.fn(), create: vi.fn() },
-      })
+      }),
     );
 
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -208,13 +211,13 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           count: vi.fn().mockResolvedValue(5),
           create: vi.fn().mockResolvedValue({}),
         },
-      })
+      }),
     );
 
     const result = await tryConsumeGeneration(
       "shop.myshopify.com",
       "description",
-      "gid://shopify/Product/999"
+      "gid://shopify/Product/999",
     );
 
     // Every call now goes through the transaction — no free bypass
@@ -238,13 +241,13 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           count: vi.fn().mockResolvedValue(10),
           create: vi.fn().mockResolvedValue({}),
         },
-      })
+      }),
     );
 
     const result = await tryConsumeGeneration(
       "shop.myshopify.com",
       "description",
-      "gid://shopify/Product/123"
+      "gid://shopify/Product/123",
     );
 
     expect(result.allowed).toBe(true);

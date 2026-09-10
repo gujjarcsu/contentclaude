@@ -16,7 +16,8 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 }));
 
 const { safeTarget, jsonForScript, renderReembedPage } = await import("../../app/utils/embedded.server.js");
-const { signShopCallback, verifyShopCallback, SIGNED_URL_TTL_MS } = await import("../../app/utils/signedUrl.server.js");
+const { signShopCallback, verifyShopCallback, SIGNED_URL_TTL_MS } =
+  await import("../../app/utils/signedUrl.server.js");
 const { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } = await import("../../app/utils/text.js");
 const { faqToJsonLd } = await import("../../app/utils/seo.server.js");
 
@@ -51,7 +52,10 @@ describe("item 17 — reflected XSS in /reembed?target=", () => {
 
   it("the rendered page contains no attacker markup and carries a script-src", async () => {
     const req = new Request(
-      "https://app.navaal.ai/reembed?shop=" + SHOP + "&target=" + encodeURIComponent("</script><script>alert(1)</script>"),
+      "https://app.navaal.ai/reembed?shop=" +
+        SHOP +
+        "&target=" +
+        encodeURIComponent("</script><script>alert(1)</script>"),
     );
     const res = renderReembedPage(req);
     const html = await res.text();
@@ -98,7 +102,7 @@ describe("item 18 — stored XSS on the merchant storefront via AI output", () =
   });
 
   it("the FAQ JSON-LD written to the storefront metafield cannot close its script block", () => {
-    const jsonLd = faqToJsonLd('Q: What </script><script>alert(1)</script>?\nA: An <b>answer</b> </script>.');
+    const jsonLd = faqToJsonLd("Q: What </script><script>alert(1)</script>?\nA: An <b>answer</b> </script>.");
     const serialised = JSON.stringify(jsonLd);
     expect(serialised).not.toMatch(/<\/script/i);
     expect(serialised).not.toMatch(/[<>]/);
@@ -106,7 +110,7 @@ describe("item 18 — stored XSS on the merchant storefront via AI output", () =
 
   it("the theme block escapes every interpolation (Liquid does not auto-escape)", () => {
     const liquid = readFileSync("extensions/geo-schema/blocks/faq_visible.liquid", "utf8");
-    const body = liquid.slice(liquid.indexOf("<div class=\"navaal-faq\""), liquid.indexOf("<style>"));
+    const body = liquid.slice(liquid.indexOf('<div class="navaal-faq"'), liquid.indexOf("<style>"));
     const interpolations = body.match(/\{\{[^}]*\}\}/g) ?? [];
     expect(interpolations.length).toBeGreaterThan(0);
     for (const i of interpolations) {
@@ -151,7 +155,9 @@ describe("item 20 — the billing callback is no longer an open oracle", () => {
     expect(verifyShopCallback("other.myshopify.com", sig).ok).toBe(false);
     // …not with a tampered signature or expiry…
     expect(verifyShopCallback(SHOP, { sig: "nope", exp: sig.exp }).reason).toBe("bad_signature");
-    expect(verifyShopCallback(SHOP, { sig: sig.sig, exp: String(Number(sig.exp) + 1000) }).reason).toBe("bad_signature");
+    expect(verifyShopCallback(SHOP, { sig: sig.sig, exp: String(Number(sig.exp) + 1000) }).reason).toBe(
+      "bad_signature",
+    );
     // …and not at all when it is absent.
     expect(verifyShopCallback(SHOP, {}).reason).toBe("missing");
   });
