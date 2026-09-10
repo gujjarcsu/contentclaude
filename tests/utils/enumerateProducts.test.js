@@ -189,6 +189,46 @@ describe("THROTTLED mid-run", () => {
   });
 });
 
+describe("the wall-clock budget (A2.5)", () => {
+  it("stops when reading is taking too long, and says so", async () => {
+    // 80 requests cost 6 ms of our loop and an unmeasured amount of network. A
+    // page cap does not bound wall clock, and there is no request timeout
+    // configured anywhere to stop a slow walk.
+    const { graphql } = fakeShopify(500_000);
+    let t = 0;
+    const r = await enumerateProductIds(graphql, {
+      shop: "s",
+      // Injected clock: 3 s per page, so the 20 s budget is spent on page 8.
+      now: () => (t += 3000),
+      budgetMs: 20_000,
+    });
+
+    expect(r.stop).toBe(ENUM_STOP.TIME_BUDGET);
+    expect(r.truncated).toBe(true);
+    expect(r.pages).toBeLessThan(ENUM_MAX_PAGES);
+    expect(r.message).toMatch(/taking a while/i);
+    expect(r.message).toMatch(/run it again/i);
+  });
+
+  it("a fast walk is never cut short by the budget", async () => {
+    // The budget must be invisible on a healthy store, or it becomes a cap
+    // nobody expected.
+    const { graphql } = fakeShopify(3000);
+    const r = await enumerateProductIds(graphql, { shop: "s" });
+    expect(r.stop).toBe(ENUM_STOP.COMPLETE);
+    expect(r.ids).toHaveLength(3000);
+  });
+
+  it("the budget is checked BEFORE a request, not after", async () => {
+    // Stopping after the request that blew the budget would still have paid
+    // for it. With 1 ms allowed, exactly one page is fetched.
+    const { graphql, state } = fakeShopify(500_000);
+    let t = 0;
+    await enumerateProductIds(graphql, { shop: "s", now: () => (t += 10_000), budgetMs: 1 });
+    expect(state.calls).toBe(1);
+  });
+});
+
 describe("memory", () => {
   it("holds ids, not product bodies, so 20,000 products is bounded", async () => {
     // The worker OOM risk is accumulating whole nodes across 80 pages. Measured

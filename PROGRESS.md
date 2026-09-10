@@ -3878,3 +3878,25 @@ went wrong" tells a merchant nothing about whether to retry.
 
 Those tests also began timing out at 5,007 ms, because the route now does real backoff. Fixed with the
 documented pattern: the real `shopifyQuery` with `maxRetries: 0`, not a fake module.
+
+### A2.5 — a page cap is not a wall-clock bound
+
+80 sequential requests cost 6 ms of our own loop and an unmeasured amount of network. At a realistic
+100–300 ms per Shopify round trip that is **8–24 seconds inside a form action**, and `fly.toml`
+configures no request timeout to stop it — only `kill_timeout = 60s`, which is a shutdown grace, not
+a request budget.
+
+Bounded by TIME as well as pages: `ENUM_BUDGET_MS = 20_000`, the pattern `catalogGaps.server.js`
+already used (`budgetMs = 4000`). Hitting the budget is reported exactly like hitting the page cap —
+same promise broken, different cause. The check runs BEFORE each request, not after: stopping after
+the request that blew the budget would still have paid for it, and a test pins that by asserting
+exactly one call when the budget is 1 ms.
+
+**Chosen over moving the walk into the worker.** That was the other option written into A2.5, and it
+changes the job lifecycle and the timing of the quota slice on the path that spends a merchant's
+money. That is not a change to make as a side effect of a scale report.
+
+**Still not measured against real Shopify.** No large dev store exists. The clock is injected in
+tests, so this proves the budget is enforced, not that 80 real requests take 8–24 s.
+
+Guard broken: disabling the budget check fails **2 tests**.

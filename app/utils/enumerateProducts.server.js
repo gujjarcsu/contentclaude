@@ -34,9 +34,28 @@ export const ENUM_PAGE_SIZE = 250;
  */
 export const ENUM_MAX_PAGES = 80;
 
+/**
+ * A2.5 — the wall-clock bound, because the page cap is not one.
+ *
+ * 80 sequential requests cost 6 ms of OUR loop and an unmeasured amount of
+ * network. At a realistic 100-300 ms per Shopify round trip that is 8-24
+ * seconds inside a form action, with the merchant watching a spinner and no
+ * request timeout configured anywhere to stop it.
+ *
+ * So the walk is bounded by TIME as well as pages, which is the pattern
+ * `catalogGaps.server.js` already uses (`budgetMs = 4000`). Hitting the budget
+ * is reported exactly like hitting the page cap — it is the same promise
+ * (we did not cover everything) with a different cause.
+ *
+ * 20 s: comfortably more than a healthy 80-page walk needs, and short enough
+ * that a slow day ends in a message rather than an abandoned tab.
+ */
+export const ENUM_BUDGET_MS = 20_000;
+
 export const ENUM_STOP = Object.freeze({
   COMPLETE: "complete",
   PAGE_CAP: "page_cap",
+  TIME_BUDGET: "time_budget",
   THROTTLED: "throttled",
   ERROR: "error",
 });
@@ -51,8 +70,17 @@ export const ENUM_STOP = Object.freeze({
  */
 export async function enumerateProductIds(
   graphql,
-  { shop, query = null, maxPages = ENUM_MAX_PAGES, select = null, label = "enumerate products" } = {},
+  {
+    shop,
+    query = null,
+    maxPages = ENUM_MAX_PAGES,
+    budgetMs = ENUM_BUDGET_MS,
+    select = null,
+    label = "enumerate products",
+    now = () => Date.now(),
+  } = {},
 ) {
+  const startedAt = now();
   const ids = [];
   const nodes = [];
   let cursor = null;
@@ -76,6 +104,12 @@ export async function enumerateProductIds(
   while (hasNextPage) {
     if (pages >= maxPages) {
       stop = ENUM_STOP.PAGE_CAP;
+      break;
+    }
+    // Checked BEFORE the request, not after: stopping after the request that
+    // blew the budget would still have paid for it.
+    if (pages > 0 && now() - startedAt >= budgetMs) {
+      stop = ENUM_STOP.TIME_BUDGET;
       break;
     }
     pages += 1;
@@ -120,6 +154,9 @@ export function describeStop(stop, count) {
   if (stop === ENUM_STOP.COMPLETE) return null;
   if (stop === ENUM_STOP.PAGE_CAP) {
     return `This run covers the ${count} most recently updated products. Your catalog is larger than one run can cover, so run it again afterwards to reach the rest.`;
+  }
+  if (stop === ENUM_STOP.TIME_BUDGET) {
+    return `Reading your catalog was taking a while, so this run covers the ${count} most recently updated products. Run it again to reach the rest.`;
   }
   if (stop === ENUM_STOP.THROTTLED) {
     return `Shopify started rate-limiting your store part-way through, so this run covers ${count} products rather than your whole catalog. Run it again in a few minutes to reach the rest.`;
