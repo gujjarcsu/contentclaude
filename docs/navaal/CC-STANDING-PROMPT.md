@@ -41,14 +41,20 @@ If `shortSha` from build-info is not the tip of `origin/main`, or `main` is ahea
 2026-09-10 that was true of ten commits — the entire Phase A defect fix. Say so at the top of
 your report, in that case, before anything else.
 
-Shipping is two separate actions and one does not imply the other:
-1. `git push origin main` — this runs CI (`.github/workflows/ci.yml`). CI is a gate, not a deploy.
-2. Run the **Manual Deploy to Fly.io** workflow — `.github/workflows/deploy.yml` is
-   `workflow_dispatch` only. `gh workflow run "Manual Deploy to Fly.io"` if `gh` is authenticated.
+**CORRECTED 2026-09-10 — this section previously said CI was "a gate, not a deploy". It is not.**
+Verified in `.github/workflows/ci.yml`: the `deploy` job runs
+`if: github.ref == 'refs/heads/main' && github.event_name == 'push'` (line 140) and calls
+`flyctl deploy` (line 148). **A push to `main` IS a deploy.**
 
-Do step 1 yourself if CI is green and the tree is clean. If you cannot do step 2 (no `gh` auth, no
-`FLY_API_TOKEN` locally), append it to the human queue INBOX with the exact command — do not
-declare Phase A closed and do not silently leave it.
+So shipping is ONE action, and there are TWO paths that both do it:
+1. `git push origin main` — runs CI **and deploys** if CI passes, then runs the post-deploy smoke job.
+2. The **Manual Deploy to Fly.io** workflow (`deploy.yml`, `workflow_dispatch`) — deploys the same
+   thing again. Doing BOTH is the INFRA1 double-deploy that shipped one commit as v176 and v177,
+   79 seconds apart, each opening its own outage window.
+
+**Push, then stop and verify.** Do not also dispatch the manual workflow unless the push-triggered
+deploy failed. Because a push deploys, **do not push mid-phase** — L11 says deploy at phase
+boundaries, and a push is a deploy.
 
 **Deploy is verified only by:** `/api/build-info` returning the new `shortSha`, and
 `/api/health?deep=1` returning `status: ok` with `schema.ok: true` and the column count
