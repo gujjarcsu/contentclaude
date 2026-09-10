@@ -11,9 +11,11 @@ and restarts both machines onto it.
 
 ## Open
 
-Six items, all with the owner. Every one needs an account or a console the
-agent cannot reach. The code for each is shipped and degrades honestly without
-it.
+Nine items, all with the owner. Every one needs an account, a console or a
+browser session the agent cannot reach — no agent types credentials here. The
+code for each is shipped and degrades honestly without it, and items 8, 9 and 10
+are measurements rather than fixes: the mechanism is tested and deployed, and
+what is missing is a real merchant session to record it against.
 
 ### 2. Uptime monitor from two regions (Phase 1 item 5)
 - **Why:** this is the gap the 2026-09-09 incident exposed. A five-minute in-app check now exists and
@@ -106,6 +108,64 @@ it.
 - **Confirm it is gone:** `fly secrets list -a contentclaude | grep FEATURE_MAGIC_MOMENT` → no output.
 - **Safe to leave for now.** Nothing reads it, and a test asserts no source file does
   (`tests/utils/featureFlags.test.js`). This is tidiness, not a fix.
+
+### 8. Re-read the webhook failure rate on the Dev Dashboard (Phase 3, pre-phase item 1)
+- **Why:** the fix is deployed and proven with signed probe deliveries — the 25 h and 47 h cases that
+  returned 401 now return 200, and `shop/redact` is accepted at 10 days old. But the dashboard figure is
+  a **7-day trailing rate**, so it cannot move immediately and nothing I can run will make it move.
+  The probe proves the mechanism; the dashboard is what proves the outcome.
+- **Where:** dev.shopify.com → the app → Monitoring → Webhooks.
+- **When:** **2026-09-11** (first look — the rate should already be falling) and **2026-09-17** (a full
+  7 days of post-fix deliveries).
+- **What to expect:** overall was **88.5%**, `app/uninstalled` 82.353% of 17, `shop/redact` 100.0% of 9.
+  Response times were 1,039 ms and 816 ms; both handlers now answer in tens of milliseconds regardless of
+  how much data the shop has.
+- **If it has NOT fallen:** run the probe again (`docs/RUNBOOK.md` → "Shopify's Dev Dashboard says
+  webhooks are failing") and check `fly logs -a contentclaude | grep -E "deferred|webhook_sweep"`. A
+  `redaction_unfinished` or `uninstall_cleanup_unfinished` line repeating for the same shop is a real
+  problem; one after a deploy is the sweep doing its job.
+
+### 9. Five fresh dev-store installs, to produce the TTFV number (Phase 3 item 3.2)
+- **Why:** the brief asks for **time-to-first-value p50/p90 over ≥ 5 fresh installs**. The
+  instrumentation is live and `scripts/ttv-report.mjs` works, but the cohort is **empty** — it excludes
+  `pre_tracking` shops and every shop in the database is one. Verified against production:
+  `cohortSize: 0`, `measuredInstallsTotal: 0`. An install is a human action: it needs the Partner
+  console and a browser somebody logs into, and no agent types credentials here.
+- **Steps:**
+  1. Partner console → create 5 development stores. Each needs **≥ 10 products** (Shopify's sample data
+     is fine) or the run measures the empty-store path instead.
+  2. Install the app on each from the App Store listing, and let the Start state run. Do not click
+     through to anything else first — the measurement is install → first draft on screen.
+  3. For **one** of them, screen-record from the install grant screen with the **URL bar visible**
+     through to the first proposal. That is the 120 s acceptance recording the brief asks for.
+  4. Then:
+     ```
+     fly ssh console -a contentclaude -C "node /app/scripts/ttv-report.mjs"
+     ```
+- **What to expect:** `draft.medianSeconds` and `draft.p90Seconds` populated, `under120s` counting how
+  many made the bar, and `bySource` showing `quick_start`. `smallSample: true` stays until the cohort is
+  larger — five is enough to report and not enough to be confident, and the report says so itself.
+- **Read `zeroProducts` before anything else.** An install with no products cannot reach a draft, and it
+  is counted separately rather than dragged into the median as a failure.
+
+### 10. The two Phase 3.4 acceptance recordings (Phase 3 item 3.4)
+- **Why:** both need a browser session and real Shopify billing approval.
+- **(a) Drive a dev store 0 → 20 → 25 generations with the URL bar visible.** Expect: nothing at all
+  below 20; **one** banner on Home and on Products from 20; at 25 the generate and optimise actions
+  **replaced** by a card, while the audit, and reviewing and publishing existing drafts, all still work.
+  Dismiss the banner and confirm it stays gone on a reload and on another device.
+  - The seeder exists if you would rather not spend 25 real generations:
+    ```
+    fly ssh console -a contentclaude -C "SEED_ACTION=seed node /app/scripts/test-seed-usage--writes-test-store-only.mjs"
+    ```
+    It refuses any shop it does not recognise as a test store. `SEED_ACTION=restore` removes the rows.
+- **(b) Upgrade from the 100% card → Approve → land back in-admin.** Expect the plan active, and:
+  ```
+  fly ssh console -a contentclaude -C "node /app/scripts/diag-shop.cjs <shop>"
+  ```
+  showing `upgradePromptSource: "quota100"` on the `Shop` row. If it is `null`, the plan still activated
+  correctly — attribution is deliberately non-fatal — but the chain did not join, and the place to look
+  is whether `?prompt=` survived the round trip to Shopify's approval screen.
 
 ## Done
 
