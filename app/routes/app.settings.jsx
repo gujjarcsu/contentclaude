@@ -52,6 +52,7 @@ export const loader = async ({ request }) => {
       autopilotEnabled: false,
       autopilotAutoPublish: false,
       publishWithoutReview: false,
+      includeDraftProducts: false,
       autopilotContentTypes: "description,metaTitle,metaDescription",
     },
     templates,
@@ -159,6 +160,8 @@ export const action = async ({ request }) => {
     autopilotAutoPublish: autopilotEnabled && formData.get("autopilotAutoPublish") === "true",
     // Phase 2 item 2.6 - the ONE place auto-publish is decided.
     publishWithoutReview: formData.get("publishWithoutReview") === "true",
+    // A1.2 — which products every count and every action may touch.
+    includeDraftProducts: formData.get("includeDraftProducts") === "true",
     autopilotContentTypes,
   };
 
@@ -229,6 +232,7 @@ export default function SettingsPage() {
 
   const [autopilotEnabled, setAutopilotEnabled] = useState(brandVoice.autopilotEnabled || false);
   const [publishWithoutReview, setPublishWithoutReview] = useState(brandVoice.publishWithoutReview || false);
+  const [includeDraftProducts, setIncludeDraftProducts] = useState(brandVoice.includeDraftProducts || false);
   const [confirmPublishWithoutReview, setConfirmPublishWithoutReview] = useState(false);
   const [autopilotAutoPublish, setAutopilotAutoPublish] = useState(brandVoice.autopilotAutoPublish || false);
   const apTypes = (brandVoice.autopilotContentTypes || "description,metaTitle,metaDescription").split(",");
@@ -282,6 +286,7 @@ export default function SettingsPage() {
           <input type="hidden" name="actionType" value="saveBrandVoice" />
           <input type="hidden" name="autopilotEnabled" value={autopilotEnabled.toString()} />
           <input type="hidden" name="publishWithoutReview" value={publishWithoutReview.toString()} />
+          <input type="hidden" name="includeDraftProducts" value={includeDraftProducts.toString()} />
           <input type="hidden" name="autopilotAutoPublish" value={autopilotAutoPublish.toString()} />
           <input type="hidden" name="ap_description" value={apDesc.toString()} />
           {/* The checkbox says "Meta Title & Description" — it must submit BOTH
@@ -495,6 +500,25 @@ export default function SettingsPage() {
                         if (value) setConfirmPublishWithoutReview(true);
                         else setPublishWithoutReview(false);
                       }}
+                    />
+
+                    {/* A1.2 — the drafts opt-in.
+                        The column and the read path shipped in 2d9c37d; this is
+                        the half a merchant can reach. Without it the default was
+                        not a default, it was a law: no shop could ever include
+                        its drafts, however it merchandises.
+                        Off by default because a draft has no public page, so
+                        writing SEO copy for one spends a generation on a page
+                        nobody can reach. On for the merchants who draft in bulk
+                        and publish in batches — which is a real and ordinary way
+                        to run a store, not an edge case.
+                        Archived is deliberately NOT offered: an archived product
+                        is not for sale and has no storefront page at all. */}
+                    <Checkbox
+                      label="Include draft products"
+                      checked={includeDraftProducts}
+                      helpText="Counts and optimizes products that are still drafts. Off by default, because a draft has no public page yet. Archived products are never included."
+                      onChange={setIncludeDraftProducts}
                     />
                   </BlockStack>
                 </Card>

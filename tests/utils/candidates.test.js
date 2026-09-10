@@ -105,6 +105,18 @@ describe("store shapes: which products may an action touch", () => {
     expect(countOf(ALL_DRAFT, { includeDrafts: true, requireOnlineStore: false })).toBe(ALL_DRAFT.length);
   });
 
+  it("opting into DRAFTS never opts into archived", () => {
+    // A1.2 — the over-correction case. A merchant who drafts in bulk wants
+    // their drafts counted; nobody wants an archived product optimized, and
+    // widening one axis must not quietly widen the other.
+    const archived = { status: "ARCHIVED", publishedOnOnlineStore: true };
+    expect(isCandidate(archived, { includeDrafts: true })).toBe(false);
+    expect(scopeQueryFor({ includeDrafts: true })).not.toMatch(/archived/);
+    // And the drafts it DOES admit still need a public page.
+    expect(isCandidate({ status: "DRAFT", publishedOnOnlineStore: false }, { includeDrafts: true })).toBe(false);
+    expect(isCandidate({ status: "DRAFT", publishedOnOnlineStore: true }, { includeDrafts: true })).toBe(true);
+  });
+
   it("majority-archived: only the active, published slice counts", () => {
     // The real proportions that produced the defect. 32 products, 14 candidates.
     expect(MAJORITY_ARCHIVED.length).toBe(32);

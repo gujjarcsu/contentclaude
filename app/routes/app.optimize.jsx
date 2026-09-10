@@ -240,6 +240,7 @@ export default function OptimizePage() {
     publishedCount,
     draftCount,
     needsContent,
+    candidateLabel,
     remaining,
     canOptimize,
     planName,
@@ -379,13 +380,13 @@ export default function OptimizePage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Needs Content
+                  Not yet optimized
                 </Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold" tone="critical">
+                <Text as="p" variant="heading2xl" fontWeight="bold">
                   {needsContent}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Products with no AI description
+                  {candidateLabel ? `Of your ${candidateLabel}` : "Products we have not written for yet"}
                 </Text>
               </BlockStack>
             </Card>
