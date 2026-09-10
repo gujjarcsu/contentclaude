@@ -168,6 +168,26 @@ describe("the score is computed from the merchant's own catalogue", () => {
     expect(START_SCAN_QUERY).toMatch(/edges \{ node \{ title description \} \}/);
   });
 
+  it("asks for page copy on the SAME request too (A4.8)", () => {
+    // A4.8 was WRITTEN assuming pages would cost an extra request. They do not:
+    // `pages` is a root connection, so it rides the same scan. Checking the
+    // schema disproved the premise the item was created on.
+    //
+    // `PageSortKeys` includes UPDATED_AT and `Page` has `body` and
+    // `isPublished` — verified against the live Admin schema, because every
+    // test here mocks the transport and a wrong field name would pass all of
+    // them and break every scan in production.
+    expect(START_SCAN_QUERY).toMatch(/pages\(first: 5, sortKey: UPDATED_AT, reverse: true\)/);
+    expect(START_SCAN_QUERY).toMatch(/title body isPublished/);
+  });
+
+  it("does NOT ask for blog articles", () => {
+    // Deliberate. Blog posts are long-form and their cadence is not product
+    // cadence; learning from them teaches the model to write blog paragraphs
+    // into product descriptions.
+    expect(START_SCAN_QUERY).not.toMatch(/articles\(/);
+  });
+
   it("asks for the store's own name, for the inferred brand voice", async () => {
     const r = await scanStoreForStart(adminReturning([node(1)], "Alpine Supply"), SHOP);
     expect(r.shopName).toBe("Alpine Supply");

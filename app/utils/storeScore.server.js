@@ -78,8 +78,9 @@ export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
     void ensureInferredBrandVoice(shop, {
       scored: scan.scored ?? [],
       shopName: scan.shopName,
-      // A4.6 — where the merchant's differentiators actually live.
+      // A4.6 / A4.8 — where the merchant's differentiators actually live.
       collectionCopy: scan.collectionCopy ?? [],
+      pageCopy: scan.pageCopy ?? [],
     });
 
     const atInstall = row?.storeScoreAtInstall;

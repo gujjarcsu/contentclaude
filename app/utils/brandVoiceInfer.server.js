@@ -47,6 +47,12 @@ export const MAX_SAMPLE_CHARS = 1500;
  */
 export const COLLECTION_SAMPLE_SCORE = 55;
 
+/**
+ * Where a page ranks. Below a collection: a policy page states the shop's terms
+ * in the shop's voice, which is useful, but it is not selling copy.
+ */
+export const PAGE_SAMPLE_SCORE = 40;
+
 /** At most this many inferred differentiators; the rest is noise in a prompt. */
 export const MAX_DIFFERENTIATORS = 5;
 
@@ -79,7 +85,7 @@ export function inferDifferentiators(texts) {
  *
  * @param {Array<{title?: string, description?: string, scores?: {combined?: number}}>} scored
  */
-export function pickVoiceSamples(scored, { count = SAMPLE_COUNT, collectionCopy = [] } = {}) {
+export function pickVoiceSamples(scored, { count = SAMPLE_COUNT, collectionCopy = [], pageCopy = [] } = {}) {
   const products = Array.isArray(scored)
     ? scored.map((p) => ({
         title: p?.title ?? "",
@@ -106,7 +112,16 @@ export function pickVoiceSamples(scored, { count = SAMPLE_COUNT, collectionCopy 
     score: COLLECTION_SAMPLE_SCORE,
   }));
 
-  return [...products, ...collections]
+  // A4.8 — About / Shipping / Returns. Scored BELOW collections: a policy page
+  // states the shop's terms in the shop's voice, which is useful, but it is not
+  // selling copy and should never outrank a description.
+  const pages = (Array.isArray(pageCopy) ? pageCopy : []).map((p) => ({
+    title: p?.title ?? "",
+    text: plainText(p?.text ?? p?.body),
+    score: PAGE_SAMPLE_SCORE,
+  }));
+
+  return [...products, ...collections, ...pages]
     .filter((p) => p.text.length >= MIN_SAMPLE_CHARS)
     .sort((a, b) => b.score - a.score || b.text.length - a.text.length)
     .slice(0, count);
@@ -140,7 +155,7 @@ export function buildSampleContent(samples) {
  */
 export async function ensureInferredBrandVoice(
   shop,
-  { scored = [], shopName = null, collectionCopy = [] } = {},
+  { scored = [], shopName = null, collectionCopy = [], pageCopy = [] } = {},
 ) {
   try {
     const existing = await prisma.brandVoice.findUnique({
@@ -149,7 +164,7 @@ export async function ensureInferredBrandVoice(
     });
     if (existing) return { created: false };
 
-    const samples = pickVoiceSamples(scored, { collectionCopy });
+    const samples = pickVoiceSamples(scored, { collectionCopy, pageCopy });
     const sampleContent = buildSampleContent(samples);
 
     // A4.6 — the merchant's own standing claims, read from products AND
@@ -158,6 +173,7 @@ export async function ensureInferredBrandVoice(
     const keyDifferentiators = inferDifferentiators([
       ...(Array.isArray(scored) ? scored.map((p) => plainText(p?.description)) : []),
       ...(Array.isArray(collectionCopy) ? collectionCopy.map((c) => plainText(c?.text ?? c?.description)) : []),
+      ...(Array.isArray(pageCopy) ? pageCopy.map((p) => plainText(p?.text ?? p?.body)) : []),
     ]);
     // Shopify's own store name, falling back to the shop handle rather than to
     // an empty string — "Alpine Supply" reads as a brand, "" reads as a bug.

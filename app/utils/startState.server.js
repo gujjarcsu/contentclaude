@@ -30,6 +30,9 @@ import { shopifyQuery } from "./shopifyQuery.server.js";
  * 30 is what the welcome scan used and what its GraphQL cost was sized for.
  */
 export const SCAN_LIMIT = 30;
+
+/** How much of a page body is kept. A Terms page is long; its voice is in the opening. */
+export const PAGE_SAMPLE_CHARS = 1200;
 /** How many products the Start state offers to fix. The brief's number. */
 export const START_TARGETS = 3;
 /** Short — a merchant who refreshes twice in a minute should not re-scan. */
@@ -47,6 +50,9 @@ export const START_SCAN_QUERY = `query startScan($n: Int!) {
   shop { name }
   collections(first: 20, sortKey: UPDATED_AT, reverse: true) {
     edges { node { title description } }
+  }
+  pages(first: 5, sortKey: UPDATED_AT, reverse: true) {
+    edges { node { title body isPublished } }
   }
   products(first: $n, sortKey: UPDATED_AT, query: "status:active") {
     edges { node {
@@ -162,6 +168,31 @@ export async function scanStoreForStart(
     const collectionCopy = (r.data?.collections?.edges ?? [])
       .map((e) => ({ title: e?.node?.title ?? "", text: String(e?.node?.description ?? "").trim() }))
       .filter((c) => c.text.length > 0);
+
+    // A4.8 — About / Shipping / Returns pages, on the SAME request.
+    //
+    // The item was written assuming these would each cost a request. They do
+    // not: `pages` is a root connection, so it rides the scan exactly as
+    // `collections` and `shop { name }` do. Checking the schema disproved my
+    // own premise.
+    //
+    // UNPUBLISHED pages are dropped: a page nobody can read is not the voice
+    // the shop presents. Bodies are sliced here rather than in the query
+    // because a Terms page can be very long and only the opening carries voice.
+    //
+    // ARTICLES ARE DELIBERATELY NOT INCLUDED. Blog posts are long-form and
+    // their cadence is not product cadence; learning from them would teach the
+    // model to write blog paragraphs into product descriptions. `articles` is
+    // available on the same connection if that judgement ever changes.
+    const pageCopy = (r.data?.pages?.edges ?? [])
+      .filter((e) => e?.node?.isPublished !== false)
+      .map((e) => ({
+        title: e?.node?.title ?? "",
+        text: String(e?.node?.body ?? "")
+          .trim()
+          .slice(0, PAGE_SAMPLE_CHARS),
+      }))
+      .filter((p) => p.text.length > 0);
     const nodes = (r.data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
     if (nodes.length === 0) return { empty: true, shopName };
 
@@ -189,6 +220,7 @@ export async function scanStoreForStart(
       empty: false,
       shopName,
       collectionCopy,
+      pageCopy,
       // Phase 4 item 4.3 — every scored product, so the store score and the
       // per-product before/after come from ONE scan. A "before" measured by a
       // different code path from the "after" is not a delta.

@@ -4002,3 +4002,31 @@ nothing".
 
 **Not proved:** that any of these controls is VISIBLE — L15's third requirement. A control in a
 collapsed section or behind a plan gate passes every assertion here. Needs a browser; queued.
+
+### A4.8 — the item's own premise was wrong
+
+A4.8 was written (by me, closing A4.6) on the assumption that Pages and Articles "would each cost a
+request on the dashboard's hot path", and it asked for a decision between paying that cost and
+declaring the limitation.
+
+**Checking the schema disproved the premise.** `pages` and `articles` are both ROOT connections on
+`QueryRoot`, so they ride the existing scan exactly as `collections` and `shop { name }` already do.
+There was no cost to weigh and no decision to make — only work to do.
+
+Pages are now read on the same request: published only (a page nobody can read is not the voice the
+shop presents), body sliced to 1,200 characters in JS rather than in the query, because a Terms page
+is long and only its opening carries voice. Scored at 40 — **below** collections at 55 — because a
+policy page states the shop's terms in the shop's voice, which is useful, but it is not selling copy
+and must never outrank a description.
+
+**Articles are deliberately excluded**, and that is the decision A4.8 actually needed. Blog posts are
+long-form; their cadence is not product cadence, and learning from them would teach the model to write
+blog paragraphs into product descriptions. `articles` is available on the same connection if that
+judgement ever changes, and a test asserts we do not ask for it — so removing the exclusion has to be
+deliberate.
+
+`PageSortKeys.UPDATED_AT`, `Page.body` and `Page.isPublished` were all verified against the live Admin
+schema. Every test in this repo mocks the transport: a wrong field name would have passed all 1,439 of
+them and broken every scan in production.
+
+Guard broken: renaming `pages(` in the query fails **1 test**.

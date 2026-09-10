@@ -221,3 +221,40 @@ describe("A4.6 — reading collection copy, not just product copy", () => {
     expect(call.update).toEqual({});
   });
 });
+
+describe("A4.8 — About / Shipping / Returns pages", () => {
+  const PAGES = [
+    {
+      title: "About EBS",
+      text:
+        "We have supplied licensed plumbers and homeowners across Sydney for 25 years from our trade " +
+        "counter. Everything we sell carries WaterMark certification where the standard requires it, " +
+        "and we hold trade pricing for account customers.",
+    },
+  ];
+
+  it("learns from a published page", () => {
+    const picked = pickVoiceSamples([], { pageCopy: PAGES });
+    expect(picked.map((p) => p.text).join(" ")).toMatch(/trade counter|25 years/);
+  });
+
+  it("ranks a page BELOW a collection and a good product", () => {
+    // A policy page states the shop's terms in the shop's voice, which is
+    // useful, but it is not selling copy and must never outrank a description.
+    const collections = [
+      {
+        title: "Astra Walker",
+        text:
+          "Astra Walker tapware is designed and made in Australia and carries WaterMark certification " +
+          "for every model we stock, with trade pricing available to licensed plumbers on account.",
+      },
+    ];
+    const picked = pickVoiceSamples([], { collectionCopy: collections, pageCopy: PAGES });
+    expect(picked[0].title).toBe("Astra Walker");
+  });
+
+  it("works with no pages at all, exactly as before", () => {
+    expect(() => pickVoiceSamples([], { pageCopy: [] })).not.toThrow();
+    expect(pickVoiceSamples([], {})).toEqual([]);
+  });
+});
