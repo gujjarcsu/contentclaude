@@ -83,8 +83,19 @@ surfaces to merchants as "Timed out fetching a new connection from the pool" und
 
 These are not sensitive and live in `[env]` so they are visible in review:
 
-`NODE_ENV=production`, `LOG_LEVEL=info`, `PORT=3000`,
-`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=true` (temporary — see `DIRECT_URL` above).
+`NODE_ENV=production`, `LOG_LEVEL=info`, `PORT=3000`.
+
+`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` used to be listed here. It is gone from
+`fly.toml` — `DIRECT_URL` made it unnecessary — and this line stayed behind for
+a while because the docs test only checks one direction: every variable the code
+READS must be documented, but a documented variable that no longer exists
+anywhere raises nothing. Worth knowing before trusting this file as an inventory.
+
+## Optional tuning knobs (defaults are in the code)
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `WEB_DRAIN_MS` | `15000` | How long a **web** machine waits after SIGTERM for requests that are already running, before the process exits. Fly cordons the machine first, so nothing new arrives during the wait. Must stay below `kill_timeout` in `fly.toml` (60 s), or Fly SIGKILLs and the wait achieves nothing. |
 
 ---
 

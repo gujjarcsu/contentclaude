@@ -272,6 +272,13 @@ export const startupPromise = (async () => {
 })();
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
+/**
+ * How long a web machine waits for requests that are already running, after Fly
+ * has cordoned it and before the process exits. Must stay below kill_timeout in
+ * fly.toml (60 s) — past that Fly sends SIGKILL and the wait achieves nothing.
+ */
+export const WEB_DRAIN_MS = Number(process.env.WEB_DRAIN_MS || 15_000);
+
 let _shuttingDown = false;
 
 async function gracefulShutdown(signal) {
@@ -301,6 +308,29 @@ async function gracefulShutdown(signal) {
     }
   } catch (err) {
     logger.error({ err }, "Error closing BullMQ — forcing exit anyway");
+  }
+
+  // ── In-flight HTTP requests ───────────────────────────────────────────────
+  // `react-router-serve` installs its own SIGTERM handler that calls
+  // server.close(): it stops accepting new connections and lets requests that
+  // are already running finish. This handler was racing it — on a web machine
+  // there is no BullMQ worker to drain, so everything above completes in a few
+  // milliseconds and `process.exit(0)` killed those in-flight requests.
+  //
+  // Fly cordons the machine before it sends SIGTERM, so no NEW request arrives
+  // during this wait; it is purely time for the ones already running to finish.
+  //
+  // Why a bounded wait and not a count of in-flight requests: React Router only
+  // routes DOCUMENT and .data requests through entry.server, so a counter there
+  // would miss every resource route — including the generation endpoint, which
+  // is the single request we least want to drop. A counter that misses the
+  // important case is worse than an honest timer, because it reads as proof.
+  //
+  // 15 s sits inside kill_timeout (60 s) with room for the worker's 30 s BullMQ
+  // drain on the machines that have one.
+  if (!RUNS_JOBS) {
+    logger.info({ ms: WEB_DRAIN_MS }, "Waiting for in-flight HTTP requests before exit");
+    await new Promise((r) => setTimeout(r, WEB_DRAIN_MS));
   }
 
   try {

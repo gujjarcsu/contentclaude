@@ -395,11 +395,13 @@ describe("tryConsumeGeneration — P2034 retry", () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
-  it("returns isContention:true on second P2034 failure", async () => {
+  it("returns isContention:true once the retry budget is exhausted", async () => {
+    // Rejects EVERY attempt rather than a fixed number of them, so this stays
+    // a test of the terminal behaviour — deny safely, never throw — and does
+    // not have to be edited every time the budget changes. The size of the
+    // budget is pinned separately in tests/utils/quotaContention.test.js.
     const p2034 = Object.assign(new Error("Write conflict"), { code: "P2034" });
-    prisma.$transaction
-      .mockRejectedValueOnce(p2034) // first call
-      .mockRejectedValueOnce(p2034); // retry call
+    prisma.$transaction.mockRejectedValue(p2034);
 
     const result = await tryConsumeGeneration("shop.com", "description", null);
 

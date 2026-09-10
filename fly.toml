@@ -18,6 +18,16 @@ primary_region = "syd"   # Sydney — matches Neon + Upstash region
 [deploy]
   release_command = "npx prisma migrate deploy"
 
+  # Explicit rather than inherited. With two machines always running, `rolling`
+  # replaces them ONE AT A TIME and waits for each machine's health check to
+  # pass before moving to the next, so one machine is always serving.
+  #
+  # `max_unavailable = 1` is the same number flyctl's 0.33 default rounds to at
+  # two machines. It is written down so that adding a third machine later cannot
+  # silently make it two-at-a-time and reopen the hole this section closes.
+  strategy = "rolling"
+  max_unavailable = 1
+
 # Phase 0 item 12 — Fly sends SIGTERM and then SIGKILLs after kill_timeout,
 # which defaults to 5 SECONDS. The graceful shutdown in startup.server.js drains
 # BullMQ for up to 30 s, so every deploy hard-killed any bulk job that happened
@@ -59,9 +69,34 @@ kill_timeout = "60s"
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  # ── Why these three are what they are (measured 2026-09-10) ───────────────
+  # This was `auto_stop_machines = "stop"` with `min_machines_running = 1`.
+  # That combination means Fly keeps exactly ONE web machine running and stops
+  # the rest — and during a deploy, that one machine is the one being replaced.
+  # So a routine deploy left the app with no running web machine at all.
+  #
+  # Fly's own event log for release v176, which is what proved it:
+  #
+  #   05:58:19.539  81112eb  (the only RUNNING machine)  pending/launch
+  #   05:58:20.442  784eed   (the "spare")               stopped/update
+  #   05:58:23.468  81112eb                              started
+  #
+  # The spare was updated in place WHILE STOPPED and left stopped. It was never
+  # a fallback; it was decoration. Requests arriving in that window queue at the
+  # Fly proxy until some machine can serve them, which is why the symptom was
+  # multi-second latency rather than a clean 5xx — and why app/uninstalled's p90
+  # crossed Shopify's ~5 s delivery timeout on a handler that answers in ~40 ms
+  # and does nothing before the 200 but an HMAC, a Redis SET NX and two queries.
+  #
+  # "off" plus two machines means the rolling deploy always has one machine
+  # serving while the other is replaced. The price is one extra shared-cpu-1x
+  # 512 MB machine, which is the cheapest thing in this file.
+  #
+  # `min_machines_running` is redundant while autostop is off. It stays because
+  # it states the intent: if autostop is ever turned back on, two is the floor.
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2
   processes = ["web"]
 
   [http_service.concurrency]

@@ -99,6 +99,34 @@ export async function canGenerate(shop) {
 }
 
 /**
+ * How many times the SERIALIZABLE quota gate retries a write conflict.
+ *
+ * This was 1, and one retry is not a budget — it is a coin flip. The dashboard
+ * fires up to THREE quick-start requests in parallel for the same shop, and
+ * every one of them runs `count(where: {shop, month})` and then `create()` in a
+ * SERIALIZABLE transaction. Concurrent transactions counting and inserting over
+ * the same predicate is the textbook serialization anomaly: Postgres aborts all
+ * but one with 40001, which Prisma surfaces as P2034. With three in flight, one
+ * wins, two retry, and the loser of THAT race had no attempts left and became
+ * "Busy for a moment — no generation was used."
+ *
+ * Four attempts with exponential backoff spreads the three requests far enough
+ * apart that they stop colliding. Nothing is double-charged by retrying: the
+ * conflicting transaction ABORTED, so no UsageRecord was written by it.
+ *
+ * The real fix is to stop the conflict rather than survive it — a per-shop
+ * advisory lock would make these queue instead of abort — but that changes the
+ * shape of the one transaction in the app that decides whether a merchant is
+ * charged, and it is not a change to make in the same pass as a deploy fix.
+ */
+export const QUOTA_MAX_RETRIES = 3;
+
+/** Backoff before retry `attempt` (0-based): 50, 100, 200 ms plus up to 100 ms jitter. Pure. */
+export function quotaRetryDelayMs(attempt, rand = Math.random) {
+  return 50 * 2 ** attempt + rand() * 100;
+}
+
+/**
  * Atomic gate + usage record creation in one serializable transaction.
  *
  * Uses SERIALIZABLE isolation so two concurrent requests cannot both
@@ -168,12 +196,11 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
     // P2034 = "Transaction failed due to a write conflict or a deadlock"
     // This can happen under very high concurrent load with Serializable isolation.
     if (err.code === "P2034") {
-      if (attempt < 1) {
-        // Retry once after brief jitter — write conflict is transient. Track the
-        // retry via the attempt counter, NOT by overloading contentType, so the
-        // real contentType is always what gets persisted to UsageRecord.
-        const jitter = 50 + Math.random() * 100;
-        await new Promise((r) => setTimeout(r, jitter));
+      if (attempt < QUOTA_MAX_RETRIES) {
+        // Exponential backoff with jitter. Track the retry via the attempt
+        // counter, NOT by overloading contentType, so the real contentType is
+        // always what gets persisted to UsageRecord.
+        await new Promise((r) => setTimeout(r, quotaRetryDelayMs(attempt)));
         return tryConsumeGeneration(shop, contentType, productId, attempt + 1);
       }
       // Second failure — return safe denial with distinct error tag
