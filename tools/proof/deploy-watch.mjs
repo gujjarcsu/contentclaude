@@ -148,10 +148,41 @@ const lat = samples.map((s) => s.ms).sort((a, b) => a - b);
 const pct = (p) => (lat.length ? lat[Math.min(lat.length - 1, Math.floor((p / 100) * lat.length))] : 0);
 
 const nonOk = samples.filter((s) => s.status !== 200);
-const slow = samples.filter((s) => s.ms > SLOW_MS);
-// The window is measured from the START of the first slow request to the END
-// of the last one — the span a merchant would have experienced as "it's stuck".
+const slow = samples.filter((s) => s.ms > SLOW_MS).sort((a, b) => a.at - b.at);
+
+// The span from the first slow request to the last one. Reported, but NOT the
+// headline — see `outages` below for why.
 const slowWindowMs = slow.length ? Math.max(...slow.map((s) => s.at + s.ms)) - Math.min(...slow.map((s) => s.at)) : 0;
+
+/**
+ * Group the slow samples into actual OUTAGES: runs of slow requests that are
+ * adjacent in time, rather than merely both slow.
+ *
+ * `slowWindowMs` alone is decorative once the slow samples are sparse. Ask the
+ * standing question of it — what would it print if there were NO outage but two
+ * unrelated slow samples three minutes apart? "180 s window": the same thing it
+ * prints for a genuine three-minute outage. It was measured at 156 s on a run
+ * whose longest real interruption was 1.5 s and affected one request.
+ *
+ * So the headline is the longest CONTIGUOUS run, and how many separate ones
+ * there were. Two 17 s outages and five scattered 1 s blips are different
+ * events and must not produce comparable numbers.
+ */
+const OUTAGE_GAP_MS = 2000;
+const outages = [];
+for (const s of slow) {
+  const cur = outages[outages.length - 1];
+  const prevEnd = cur ? Math.max(...cur.map((x) => x.at + x.ms)) : null;
+  if (cur && s.at - prevEnd <= OUTAGE_GAP_MS) cur.push(s);
+  else outages.push([s]);
+}
+const outageSpans = outages
+  .map((c) => ({
+    ms: Math.max(...c.map((x) => x.at + x.ms)) - Math.min(...c.map((x) => x.at)),
+    requests: c.length,
+    startedAtMs: Math.min(...c.map((x) => x.at)),
+  }))
+  .sort((a, b) => b.ms - a.ms);
 
 const byStatus = {};
 for (const s of samples) byStatus[s.status || `err:${s.error}`] = (byStatus[s.status || `err:${s.error}`] || 0) + 1;
@@ -184,6 +215,8 @@ const summary = {
   p90: pct(90),
   p99: pct(99),
   overSlowMs: { threshold: SLOW_MS, count: slow.length, windowMs: slowWindowMs },
+  // The honest one: real interruptions, longest first.
+  outages: { gapMs: OUTAGE_GAP_MS, count: outageSpans.length, longestMs: outageSpans[0]?.ms ?? 0, spans: outageSpans },
   worst: samples
     .slice()
     .sort((a, b) => b.ms - a.ms)

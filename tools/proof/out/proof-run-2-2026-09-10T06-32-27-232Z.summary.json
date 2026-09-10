@@ -1,0 +1,106 @@
+{
+  "label": "proof-run-2",
+  "url": "https://app.navaal.ai/api/health",
+  "startedAt": "2026-09-10T06:32:27.232Z",
+  "seconds": 780,
+  "intervalMs": 250,
+  "samples": 3061,
+  "nonOk": 0,
+  "byStatus": {
+    "200": 3061
+  },
+  "maxMs": 1521,
+  "p50": 32,
+  "p90": 36,
+  "p99": 70,
+  "overSlowMs": {
+    "threshold": 1000,
+    "count": 5,
+    "windowMs": 156100
+  },
+  "worst": [
+    {
+      "at": 218358,
+      "ms": 1521,
+      "status": 200
+    },
+    {
+      "at": 247632,
+      "ms": 1391,
+      "status": 200
+    },
+    {
+      "at": 92923,
+      "ms": 1048,
+      "status": 200
+    },
+    {
+      "at": 185326,
+      "ms": 1029,
+      "status": 200
+    },
+    {
+      "at": 185076,
+      "ms": 1028,
+      "status": 200
+    },
+    {
+      "at": 248134,
+      "ms": 890,
+      "status": 200
+    },
+    {
+      "at": 219108,
+      "ms": 835,
+      "status": 200
+    },
+    {
+      "at": 184825,
+      "ms": 698,
+      "status": 200
+    },
+    {
+      "at": 236176,
+      "ms": 363,
+      "status": 200
+    },
+    {
+      "at": 548871,
+      "ms": 186,
+      "status": 200
+    }
+  ],
+  "nonOkDetail": [],
+  "buildTimeline": [
+    {
+      "at": 2133,
+      "ms": 51,
+      "status": 200,
+      "build": "229fa44"
+    },
+    {
+      "at": 218425,
+      "ms": 1653,
+      "status": 503,
+      "build": "d272222"
+    },
+    {
+      "at": 220425,
+      "ms": 41,
+      "status": 200,
+      "build": "d272222"
+    },
+    {
+      "at": 248452,
+      "ms": 842,
+      "status": 503,
+      "build": "d272222"
+    },
+    {
+      "at": 250454,
+      "ms": 45,
+      "status": 200,
+      "build": "d272222"
+    }
+  ]
+}

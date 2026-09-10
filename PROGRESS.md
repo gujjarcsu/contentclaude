@@ -3675,3 +3675,40 @@ to a request held that long.
 What **cannot** be attributed either way is the 7-day `app/uninstalled` move from 1,039 ms to 1,403 ms:
 that window contains both the old pre-fix handler and ten deploy windows, and there is no per-delivery
 breakdown to separate them.
+
+
+### Correction, same day: `windowMs` was the fifth false green, and it was mine
+
+The table above reports a "window containing them" of 95.2 s, 168.7 s, 31.7 s. That statistic is the
+span from the first slow request to the last one, and it is **decorative as soon as the slow samples
+are sparse**. Ask the standing question of it: what would it print if there were no outage at all, but
+two unrelated slow samples three minutes apart? *"180 s window"* — the same thing it prints for a
+genuine three-minute outage.
+
+A second proof run (release `d272222`) made that concrete: `windowMs` said **156.1 s** on a run whose
+longest actual interruption was **1.5 s and affected one request**. Quoting 31.7 s against 95.2 s as
+though they were comparable was wrong.
+
+Recomputed from the raw samples, grouping slow requests into runs that are genuinely adjacent in time
+(gap ≤ 2 s) rather than merely both slow:
+
+| run | slow reqs | naive `windowMs` | real outages |
+| --- | --- | --- | --- |
+| before-fix (v176) | 125 | 95.2 s | **17.4 s** (63 reqs) and **16.8 s** (62 reqs) |
+| strategy only (v179) | 208 | 168.7 s | **28.9 s** (110) and **25.6 s** (96), plus 1.7 s |
+| both machines (v180) | 4 | 31.7 s | **2.1 s** (2 reqs) and 1.5 s (2 reqs) |
+| both machines, run 2 (`d272222`) | 5 | 156.1 s | **1.5 s** (1 req), then 1.4 s, 1.3 s, 1.0 s |
+
+**That is the honest result: two seventeen-second outages became four isolated blips of one or two
+requests each.** The before-fix run shows *two* outages because it caught two deploys of the same
+commit — the manual dispatch and the CI push described above.
+
+`deploy-watch.mjs` now computes this itself and reports `outages: {count, longestMs, spans}` alongside
+the old number, which is kept because the envelope is still worth seeing. Self-tested: with the slow
+threshold forced to 0, twenty-three contiguous samples collapse into **one** outage of 5,630 ms, not
+twenty-three.
+
+Second proof run in full: 3,061 samples, **0 non-200**, p50 32 ms, p90 36 ms, p99 70 ms, max 1,521 ms.
+Its deep check did return 503 twice for about two seconds each as a machine came back — the first proof
+run's did not. Merchants never call `deep=1`, but the post-deploy smoke job does, so that is a
+narrow race worth knowing about; it passed on both runs.
