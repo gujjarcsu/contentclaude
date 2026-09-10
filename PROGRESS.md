@@ -4030,3 +4030,73 @@ schema. Every test in this repo mocks the transport: a wrong field name would ha
 them and broken every scan in production.
 
 Guard broken: renaming `pages(` in the query fails **1 test**.
+
+---
+
+## A7.1 (10 Sep 2026) — Phase A closed, deployed and verified
+
+19 commits shipped, `0acb04a..d21b5bb`. Before this push **every Phase A fix existed only on one
+computer**: a merchant installing that morning still saw "Optimize 3146 products?".
+
+Verified from outside, cache-busted (L4):
+- `/api/build-info` → `d21b5bb`, equal to local `HEAD`
+- `/api/health?deep=1` → `status: ok`, `schema.ok: true`, **columns 229 → 230** — exactly the one
+  column `20260910180000_candidate_scope` adds. A schema-level byte delta: one column added, count up
+  by one.
+- ahead-count → 0
+- All four CI jobs green, and the machine guard logged **"2 web machines, all started"**, so the P1
+  fix held through this deploy.
+
+**One deploy, not two.** The push *is* the deploy; the Manual Deploy workflow was deliberately not
+dispatched. Doing both is the INFRA1 defect.
+
+### INFRA3 — closed with evidence rather than reasoning
+
+Ran the CI guard's exact shell against four cases:
+
+| states | count | notStarted | verdict |
+| --- | --- | --- | --- |
+| `started, started` | 2 | 0 | passes |
+| `started, stopped` | 2 | 1 | **FAILS** — the case INFRA3 asked about |
+| `started` | 1 | 0 | fails |
+| *(empty)* | 0 | 1 | fails — cannot pass by scanning nothing |
+
+Proves the LOGIC. It does not prove flyctl's output shape, which only a real stopped machine would.
+
+### L15 verified live, and the half that is not
+
+The new "Include draft products" control was read from a LIVE render on `contentpilot-dev2`:
+
+> Include draft products
+> Counts and optimizes products that are still drafts. Off by default, because a draft has no public
+> page yet. Archived products are never included.
+
+That proves it is wired and **not inside a collapsed section** — stronger than the source assertions
+A1.2 shipped with. It does **not** prove a human can see it: the harness screenshots the app's iframe
+ELEMENT, so `fullPage` does not apply and the control sits below the captured 1360×1087 frame. I added
+a `--full` flag, measured that it changed nothing, and **reverted it** — a flag whose name promises
+something it does not do is the decorative pattern this project keeps catching.
+
+H13 narrowed accordingly rather than closed.
+
+### The Phase A deploy, measured from outside
+
+`deploy-watch.mjs`, 780 s, 250 ms tick, no keep-alive.
+
+| | P1 baseline (v176) | **Phase A (`d21b5bb`)** |
+| --- | --- | --- |
+| samples | 2,349 | 3,035 |
+| non-200 | 0 | **0** |
+| p50 / p90 | 33 / 45 ms | **31 / 36 ms** |
+| p99 | 14,190 ms | **123 ms** |
+| max | 17,085 ms | **1,189 ms** |
+| requests over 1 s | 125 | **1** |
+| longest real outage | 17.4 s (63 reqs) | **1.19 s (1 req)** |
+| deep-check 503s | 2 | **0** |
+
+The build timeline shows a clean `0acb04a → d21b5bb` flip with both reads at 200 and no 503 at any
+point. **One request in 3,035 exceeded a second, by 189 ms.**
+
+`deploy-watch` still exited **1**, because the pass condition set in P1 is zero non-200s AND a
+sub-second maximum, and 1,189 ms is not sub-second. Reported as a partial pass, as it was then. The
+tool has never been talked into a green.

@@ -104,7 +104,7 @@ Nothing new ships on top of a phase that is not finished.
 
 | Phase | What | Status |
 |---|---|---|
-| **A** | 29 real-store defects: the candidate primitive, scale caps, entitlement honesty, pre-existing content, variant families, cross-screen contradictions | **In progress** |
+| **A** | 29 real-store defects: the candidate primitive, scale caps, entitlement honesty, pre-existing content, variant families, cross-screen contradictions | **CLOSED `d21b5bb`** (A4.9, A6.6 blocked) |
 | **B** | Discoverability, first-run order, Built for Shopify gaps (contextual save bars, dark pattern) | Not started |
 | **C** | Pricing implementation, two-axis plans, migration, BYO key | Not started |
 | **D** | The moat: port the AI-visibility probe, indexation proof, rich-result eligibility, Search Console proof, control-group holdback, **the weekly report** | Not started — plan first |
@@ -169,6 +169,15 @@ merchants who would otherwise have reviewed us.
 - Phase A, CC: standing commercial claims (`ea6ee27`) — a rewrite deleted the merchant's two-day
   dispatch, free pickup and price match and replaced them with "Available at EBS". Now two
   severities: compliance/certification hard-fail, commercial claims warn.
+- **PHASE A CLOSED and DEPLOYED as `d21b5bb`** — 19 commits, `0acb04a..d21b5bb`. Verified cache-busted
+  from outside: build-info matches HEAD, deep health `ok`, schema columns 229 → 230 (exactly the one
+  column the new migration adds). The P1 fix held: the deploy guard logged "2 web machines, all
+  started". **Every Phase A fix is now live for merchants**; before this push none of it was.
+- Phase A, CC: `A4.6`/`A4.8` — the voice inference read only product descriptions, which on the real
+  store were templated boilerplate, while the merchant's differentiators sat in collection copy.
+  Collections AND pages now ride the existing scan for FREE — both are root connections, which
+  disproved the premise A4.8 was written on. Articles deliberately excluded: blog cadence is not
+  product cadence.
 - Phase A, CC: `A2.3`/`A2.4` — Optimize's catalogue walk used raw `admin.graphql` with no backoff
   (Phase 4 item 6 fixed the identical loop on Products and missed this one), and BOTH stopped at
   20,000 products **silently**: on a 50,000-product store "Optimize store" enqueued 20,000 and

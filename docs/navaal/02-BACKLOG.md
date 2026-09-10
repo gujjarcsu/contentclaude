@@ -9,7 +9,9 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 
 ---
 
-## PHASE A — DEFECTS. Nothing new ships on top until A closes.
+## PHASE A — DEFECTS. **CLOSED 2026-09-10, deployed and verified as `d21b5bb`.**
+
+Only A4.9 and A6.6 remain, both BLOCKED on human/infra tasks, not on code.
 
 ### A1 · The candidate primitive — one line, five symptoms
 | ID | Item | Status |
@@ -71,7 +73,7 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 ### A7 · Phase A close-out
 | ID | Item | Status |
 |---|---|---|
-| A7.1 | Deploy Phase A. Confirm `/api/health?deep=1` ok on the new SHA. | OPEN |
+| A7.1 | Deploy Phase A. Confirm `/api/health?deep=1` ok on the new SHA. | **VERIFIED d21b5bb** — 19 commits shipped `0acb04a..d21b5bb`. Cache-busted from outside: `build-info` = `d21b5bb` = local HEAD; deep health `status: ok`, `schema.ok: true`, **columns 229 → 230**, exactly the one column the `20260910180000_candidate_scope` migration adds. All four CI jobs green; the machine guard logged "2 web machines, all started". |
 
 ---
 
@@ -81,7 +83,7 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 |---|---|---|
 | INFRA1 | Deduplicate deploys. `ci.yml` on push + `deploy.yml` on dispatch; `concurrency` serialises without deduping, so one commit shipped as v176 and v177. A duplicate deploy of an already-deployed SHA is a no-op, or remove one path. Prove: dispatch during a push, show one version. | OPEN |
 | INFRA2 | **Log retention.** ~100 lines today, so no incident is traceable after minutes. Ship durable log shipping, ≥30 days. State the retention achieved. Blocks A6.6 and every future "could not reproduce". | OPEN |
-| INFRA3 | Confirm the CI ≥2-web-machines assertion FAILS when one is stopped, not only when one is missing. | OPEN |
+| INFRA3 | Confirm the CI ≥2-web-machines assertion FAILS when one is stopped, not only when one is missing. | DONE — ran the guard's exact shell against four cases. `started,started` → passes. `started,stopped` → **count=2 notStarted=1, FAILS** (the case INFRA3 asked about). `started` alone → fails. Empty output → fails, so it cannot pass by scanning nothing. Proves the LOGIC, not flyctl's output shape. |
 | INFRA4 | Correct `4312a5b`'s unmeasured "~40 ms" claim in PROGRESS.md — measure it or delete it. | OPEN |
 | INFRA5 | Mark every latency and TTV figure captured before `d272222` as deploy-contaminated. | OPEN |
 | INFRA6 | `fly secrets unset FEATURE_MAGIC_MOMENT`, then confirm deep health. | OPEN |
