@@ -18,7 +18,8 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
-*(empty)*
+- **Phase A is written but not live.** `main` is **9 commits ahead of `origin/main`**, and production runs `0acb04a`, which is the tip of `origin/main`. Every Phase A fix — the candidate primitive (five wrong numbers), the duplicate gate, caps-presented-as-totals, the dev-store residue sweep, the drafts opt-in — exists only on this computer. A merchant installing today still sees "Optimize 3146 products?". Verified 2026-09-10 11:02 UTC: `/api/build-info` → `shortSha 0acb04a`, `startedAt 2026-09-10T06:51:26Z`. Two steps, both needing the owner: `git push origin main` (CI gates it), then run the **Manual Deploy to Fly.io** workflow — `.github/workflows/deploy.yml` is `workflow_dispatch` only, so a green CI run does NOT deploy. Done looks like: `/api/build-info` returns the new sha and `/api/health?deep=1` still `status: ok` with 229+ columns.
+
 
 
 ## OPEN
