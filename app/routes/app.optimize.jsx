@@ -29,6 +29,7 @@ import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/p
 import { getCache } from "../utils/cache.server.js";
 import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
+import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -44,9 +45,20 @@ export const loader = async ({ request }) => {
     getCache(
       `productCount:${shop}`,
       async () => {
-        const r = await admin.graphql(`query { productsCount { count } }`);
-        const d = await r.json();
-        return d.data.productsCount.count;
+        // Phase 4 item 6 — `d.data.productsCount.count` with no errors check
+        // was the same crash as the Products page: on a THROTTLED response
+        // `data` is null and this threw, 500ing Optimize for a big catalogue.
+        const r = await shopifyQuery(
+          admin.graphql,
+          `query { productsCount { count } }`,
+          {},
+          {
+            shop,
+            label: "product count",
+          },
+        );
+        if (!r.ok) throw new Error(r.error ?? "product count unavailable");
+        return r.data?.productsCount?.count ?? 0;
       },
       300,
     ),

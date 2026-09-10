@@ -11,6 +11,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 
+// Phase 4 item 6 — the catalogue reads now back off on THROTTLED, which means
+// real 1s/2s/4s sleeps. These tests are about THIS module's behaviour, not the
+// backoff, so the shared helper keeps its real logic with retries disabled. The
+// backoff itself is tested with fake timers in tests/utils/shopifyQuery.test.js.
+vi.mock("../../app/utils/shopifyQuery.server.js", async () => {
+  const actual = await vi.importActual("../../app/utils/shopifyQuery.server.js");
+  return {
+    ...actual,
+    shopifyQuery: (graphql, query, variables, opts = {}) =>
+      actual.shopifyQuery(graphql, query, variables, { ...opts, maxRetries: 0 }),
+  };
+});
+
 vi.mock("../../app/utils/logger.server.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

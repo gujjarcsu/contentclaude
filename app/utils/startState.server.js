@@ -22,6 +22,7 @@ import logger from "./logger.server.js";
 import { getCache } from "./cache.server.js";
 import { calculateSeoScore } from "./seo.server.js";
 import { calculateGeoScore } from "./geo.server.js";
+import { shopifyQuery } from "./shopifyQuery.server.js";
 
 /**
  * How many products to score. The store score is a sample and is described as
@@ -126,11 +127,21 @@ export async function scanStoreForStart(
   { skipCache = false, ttlSeconds = START_SCAN_TTL_S } = {},
 ) {
   const load = async () => {
-    const resp = await admin.graphql(START_SCAN_QUERY, { variables: { n: SCAN_LIMIT } });
-    const { data, errors } = await resp.json();
-    if (errors?.length) throw new Error(errors[0]?.message || "GraphQL error");
+    // Phase 4 item 6 — through the shared backoff. This scan now feeds the
+    // store score on Home as well as the Start state, so a throttle here would
+    // blank the merchant's headline number rather than just delaying a page.
+    const r = await shopifyQuery(
+      admin.graphql,
+      START_SCAN_QUERY,
+      { n: SCAN_LIMIT },
+      {
+        shop,
+        label: "start scan",
+      },
+    );
+    if (!r.ok) throw new Error(r.error ?? "scan unavailable");
 
-    const nodes = (data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
+    const nodes = (r.data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
     if (nodes.length === 0) return { empty: true };
 
     const scored = nodes.map((node) => {

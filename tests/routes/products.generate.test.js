@@ -24,17 +24,28 @@ const {
   remainingGenerations,
   graphql,
   publishesWithoutReview,
-} = vi.hoisted(
-  () => ({
-    prisma: { generationJob: { create: vi.fn(async ({ data }) => ({ id: "job-1", ...data })) } },
-    authenticate: { admin: vi.fn() },
-    enqueue: vi.fn(async () => {}),
-    checkEntitlement: vi.fn(async () => ({ allowed: true })),
-    remainingGenerations: vi.fn(async () => 1000),
-    graphql: vi.fn(),
-    publishesWithoutReview: vi.fn(async () => false),
-  }),
-);
+} = vi.hoisted(() => ({
+  prisma: { generationJob: { create: vi.fn(async ({ data }) => ({ id: "job-1", ...data })) } },
+  authenticate: { admin: vi.fn() },
+  enqueue: vi.fn(async () => {}),
+  checkEntitlement: vi.fn(async () => ({ allowed: true })),
+  remainingGenerations: vi.fn(async () => 1000),
+  graphql: vi.fn(),
+  publishesWithoutReview: vi.fn(async () => false),
+}));
+
+// Phase 4 item 6 — the catalogue reads now back off on THROTTLED, which means
+// real 1s/2s/4s sleeps. These tests are about THIS module's behaviour, not the
+// backoff, so the shared helper keeps its real logic with retries disabled. The
+// backoff itself is tested with fake timers in tests/utils/shopifyQuery.test.js.
+vi.mock("../../app/utils/shopifyQuery.server.js", async () => {
+  const actual = await vi.importActual("../../app/utils/shopifyQuery.server.js");
+  return {
+    ...actual,
+    shopifyQuery: (graphql, query, variables, opts = {}) =>
+      actual.shopifyQuery(graphql, query, variables, { ...opts, maxRetries: 0 }),
+  };
+});
 
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate }));
@@ -226,9 +237,7 @@ describe("when Shopify's catalogue call fails", () => {
   });
 
   it("a mid-pagination failure runs what did arrive", async () => {
-    graphql
-      .mockResolvedValueOnce(page(ids(250), true))
-      .mockRejectedValueOnce(new Error("timeout"));
+    graphql.mockResolvedValueOnce(page(ids(250), true)).mockRejectedValueOnce(new Error("timeout"));
 
     const res = await generateAll();
 

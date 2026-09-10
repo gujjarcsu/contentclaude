@@ -52,6 +52,7 @@ import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePromp
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap } from "../utils/productState.js";
 import { productScoresFor } from "../utils/storeScore.server.js";
+import { shopifyQuery, productsPage } from "../utils/shopifyQuery.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -96,7 +97,7 @@ export const loader = async ({ request }) => {
   // fully parsed. Reading the body is part of the round-trip, so both reads
   // now happen inside Promise.all.
   const [gqlData, plan, usageCount, metrics, productCountData, publishWithoutReview] = await Promise.all([
-    admin.graphql(gqlQuery, { variables: { cursor } }).then((r) => r.json()),
+    shopifyQuery(admin.graphql, gqlQuery, { cursor }, { shop, label: "products page" }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     getContentMetrics(shop),
@@ -104,7 +105,19 @@ export const loader = async ({ request }) => {
     publishesWithoutReview(shop),
   ]);
 
-  const { edges, pageInfo } = gqlData.data.products;
+  // Phase 4 item 6 — this used to read `gqlData.data.products` directly. On a
+  // THROTTLED response `data` is null, so the line threw and the Products page
+  // returned 500 — to a merchant whose only crime was having a catalogue big
+  // enough to get throttled. Shopify's bucket refills at a fixed rate, so a
+  // 200-product store never sees it and a 5,000-product store sees it
+  // constantly: it failed for exactly the merchants worth having.
+  const page = productsPage(gqlData);
+  const { edges, pageInfo } = page;
+  const catalogError = page.ok
+    ? null
+    : page.throttled
+      ? "Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly."
+      : "We could not read your full product list from Shopify just now. This list may be incomplete.";
   const products = edges.map(({ node }) => ({
     id: node.id,
     numericId: node.id.replace("gid://shopify/Product/", ""),
@@ -181,6 +194,7 @@ export const loader = async ({ request }) => {
     quotaWarning,
     upsell,
     productScores,
+    catalogError,
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
@@ -220,27 +234,34 @@ export const action = async ({ request }) => {
 
     while (hasNextPage && pageCount < MAX_PAGES) {
       pageCount++;
-      let resp;
-      try {
-        resp = await admin.graphql(
-          `query($cursor: String) {
+      // Phase 4 item 6 — with backoff. Enumerating 5,000 products is 20 pages,
+      // and without a retry the first throttle silently truncated the run: the
+      // merchant asked to optimise everything and got whatever had been read
+      // before Shopify said no.
+      const res = await shopifyQuery(
+        admin.graphql,
+        `query($cursor: String) {
             products(first: 250, after: $cursor) {
               pageInfo { hasNextPage endCursor }
               edges { node { id } }
             }
           }`,
-          { variables: { cursor } },
-        );
-      } catch {
-        if (allIds.length > 0) break;
-        return { error: "Could not fetch your product list from Shopify. Please try again." };
+        { cursor },
+        { shop, label: "enumerate products" },
+      );
+      const pageResult = productsPage(res);
+      if (!pageResult.ok) {
+        if (allIds.length > 0) break; // partial is better than nothing, and the
+        // quota slice below reports what was actually enqueued
+        return {
+          error: pageResult.throttled
+            ? "Shopify is rate-limiting your store right now. Please try again in a minute."
+            : pageResult.reason === "no_data" || pageResult.reason === "errors"
+              ? "Shopify returned an unexpected response. Please try again."
+              : "Could not fetch your product list from Shopify. Please try again.",
+        };
       }
-      const { data } = await resp.json();
-      if (!data?.products) {
-        if (allIds.length > 0) break;
-        return { error: "Shopify returned an unexpected response. Please try again." };
-      }
-      const { edges, pageInfo } = data.products;
+      const { edges, pageInfo } = pageResult;
       allIds.push(...edges.map((e) => e.node.id));
       hasNextPage = pageInfo.hasNextPage;
       cursor = pageInfo.endCursor;
@@ -371,6 +392,7 @@ export default function ProductsPage() {
     quotaWarning,
     upsell,
     productScores,
+    catalogError,
     monthlyLimit,
     planName,
     entitlements,
@@ -644,6 +666,12 @@ export default function ProductsPage() {
             generation limit reached" banner that used to sit here is gone:
             reaching a quota is completion, not an error, and at 100% the
             message belongs where the action was, not at the top of the page. */}
+        {catalogError && (
+          <Banner tone="warning" title="This list may be incomplete">
+            <p>{catalogError}</p>
+          </Banner>
+        )}
+
         <QuotaWarningBanner warning={quotaWarning} />
         {/* Stat bar */}
         <Layout>

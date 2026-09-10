@@ -52,6 +52,19 @@ const {
   stampProductCountAtFirstLoad: vi.fn(async () => true),
 }));
 
+// Phase 4 item 6 — the catalogue reads back off on THROTTLED, which means real
+// 1s/2s/4s sleeps. This file tests the loader, not the backoff, so the shared
+// helper keeps its real logic with retries disabled. The backoff has its own
+// fake-timer tests in tests/utils/shopifyQuery.test.js.
+vi.mock("../../app/utils/shopifyQuery.server.js", async () => {
+  const actual = await vi.importActual("../../app/utils/shopifyQuery.server.js");
+  return {
+    ...actual,
+    shopifyQuery: (graphql, query, variables, opts = {}) =>
+      actual.shopifyQuery(graphql, query, variables, { ...opts, maxRetries: 0 }),
+  };
+});
+
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate, apiVersion: "2026-04" }));
 vi.mock("../../app/utils/metrics.server.js", async () => {

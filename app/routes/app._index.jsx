@@ -43,6 +43,7 @@ import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js"
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { getStoreScore } from "../utils/storeScore.server.js";
+import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -121,9 +122,21 @@ export const loader = async ({ request }) => {
     getCache(
       `productCount:${shop}`,
       async () => {
-        const r = await admin.graphql(`query { productsCount { count } }`);
-        const d = await r.json();
-        return d.data.productsCount.count;
+        // Phase 4 item 6 — this was the third instance of the same crash, on
+        // the dashboard itself: `d.data.productsCount.count` with no errors
+        // check, so a THROTTLED response (where `data` is null) 500ed Home for
+        // a large catalogue. Found by the sweep, not by reading the file.
+        const r = await shopifyQuery(
+          admin.graphql,
+          `query { productsCount { count } }`,
+          {},
+          {
+            shop,
+            label: "product count",
+          },
+        );
+        if (!r.ok) throw new Error(r.error ?? "product count unavailable");
+        return r.data?.productsCount?.count ?? 0;
       },
       300,
     ),
@@ -290,6 +303,15 @@ function StoreScoreCard({ score }) {
   // A baseline captured on THIS very load is not a comparison. Treating it as
   // one produced "Unchanged since you installed" seconds after the first scan.
   const hasBaseline = Number.isFinite(score.atInstall) && !score.baselineIsNew;
+
+  // The baseline is captured on the FIRST SCAN, not at install. For a shop that
+  // installed weeks before this feature existed, "since you installed" is
+  // simply false. Naming the date is true in both cases and no less
+  // persuasive — and a merchant can check it.
+  const sinceLabel = score.since
+    ? new Date(score.since).toLocaleDateString("en-US", { day: "numeric", month: "long" })
+    : null;
+  const sincePhrase = sinceLabel ? `since ${sinceLabel}` : "since we first scored your store";
   const delta = hasBaseline ? score.current - score.atInstall : null;
   const improved = delta != null && delta > 0;
 
@@ -300,7 +322,7 @@ function StoreScoreCard({ score }) {
           <Text as="h2" variant="headingMd">
             Store SEO score
           </Text>
-          {improved && <Badge tone="success">{`+${delta} since install`}</Badge>}
+          {improved && <Badge tone="success">{`+${delta} ${sincePhrase}`}</Badge>}
         </InlineStack>
 
         <InlineStack gap="200" blockAlign="baseline" wrap>
@@ -324,11 +346,11 @@ function StoreScoreCard({ score }) {
 
         <Text as="p" variant="bodySm" tone="subdued">
           {improved
-            ? `Up ${delta} points since you installed, across the ${score.scanned} products we scanned.`
+            ? `Up ${delta} points ${sincePhrase}, across the ${score.scanned} products we scanned.`
             : hasBaseline && delta === 0
-              ? `Unchanged since you installed, across the ${score.scanned} products we scanned.`
+              ? `Unchanged ${sincePhrase}, across the ${score.scanned} products we scanned.`
               : hasBaseline && delta < 0
-                ? `Down ${Math.abs(delta)} points since you installed, across the ${score.scanned} products we scanned.`
+                ? `Down ${Math.abs(delta)} points ${sincePhrase}, across the ${score.scanned} products we scanned.`
                 : `Across the ${score.scanned} products we scanned. We will show the change once there is one.`}
         </Text>
       </BlockStack>

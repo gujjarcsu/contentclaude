@@ -22,6 +22,7 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { scoreTone } from "../utils/scoreBands.js";
+import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -62,10 +63,22 @@ export const loader = async ({ request }) => {
   // failed page used to abort the whole audit; now the caller decides whether
   // to keep what it already has.
   const fetchPage = async (cursor) => {
+    // Phase 4 item 6 — through the shared backoff, so a throttled page waits
+    // and retries instead of counting as a failed page. An audit that silently
+    // stops early reports a score for part of the catalogue as if it were the
+    // whole one.
     const attempt = async () => {
-      const response = await admin.graphql(AUDIT_PAGE_QUERY, { variables: { cursor } });
-      const { data } = await response.json();
-      return data?.products ?? null;
+      const r = await shopifyQuery(
+        admin.graphql,
+        AUDIT_PAGE_QUERY,
+        { cursor },
+        {
+          shop,
+          label: "audit page",
+        },
+      );
+      if (!r.ok) throw new Error(r.error ?? "audit page unavailable");
+      return r.data?.products ?? null;
     };
     try {
       return await attempt();

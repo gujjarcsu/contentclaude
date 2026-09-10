@@ -3346,3 +3346,70 @@ New migration `20260910160000_quality_gate`: `GeneratedContent.simhash` and `qua
 on `(shop, contentType, updatedAt DESC)` — the query the comparison window actually runs. No backfill: a
 row written before the gate has no fingerprint and is **excluded** from comparison rather than treated as
 unique, because treating unknown as unique is how a duplicate check stops working without anything failing.
+
+## 4-item-6 — Large catalogues, and three crashes that only happen to big shops
+
+The owner named one: `app.products.jsx` dereferencing `gqlData.data.products` with no errors check.
+Confirmed, and it is worse than one site.
+
+A Shopify GraphQL response can fail three ways and **all of them return HTTP 200**. Top-level `errors` is
+a *sibling* of `data`, never a member of it, so on a THROTTLED response `data` is null and
+`gqlData.data.products` throws a TypeError. That is a **500 page**, for a merchant whose only crime was
+having a catalogue big enough to get throttled.
+
+Shopify's leaky bucket refills at a fixed rate, which makes this a large-catalogue bug specifically: a
+200-product shop never sees it and a 5,000-product shop sees it constantly. **It fails for exactly the
+merchants worth having.** It is also the same defect Phase 0 item 9 fixed in the publish path, still
+living in the read path — which is what happens when a fix is applied to one call site rather than to a
+shared helper.
+
+### The three sites
+
+| Where | What it read | Effect on a throttle |
+|---|---|---|
+| `app.products.jsx` loader | `gqlData.data.products` | **500** on Products |
+| `app.optimize.jsx` product count | `d.data.productsCount.count` | **500** on Optimize |
+| `app._index.jsx` product count | `d.data.productsCount.count` | **500** on Home |
+
+The first was named by the owner. The second I found by grepping for the pattern. **The third was found by
+the sweep test**, after I had already "finished" — which is the argument for the sweep existing at all.
+
+### One helper, every catalogue read
+
+`shopifyQuery.server.js`: retries a throttle with exponential backoff, honours `Retry-After` on a 429,
+does **not** retry an ordinary GraphQL error (retrying will not fix a bad field), and — when it gives up —
+returns a **result rather than throwing**, because a 500 page is not an answer. `productsPage()` extracts
+the page and returns empty edges instead of throwing, with a `reason` (`throttled` / `no_data` /
+`transport` / `errors`) so callers can use the right words.
+
+Wired into: the Products loader and its 250-per-page enumeration, the Optimize product count, the Home
+product count, the SEO audit page fetch, and the Start/store-score scan.
+
+### What the merchant sees now
+
+- **Products** renders what it has with a warning: *"Shopify is rate-limiting your store right now, so
+  this list may be incomplete. It will fill in shortly."* — instead of a 500.
+- **Enumerating 5,000 products** (20 pages) retries a throttled page instead of silently truncating. That
+  mattered: a merchant asking to optimise everything previously got whatever had been read before Shopify
+  said no, with no indication the run was short.
+- **The SEO audit** waits and retries a throttled page rather than counting it as failed. An audit that
+  stops early reports a score for part of the catalogue as if it were the whole one.
+
+### The sweep
+
+A test walks every route file and fails on `\w.data.products` or `\w.data.productsCount` — the unguarded
+form, where `data?.products` is fine. It found the Home instance. It also asserts it swept more than ten
+files, so it cannot pass by inspecting nothing.
+
+**What would this print if the thing it watches were completely broken?** If `shopifyQuery` always
+returned `ok: false`, the backoff tests fail (they assert `ok: true` after recovery) and the productsPage
+tests still pass — so the pair is needed, and both are present. If the sweep's regex matched nothing, the
+`swept > 10` assertion fails. Neither check can pass vacuously.
+
+### A cost worth naming
+
+Backoff means real sleeps of 1s, 2s and 4s. Three test files were mocking `admin.graphql` directly and
+began timing out at 5s. They now use the real helper with `maxRetries: 0`, and the backoff has its own
+fake-timer tests. Worth stating plainly: the retries are real time on a genuinely throttled store, up to
+about 7 seconds before giving up — which is the right trade against a 500, and is why the give-up path
+returns a partial page with a banner rather than an error.
