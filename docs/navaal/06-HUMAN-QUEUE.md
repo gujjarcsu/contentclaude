@@ -26,9 +26,6 @@ Status: `OPEN` · `DONE <date, how confirmed>`
   that never renders is the exact L15 failure class. Done looks like: the banner visible above the
   job list, wording readable, and it does NOT appear on a run that covered the whole catalogue.
 
-- **Phase A is written but not live.** `main` is **9 commits ahead of `origin/main`**, and production runs `0acb04a`, which is the tip of `origin/main`. Every Phase A fix — the candidate primitive (five wrong numbers), the duplicate gate, caps-presented-as-totals, the dev-store residue sweep, the drafts opt-in — exists only on this computer. A merchant installing today still sees "Optimize 3146 products?". Verified 2026-09-10 11:02 UTC: `/api/build-info` → `shortSha 0acb04a`, `startedAt 2026-09-10T06:51:26Z`. **CORRECTED: this is ONE step, not two.** `ci.yml` line 140-148 deploys on any push to `main`, so `git push origin main` **is** the deploy. Dispatching **Manual Deploy to Fly.io** as well would deploy the same commit twice — the INFRA1 defect that shipped one commit as v176 and v177, 79 s apart, each with its own outage window. Push, then verify; only dispatch the manual workflow if the push-triggered deploy failed. Done looks like: `/api/build-info` returns the new sha and `/api/health?deep=1` still `status: ok` with 229+ columns.
-
-
 
 ## OPEN
 
