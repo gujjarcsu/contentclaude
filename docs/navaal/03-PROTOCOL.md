@@ -10,8 +10,9 @@ genuinely nothing left that you own. This file is how a session runs.
 
 ## STEP 0 — ORIENT (once, at the start, no exceptions)
 
-**0a. Read the CORE in full:** `00-CONSTITUTION.md` · `01-NORTH-STAR.md` · `02-BACKLOG.md` ·
-this file. Then `PROGRESS.md` and `git log --oneline -20`. Reference files are read later, when
+**0a. Read the CORE in full:** `00-CONSTITUTION.md` · **`09-DOCTRINE.md`** ·
+**`11-MASTERPLAN.md`** · `01-NORTH-STAR.md` · `02-BACKLOG.md` · this file.
+`README.md` gives the order of authority when two files disagree. Then `PROGRESS.md` and `git log --oneline -20`. Reference files are read later, when
 their trigger fires (see `README.md`).
 
 **0b. Is what we built actually live?** (L19) Two commands:
@@ -44,7 +45,8 @@ with line numbers, and lead your report with it.
 
 ## STEP 1 — PICK
 
-Take the **lowest-numbered unblocked item you own** in the earliest unfinished phase.
+Take the **lowest-numbered unblocked item you own** in the earliest unfinished phase
+**of `11-MASTERPLAN.md`**.
 Phases are strictly ordered: never start a later phase while an earlier one has an item open
 *that you own and that is not blocked*.
 

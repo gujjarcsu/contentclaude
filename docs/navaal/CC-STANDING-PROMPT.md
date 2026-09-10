@@ -39,9 +39,12 @@ not a replacement.
 
 ### ORIENT — once, before anything
 
-1. Read in full: `00-CONSTITUTION.md` · `01-NORTH-STAR.md` · `02-BACKLOG.md` · `03-PROTOCOL.md`.
-   Then `PROGRESS.md` and `git log --oneline -20`. The reference files (`04`, `05`, `08`, `09`) are
-   read when their trigger fires — `README.md` says when.
+1. Read in full, in this order: `00-CONSTITUTION.md` · **`09-DOCTRINE.md`** ·
+   **`11-MASTERPLAN.md`** · `01-NORTH-STAR.md` · `02-BACKLOG.md` · `03-PROTOCOL.md`.
+   Then `PROGRESS.md` and `git log --oneline -20`. Reference files (`04`, `05`, `07`, `08`, `11`)
+   are read when their trigger fires — `README.md` says when, and gives the order of authority.
+   **`11-MASTERPLAN.md` is authoritative for phases and order; `02-BACKLOG.md` is the item ledger
+   underneath it.** `04-DECISIONS.md` is partly superseded — treat it as history until P0.11 closes.
 2. **Is it live?** (L19) `git status -sb` and `curl -s https://app.navaal.ai/api/build-info`.
    If the deployed sha is not the tip of `origin/main`, finished work is not reaching merchants —
    say so first, and ship it first. **A push to `main` IS a deploy** (`ci.yml:140`), so never push
@@ -54,7 +57,9 @@ not a replacement.
 
 ### PICK
 
-The lowest-numbered unblocked item **you own** in the earliest unfinished phase. Phases are
+The lowest-numbered unblocked item **you own** in the earliest unfinished phase **of
+`11-MASTERPLAN.md`** — Phase 0 first, and Phase 0 contains three dated platform obligations plus
+the billing and cost measurements everything else depends on. Phases are
 ordered. An item owned by CW, COWORK or OWNER does not block you — route it and move on.
 Never invent work; if it belongs in the backlog, add it with an owner and a reason first.
 

@@ -19,8 +19,10 @@ when the protocol says its trigger has fired.
 | File | What it is |
 |---|---|
 | `00-CONSTITUTION.md` | **Laws.** Each was learned by being wrong. A law beats an instruction. |
-| `01-NORTH-STAR.md` | The goal, the ladder to #1, the scoreboard, the running log |
-| `02-BACKLOG.md` | **What is left.** Phased, owned, gated. Authoritative for WHAT. |
+| `09-DOCTRINE.md` | **What we sell and what we refuse to say**, with the evidence for each. Outranks enthusiasm. |
+| `11-MASTERPLAN.md` | **The plan.** Phases, gates, owners, the pre-mortem, and the stop conditions. |
+| `01-NORTH-STAR.md` | The goal, the ladder, the scoreboard, the running log |
+| `02-BACKLOG.md` | **What is left**, as items with status. Sits *under* the masterplan's phases. |
 | `03-PROTOCOL.md` | How a session runs, and how work is routed when you cannot do it |
 
 ### REFERENCE — read when its trigger fires, not by default
@@ -28,7 +30,8 @@ when the protocol says its trigger has fired.
 | File | Read it before... |
 |---|---|
 | `04-DECISIONS.md` | ...any decision about pricing, plans, positioning or scope |
-| `05-EVIDENCE.md` | ...researching anything. If it is here, it is known. Do not re-research it. |
+| `05-EVIDENCE.md` | ...researching anything. Store shapes, the EBS baseline, contaminated measurements. **§1–§2 superseded by `10-MARKET.md`.** |
+| `10-MARKET.md` | ...any claim about competitors, pricing, the platform or what can be measured. Verified 2026-09-10 from live sources. |
 | `07-VERIFICATION.md` | ...claiming anything is verified. It names the proof each claim class requires. |
 | `08-ECONOMICS.md` | ...anything touching cost, quota, model spend, plan limits or margin |
 
@@ -60,6 +63,19 @@ Four workers touch this project. Knowing which one owns a task is what stops wor
 with an owner and a complete brief, and the session carries on with the next thing it *can* do.
 
 ---
+
+## THE ORDER OF AUTHORITY
+
+When two files disagree, the higher one wins, and you say so in your report.
+
+1. **`00-CONSTITUTION.md`** — the laws. Learned by being wrong.
+2. **`09-DOCTRINE.md`** — what is true about the market and therefore what we sell and never claim.
+3. **`11-MASTERPLAN.md`** — the plan, its phases and its gates.
+4. **`02-BACKLOG.md`** — the items, with status.
+5. Everything else.
+
+*`04-DECISIONS.md` is partly superseded as of 2026-09-10 and is being reconciled (P0.11). Treat it
+as history until that closes.*
 
 ## THE FOUR RULES OF THIS FOLDER
 

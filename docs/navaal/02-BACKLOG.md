@@ -1,4 +1,23 @@
-# BACKLOG — the single source of truth for WHAT IS LEFT
+# BACKLOG — the items, with status
+
+> **⚠️ RE-BASED 2026-09-10.** The phase structure below (A · INFRA · B · C · D · E · G · R · F) was
+> written before the market research. **`11-MASTERPLAN.md` is now authoritative for phases, order
+> and gates**; this file is the item ledger underneath it. Phase A and PHASE INFRA are closed and
+> stay here as the record. The forward phases map like this:
+>
+> | Old | New home in `11-MASTERPLAN.md` |
+> |---|---|
+> | B (trust and the badge) | Phase 1 (truth) + B4 (achievement, then badge) |
+> | C (pricing) | **Phase 0** (P0.5 billing proved, P0.6 cost measured) + Phase 4 (the table) |
+> | D (the moat) | Phase 3 (Bing/IndexNow proof) + Phase 5 (Google engine, gated on paying merchants) |
+> | E (reach) | Phase 7 |
+> | G (installs and reviews) | Track B |
+> | R (reliability and retention) | Phase 6 |
+> | F (fixture matrix) | Continuous |
+>
+> **Items the doctrine now forbids are CLOSED, not OPEN** — llms.txt generation, FAQ-schema benefit
+> claims, "instant indexing", and any A/B content claim on a catalogue too small to detect one.
+> Reconciling every row against `09-DOCTRINE.md` is item **P0.11**.
 
 Status: `OPEN` · `IN PROGRESS` · `DONE <sha>` · `VERIFIED <sha>` · `BLOCKED <by>` · `CLOSED`
 Owner: **`CC`** code · **`CW`** browser + the owner's computer · **`COWORK`** research, strategy,

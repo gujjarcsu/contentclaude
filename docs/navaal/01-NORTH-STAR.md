@@ -1,5 +1,9 @@
 # NORTH STAR — Navaal
 
+> **The plan lives in `11-MASTERPLAN.md` (revision 2, 2026-09-10), and the ground rules in
+> `09-DOCTRINE.md`. Where this file's §4 strategy or §7 phase table disagrees with them, they win.**
+> This file keeps the goal, the ladder, the scoreboard and the running log.
+
 One file. Read it before starting anything. If a piece of work does not move a number
 in **The Scoreboard**, it is a distraction — however good an idea it is.
 
@@ -64,7 +68,10 @@ else belongs on this list. **Every row names who moves it** — a number nobody 
 The utility layer has collapsed to free — SEOLab is #5 in the category with 2,590 reviews and
 charges nothing; Avada gives llms.txt away. We cannot win there and will not try.
 The AI-visibility layer is pricing at $45–$99 with almost no traction: IndexGPT gates a prompt
-tracker behind its top tier, CartRank charges $99 and has **zero reviews**. Nobody has both halves.
+tracker behind its top tier, CartRank charges $99 and has **zero reviews**.
+**CORRECTED 2026-09-10:** "nobody has both halves" is no longer true — six apps now ship both.
+What nobody has is credible measurement at this price or a causal link between the content
+generated and the outcome reported. See `10-MARKET.md` §2 and `11-MASTERPLAN.md` §1.
 **Our position is the loop: generate → publish → prove the citation lift → regenerate what did not land.**
 Generation is the acquisition wedge. **Monitoring is the business**, because generation finishes and
 monitoring never does — and that is also the answer to churn.

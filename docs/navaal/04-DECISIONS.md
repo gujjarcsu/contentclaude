@@ -1,5 +1,14 @@
 # DECISIONS — settled. Do not re-litigate.
 
+> **⚠️ SUPERSEDED IN PART, 2026-09-10.** This table was set before the market research in
+> `10-MARKET.md` and the doctrine in `09-DOCTRINE.md`. **Three rows are now banned outright and must
+> not ship:** `llms.txt` in every tier (Shopify serves it natively on every store), "instant
+> indexing" as a phrase (Google's Indexing API excludes product pages), and A/B content testing at a
+> 5,000-product cap (statistically undetectable at that size — see `10-MARKET.md` §6). **The whole
+> pricing table is re-decided in `11-MASTERPLAN.md` P4.0**, informed by ten real merchants rather
+> than a spreadsheet. Until then, treat this file as history, not instruction. Reconciling it line
+> by line is item **P0.11**.
+
 To reopen one you must bring **new evidence**, not a preference. Say so explicitly and stop.
 
 ---

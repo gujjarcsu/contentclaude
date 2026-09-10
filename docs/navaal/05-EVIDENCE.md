@@ -1,5 +1,10 @@
 # EVIDENCE — verified facts. Do not re-research these.
 
+> **⚠️ §2 (competitor pricing) and §1 (the ladder) were superseded on 2026-09-10 by
+> `10-MARKET.md`, which was researched from live sources that day. Where the two disagree,
+> `10-MARKET.md` wins.** This file keeps the store-shape axes (§4), the EBS baseline (§5), the
+> inherited assets (§6) and the contaminated-measurement list (§6b), which remain current.
+
 Everything here was read from a primary source on the date shown. If you think one is stale,
 re-read the source and update the file — do not quietly assume.
 
@@ -31,7 +36,11 @@ re-read the source and update the file — do not quietly assume.
 **Readings that matter:**
 - The utility layer has collapsed to free. We cannot win there.
 - The AI-visibility layer prices at **$45–$99 with almost no traction**.
-- **Nobody has both halves.** Our position is the loop: generate → publish → prove citation lift → regenerate what did not land.
+- **~~Nobody has both halves.~~ FALSIFIED 2026-09-10 — see `10-MARKET.md` §2.** StoreRank ($29),
+  IndexGPT ($45), Kwik GEO ($50, from funded GoKwik), Vizby ($29), Shop Rank AI ($9.99) and Kedra
+  (free) all now ship generation **and** citation tracking. What nobody has solved is credible
+  measurement at this price, or a **causal** link between the content generated and the outcome
+  reported. That, not "both halves", is our position.
 - llms.txt is a free commodity.
 - "Unlimited with own key" is a proven margin unlock.
 - Category ARPU ≈ $25–35. Ours is designed at ~$66.
