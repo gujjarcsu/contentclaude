@@ -35,7 +35,16 @@ export const START_TARGETS = 3;
 /** Short — a merchant who refreshes twice in a minute should not re-scan. */
 export const START_SCAN_TTL_S = 120;
 
+// `shop { name }` is Phase 4 item 4 — the store's own name for the inferred
+// brand voice. One scalar on a query we already run: no extra request and no
+// extra round trip.
+//
+// NOTE: the comment lives OUT here. GraphQL comments are `#`, not `//`, and a
+// `//` inside this template literal is a syntax error Shopify rejects — which
+// no test in this repo would catch, because they all mock the transport and
+// never parse the query.
 export const START_SCAN_QUERY = `query startScan($n: Int!) {
+  shop { name }
   products(first: $n, sortKey: UPDATED_AT, query: "status:active") {
     edges { node {
       id title description productType vendor tags
@@ -141,8 +150,9 @@ export async function scanStoreForStart(
     );
     if (!r.ok) throw new Error(r.error ?? "scan unavailable");
 
+    const shopName = r.data?.shop?.name ?? null;
     const nodes = (r.data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
-    if (nodes.length === 0) return { empty: true };
+    if (nodes.length === 0) return { empty: true, shopName };
 
     const scored = nodes.map((node) => {
       const p = toScorable(node);
@@ -166,6 +176,7 @@ export async function scanStoreForStart(
 
     return {
       empty: false,
+      shopName,
       // Phase 4 item 4.3 — every scored product, so the store score and the
       // per-product before/after come from ONE scan. A "before" measured by a
       // different code path from the "after" is not a delta.

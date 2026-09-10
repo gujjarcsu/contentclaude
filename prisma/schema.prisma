@@ -191,6 +191,11 @@ model ContentTemplate {
 
 // Async bulk generation jobs
 model GenerationJob {
+  // Phase 4 item 5 — who asked for this job: "autopilot" | "bulk" |
+  // "quick_start". Nullable and never backfilled; the daily autopilot cap
+  // counts only rows explicitly marked "autopilot", so an unknown row can
+  // never be counted against a merchant's ceiling.
+  source           String?
   id                String    @id @default(cuid())
   shop              String
   status            String    @default("queued") // "queued" | "processing" | "complete" | "failed"
@@ -211,6 +216,7 @@ model GenerationJob {
   @@index([shop, status])
   @@index([shop, createdAt])
   @@index([status, startedAt])
+  @@index([shop, source, createdAt])
 }
 
 // Per-collection brand voice overrides — allows mixed-catalog merchants to use

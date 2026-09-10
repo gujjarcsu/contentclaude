@@ -13,6 +13,7 @@ import { getEntitlements } from "../utils/billing-plans.js";
 import { canGenerate } from "../utils/plans.server.js";
 import { invalidateLlmsTxt } from "../utils/llms.server.js";
 import logger from "../utils/logger.server.js";
+import { autopilotDailyUsage, AUTOPILOT_SOURCE } from "../utils/autopilot.server.js";
 
 export const action = async ({ request }) => {
   const { shop, payload, duplicate } = await verifyShopifyWebhook(request);
@@ -50,6 +51,20 @@ export const action = async ({ request }) => {
     return new Response("Plan limit reached", { status: 200 });
   }
 
+  // Phase 4 item 5 — the DAILY ceiling. Everything above bounds one product or
+  // one moment; this is what stops a bad catalogue import, a misbehaving
+  // integration or a product-sync loop from quietly spending a month's
+  // allowance in an afternoon. A 200 like every other refusal here: a non-2xx
+  // makes Shopify retry, and a retried refusal is a retry storm.
+  const daily = await autopilotDailyUsage(shop);
+  if (!daily.allowed) {
+    logger.info(
+      { shop, used: daily.used, cap: daily.cap, event: "autopilot_daily_cap" },
+      "Autopilot daily cap reached - skipping this product",
+    );
+    return new Response("Autopilot daily cap reached", { status: 200 });
+  }
+
   // Idempotency: Shopify may redeliver products/create on timeout/retry. If an
   // autopilot job for this exact product is already queued/processing, skip —
   // prevents duplicate jobs and double-charging. (The bulk processor's atomic
@@ -70,7 +85,11 @@ export const action = async ({ request }) => {
       totalProducts: 1,
       productIds: productIdsJson,
       contentTypes: contentTypes.join(","),
+      // Draft-only unless the merchant turned the switch on in Settings. The
+      // quality gate (item 4.1) withholds a flagged item from publishing even
+      // when this is true.
       autoPublish: brandVoice.autopilotAutoPublish,
+      source: AUTOPILOT_SOURCE,
     },
   });
 

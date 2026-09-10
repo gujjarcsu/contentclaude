@@ -44,6 +44,7 @@ import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { getStoreScore } from "../utils/storeScore.server.js";
 import { shopifyQuery } from "../utils/shopifyQuery.server.js";
+import { recentAutopilotWork } from "../utils/autopilot.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -208,12 +209,15 @@ export const loader = async ({ request }) => {
   // 100% used. Null when the shop is below the threshold, already out (that is
   // the card's job, on the screens where the action lives), or dismissed it in
   // the last 7 days. Never throws.
-  const [quotaWarning, storeScore] = await Promise.all([
+  const [quotaWarning, storeScore, autopilotRecap] = await Promise.all([
     getQuotaWarning({ shop, plan, usageCount, surface: "dashboard" }),
     // Phase 4 item 4.3 — the merchant's proof the app worked. One GraphQL page,
     // cached 10 minutes per shop, so reloading Home does not re-scan. Returns
     // { available: false } rather than a number it cannot stand behind.
     getStoreScore(admin, shop),
+    // Phase 4 item 5 — autopilot works while the merchant is not looking, so
+    // the one place it must show up is the screen they open next.
+    recentAutopilotWork(shop),
   ]);
 
   const start = isFirstRun
@@ -244,6 +248,7 @@ export const loader = async ({ request }) => {
     start,
     quotaWarning,
     storeScore,
+    autopilotRecap,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
     storeName,
@@ -540,6 +545,7 @@ export default function Dashboard() {
     start,
     quotaWarning,
     storeScore,
+    autopilotRecap,
     plan,
     usageCount,
     storeName,
@@ -635,6 +641,20 @@ export default function Dashboard() {
         {/* Phase 4 item 4.3 — above the fold, on purpose. This is the one
             number that tells a merchant the app did something for them. */}
         <StoreScoreCard score={storeScore} />
+
+        {/* Phase 4 item 5 — what autopilot did while nobody was watching. */}
+        {autopilotRecap && (
+          <Banner
+            tone="info"
+            title={`Autopilot optimized ${autopilotRecap.products} new product${autopilotRecap.products === 1 ? "" : "s"} in the last 24 hours`}
+            action={{ content: "Review the drafts", onAction: () => navigate("/app/review") }}
+          >
+            <p>
+              New products get content written for them automatically. Anything the quality check flagged is
+              waiting as a draft rather than going live.
+            </p>
+          </Banner>
+        )}
 
         {/* Phase 3 item 3.4, surface (a) — the only upsell on this screen. */}
         <QuotaWarningBanner warning={quotaWarning} />

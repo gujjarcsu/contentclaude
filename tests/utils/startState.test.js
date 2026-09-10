@@ -32,8 +32,15 @@ vi.mock("../../app/utils/cache.server.js", () => ({
   getCache: vi.fn(async (_key, fn) => fn()),
 }));
 
-const { scanStoreForStart, scoreProduct, pickWeakest, toScorable, SCAN_LIMIT, START_TARGETS } =
-  await import("../../app/utils/startState.server.js");
+const {
+  scanStoreForStart,
+  scoreProduct,
+  pickWeakest,
+  toScorable,
+  SCAN_LIMIT,
+  START_TARGETS,
+  START_SCAN_QUERY,
+} = await import("../../app/utils/startState.server.js");
 const { getCache } = await import("../../app/utils/cache.server.js");
 
 const SHOP = "a-store.myshopify.com";
@@ -54,9 +61,13 @@ function node(id, { title = `P${id}`, description = "", seoTitle = "", seoDescri
   };
 }
 
-const adminReturning = (nodes) => ({
+const adminReturning = (nodes, shopName = "Alpine Supply") => ({
   graphql: vi.fn(async () => ({
-    json: async () => ({ data: { products: { edges: nodes.map((n) => ({ node: n })) } } }),
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({
+      data: { shop: { name: shopName }, products: { edges: nodes.map((n) => ({ node: n })) } },
+    }),
   })),
 });
 
@@ -65,7 +76,7 @@ beforeEach(() => vi.clearAllMocks());
 describe("a store with nothing in it is told so, not scored", () => {
   it("reports empty rather than a score of zero", async () => {
     const r = await scanStoreForStart(adminReturning([]), SHOP);
-    expect(r).toEqual({ empty: true });
+    expect(r.empty).toBe(true);
     expect(r.storeScore).toBeUndefined();
   });
 });
@@ -131,6 +142,20 @@ describe("the score is computed from the merchant's own catalogue", () => {
     await scanStoreForStart(admin, SHOP);
     expect(admin.graphql.mock.calls[0][1]).toEqual({ variables: { n: SCAN_LIMIT } });
     expect(SCAN_LIMIT).toBeGreaterThan(0);
+  });
+
+  it("the query is valid GraphQL — no // comments in the template literal", () => {
+    // Nearly shipped: a `//` comment inside this string is a JS comment but a
+    // GraphQL SYNTAX ERROR, and every test here mocks the transport, so not
+    // one of them would have parsed it. Shopify would have rejected every
+    // scan in production.
+    expect(START_SCAN_QUERY).not.toMatch(/\/\//);
+    expect(START_SCAN_QUERY).toMatch(/shop \{ name \}/);
+  });
+
+  it("asks for the store's own name, for the inferred brand voice", async () => {
+    const r = await scanStoreForStart(adminReturning([node(1)], "Alpine Supply"), SHOP);
+    expect(r.shopName).toBe("Alpine Supply");
   });
 
   it("scans only ACTIVE products — a draft product is not a storefront problem", async () => {

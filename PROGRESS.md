@@ -3413,3 +3413,90 @@ began timing out at 5s. They now use the real helper with `maxRetries: 0`, and t
 fake-timer tests. Worth stating plainly: the retries are real time on a genuinely throttled store, up to
 about 7 seconds before giving up — which is the right trade against a 500, and is why the give-up path
 returns a partial page with a banner rather than an error.
+
+## 4-item-5 — Autopilot, bounded
+
+Autopilot is the only path in the app where a merchant's generation is spent **without them clicking
+anything**. `products/create` fires once per product, and a catalogue import fires it thousands of times
+in a burst.
+
+It already had the Growth+ entitlement, a quota fast-fail, per-product idempotency and a concurrent-job
+cap. Every one of those bounds a single product or a single moment. **Nothing bounded an afternoon.**
+
+- **Daily cap: 50 products per shop per UTC day.** Chosen against the plans rather than picked round —
+  Growth is 200/month, so 50 is a quarter of the monthly allowance: enough that a normal day of adding
+  products is never blocked, small enough that a runaway import is stopped on the first day rather than
+  the second. It counts **products, not jobs**, so the cap does not become meaningless the day an
+  autopilot job covers more than one.
+- **Refusal is a 200**, like every other refusal in that webhook. A non-2xx makes Shopify retry, and a
+  retried refusal is a retry storm.
+- **A failed counter ALLOWS the work.** Every other bound still applies, and failing closed there would
+  silently switch a paying merchant's automation off with no error anywhere.
+- **A job whose `source` is unknown is not counted** — that is a row written before the column existed,
+  and refusing work on evidence we do not have is the wrong direction.
+- **Draft-only unless the Settings switch is on**, and the 4.1 quality gate withholds a flagged item from
+  publishing even when it is.
+- **Home says what happened**: "Autopilot optimized N new products in the last 24 hours", with a link to
+  Review. Autopilot works while the merchant is not looking, so the one place it must appear is the
+  screen they open next. Silent when it did nothing, and silent when jobs completed with zero products —
+  "Autopilot optimized 0 new products" is worse than saying nothing.
+
+New migration `20260910170000_autopilot_bounds`: `GenerationJob.source`, nullable, no backfill.
+
+## 4-item-7 — Restore original, one click
+
+Version history and a per-type restore already existed on the product page. What did not exist was the
+one a merchant actually reaches for: they have looked at their storefront, they do not like what the app
+wrote, and they want their own words back **now** — from the list, without opening the product and
+finding the History tab.
+
+- **On the product row**, shown only when the AI version is actually live *and* an original was saved.
+  Offering to undo something that never happened is noise on every row.
+- **Not gated.** The restore branch runs **before** the bulk entitlement check. A shop that downgraded
+  must still be able to undo what the app did to its storefront.
+- **Nothing is destroyed.** The AI version goes back to being a draft, so the merchant can change their
+  mind. Undoing a publish is not throwing the work away.
+- **A failed publish does not downgrade the rows.** The AI content is still live; marking it a draft
+  would leave the app describing a storefront that does not exist.
+- **It refuses when there is no saved original**, rather than publishing an empty description — which
+  would wipe the product's copy entirely, the exact opposite of a restore.
+- **The confirm says what happens to both sides**: the original goes live, the AI version is kept,
+  nothing is deleted. A confirm that only names what it destroys makes people cancel; one that only names
+  what it does makes them careless.
+
+## 4-item-4 — Brand voice inferred
+
+The retired `/app/setup` opened with five questions about tone and audience before the merchant had seen
+the app do anything. Most people answered badly or not at all, and a blank brand voice produces generic
+copy — **so the form that existed to improve quality was mostly lowering it.**
+
+The shop already contains the answer. A merchant who has written their own product descriptions has
+demonstrated their voice far more accurately than they could describe it in a text field.
+
+- **It costs nothing extra.** The store name rides on the catalogue scan the Start state already runs
+  (`shop { name }` added to that query); the samples are the products that scan already returned. No new
+  Shopify request, no model call.
+- **The samples are the merchant's BEST-written descriptions**, ranked by the score the app already
+  computes — their best work, not the first three alphabetically. Descriptions too short to say anything
+  are skipped even when they score well.
+- **It never overwrites the merchant.** The write is create-only through an upsert whose `update` is
+  `{}` — deliberately empty, so even a race between the read and the write leaves a merchant's own
+  settings intact. Settings always wins.
+- **It is not gated.** A brand voice is not a feature; it is the difference between usable copy and
+  generic copy, and charging for it would mean deliberately shipping worse writing to free shops. A test
+  asserts the module references no entitlement at all.
+- **It invents nothing.** A shop with no copy of its own gets an empty `sampleContent`, which is honest.
+
+### A bug this nearly shipped
+
+Adding `shop { name }`, I wrote the explanatory comment **inside the GraphQL template literal** using
+`//`. That is a valid JS comment and a **GraphQL syntax error**: Shopify would have rejected every scan —
+the Start state, the store score and this inference, all at once.
+
+**Not one test would have caught it.** Every test in this repo mocks the transport and none parses the
+query. It was caught by reading the diff. The comment now lives outside the string, with a note saying
+why, and there is a test asserting the query contains no `//`.
+
+That is the fourth false-green shape in this project, and it is worth naming precisely: *a check that
+never exercises the thing it appears to cover.* The tests around that query are thorough and would all
+have stayed green while the feature was completely broken in production.

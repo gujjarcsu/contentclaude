@@ -53,6 +53,7 @@ import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap } from "../utils/productState.js";
 import { productScoresFor } from "../utils/storeScore.server.js";
 import { shopifyQuery, productsPage } from "../utils/shopifyQuery.server.js";
+import { publishProductWithRetry } from "../utils/adminGraphql.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -142,15 +143,28 @@ export const loader = async ({ request }) => {
   const generatedContent = visibleIds.length
     ? await prisma.generatedContent.findMany({
         where: { shop, productId: { in: visibleIds } },
-        select: { productId: true, contentType: true, status: true, updatedAt: true },
+        select: {
+          productId: true,
+          contentType: true,
+          status: true,
+          updatedAt: true,
+          // Phase 4 item 7 — is there an original to put back? Only the
+          // presence matters here, never the text: sending fifty product
+          // descriptions to the browser to render a button would be absurd.
+          originalContent: true,
+        },
       })
     : [];
 
   // Per-product map for the visible page: { [productId]: { description: {status, updatedAt}, ... } }
   const contentMap = {};
-  generatedContent.forEach(({ productId, contentType, status, updatedAt }) => {
+  generatedContent.forEach(({ productId, contentType, status, updatedAt, originalContent }) => {
     if (!contentMap[productId]) contentMap[productId] = {};
-    contentMap[productId][contentType] = { status, updatedAt };
+    contentMap[productId][contentType] = {
+      status,
+      updatedAt,
+      hasOriginal: !!String(originalContent ?? "").trim(),
+    };
   });
 
   // Phase 2 item 2.1 - read, never recompute. This page used to derive
@@ -207,6 +221,55 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const actionType = formData.get("actionType") || "generateSelected";
+
+  // Phase 4 item 7 — "Restore original", handled BEFORE the bulk entitlement
+  // gate below. Putting a merchant's own words back is not a paid feature, and
+  // gating it behind Growth would mean a downgraded shop could not undo what
+  // the app did to their storefront.
+  if (actionType === "restoreOriginal") {
+    const productId = String(formData.get("productId") || "");
+    if (!/^gid:\/\/shopify\/Product\/\d+$/.test(productId)) {
+      return { error: "Invalid product." };
+    }
+    const row = await prisma.generatedContent.findUnique({
+      where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
+      select: { originalContent: true, productTitle: true },
+    });
+    const original = String(row?.originalContent ?? "").trim();
+    if (!original) {
+      return {
+        error: "We do not have this product's original description saved, so there is nothing to put back.",
+      };
+    }
+
+    const pub = await publishProductWithRetry((q, o) => admin.graphql(q, o), productId, {
+      id: productId,
+      descriptionHtml: original,
+    });
+    if (!pub.ok) {
+      return {
+        error: pub.throttled
+          ? "Shopify is rate-limiting your store right now. Please try again in a minute."
+          : `Could not restore the original: ${pub.error}`,
+      };
+    }
+
+    // The AI content is no longer live, so it goes back to being a draft the
+    // merchant can publish again. It is NOT deleted — undoing a publish is not
+    // the same as throwing the work away.
+    await prisma.generatedContent
+      .updateMany({
+        where: { shop, productId, status: { in: ["published", "published_unverified"] } },
+        data: { status: "draft", verifiedAt: null, verifyNote: null },
+      })
+      .catch(() => {});
+
+    return {
+      success: true,
+      restored: true,
+      message: `Your original description is live again for "${row?.productTitle || "this product"}". The AI version is saved as a draft.`,
+    };
+  }
 
   const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
     (t) => formData.get(`bulk_${t}`) === "true",
@@ -408,6 +471,9 @@ export default function ProductsPage() {
   const [, setSearchParams] = useSearchParams();
 
   const [searchValue, setSearchValue] = useState("");
+  // Phase 4 item 7 — which product the merchant is being asked to confirm a
+  // restore for. Null when the modal is closed.
+  const [restoring, setRestoring] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [bulkDesc, setBulkDesc] = useState(true);
   const [bulkMeta, setBulkMeta] = useState(true);
@@ -518,6 +584,19 @@ export default function ProductsPage() {
         SEO {sc.before} &rarr; {sc.after}
       </Text>
     );
+  }
+
+  /**
+   * Phase 4 item 7 — can we put this merchant's own words back?
+   *
+   * Only when the AI version is actually LIVE and we saved what was there
+   * before. Offering "Restore original" beside a draft would be offering to
+   * undo something that never happened.
+   */
+  function canRestore(productId) {
+    const desc = contentMap[productId]?.description;
+    if (!desc?.hasOriginal) return false;
+    return desc.status === "published" || desc.status === "published_unverified";
   }
 
   function getContentTypePills(productId) {
@@ -821,6 +900,39 @@ export default function ProductsPage() {
           </Card>
         )}
 
+        {/* Phase 4 item 7 — restoring puts the merchant's own words back on a
+            LIVE storefront, so it asks first. The copy says exactly what will
+            happen to both sides: the original goes live, the AI version is
+            kept. Nothing here is destroyed. */}
+        <Modal
+          open={!!restoring}
+          onClose={() => setRestoring(null)}
+          title="Put your original description back?"
+          primaryAction={{
+            content: "Restore original",
+            onAction: () => {
+              const fd = new FormData();
+              fd.append("actionType", "restoreOriginal");
+              fd.append("productId", restoring.id);
+              submit(fd, { method: "post" });
+              setRestoring(null);
+            },
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setRestoring(null) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd">
+                {`Your original description for "${restoring?.title ?? ""}" goes back on your storefront, replacing the AI version that is live now.`}
+              </Text>
+              <Text as="p" variant="bodyMd">
+                The AI version is kept as a draft, so you can publish it again whenever you want. Nothing is
+                deleted.
+              </Text>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+
         {/* Product list with status tabs */}
         <Card padding="0">
           <Tabs tabs={tabs} selected={activeTab} onSelect={handleTabChange} fitted />
@@ -896,9 +1008,16 @@ export default function ProductsPage() {
                     <BlockStack gap="200" inlineAlign="end">
                       {getStatusBadge(id)}
                       {getScoreDelta(id)}
-                      <Button size="slim" onClick={() => navigate(`/app/products/${numericId}`)}>
-                        Generate
-                      </Button>
+                      <InlineStack gap="200">
+                        {canRestore(id) && (
+                          <Button size="slim" variant="plain" onClick={() => setRestoring({ id, title })}>
+                            Restore original
+                          </Button>
+                        )}
+                        <Button size="slim" onClick={() => navigate(`/app/products/${numericId}`)}>
+                          Generate
+                        </Button>
+                      </InlineStack>
                     </BlockStack>
                   </InlineStack>
                 </ResourceItem>

@@ -96,6 +96,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "GenerationJob.productIds",
   "GenerationJob.quotaSkipped",
   "GenerationJob.shop",
+  "GenerationJob.source",
   "GenerationJob.startedAt",
   "GenerationJob.status",
   "GenerationJob.totalProducts",

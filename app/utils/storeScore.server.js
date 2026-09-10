@@ -32,6 +32,7 @@
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { scanStoreForStart } from "./startState.server.js";
+import { ensureInferredBrandVoice } from "./brandVoiceInfer.server.js";
 
 /** Home re-reads the store score at most this often. */
 export const STORE_SCORE_TTL_S = 600;
@@ -69,6 +70,12 @@ export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
     // any product we are seeing for the first time. This rides the scan that
     // already happened — no extra Shopify request.
     void recordProductScores(shop, scan.scored ?? [], now);
+
+    // Phase 4 item 4 — infer the brand voice from what the shop already
+    // contains, riding the same scan. Create-only: a merchant who has set
+    // theirs in Settings keeps it. Not awaited; a brand voice is not worth
+    // delaying the dashboard for.
+    void ensureInferredBrandVoice(shop, { scored: scan.scored ?? [], shopName: scan.shopName });
 
     const atInstall = row?.storeScoreAtInstall;
     if (!Number.isFinite(atInstall)) {
