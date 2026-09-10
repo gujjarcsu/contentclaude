@@ -110,7 +110,11 @@ These are commitments already made to merchants. Breaking one is not a trade-off
 4. **A cap is never presented as a total** (L5). A quota screen states what is included, what is
    used, and what happens next — once, not the same fact twice in adjacent lines.
 5. **Entitlement is visible before the click** (L5, A3.1). Never a bare navigate to billing.
-6. **No "SLA" and no "dedicated account manager"**, anywhere, ever. At low review volume one
+6. **No "SLA" and no "dedicated account manager"** — the WORDS, not the service. **REFINED
+   2026-09-10:** the owner supports merchants personally and at small numbers that is a real
+   advantage; the offer stays, the two undefined words go, replaced by *"Direct access to the
+   founder. Every question answered within one business day. A setup call when you start."*
+   Full wording in `12-OFFER.md` §6. The original reasoning still holds: at low review volume one
    unmet promise halves the rating. "Onboarding call" and "guaranteed 1-business-day response"
    are keepable and are what we say instead.
 7. **Merchant-supplied AI keys are secrets** (L9). Never printed, never logged, never in an error.

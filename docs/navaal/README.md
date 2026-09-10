@@ -21,6 +21,7 @@ when the protocol says its trigger has fired.
 | `00-CONSTITUTION.md` | **Laws.** Each was learned by being wrong. A law beats an instruction. |
 | `09-DOCTRINE.md` | **What we sell and what we refuse to say**, with the evidence for each. Outranks enthusiasm. |
 | `11-MASTERPLAN.md` | **The plan.** Phases, gates, owners, the pre-mortem, and the stop conditions. |
+| `12-OFFER.md` | **The plans, the features and the listing copy** — including the line the listing may not cross. |
 | `01-NORTH-STAR.md` | The goal, the ladder, the scoreboard, the running log |
 | `02-BACKLOG.md` | **What is left**, as items with status. Sits *under* the masterplan's phases. |
 | `03-PROTOCOL.md` | How a session runs, and how work is routed when you cannot do it |

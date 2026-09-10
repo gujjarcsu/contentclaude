@@ -42,9 +42,13 @@ the difference? This falsifies or confirms the assumption the whole positioning 
 (`09-DOCTRINE.md` §0.1). **If they consistently pick the bolder claim, we change the words, not the
 doctrine.**
 
-### F. Do not sell an onboarding call or a 1-business-day response — **a decision, now**
-One person cannot be the only engineer and the enterprise success team. `04-DECISIONS.md` promises
-both at Enterprise. Withdraw them until there is capacity to honour them.
+### F. Keep the human service — change two words — **decided 2026-09-10**
+You said you have time to do this personally, and at a small number of merchants that is a real
+advantage no large competitor can match, so **the offer stays.** What changes is the wording:
+"SLA support" and "Dedicated account manager" become **"Direct access to the founder. Every question
+answered within one business day. A setup call when you start."** "SLA" means a contractual
+guarantee with remedies we have not written; "account manager" implies someone who exists while you
+are asleep. The replacement is truer and reads better. Full wording in `12-OFFER.md` §6.
 
 ---
 

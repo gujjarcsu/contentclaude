@@ -92,7 +92,7 @@ monitoring never does — and that is also the answer to churn.
 | Trial = **14 days** (competitors run 3–7) | ✔ |
 | Generations rejected by the quality gate are **never billed** | ✔ |
 | Unused generations roll over **one month** | ✔ |
-| Enterprise promises **onboarding call + 1-business-day response** — never "SLA" or "dedicated account manager" | ✔ |
+| Enterprise promises **a setup call, direct access to the founder, and every question answered within one business day** — never the words "SLA" or "dedicated account manager" (`12-OFFER.md` §6) | ✔ |
 | **No rank tracker.** Use Search Console's own position data | ✔ |
 | AI probes carry an **honest method label** naming the model and the method | ✔ |
 

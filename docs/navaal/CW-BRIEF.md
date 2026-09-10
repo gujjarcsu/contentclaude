@@ -36,10 +36,13 @@ zero reviews one unmet promise halves the rating. This is a live commitment to a
 subscribes today.
 
 **Do:** Partner Dashboard → Apps → Navaal → Distribution → App Store listing → the pricing section.
-Find the Professional tier's feature list. Remove the line containing "Dedicated account manager"
-and the line containing "SLA support". Do not replace them with anything yet — the approved
-replacements are "onboarding call" and "guaranteed 1-business-day response", but those belong to
-the Enterprise tier in the new pricing and that pricing has not shipped, so removing is correct now.
+Find the Professional tier's feature list. **Replace** the line "Dedicated account manager" with
+**"Direct access to the founder"**, and the line "SLA support" with **"Every question answered
+within one business day"**. Add **"Setup call when you start"** if there is room.
+
+The service is real and the owner will do it personally — it is the two undefined words that go.
+"SLA" means a contractual guarantee with remedies we have not written; "account manager" implies a
+person who exists while the owner is asleep. See `12-OFFER.md` §6.
 
 Submit the listing change if submission is required.
 

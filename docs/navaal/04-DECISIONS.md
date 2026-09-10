@@ -57,7 +57,7 @@ extra competitor $10 each · done-for-you setup $750 one-time (contact action, n
 | **14-day trial** | Competitors run 3–7. SEO cannot prove itself in a week; the citation probe can prove itself in one run, so a longer trial favours us. |
 | **Rejected generations never billed** | Costs nothing, nobody else has it, and it is a trust line for the listing. |
 | **Round prices, not .99** | Reads as a business tool. We compete on proof, not on being cheapest. |
-| **No "SLA" or "dedicated account manager"** | At 0 reviews one unmet promise halves the rating. "Onboarding call" and "guaranteed 1-business-day response" are keepable. |
+| **No "SLA" or "dedicated account manager"** — the words only; the human service stays, reworded per `12-OFFER.md` §6 | At 0 reviews one unmet promise halves the rating. "Onboarding call" and "guaranteed 1-business-day response" are keepable. |
 
 ---
 
