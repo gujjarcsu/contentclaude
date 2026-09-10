@@ -1,11 +1,22 @@
 // Token-free verification (HMAC only) — see app/utils/webhookAuth.server.js for
 // why the library authenticator cannot be used on lifecycle/GDPR webhooks.
+//
+// This topic was failing 82.4% of deliveries. Two causes, both fixed:
+//   1. The 24 h triggered-at window refused every retry past a day old, while
+//      Shopify retries for ~48 h carrying the original timestamp. One transient
+//      failure and the delivery could never succeed again.
+//   2. It answered in 1,039 ms because the carryover capture, the job cancel
+//      and thirteen chunked deletes all ran before the 200.
+//
+// What must happen BEFORE the 200 is the uninstall stamp: it is the durable
+// marker that says data deletion is owed for this shop, and it is what
+// sweepUnfinishedWebhookWork keys on if this process dies before the deletion
+// finishes.
 import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import db from "../db.server.js";
 import logger from "../utils/logger.server.js";
-import { chunkDelete, GDPR_SHOP_MODELS } from "../utils/gdpr.server.js";
 import { markShopUninstalled } from "../utils/installTracking.server.js";
-import { captureUsageCarryover } from "../utils/plans.server.js";
+import { finishAfterResponse, finishUninstall } from "../utils/webhookWork.server.js";
 
 // Shopify may deliver a webhook more than once and retries failed deliveries
 // for hours. A delivery TRIGGERED before the shop's latest reinstall describes
@@ -25,7 +36,7 @@ async function isStaleUninstallDelivery(shop, triggeredAt) {
 }
 
 export const action = async ({ request }) => {
-  const { shop, topic, triggeredAt, duplicate } = await verifyShopifyWebhook(request);
+  const { shop, topic, triggeredAt, webhookId, duplicate } = await verifyShopifyWebhook(request);
 
   logger.info({ shop, topic, triggeredAt }, "Webhook received: app/uninstalled");
 
@@ -41,57 +52,16 @@ export const action = async ({ request }) => {
     return new Response();
   }
 
-  // Phase 0 item 10 — record this month's generation count BEFORE the delete
-  // wipes UsageRecord and Plan. Without it, uninstall + reinstall handed out a
-  // fresh 25 free generations on demand. A number only; nothing identifying.
-  await captureUsageCarryover(shop);
-
-  // Phase 0 item 14 — stop any run that is still going. Without this the worker
-  // kept working through the catalogue for a store that no longer has the app,
-  // burning four immediate 401 refresh attempts on every remaining product.
-  // (The rows are deleted moments later; this is what the WORKER sees on its
-  // next per-product status check, which makes it abort straight away.)
-  try {
-    const { count } = await db.generationJob.updateMany({
-      where: { shop, status: { in: ["queued", "processing"] } },
-      data: {
-        status: "failed",
-        completedAt: new Date(),
-        errorLog: JSON.stringify([
-          { productId: "N/A", error: "The app was uninstalled while this job was running." },
-        ]),
-      },
-    });
-    if (count > 0)
-      logger.info(
-        { shop, count, event: "jobs_cancelled_on_uninstall" },
-        "Cancelled in-flight jobs on uninstall",
-      );
-  } catch (err) {
-    logger.warn({ shop, err: err?.message }, "Could not cancel in-flight jobs on uninstall (non-fatal)");
-  }
-
-  try {
-    await db.$transaction(
-      async (tx) => {
-        // Batched deletion so large tenants stay within the transaction timeout.
-        for (const model of GDPR_SHOP_MODELS) {
-          await chunkDelete(tx, model, { shop });
-        }
-      },
-      { timeout: 60_000 },
-    );
-    logger.info({ shop }, "All shop data deleted after uninstall");
-  } catch (err) {
-    // Log but don't fail — Shopify expects a 200 regardless.
-    // The shop/redact GDPR webhook will be sent 48h later as a second chance.
-    logger.error({ shop, err }, "Failed to delete shop data on uninstall");
-  }
-
-  // The Shop row is intentionally NOT in GDPR_SHOP_MODELS: it survives uninstall
-  // with uninstalledAt set so installs/uninstalls/reinstalls stay countable. The
-  // shop/redact webhook (48h later) anonymises it.
+  // The Shop row is intentionally NOT deleted: it survives uninstall with
+  // uninstalledAt set so installs/uninstalls/reinstalls stay countable, and
+  // shop/redact anonymises it 48 h later. Stamping it here, before the 200, is
+  // what makes the deferred deletion recoverable.
   await markShopUninstalled(shop, triggeredAt);
+
+  // Carryover capture, in-flight job cancel, and the deletion itself. If this
+  // dies half-way the sweep finishes it; shop/redact 48 h later is the second
+  // safety net it always was.
+  finishAfterResponse("app_uninstalled_deferred", { shop, webhookId }, () => finishUninstall(shop));
 
   return new Response();
 };

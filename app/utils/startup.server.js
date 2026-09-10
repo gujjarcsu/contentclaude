@@ -279,6 +279,17 @@ async function gracefulShutdown(signal) {
   _shuttingDown = true;
   logger.info({ signal }, "Shutdown signal received — closing BullMQ and Prisma gracefully");
 
+  // Webhook handlers answer 200 and finish the deletion afterwards. Waiting for
+  // that here is what stops a routine deploy from interrupting a GDPR redaction
+  // that started two seconds earlier. Anything still going after the timeout is
+  // left to the worker's sweep.
+  try {
+    const { drainWebhookWork } = await import("./webhookWork.server.js");
+    await drainWebhookWork();
+  } catch (err) {
+    logger.error({ err }, "Error draining deferred webhook work");
+  }
+
   try {
     if (process.env.REDIS_URL) {
       const { closeQueue } = await import("../queues/generationQueue.server.js");

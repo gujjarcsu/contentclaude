@@ -24,8 +24,11 @@ import { sendOperatorEmail } from "./notify.server.js";
 import { buildDailyDigest } from "./digest.server.js";
 import { getRedis } from "./cache.server.js";
 import { runNightlyBackup } from "./backup.server.js";
+import { sweepUnfinishedWebhookWork } from "./webhookWork.server.js";
 
 const HEALTH_INTERVAL_MS = 5 * 60 * 1000;
+/** How often the worker looks for webhook work that was acknowledged but never finished. */
+const WEBHOOK_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const BASE_URL = (process.env.SHOPIFY_APP_URL || "https://app.navaal.ai").replace(/\/$/, "");
 const HEALTH_URL = `${BASE_URL}/api/health?deep=1`;
 /** The embedded admin shell. /api/health can be perfectly healthy while this 500s. */
@@ -66,6 +69,7 @@ const BACKUP_HOUR_SYDNEY = 3;
 
 let _healthTimer = null;
 let _digestTimer = null;
+let _sweepTimer = null;
 // In-memory is enough for the alert state: a worker restart re-alerting once on
 // a genuinely broken system is the correct behavior, not a bug.
 let _lastAlertAt = 0;
@@ -373,6 +377,15 @@ export function startScheduler() {
   }, 60_000);
   _digestTimer.unref?.();
 
+  // Uninstall and redaction deletion now runs AFTER the 200 so the webhook
+  // answers in milliseconds. This is the net under that: it finds work that was
+  // acknowledged but never finished — a deploy or a machine stop mid-deletion —
+  // and completes it. In the worker, so it runs exactly once.
+  _sweepTimer = setInterval(() => {
+    sweepUnfinishedWebhookWork().catch((err) => logger.error({ err }, "webhook sweep threw"));
+  }, WEBHOOK_SWEEP_INTERVAL_MS);
+  _sweepTimer.unref?.();
+
   logger.info(
     {
       healthEveryMs: HEALTH_INTERVAL_MS,
@@ -380,6 +393,7 @@ export function startScheduler() {
       healthUrl: HEALTH_URL,
       appUrl: APP_URL,
       degradedProbesBeforeAlert: DEGRADED_PROBES_BEFORE_ALERT,
+      webhookSweepEveryMs: WEBHOOK_SWEEP_INTERVAL_MS,
     },
     "Operator scheduler started",
   );
@@ -388,6 +402,8 @@ export function startScheduler() {
 export function stopScheduler() {
   if (_healthTimer) clearInterval(_healthTimer);
   if (_digestTimer) clearInterval(_digestTimer);
+  if (_sweepTimer) clearInterval(_sweepTimer);
   _healthTimer = null;
   _digestTimer = null;
+  _sweepTimer = null;
 }

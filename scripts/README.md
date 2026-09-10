@@ -1,6 +1,6 @@
 # scripts — operational scripts that run on the machine
 
-Seven scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
+Eight scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
 already exist:
 
 ```bash
@@ -27,6 +27,7 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `backfill-faq-metafields--dry-run-default.mjs` | **dry run** | Repairs FAQ metafields that were recorded as published but are missing live. Idempotent, resumable. `--apply` to write. |
 | `fix-legacy-alttext-rows--dry-run-default.mjs` | **dry run** | Marks pre-fix alt-text rows failed — they were stored as published but never reached Shopify. `--apply` to write. |
 | `test-seed-usage--writes-test-store-only.mjs` | **writes** | Inserts synthetic usage rows to exhaust a dev shop's quota, so the upgrade prompts can be photographed without spending 25 real generations. **Refuses any shop it does not recognise as a test store.** `SEED_ACTION=restore` removes them. |
+| `webhook-probe--writes-fake-shop-only.mjs` | **writes** | Sends real HMAC-signed webhook deliveries to production and prints the status and time for each. This is what found the 88.5% failure rate. **Refuses any domain but the fake probe shop**, because app/uninstalled deletes everything for the shop in the header. Removes its own GDPR audit rows. |
 | `generate-schema-columns.mjs` | read-only | Regenerates the expected-column list the schema-drift guard compares against. Run it after ANY change to `prisma/schema.prisma`; a test fails if the committed list is stale. `--check` exits 1 instead of writing. Touches no database. |
 | `ttv-report.mjs` | read-only | Time-to-first-value, review-ask outcomes, upgrade funnel. No writes. |
 | `diag-shop.cjs` | read-only | One shop's install, plan and session state. |
