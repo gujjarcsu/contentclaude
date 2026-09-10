@@ -4171,3 +4171,36 @@ filters when nothing matches — "no rows matched" and "nothing happened" are di
 swallowed — not that the table accepts it, nor that 30 days actually elapse. The first real read is
 queued. **INFRA1's live proof** — dispatch during a push and show one version — needs a real deploy and
 is pending.
+
+### INFRA1, proved live — and the hole the proof exposed
+
+The item asked for a specific proof: *dispatch during a push, show one version.* Done on `64c703b`:
+
+| run | read | result |
+| --- | --- | --- |
+| Manual dispatch, 15:56:46 | `live sha: 693db1c…` (the old commit) | **deployed** |
+| CI push, 16:00:36 | `live sha == target sha` | **"This commit is already live — skipping a duplicate deploy (INFRA1)."** |
+
+**One deploy, not two.** The property that makes it robust is that whichever run acquires the
+concurrency slot *second* is the one that skips — so the order does not matter and neither path needs
+to know about the other.
+
+### INFRA8 — the proof run found a hole INFRA1 had widened
+
+`deploy.yml` runs **no tests**. Before INFRA1 that was survivable: dispatching it double-deployed, but
+`ci.yml` also deployed the same commit once its tests went green, so a tested copy always landed. With
+the duplicate now skipped, **if the manual path wins the race it becomes the only deploy** — and it can
+ship a commit whose test job is still running, or already red.
+
+This is not hypothetical. On the proof run the manual path deployed at **15:56:46** and CI's test job
+only confirmed the commit at **16:00:36**: four minutes of shipped-but-unverified. The tests happened to
+pass. Nothing in the system required that.
+
+`deploy.yml` now requires the `Lint · Test · Build` check to be `success`. It **fails open** on an
+unreadable status, deliberately — it is the *repair* path, and refusing to deploy during an incident
+because a status API was slow is the wrong way to be wrong. A known-bad status still refuses, and
+`force: true` bypasses for the case where somebody is deliberately shipping past a red build.
+
+Worth naming plainly: **INFRA1 made the system safer in one dimension and less safe in another**, and
+the only reason that surfaced is that the item demanded a live proof rather than a unit test. A guard
+proved only in the abstract would have shipped the regression.

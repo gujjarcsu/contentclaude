@@ -55,7 +55,7 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 | ID | Task | Why | Done looks like |
 |---|---|---|---|
 | H2 | Add `hello@navaal.ai` as a second UptimeRobot alert contact | Alerts go only to one inbox today | Both monitors list both contacts, read back on a fresh page load |
-| H3 | Five fresh dev-store installs, ≥10 products each, let the Start state run | TTFV cohort is empty (`cohortSize: 0`) | `ttv-report.mjs` shows populated median and p90 |
+| H3 | Five fresh dev-store installs, >=10 products each, let the Start state run | **Cohort complete 2026-09-10.** navaal-ttv-01..05 created with 17 products each (verified per store). Installed from the App Store listing: TTV 02, 03, 04, 05 earlier in the day; **TTV 01 (renamed Harbourline Goods) installed 15:56:34 UTC** — grant to all three drafts complete in **under 18 seconds**, store scored 34/100 (GEO 43, Traditional SEO 25), 3 drafts written. TTV 04 was later uninstalled for the webhook test, so the live cohort is 4 of the 5. **Still needs `ttv-report.mjs` run via `fly ssh` (Claude Code) to produce median/p90** | `ttv-report.mjs` shows populated median and p90 |
 | H4 | Screen-record ONE of those installs, URL bar visible, grant → first proposal | The 120-second acceptance recording | A single video under 120s |
 | H5 | Drive a dev store 0 → 20 → 25 generations, URL bar visible | Quota-surface acceptance: nothing below 20, one banner from 20, actions replaced at 25 | Recording + banner stays dismissed on reload and another device |
 | H6 | Upgrade from the 100% card → Approve → land back in-admin | Billing attribution chain | `diag-shop.cjs` shows `upgradePromptSource: "quota100"` |

@@ -15,10 +15,11 @@ Better still, and now the standard: **verify a guard by breaking it.** Disable t
 watches and show the test count that fails. CC did this for the claim check (2 tests) and the
 family skip (4 tests). That is the bar.
 
-*Six false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
+*Seven false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
 comparing an empty commit range, a passing test suite over a GraphQL query with a `//` syntax
 error, a harness measuring `admin.shopify.com` instead of our own iframe, and a setting with a column,
-a read path and a green suite that no merchant could reach (see L15).*
+a read path and a green suite that no merchant could reach (L15), and a folder of
+guiding documents that confidently described a workflow nobody had read to the end (L16).*
 
 ## L2 — THE STORE-SHAPE LAW
 Name the store shapes every fix must hold for, and prove it against them.
@@ -108,3 +109,45 @@ So "done", for anything a merchant touches, requires all three:
 
 *This is the sixth false-green shape, and the first that a perfect test suite guarantees you will
 miss. Audit every existing setting for it, not only new ones.*
+
+## L16 — A CLAIM ABOUT A FILE IS PROVED BY THE WHOLE FILE
+Reading part of a file and inferring the rest is not reading it. Before you write down what a
+file, workflow, config or schema *does* — especially into this folder, where it will steer other
+sessions — read it end to end and quote the line number.
+
+*Cowork read the first thirty lines of `ci.yml`, saw a comment saying in plain English that a push
+to `main` IS a deploy, concluded the opposite, and wrote the opposite into the standing prompt.
+The evidence was in its own tool output. Partial reads do not fail loudly; they fail confidently.*
+
+Corollary: **grep tells you a string exists, never that a thing is true.** A grep hit is a pointer
+to a file you now have to read.
+
+## L17 — BLOCKED WORK IS ROUTED, NEVER PARKED
+"I could not do this" is half a sentence. The other half is **who can, and exactly how.**
+Every task you cannot finish goes into `06-QUEUE.md` with an owner (`CC` · `CW` · `COWORK` ·
+`OWNER`) and a brief complete enough that its owner needs to ask you nothing.
+
+Then you carry on. A session never stops because *one* item is blocked — only because *every*
+item it owns is.
+
+*Four browser tasks sat blocked on a single sign-in for a week because each session recorded the
+blocker and stopped, instead of routing it to the one person who could clear it in a minute.*
+
+## L18 — LEAVE THE SYSTEM SMARTER THAN YOU FOUND IT
+A lesson that lives only in a session report is lost. If you were wrong, if a doc was wrong, if a
+tool lied, or if you found a shape of failure we have not seen before: **write it into the file
+that would have prevented it** — a law here, a fact in `05-EVIDENCE.md`, a technique in
+`08-VERIFICATION.md` — and say in your report that you did.
+
+The measure of a session is not only what shipped. It is whether the next session is better armed.
+
+## L19 — WORK THAT IS NOT LIVE IS NOT DONE
+A commit is not a deploy. A green CI run is not a deploy. A successful `fly deploy` is not a
+verification. Done means a merchant can use it, proved by `/api/build-info` returning the sha and
+`/api/health?deep=1` returning `status: ok`.
+
+*Ten commits — the entire Phase A defect fix — sat unpushed on one machine while production served
+the broken build. Every session report said "done". Every one of them was true about the code and
+false about the product.*
+
+Check it at the start of every session, before picking work. It takes one command.

@@ -48,6 +48,45 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # INFRA8 — do not ship a commit whose tests have not passed.
+      #
+      # This path runs NO tests of its own. Before INFRA1 that was survivable:
+      # dispatching it double-deployed, but ci.yml also deployed the same commit
+      # after its tests went green. Now the duplicate is skipped, so if this
+      # path wins the race it becomes the ONLY deploy — and it can ship a commit
+      # whose test job is still running or already red.
+      #
+      # Measured on the INFRA1 proof run: this workflow deployed at 15:56:46 and
+      # CI's test job only confirmed the commit at 16:00:36. Four minutes of
+      # shipped-but-unverified.
+      #
+      # Fails OPEN on an unreadable status, deliberately: this is the REPAIR
+      # path, and refusing to deploy during an incident because the checks API
+      # was slow is the wrong way to be wrong. A KNOWN-BAD status still refuses.
+      - name: Has CI passed for this commit?
+        if: steps.live.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ "$FORCE" = "true" ]; then
+            echo "::warning::force:true — skipping the CI gate. Use this only to repair a broken deploy."
+            exit 0
+          fi
+          status=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+            --jq '[.check_runs[] | select(.name == "Lint · Test · Build")] | .[0].conclusion // "unknown"' 2>/dev/null || echo "unreadable")
+          echo "CI test job for ${GITHUB_SHA}: ${status}"
+          case "$status" in
+            success)
+              echo "Tests passed for this commit." ;;
+            unreadable|unknown|null|"")
+              echo "::warning::Could not read the CI status for this commit. Proceeding — this is the repair path, and refusing to deploy because a status API was slow is the wrong way to be wrong." ;;
+            *)
+              echo "::error::CI's test job for this commit is '${status}', not success. Refusing to deploy. Re-run with force:true only if you are deliberately shipping past a red build."
+              exit 1 ;;
+          esac
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
         if: steps.live.outputs.skip != 'true'
 

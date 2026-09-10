@@ -173,6 +173,11 @@ merchants who would otherwise have reviewed us.
   minutes later and A6.6 was blocked on it. A `LogEvent` table now keeps WARN-and-above plus tagged
   events for **30 days**, written through a pino multistream so redaction has already run. No new
   vendor, no new account. Read with `scripts/logs.mjs`.
+- INFRA, CC: **INFRA1's own live proof found a hole INFRA1 widened** (INFRA8). `deploy.yml` runs no
+  tests; before the dedupe it double-deployed but CI also shipped the tested copy. With the duplicate
+  skipped, the manual path can become the ONLY deploy — and on the proof run it deployed at 15:56:46
+  while CI's tests only went green at 16:00:36. It now requires a passing test check, and fails OPEN
+  on an unreadable status because it is the repair path.
 - INFRA, CC: **duplicate deploys are now a no-op** (INFRA1) — both `ci.yml` and `deploy.yml` skip a
   commit that is already live. Fails safe: an unreadable `build-info` deploys rather than skips.
 - **PHASE A CLOSED and DEPLOYED as `d21b5bb`** — 19 commits, `0acb04a..d21b5bb`. Verified cache-busted
