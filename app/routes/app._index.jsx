@@ -316,6 +316,14 @@ function StoreScoreCard({ score }) {
   const delta = hasBaseline ? score.current - score.atInstall : null;
   const improved = delta != null && delta > 0;
 
+  // Group 6.3 — a baseline stamped TODAY is not history. `baselineIsNew` only
+  // covers the load that stamped it; on the SECOND load of the same day the
+  // baseline is real, the delta is 0, and the card said "Unchanged since
+  // September 10" on September 10 — which reads as "we have been working on
+  // this for a while and nothing improved".
+  const baselineIsToday =
+    !!score.since && new Date(score.since).toDateString() === new Date().toDateString();
+
   return (
     <Card>
       <BlockStack gap="200">
@@ -346,13 +354,23 @@ function StoreScoreCard({ score }) {
         </InlineStack>
 
         <Text as="p" variant="bodySm" tone="subdued">
-          {improved
-            ? `Up ${delta} points ${sincePhrase}, across the ${score.scanned} products we scanned.`
-            : hasBaseline && delta === 0
-              ? `Unchanged ${sincePhrase}, across the ${score.scanned} products we scanned.`
-              : hasBaseline && delta < 0
-                ? `Down ${Math.abs(delta)} points ${sincePhrase}, across the ${score.scanned} products we scanned.`
-                : `Across the ${score.scanned} products we scanned. We will show the change once there is one.`}
+          {/* "sampled", not "scanned": 30 of 1,350 active products is a sample,
+              and Group 2.1's rule is that a number states its population. */}
+          {baselineIsToday && delta === 0
+            ? `Your starting score, across the ${score.scanned} products we sampled.`
+            : improved
+              ? `Up ${delta} points ${sincePhrase}, across the ${score.scanned} products we sampled.`
+              : hasBaseline && delta === 0
+                ? `Unchanged ${sincePhrase}, across the ${score.scanned} products we sampled.`
+                : hasBaseline && delta < 0
+                  ? `Down ${Math.abs(delta)} points ${sincePhrase}, across the ${score.scanned} products we sampled.`
+                  : `Across the ${score.scanned} products we sampled. We will show the change once there is one.`}
+        </Text>
+
+        {/* Group 6.1 — the OTHER score, named, so the two are never mistaken for
+            one number disagreeing with itself. */}
+        <Text as="p" variant="bodySm" tone="subdued">
+          This is a sample. The SEO Audit scores more of your catalog and lists what to fix.
         </Text>
       </BlockStack>
     </Card>
@@ -842,8 +860,13 @@ export default function Dashboard() {
                   {planLabels[plan.planName] ?? plan.planName} Plan
                 </Badge>
               </InlineStack>
+              {/* Group 6.4 — this said "2 / 25 used · 23 remaining" directly
+                  above "23 of 25 left this month": the same fact twice, in
+                  adjacent lines, in two different phrasings. The bar shows the
+                  proportion; this shows the count; the line under the bar is
+                  the one that carries the reset date. */}
               <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
-                {usageCount} / {plan.monthlyLimit} used · {remaining} remaining
+                {usageCount} / {plan.monthlyLimit} used
               </Text>
             </InlineStack>
 
@@ -915,7 +938,12 @@ export default function Dashboard() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Scan your entire catalog for missing descriptions, meta tags, and alt text.
+                  {/* Group 2.1 — this promised the ENTIRE catalog while the audit
+                      itself reports "500 products analyzed · partial scan" on a
+                      3,148-product store. One of the two was wrong, and it was
+                      this one. */}
+                  Check your catalog for missing descriptions, meta tags and alt text — and see exactly
+                  which products to fix first.
                 </Text>
                 <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
               </BlockStack>

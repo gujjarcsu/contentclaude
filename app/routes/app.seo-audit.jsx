@@ -208,7 +208,19 @@ export const loader = async ({ request }) => {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function ScoreRing({ score }) {
+/**
+ * Group 6.1 — this said "/ 100 — Traditional SEO score" while Home said
+ * "/ 100 — Store SEO score", computed by a DIFFERENT scanner over a DIFFERENT
+ * sample (30 products against up to 500). Two numbers with the same shape and
+ * nothing to tell them apart is the same defect as a before measured one way
+ * and an after measured another: two unrelated numbers with an arrow between
+ * them, on the app's headline claim.
+ *
+ * They stay two metrics — unifying them would mean running a 500-product scan
+ * on every dashboard load, or throwing away the audit's per-product detail —
+ * but each now carries its own name and its own N, and each points at the other.
+ */
+function ScoreRing({ score, scanned }) {
   // Unified color rule: >=70 green, 40–69 amber (highlight), <40 red.
   const tone = scoreTone(score);
   return (
@@ -217,7 +229,12 @@ function ScoreRing({ score }) {
         {score}
       </Text>
       <Text as="p" variant="bodySm" tone="subdued">
-        / 100 — Traditional SEO score
+        {Number.isFinite(scanned)
+          ? `/ 100 — Audit score, averaged across ${scanned} product${scanned === 1 ? "" : "s"}`
+          : "/ 100 — Audit score"}
+      </Text>
+      <Text as="p" variant="bodySm" tone="subdued">
+        Measured differently from the Store SEO score on Home, which samples a smaller set.
       </Text>
       <ProgressBar progress={score} tone={tone} size="medium" />
     </BlockStack>
@@ -385,7 +402,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
           <Layout>
             <Layout.Section variant="oneThird">
               <Card>
-                <ScoreRing score={totalScore} />
+                <ScoreRing score={totalScore} scanned={scannedCount} />
               </Card>
             </Layout.Section>
             <Layout.Section>

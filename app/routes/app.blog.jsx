@@ -551,9 +551,15 @@ export default function BlogPage() {
                     </Text>
                   </InlineStack>
                   <BlockStack gap="100">
+                    {/* Group 7.6 — this told a plumbing merchant that "How to wax
+                        a snowboard for beginners" beats "snowboards". The example
+                        came from Shopify's demo catalogue, which is a store we do
+                        not serve, and it reads to every real merchant as advice
+                        written for somebody else. The rule it teaches is the same
+                        one without naming anybody's products. */}
                     <Text as="p" variant="bodySm">
-                      • <strong>Be specific</strong> — "How to wax a snowboard for beginners" beats
-                      "snowboards".
+                      • <strong>Be specific</strong> — a post answering one question a customer actually asks
+                      beats a post named after a product category.
                     </Text>
                     <Text as="p" variant="bodySm">
                       • Add <strong>target keywords</strong> your customers actually search.

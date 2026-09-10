@@ -612,10 +612,16 @@ export default function ProductsPage() {
 
   const tabs = useMemo(
     () => [
+      // Group 6.2, third occurrence of this defect. The header and the stat
+      // cards are STORE-WIDE; these tabs count only the visible page. The screen
+      // read "2 ready to review" above "Draft (0)" and nothing said why.
+      //
+      // Both numbers were right. What was missing was the scope, so every
+      // page-scoped label now carries "on this page" — a guard asserts it.
       { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
       { id: "needsContent", content: `Not optimized on this page (${pageCounts.none})`, panelID: "needsContent" },
-      { id: "draft", content: `Draft (${pageCounts.draft})`, panelID: "draft" },
-      { id: "published", content: `Published (${pageCounts.published})`, panelID: "published" },
+      { id: "draft", content: `Draft on this page (${pageCounts.draft})`, panelID: "draft" },
+      { id: "published", content: `Published on this page (${pageCounts.published})`, panelID: "published" },
     ],
     [products.length, pageCounts],
   );

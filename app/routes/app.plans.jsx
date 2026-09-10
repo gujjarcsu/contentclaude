@@ -344,7 +344,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "What counts as one 'generation'?",
-    a: "Each time you generate content for a product — description, meta title/description, or FAQ — counts as one generation, regardless of how many content types are selected in that run.",
+    a: "Each time you generate content for a product — description, meta title and description, FAQ content, or image alt text — counts as one generation, regardless of how many content types are selected in that run. Alt text for all of a product's images counts as one generation, not one per image.",
   },
   {
     q: "Is there a free trial?",
