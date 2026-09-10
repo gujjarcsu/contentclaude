@@ -3800,3 +3800,81 @@ zero Enhance routing; Collections has the button label only).
 unreachable. `autopilotAutoPublish` and `autopilotContentTypes` have never been audited for this.
 A guard should assert that every `BrandVoice` boolean a rule reads has both a control in Settings and
 a hidden input that posts it.
+
+---
+
+## A2.3 / A2.4 (10 Sep 2026) — the largest catalogue we can actually walk
+
+Two screens each had their own copy of the catalogue walk, and they had drifted.
+
+`app.products.jsx` went through `shopifyQuery`, so a throttle backed off and retried — that was Phase 4
+item 6. `app.optimize.jsx` used **raw `admin.graphql`**. The same fix was applied to one and missed on
+the other, so on Optimize the FIRST throttle silently truncated a bulk run: the merchant asked to
+optimize everything, got whatever had been read before Shopify said no, and was redirected to Jobs
+with no indication anything had been cut short.
+
+Both also stopped at `MAX_PAGES = 80` — 20,000 products — **and said nothing**. On a 50,000-product
+catalogue "Optimize store" enqueued at most 20,000 and reported success. That is a cap presented as a
+total (L5) on the one action that spends a merchant's money.
+
+### Measured
+
+Simulated catalogues through the real enumerator. `ms` is **our loop only** — the responses are fakes,
+so network time is excluded.
+
+| catalogue | ids walked | pages | requests | our loop ms | heap delta | result |
+| --- | --- | --- | --- | --- | --- | --- |
+| 250 | 250 | 1 | 1 | 0 | 0.6 MB | complete |
+| 3,000 | 3,000 | 12 | 12 | 1 | 0.9 MB | complete |
+| **20,000** | 20,000 | 80 | 80 | 6 | 3.4 MB | **complete — the ceiling** |
+| 50,000 | 20,000 | 80 | 80 | 5 | 2.5 MB | truncated, reported |
+| 500,000 | 20,000 | 80 | 80 | 5 | 2.8 MB | truncated, reported |
+
+**A2.4 — the largest catalogue proven walkable: 20,000 products.** Above that the app walks the 20,000
+most-recently-updated and tells the merchant, on the screen they land on.
+
+The request count does **not** grow with the catalogue: 50,000 and 500,000 both cost exactly 80
+requests. A test asserts that equality, so a change that made a large store pay for a walk it cannot
+finish would fail.
+
+### The four failure modes A2.3 names
+
+- **Cursor exhaustion** — a connection that never returns `hasNextPage: false` is bounded at 80
+  requests. The test asserts the REQUEST COUNT rather than the result, deliberately: without the cap
+  that test would not fail, it would never finish.
+- **THROTTLED mid-run** — keeps the pages that landed, stops, and says why. Measured: a throttle from
+  page 6 yields 1,250 ids and the message names that number.
+- **A job outliving a deploy** — unchanged and not re-tested here; the worker drains BullMQ for 30 s
+  and `kill_timeout` is 60 s (P1).
+- **Worker memory** — the walk holds ids, not product bodies. 20,000 gids measured at 3.4 MB heap
+  delta, and a test caps the id array at 4 MB.
+
+### The false-green answer, per check (L1)
+
+| Check | What it prints if the watched thing is broken |
+| --- | --- |
+| the five size cases | **7 tests fail** when `truncated` is hardcoded false — verified by doing it. Two of the seven are ROUTE tests, which is what proves the enumerator is actually wired in and not just unit-tested. |
+| cursor exhaustion | Asserts the request count, because with no cap it would hang rather than fail |
+| "request count does not grow" | Compares 50,000 against 500,000; a per-product request would diverge |
+| the memory bound | Would pass on an empty array, which is why the same test asserts `ids` has 20,000 first |
+
+### What this CANNOT prove
+
+**That Shopify behaves this way.** Every response is a fake. This proves our loop is bounded, reports
+why it stopped, and does not accumulate without limit. It does not prove a real 500,000-product store
+returns cursors the way the fake does — and we have no such store. The largest real catalogue this
+code has met is **3,148 products**.
+
+**Not measured: wall-clock against real Shopify.** 80 sequential requests at a realistic 100-300 ms is
+**8-24 seconds** inside a form action. Logged as new item **A2.5**.
+
+### Contract preserved rather than rewritten
+
+Moving Optimize onto the shared enumerator broke three existing tests that pin its failure contract —
+503 status, and a different sentence for a throttle, a malformed response and a dead connection. The
+first instinct was to retarget them to my new wording. Instead the enumerator now carries
+`shopifyQuery`'s own `reason`, and the route reproduces the exact messages and the 503. "Something
+went wrong" tells a merchant nothing about whether to retry.
+
+Those tests also began timing out at 5,007 ms, because the route now does real backoff. Fixed with the
+documented pattern: the real `shopifyQuery` with `maxRetries: 0`, not a fake module.

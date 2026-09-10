@@ -28,6 +28,7 @@ import { FREE_PLAN } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
+import { enumerateProductIds } from "../utils/enumerateProducts.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -136,52 +137,37 @@ export const action = async ({ request }) => {
   // generate → products missing AI content; enhance → products that already
   // have a live description to improve.
   // Hard-limit to 80 pages (80 × 250 = 20,000 products max) to prevent runaway loops.
-  const targetIds = [];
-  let cursor = null;
-  let hasNextPage = true;
-  let pageCount = 0;
-  const MAX_PAGES = 80;
+  // A2.3 — this was a hand-rolled copy of the catalogue walk using RAW
+  // `admin.graphql`. Products had the same loop and was moved onto the backoff
+  // wrapper in Phase 4 item 6; this one was missed, so the first THROTTLE
+  // silently truncated a bulk run — the merchant asked to optimize everything
+  // and got whatever had been read before Shopify said no, reported as success.
+  //
+  // It also stopped at 80 pages (20,000 products) and said nothing at all. One
+  // enumerator now, and its result carries WHY it stopped.
+  const walk = await enumerateProductIds(admin.graphql, {
+    shop,
+    label: "optimize enumerate",
+    select: (node) =>
+      mode === "enhance" ? !!(node.description && node.description.trim()) : !existingIds.has(node.id),
+  });
+  const targetIds = walk.ids;
 
-  while (hasNextPage && pageCount < MAX_PAGES) {
-    pageCount++;
-    let resp;
-    try {
-      resp = await admin.graphql(
-        `query($cursor: String) {
-          products(first: 250, after: $cursor) {
-            pageInfo { hasNextPage endCursor }
-            edges { node { id description(truncateAt: 20) } }
-          }
-        }`,
-        { variables: { cursor } },
-      );
-    } catch {
-      if (targetIds.length > 0) break; // partial list — proceed with what we have
-      return Response.json(
-        { error: "Could not fetch your product list from Shopify. Please try again." },
-        { status: 503 },
-      );
-    }
-
-    const { data } = await resp.json();
-    if (!data?.products) {
-      if (targetIds.length > 0) break;
-      return Response.json(
-        { error: "Shopify returned an unexpected response. Please try again." },
-        { status: 503 },
-      );
-    }
-
-    const { edges, pageInfo } = data.products;
-    for (const { node } of edges) {
-      if (mode === "enhance") {
-        if (node.description && node.description.trim()) targetIds.push(node.id);
-      } else if (!existingIds.has(node.id)) {
-        targetIds.push(node.id);
-      }
-    }
-    hasNextPage = pageInfo.hasNextPage;
-    cursor = pageInfo.endCursor;
+  // Nothing usable AND we know why. The wording and the 503 are the contract
+  // this route already had and its tests pin: a throttle, a malformed response
+  // and a dead connection each get their own sentence, because "something went
+  // wrong" tells a merchant nothing about whether to retry.
+  if (targetIds.length === 0 && walk.truncated) {
+    return Response.json(
+      {
+        error: walk.throttled
+          ? "Shopify is rate-limiting your store right now. Please try again in a minute."
+          : walk.reason === "no_data" || walk.reason === "errors"
+            ? "Shopify returned an unexpected response. Please try again."
+            : "Could not fetch your product list from Shopify. Please try again.",
+      },
+      { status: 503 },
+    );
   }
 
   if (targetIds.length === 0) {
@@ -229,7 +215,10 @@ export const action = async ({ request }) => {
         : "Could not start the bulk job. Please try again.",
     });
   }
-  return redirect("/app/jobs");
+  // A2.3 — a redirect discards the action's return value, so a run that was
+  // cut short would have landed on Jobs looking like a complete success. The
+  // note travels in the URL and Jobs renders it.
+  return redirect(walk.truncated ? `/app/jobs?partial=${encodeURIComponent(walk.message)}` : "/app/jobs");
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────

@@ -169,6 +169,14 @@ merchants who would otherwise have reviewed us.
 - Phase A, CC: standing commercial claims (`ea6ee27`) — a rewrite deleted the merchant's two-day
   dispatch, free pickup and price match and replaced them with "Available at EBS". Now two
   severities: compliance/certification hard-fail, commercial claims warn.
+- Phase A, CC: `A2.3`/`A2.4` — Optimize's catalogue walk used raw `admin.graphql` with no backoff
+  (Phase 4 item 6 fixed the identical loop on Products and missed this one), and BOTH stopped at
+  20,000 products **silently**: on a 50,000-product store "Optimize store" enqueued 20,000 and
+  reported success. One shared enumerator now, and it reports why it stopped. Largest catalogue
+  proven walkable: **20,000** (80 requests, 3.4 MB, simulated).
+- Phase A, CC: the guiding docs said "CI is a gate, not a deploy". `ci.yml` line 140 deploys on any
+  push to `main`. Following the docs — push, then dispatch Manual Deploy — reproduces the INFRA1
+  double-deploy that P1 was opened to fix. Corrected in the prompt and the human queue.
 - Phase A, CC: `A1.2` (`f02c0b2`) — the drafts opt-in had a column, a read path and a green suite,
   and **no control in Settings**. No merchant could ever turn it on. Found by reconciling the
   backlog against the code rather than against memory.

@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate, useRevalidator, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator, useFetcher, useSearchParams } from "react-router";
 import {
   Page,
   Card,
@@ -202,6 +202,8 @@ function formatDate(iso) {
 export default function JobsPage() {
   const { jobs } = useLoaderData();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const partialNote = searchParams.get("partial");
   // Phase 3 item 3.3 — there is NO review ask on this screen any more.
   // It fired on page load, derived from loader data: a merchant who opened
   // Jobs to check on a run was asked to review the app, having pressed nothing.
@@ -312,6 +314,15 @@ export default function JobsPage() {
       }
     >
       <BlockStack gap="500">
+        {/* A2.3 — a bulk run that could not cover the whole catalogue used to
+            land here looking like a complete success, because a redirect
+            discards the action's return value. The enumerator says why it
+            stopped and the note travels in the URL. */}
+        {partialNote && (
+          <Banner tone="warning" title="This run covers part of your catalog">
+            <p>{partialNote}</p>
+          </Banner>
+        )}
         {hasActiveJobs && (
           <Banner tone="info" title="Jobs are running">
             <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>

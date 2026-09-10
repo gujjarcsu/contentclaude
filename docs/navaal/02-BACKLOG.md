@@ -26,8 +26,8 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 |---|---|---|
 | A2.1 | No silent caps. Every sampling screen states what it sampled, out of what, why — and offers to continue. Collections said "250" on a 395-collection store. | DONE |
 | A2.2 | Representative sampling. Title order clusters variant families — "first 500 by title" can be a few dozen real products wearing 500 hats. Now `UPDATED_AT` desc; archived and unpublished excluded. | DONE |
-| A2.3 | Scale report: what you can PROVE correct at 50,000 and 500,000 products. Cursor exhaustion, THROTTLED mid-run, a job outliving a deploy, worker memory. | OPEN |
-| A2.4 | Report the largest catalogue proven, and how. | OPEN |
+| A2.3 | Scale report: what you can PROVE correct at 50,000 and 500,000 products. Cursor exhaustion, THROTTLED mid-run, a job outliving a deploy, worker memory. | DONE — one shared `enumerateProducts.server.js`; measured 250/3,000/20,000/50,000/500,000. Found: Optimize's walk used RAW `admin.graphql` (no backoff — Phase 4 item 6 fixed Products and missed this), and BOTH capped at 20,000 silently. |
+| A2.4 | Report the largest catalogue proven, and how. | DONE — **20,000 products walked completely** (80 requests, 3.4 MB heap, 6 ms of our own loop). Above that we walk the 20,000 most-recently-updated and SAY SO. Simulated, not real: the largest real catalogue this code has met is 3,148. |
 
 ### A3 · Entitlement and quota honesty — Built for Shopify blocker
 | ID | Item | Status |
@@ -45,6 +45,7 @@ Phases are strictly ordered. Never start a later phase while an earlier one has 
 | A4.3 | Enhance-vs-Generate **routing on the Products list row actions** and the bulk action. The primitive already exists (product page + `mode=enhance`). Routing, not new work. Same on Collections. | OPEN |
 | A4.4 | Stop claiming authorship of the merchant's writing. Banner now scopes to proposals; "Currently on your store" labels theirs. | DONE |
 | A4.5 | `standingClaims.js` — 10 promise kinds + `recurringClaims` (a sentence repeated across a fifth of a catalogue is policy, not prose). Two severities: compliance/certification hard-fail, everything else warns. `claimsIn` no longer stops at the first pattern per sentence. | DONE |
+| A2.5 | NEW (found in A2.3). The 20,000 ceiling is 80 sequential Shopify requests. Our loop costs 6 ms; the network does not. At a realistic 100-300 ms per request that is **8-24 seconds** inside a form action, unmeasured against real Shopify. Either measure it against a large dev store, or move the walk into the worker and return immediately. | OPEN |
 | A4.7 | NEW (found in A1.2 reconcile). A setting can ship with a column, a read path and a green suite and still be unreachable. Add a guard that every `BrandVoice` boolean a rule reads has a control in Settings AND a hidden input that posts it — a Polaris Checkbox is not a form field. `includeDraftProducts` was unreachable for one commit; `autopilotAutoPublish` and `autopilotContentTypes` are unaudited. | OPEN |
 | A4.6 | Voice inference must read **collection descriptions, pages and blog copy**, not only product descriptions — that is where this merchant's differentiators live (21 of 30 collections carry full hand-written copy). Extract recurring claims into Key Differentiators, create-only upsert, invent nothing. Show the Agena meta before/after. | OPEN |
 

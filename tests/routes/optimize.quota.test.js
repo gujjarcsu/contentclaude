@@ -14,6 +14,20 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// A2.3 moved this route onto the shared enumerator, which goes through
+// `shopifyQuery` and therefore BACKS OFF for real — 1s + 2s + 4s, longer than
+// vitest's 5s timeout, so these cases timed out rather than failing. Keeping
+// the real implementation and only zeroing the retry budget: faking the module
+// would test the fake. The backoff timing has its own fake-timer tests.
+vi.mock("../../app/utils/shopifyQuery.server.js", async () => {
+  const actual = await vi.importActual("../../app/utils/shopifyQuery.server.js");
+  return {
+    ...actual,
+    shopifyQuery: (graphql, query, variables, opts = {}) =>
+      actual.shopifyQuery(graphql, query, variables, { ...opts, maxRetries: 0 }),
+  };
+});
+
 const { prisma, authenticate, enqueue, checkEntitlement, remainingGenerations, graphql } = vi.hoisted(
   () => ({
     prisma: {
