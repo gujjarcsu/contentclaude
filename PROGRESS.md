@@ -3926,3 +3926,22 @@ both destinations.
 
 **Not proved:** that the modal opens on a rendered page. Source assertions only — a `useState`
 initialiser that never runs would pass. L15; queued for a human.
+
+### A4.2 / A4.3 — the badge and the button disagreed about the same product
+
+Group 1 split the row BADGE into Generate / Enhance / Optimized. It did not split the row ACTION,
+which still said **"Generate"** on every row. So the screen made two different claims about one
+product: a calm "Not yet optimized" badge beside a button offering to generate over the paragraph the
+merchant wrote themselves.
+
+`rowActionLabel()` now routes three verbs through the **shared** classifier — `stateOfContentMap`,
+`actionFor`, `hasRealContent` — rather than becoming a fourth hand-rolled one, which was the Phase 2
+defect on this exact screen. A test asserts it calls all three and invents no vocabulary of its own.
+
+This is routing, not new work, as the backlog said: the product page already has a real `enhance`
+action, and the Optimize screen already has an enhance panel. That panel is also A4.2's "separate
+labelled action for rewriting existing content".
+
+Guard broken: reverting the button to a literal "Generate" fails **1 test**.
+
+**Not proved:** the labels on a rendered page (L15).

@@ -51,6 +51,7 @@ import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/can
 import {
   actionFor,
   hasRealContent,
+  CONTENT_ACTION,
   CONTENT_ACTION_LABEL,
   CONTENT_ACTION_TONE,
 } from "../utils/candidates.js";
@@ -653,6 +654,20 @@ export default function ProductsPage() {
     [PRODUCT_STATE.REJECTED]: "warning",
   };
 
+  /**
+   * What this row offers to DO, matching what its badge already says.
+   *
+   * Three states, three verbs. "Generate" over a merchant's own paragraph is
+   * the app telling them their work is missing.
+   */
+  function rowActionLabel(productId, description) {
+    const state = stateOfContentMap(contentMap[productId]);
+    if (state !== PRODUCT_STATE.NEEDS_CONTENT) return "Review";
+    return actionFor({ hasOwnContent: hasRealContent(description) }) === CONTENT_ACTION.ENHANCE
+      ? "Enhance"
+      : "Generate";
+  }
+
   function getStatusBadge(productId, description) {
     const state = stateOfContentMap(contentMap[productId]);
     if (state !== PRODUCT_STATE.NEEDS_CONTENT) {
@@ -1123,8 +1138,16 @@ export default function ProductsPage() {
                             Restore original
                           </Button>
                         )}
+                        {/* A4.2 / A4.3 — this said "Generate" on every row, including
+                            rows whose description the merchant wrote themselves. On a
+                            store where all 100 sampled products had one, every row
+                            offered to generate over their own writing.
+                            The badge was split in Group 1; the ACTION was not, so the
+                            screen told the merchant two different things about the same
+                            product. Routing, not new work: the product page already has
+                            a real `enhance` action. */}
                         <Button size="slim" onClick={() => navigate(`/app/products/${numericId}`)}>
-                          Generate
+                          {rowActionLabel(id, description)}
                         </Button>
                       </InlineStack>
                     </BlockStack>

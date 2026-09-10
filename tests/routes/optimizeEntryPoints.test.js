@@ -72,3 +72,33 @@ describe("the label still tells the truth before the click", () => {
     expect(products).toMatch(/Optimize store \(\$\{notOptimized\}\) · Starter/);
   });
 });
+
+describe("A4.2 / A4.3 — the row offers what the badge says", () => {
+  it("routes the row action by content state instead of always saying Generate", () => {
+    // The badge was split in Group 1; the ACTION was not, so the screen told a
+    // merchant two different things about the same product — a red-free
+    // "Not yet optimized" badge beside a button offering to "Generate" over
+    // the paragraph they wrote themselves.
+    expect(products).toMatch(/function rowActionLabel\(/);
+    expect(products).toMatch(/\{rowActionLabel\(id, description\)\}/);
+  });
+
+  it("uses the SHARED classifier, not a fourth hand-rolled one", () => {
+    // Three independent classifiers on this screen was the Phase 2 defect.
+    const fn = products.slice(products.indexOf("function rowActionLabel("));
+    const body = fn.slice(0, fn.indexOf("\n  }") + 4);
+    expect(body).toMatch(/actionFor\(/);
+    expect(body).toMatch(/hasRealContent\(/);
+    expect(body).toMatch(/stateOfContentMap\(/);
+    // and does not invent its own vocabulary
+    expect(body).not.toMatch(/Needs content|No AI Content/);
+  });
+
+  it("offers three verbs, one per state", () => {
+    const fn = products.slice(products.indexOf("function rowActionLabel("));
+    const body = fn.slice(0, fn.indexOf("\n  }") + 4);
+    expect(body).toMatch(/"Review"/);
+    expect(body).toMatch(/"Enhance"/);
+    expect(body).toMatch(/"Generate"/);
+  });
+});
