@@ -184,8 +184,26 @@ describe("deep health reports drift as an error, not a degrade", () => {
 describe("migrations are immutable, and CI enforces it", () => {
   const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 
-  it("CI fails when a migration already on main is modified", () => {
-    expect(ci).toMatch(/diff-filter=MD origin\/main\.\.\.HEAD -- 'prisma\/migrations/);
+  it("CI fails when a migration already on the branch is modified", () => {
+    expect(ci).toMatch(/diff-filter=MD "\$BASE" "\$GITHUB_SHA" -- 'prisma\/migrations/);
+  });
+
+  it("it compares against the PUSH BASE, not against main", () => {
+    // `origin/main...HEAD` is EMPTY on a push to main — HEAD is already
+    // origin/main — so the first version of this guard reported "ok" without
+    // comparing anything, on the very commit that restored the broken
+    // migration. It would never have fired on the deploy path this repo uses.
+    expect(ci).toMatch(/github\.event\.before/);
+    // The command itself must not use that range. The comment above the fix
+    // names it, so this looks at the git invocation rather than the whole file.
+    const cmd = ci.slice(ci.indexOf("changed=$(git diff"));
+    expect(cmd.slice(0, 200)).not.toMatch(/origin\/main\.\.\.HEAD/);
+  });
+
+  it("and refuses to pass when it cannot resolve that base", () => {
+    // A guard that cannot compare must fail, not shrug. Silently passing is
+    // how this whole class of incident happens.
+    expect(ci).toMatch(/Refusing to pass this check without comparing anything/);
   });
 
   it("CI has the full history it needs to make that comparison", () => {

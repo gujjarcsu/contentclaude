@@ -40,9 +40,25 @@ jobs:
           #
           # New schema change, new file. This makes that a build failure rather
           # than an eight-hour outage.
-          git fetch --no-tags --depth=1 origin main
+          # Compare against what was on the branch BEFORE this push.
+          #
+          # The first version of this guard used `origin/main...HEAD`. On a push
+          # to main that range is EMPTY - HEAD is already origin/main - so it
+          # reported "ok" without comparing anything, on the very commit that
+          # restored the migration this incident was about. It would never have
+          # fired on the deploy path this repo actually uses.
+          #
+          # github.event.before is the SHA main pointed at before the push; for a
+          # pull request, the base branch. Both are the right comparison.
+          BASE="${{ github.event.before || github.event.pull_request.base.sha }}"
 
-          changed=$(git diff --name-only --diff-filter=MD origin/main...HEAD -- 'prisma/migrations/**' || true)
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "::error::Cannot resolve the base commit to diff against (got '$BASE'). Refusing to pass this check without comparing anything."
+            exit 1
+          fi
+
+          echo "comparing $BASE..$GITHUB_SHA"
+          changed=$(git diff --name-only --diff-filter=MD "$BASE" "$GITHUB_SHA" -- 'prisma/migrations/**' || true)
 
           if [ -z "$changed" ]; then
             echo "ok — no existing migration was modified or deleted"

@@ -2207,7 +2207,29 @@ The startup check logs loudly but does **not** exit. With `min_machines_running 
 the app down entirely, and drift usually means one column is missing while most of the app still works.
 Deep health returns 503 regardless, so the deploy still fails and the owner is still paged.
 
-24 assertions, including the exact incident: one column removed from the fixture, reported by name.
+26 assertions, including the exact incident: one column removed from the fixture, reported by name.
+
+### The guard's first version did not work either
+
+It compared `origin/main...HEAD`. **On a push to `main` that range is empty** — HEAD *is*
+`origin/main` — so it printed "ok — no existing migration was modified" on the very commit that
+restored the broken migration, having compared nothing. It would never have fired on the deploy path
+this repository actually uses.
+
+Caught by reading the CI log rather than trusting the green tick, and proven locally:
+
+```
+$ git diff --name-only --diff-filter=MD origin/main...HEAD -- 'prisma/migrations/**' | wc -l
+0
+$ git diff --name-only --diff-filter=MD HEAD~1 HEAD -- 'prisma/migrations/**'
+prisma/migrations/20260910_geo_note_dismissed/migration.sql
+```
+
+It now compares against `github.event.before`, the SHA the branch pointed at before the push, and
+**fails rather than passing if it cannot resolve that base**. A guard that cannot compare must say so.
+
+That is the fourth instance of this same mistake in one day, and it was inside the guard written to
+prevent the first one.
 
 ## The lesson, which is not new
 
