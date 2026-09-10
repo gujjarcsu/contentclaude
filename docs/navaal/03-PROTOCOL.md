@@ -37,7 +37,9 @@ Under the constitution. Small commits. Tests with every change.
 Before finishing, update in the repo:
 - `02-BACKLOG.md` — item status, and any new item you discovered
 - `01-NORTH-STAR.md` §10 LOG — one line per material change
-- `06-HUMAN-QUEUE.md` — anything only a human can do, with the exact click path or command
+- `06-HUMAN-QUEUE.md` — anything only a human can do, with the exact click path or command.
+  **Append to INBOX with no ID.** Never assign or renumber an ID mid-session; another session
+  may be editing the same file. Read that file's HOW TO ADD before touching it.
 - `PROGRESS.md` — the detail, as now
 
 ## STEP 6 — REPORT AND STOP

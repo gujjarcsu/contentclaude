@@ -70,3 +70,6 @@ tools/proof/out/*.samples.json
 
 # Backups of the guiding docs. A stale copy of a live doc gets read by mistake.
 docs/navaal/*.bak-*
+
+# Files an agent could not delete (device_bash cannot rm); owner clears this folder
+_to_delete/

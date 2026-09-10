@@ -15,9 +15,10 @@ Better still, and now the standard: **verify a guard by breaking it.** Disable t
 watches and show the test count that fails. CC did this for the claim check (2 tests) and the
 family skip (4 tests). That is the bar.
 
-*Five false greens so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
+*Six false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
 comparing an empty commit range, a passing test suite over a GraphQL query with a `//` syntax
-error, and a harness measuring `admin.shopify.com` instead of our own iframe.*
+error, a harness measuring `admin.shopify.com` instead of our own iframe, and a setting with a column,
+a read path and a green suite that no merchant could reach (see L15).*
 
 ## L2 — THE STORE-SHAPE LAW
 Name the store shapes every fix must hold for, and prove it against them.
@@ -89,3 +90,21 @@ Small, medium, large, enterprise, wholesalers. Every store on Shopify.
 
 ## L14 — REPORT WHAT YOU FOUND THAT NOBODY ASKED ABOUT
 That category has been the most valuable one in every single session. Never omit it.
+
+## L15 — A FEATURE IS NOT SHIPPED UNTIL IT IS REACHABLE
+A column, a read path, a write path and a green suite prove the machinery works.
+They do not prove a merchant can get to it.
+
+*`includeDraftProducts` had all four. It appeared in exactly two files plus the generated schema
+list, and neither was a screen. No shop could include its drafts however it merchandises.*
+
+**Source assertions are not a browser.** A control inside a collapsed section, behind a plan gate,
+or on a route with no entry point passes every source-level test ever written for it.
+
+So "done", for anything a merchant touches, requires all three:
+1. the control exists and is wired,
+2. a merchant can **reach** it from somewhere they already are,
+3. it is **visible on a rendered page** — proved in a browser, not by grep.
+
+*This is the sixth false-green shape, and the first that a perfect test suite guarantees you will
+miss. Audit every existing setting for it, not only new ones.*
