@@ -31,6 +31,18 @@ const HEALTH_URL = `${BASE_URL}/api/health?deep=1`;
 /** The embedded admin shell. /api/health can be perfectly healthy while this 500s. */
 const APP_URL = `${BASE_URL}/app`;
 
+/**
+ * A real browser user-agent.
+ *
+ * The Shopify library answers a non-browser agent with 410 Gone instead of
+ * redirecting to auth, and a 410 never reaches a loader or the database. A
+ * probe without this measures the bot path and passes no matter what state
+ * the app is in - which is exactly what happened for eight hours on
+ * 2026-09-09.
+ */
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 /** Do not send the same alarm every five minutes for hours. */
 const REALERT_AFTER_MS = 60 * 60 * 1000;
 
@@ -137,7 +149,10 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
           "Runbook: docs/RUNBOOK.md — match the symptom to the section.",
         ].join("\n"),
       });
-      logger.error({ status, streak: _degradedStreak, event: "health_watch_degraded" }, "Sustained degradation");
+      logger.error(
+        { status, streak: _degradedStreak, event: "health_watch_degraded" },
+        "Sustained degradation",
+      );
     }
   } else if (!bad) {
     if (_degradedAlerted) {
@@ -277,6 +292,7 @@ export async function checkAppShellOnce({ fetchImpl = fetch, now = Date.now() } 
     const res = await fetchImpl(APP_URL, {
       method: "HEAD",
       redirect: "manual",
+      headers: { "user-agent": BROWSER_UA },
       signal: AbortSignal.timeout(20_000),
     });
     httpCode = res.status;
@@ -286,7 +302,14 @@ export async function checkAppShellOnce({ fetchImpl = fetch, now = Date.now() } 
 
   // No answer at all is already covered by the health probe, which runs against
   // the same host — reporting it twice would be two emails for one outage.
-  const broken = httpCode >= 500;
+  //
+  // Everything else: a browser gets 200 or 302. On 2026-09-09 this probe ran
+  // every five minutes for eight hours against a completely broken app and
+  // reported it healthy, because it sent no user-agent, the Shopify library
+  // classified it as a bot and answered 410, and 410 counted as fine. It was
+  // measuring a path that never reaches a loader or the database.
+  const OK_CODES = [200, 302];
+  const broken = httpCode !== 0 && !OK_CODES.includes(httpCode);
   let alerted = false;
 
   if (broken) {

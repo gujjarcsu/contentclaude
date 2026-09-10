@@ -22,9 +22,14 @@ const hasVideo = await page.evaluate(async (src) => {
   if (!v) {
     v = document.createElement("video");
     v.src = src;
-    v.style.width = "100vw"; v.style.height = "100vh"; v.style.objectFit = "contain";
-    v.muted = true; v.controls = false;
-    document.body.innerHTML = ""; document.body.style.margin = "0"; document.body.appendChild(v);
+    v.style.width = "100vw";
+    v.style.height = "100vh";
+    v.style.objectFit = "contain";
+    v.muted = true;
+    v.controls = false;
+    document.body.innerHTML = "";
+    document.body.style.margin = "0";
+    document.body.appendChild(v);
   }
   await new Promise((res) => {
     if (v.readyState >= 1 && v.duration) return res();
@@ -36,7 +41,9 @@ const hasVideo = await page.evaluate(async (src) => {
 console.log("video meta:", JSON.stringify(hasVideo));
 
 const dur = hasVideo.duration || 0;
-if (!dur || !isFinite(dur)) { console.log("Could not read duration; grabbing periodic screenshots instead."); }
+if (!dur || !isFinite(dur)) {
+  console.log("Could not read duration; grabbing periodic screenshots instead.");
+}
 
 const N = 24;
 const total = dur && isFinite(dur) ? dur : 24;
@@ -44,7 +51,10 @@ for (let i = 0; i <= N; i++) {
   const t = (total * i) / N;
   await page.evaluate((tt) => {
     const v = document.querySelector("video");
-    if (v) { v.pause(); v.currentTime = tt; }
+    if (v) {
+      v.pause();
+      v.currentTime = tt;
+    }
   }, t);
   // wait for the seek to render
   await page.waitForTimeout(700);

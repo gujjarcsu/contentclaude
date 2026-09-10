@@ -37,19 +37,35 @@ const page = await context.newPage();
 const results = { store: STORE };
 
 async function waitForApp() {
-  await appFrame(page).locator("body").waitFor({ state: "visible", timeout: 60000 }).catch(() => {});
+  await appFrame(page)
+    .locator("body")
+    .waitFor({ state: "visible", timeout: 60000 })
+    .catch(() => {});
   for (let i = 0; i < 30; i++) {
-    const t = await appFrame(page).locator("body").innerText({ timeout: 2000 }).catch(() => "");
+    const t = await appFrame(page)
+      .locator("body")
+      .innerText({ timeout: 2000 })
+      .catch(() => "");
     if (/Welcome back|Monthly Usage|Get started|Welcome to Navaal/i.test(t)) return t;
     await page.waitForTimeout(1000);
   }
-  return await appFrame(page).locator("body").innerText().catch(() => "");
+  return await appFrame(page)
+    .locator("body")
+    .innerText()
+    .catch(() => "");
 }
 
 try {
   await page.goto("https://app.navaal.ai/api/build-info", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
-  results.buildInfo = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
+  results.buildInfo = (
+    await page
+      .locator("body")
+      .innerText()
+      .catch(() => "")
+  )
+    .replace(/\s+/g, " ")
+    .slice(0, 200);
   await page.screenshot({ path: `${OUT}/00-build-info.png` });
   log("build-info: " + results.buildInfo);
 
@@ -60,17 +76,27 @@ try {
   results.dashboardHasContent = /Welcome back|Monthly Usage|Get started/i.test(text);
   const fr = frameOf(page);
   results.inAppTitle = fr ? await fr.title().catch(() => null) : null;
-  results.brandText = fr ? await fr.evaluate(() => {
-    const logo = document.querySelector('s-app-nav [slot="logo"]');
-    return logo ? logo.innerText.replace(/\s+/g, " ").trim() : null;
-  }).catch(() => null) : null;
+  results.brandText = fr
+    ? await fr
+        .evaluate(() => {
+          const logo = document.querySelector('s-app-nav [slot="logo"]');
+          return logo ? logo.innerText.replace(/\s+/g, " ").trim() : null;
+        })
+        .catch(() => null)
+    : null;
   // The admin's own sidebar label for the app (changes only after `shopify app deploy`).
-  results.adminSidebarAppLabel = await page.evaluate((handle) => {
-    const a = [...document.querySelectorAll("a[href*='/apps/" + handle + "']")].find((el) => el.innerText.trim());
-    return a ? a.innerText.replace(/\s+/g, " ").trim() : null;
-  }, APP).catch(() => null);
+  results.adminSidebarAppLabel = await page
+    .evaluate((handle) => {
+      const a = [...document.querySelectorAll("a[href*='/apps/" + handle + "']")].find((el) =>
+        el.innerText.trim(),
+      );
+      return a ? a.innerText.replace(/\s+/g, " ").trim() : null;
+    }, APP)
+    .catch(() => null);
   await page.screenshot({ path: `${OUT}/dashboard-1440.png` });
-  log(`1440 captured — title="${results.inAppTitle}" brand="${results.brandText}" sidebar="${results.adminSidebarAppLabel}"`);
+  log(
+    `1440 captured — title="${results.inAppTitle}" brand="${results.brandText}" sidebar="${results.adminSidebarAppLabel}"`,
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(2500);

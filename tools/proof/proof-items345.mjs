@@ -24,11 +24,15 @@ const log = (m) => console.log(`[proof-345] ${new Date().toISOString()} ${m}`);
 const results = { store: STORE, mode: MODE, reviewCalls: [], steps: [] };
 
 const browser = await chromium.launch({
-  headless: false, channel: "chrome",
+  headless: false,
+  channel: "chrome",
   ignoreDefaultArgs: ["--enable-automation"],
   args: ["--disable-blink-features=AutomationControlled", "--no-default-browser-check", "--no-first-run"],
 });
-const context = await browser.newContext({ storageState: "tests/e2e/.auth/shopify.json", viewport: { width: 1440, height: 900 } });
+const context = await browser.newContext({
+  storageState: "tests/e2e/.auth/shopify.json",
+  viewport: { width: 1440, height: 900 },
+});
 await context.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => undefined }));
 const page = await context.newPage();
 
@@ -44,8 +48,16 @@ await context.addInitScript(() => {
       const orig = b.request.bind(b);
       b.request = async function () {
         let r;
-        try { r = await orig(); } catch (e) { r = { error: String(e) }; }
-        try { await window.__navaalReviewCall(JSON.stringify(r ?? null)); } catch { /* top page gone */ }
+        try {
+          r = await orig();
+        } catch (e) {
+          r = { error: String(e) };
+        }
+        try {
+          await window.__navaalReviewCall(JSON.stringify(r ?? null));
+        } catch {
+          /* top page gone */
+        }
         return r;
       };
       b.__navaalWrapped = true;
@@ -55,7 +67,11 @@ await context.addInitScript(() => {
 });
 
 const appFrame = () => page.frameLocator('iframe[name^="app-iframe"], iframe[src*="app.navaal.ai"]').first();
-const frameText = async () => (await appFrame().locator("body").innerText({ timeout: 5000 }).catch(() => "")) || "";
+const frameText = async () =>
+  (await appFrame()
+    .locator("body")
+    .innerText({ timeout: 5000 })
+    .catch(() => "")) || "";
 const shot = async (name) => {
   await page.screenshot({ path: `${OUT}/${name}-1440.png` }).catch(() => {});
   await page.setViewportSize({ width: 390, height: 844 });
@@ -64,10 +80,16 @@ const shot = async (name) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(800);
 };
-const step = (name, data) => { results.steps.push({ name, at: new Date().toISOString(), ...data }); log(`${name}: ${JSON.stringify(data)}`); };
+const step = (name, data) => {
+  results.steps.push({ name, at: new Date().toISOString(), ...data });
+  log(`${name}: ${JSON.stringify(data)}`);
+};
 const gotoApp = async (path = "/app") => {
   await page.goto(`${APP_ROOT}${path}`, { waitUntil: "domcontentloaded" });
-  await appFrame().locator("body").waitFor({ state: "visible", timeout: 60000 }).catch(() => {});
+  await appFrame()
+    .locator("body")
+    .waitFor({ state: "visible", timeout: 60000 })
+    .catch(() => {});
   for (let i = 0; i < 40; i++) {
     const t = await frameText();
     if (t.length > 200) break;
@@ -87,7 +109,14 @@ const waitFor = async (re, ms) => {
 
 try {
   await page.goto("https://app.navaal.ai/api/build-info", { waitUntil: "domcontentloaded" });
-  results.buildInfo = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
+  results.buildInfo = (
+    await page
+      .locator("body")
+      .innerText()
+      .catch(() => "")
+  )
+    .replace(/\s+/g, " ")
+    .slice(0, 200);
   await page.screenshot({ path: `${OUT}/00-build-info.png` });
   step("build-info", { buildInfo: results.buildInfo });
 
@@ -95,13 +124,18 @@ try {
     // 2. Dashboard on a new shop: the primary action.
     await gotoApp("/app");
     const heroText = await frameText();
-    const m = heroText.match(/(Write \d descriptions? now[^\n]*|Improve \d descriptions? now[^\n]*|Choose a product →|Add a product in Shopify)/);
+    const m = heroText.match(
+      /(Write \d descriptions? now[^\n]*|Improve \d descriptions? now[^\n]*|Choose a product →|Add a product in Shopify)/,
+    );
     step("dashboard-offer", { primaryAction: m ? m[1] : null, reviewCallsSoFar: results.reviewCalls.length });
     await shot("dashboard-offer");
-    if (!m || !/^(Write|Improve)/.test(m[1])) throw new Error("no quick-start action on the dashboard: " + (m ? m[1] : "none"));
+    if (!m || !/^(Write|Improve)/.test(m[1]))
+      throw new Error("no quick-start action on the dashboard: " + (m ? m[1] : "none"));
 
     // 3. One click → drafts.
-    const btn = appFrame().getByRole("button", { name: /^(Write|Improve) \d descriptions? now/ }).first();
+    const btn = appFrame()
+      .getByRole("button", { name: /^(Write|Improve) \d descriptions? now/ })
+      .first();
     await btn.waitFor({ state: "visible", timeout: 20000 });
     const t0 = Date.now();
     await btn.click();
@@ -113,41 +147,80 @@ try {
     for (let i = 0; i < 150; i++) {
       const t = await frameText();
       const ready = (t.match(/Content quality \d+/g) || []).length;
-      if (ready >= 1 && !firstDraftAt) { firstDraftAt = Date.now(); step("first-draft", { seconds: (firstDraftAt - t0) / 1000 }); }
-      if (ready >= wanted) { step("all-drafts", { seconds: (Date.now() - t0) / 1000, ready }); break; }
-      if (/no generation was used|took too long|Our AI is busy/.test(t) && i > 90) { step("draft-failure-visible", {}); break; }
+      if (ready >= 1 && !firstDraftAt) {
+        firstDraftAt = Date.now();
+        step("first-draft", { seconds: (firstDraftAt - t0) / 1000 });
+      }
+      if (ready >= wanted) {
+        step("all-drafts", { seconds: (Date.now() - t0) / 1000, ready });
+        break;
+      }
+      if (/no generation was used|took too long|Our AI is busy/.test(t) && i > 90) {
+        step("draft-failure-visible", {});
+        break;
+      }
       await page.waitForTimeout(1000);
     }
     await page.waitForTimeout(1500);
     await shot("dashboard-drafts");
-    results.drafts = { clickToFirstDraftSec: firstDraftAt ? (firstDraftAt - t0) / 1000 : null, clickToAllSec: results.steps.find((s) => s.name === "all-drafts")?.seconds ?? null };
+    results.drafts = {
+      clickToFirstDraftSec: firstDraftAt ? (firstDraftAt - t0) / 1000 : null,
+      clickToAllSec: results.steps.find((s) => s.name === "all-drafts")?.seconds ?? null,
+    };
 
     // 5. Review & publish.
-    const reviewBtn = appFrame().getByRole("button", { name: /Review & publish \d drafts?/ }).first();
-    if (await reviewBtn.count()) { await reviewBtn.click(); } else { await gotoApp("/app/review"); }
+    const reviewBtn = appFrame()
+      .getByRole("button", { name: /Review & publish \d drafts?/ })
+      .first();
+    if (await reviewBtn.count()) {
+      await reviewBtn.click();
+    } else {
+      await gotoApp("/app/review");
+    }
     await waitFor(/approved and ready to publish|Nothing to review/, 30000);
     await page.waitForTimeout(2000);
-    step("review-preapproved", { text: (await frameText()).match(/\d+ of \d+ approved[^\n]*/)?.[0] ?? null, reviewCallsSoFar: results.reviewCalls.length });
+    step("review-preapproved", {
+      text: (await frameText()).match(/\d+ of \d+ approved[^\n]*/)?.[0] ?? null,
+      reviewCallsSoFar: results.reviewCalls.length,
+    });
     await shot("review-preapproved");
 
     // 6. Publish → the one review ask.
     const callsBefore = results.reviewCalls.length;
-    const publishBtn = appFrame().getByRole("button", { name: /^Publish \d+ approved/ }).first();
+    const publishBtn = appFrame()
+      .getByRole("button", { name: /^Publish \d+ approved/ })
+      .first();
     await publishBtn.waitFor({ state: "visible", timeout: 20000 });
     const tPub = Date.now();
     await publishBtn.click();
     const published = await waitFor(/Published content for \d+ product/, 60000);
-    step("published", { seconds: (Date.now() - tPub) / 1000, toast: published?.match(/Published content for[^\n]*/)?.[0] ?? null });
+    step("published", {
+      seconds: (Date.now() - tPub) / 1000,
+      toast: published?.match(/Published content for[^\n]*/)?.[0] ?? null,
+    });
     // The Shopify review modal renders in the TOP window.
     let modal = false;
     for (let i = 0; i < 12; i++) {
       await page.waitForTimeout(1000);
       if (results.reviewCalls.length > callsBefore) modal = true;
       const dlg = page.getByRole("dialog");
-      if ((await dlg.count()) > 0 && (await dlg.first().isVisible().catch(() => false))) { modal = true; break; }
+      if (
+        (await dlg.count()) > 0 &&
+        (await dlg
+          .first()
+          .isVisible()
+          .catch(() => false))
+      ) {
+        modal = true;
+        break;
+      }
     }
     await shot("review-published-modal");
-    step("review-ask", { callsDuringPublish: results.reviewCalls.length - callsBefore, lastResult: results.reviewCalls.at(-1)?.result ?? null, modalVisible: modal });
+    step("review-ask", {
+      callsDuringPublish: results.reviewCalls.length - callsBefore,
+      lastResult: results.reviewCalls.at(-1)?.result ?? null,
+      modalVisible: modal,
+    });
     await page.keyboard.press("Escape").catch(() => {});
 
     // 7. Never again on open: reload review, open jobs, open dashboard.
@@ -159,10 +232,16 @@ try {
   }
 
   if (MODE === "quota") {
-    for (const [name, path] of [["dashboard-quota-prompt", "/app"], ["products-quota-prompt", "/app/products"], ["optimize-quota-prompt", "/app/optimize"], ["seo-audit-prompt", "/app/seo-audit"]]) {
+    for (const [name, path] of [
+      ["dashboard-quota-prompt", "/app"],
+      ["products-quota-prompt", "/app/products"],
+      ["optimize-quota-prompt", "/app/optimize"],
+      ["seo-audit-prompt", "/app/seo-audit"],
+    ]) {
       await gotoApp(path);
       const t = await frameText();
-      const title = t.match(/(At least )?\d+ products? still needs? content · [A-Za-z]+ covers \d+\/month/)?.[0] ?? null;
+      const title =
+        t.match(/(At least )?\d+ products? still needs? content · [A-Za-z]+ covers \d+\/month/)?.[0] ?? null;
       const reset = t.match(/reset on \d+ [A-Za-z]+/)?.[0] ?? null;
       step(name, { title, reset, critical: /tone="critical"/.test(t) });
       await shot(name);
@@ -174,7 +253,9 @@ try {
       await link.click();
       await page.waitForTimeout(5000);
       const t = await frameText();
-      step("product-quota-prompt", { title: t.match(/(At least )?\d+ products? still needs? content[^\n]*/)?.[0] ?? null });
+      step("product-quota-prompt", {
+        title: t.match(/(At least )?\d+ products? still needs? content[^\n]*/)?.[0] ?? null,
+      });
       await shot("product-quota-prompt");
     }
   }
@@ -188,6 +269,18 @@ try {
   fs.writeFileSync(`${OUT}/results-${MODE}.json`, JSON.stringify(results, null, 2));
   await context.close();
   await browser.close();
-  console.log(JSON.stringify({ ok: results.ok, error: results.error, reviewCalls: results.reviewCalls.length, drafts: results.drafts, steps: results.steps.map((s) => s.name) }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: results.ok,
+        error: results.error,
+        reviewCalls: results.reviewCalls.length,
+        drafts: results.drafts,
+        steps: results.steps.map((s) => s.name),
+      },
+      null,
+      2,
+    ),
+  );
   process.exit(results.ok ? 0 : 1);
 }

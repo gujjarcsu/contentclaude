@@ -142,17 +142,24 @@ describe("the setting itself", () => {
     expect(schema).toMatch(/publishWithoutReview\s+Boolean\s+@default\(false\)/);
   });
 
-  it("ships as a real migration, not a db push", () => {
-    const sql = read("prisma/migrations/20260910_geo_note_dismissed/migration.sql");
-    expect(sql).toMatch(/ALTER TABLE "BrandVoice" ADD COLUMN "publishWithoutReview"/);
+  it("ships as a real migration, in its OWN file", () => {
+    // It was originally appended to 20260910_geo_note_dismissed, which had
+    // already been applied. Prisma skips an applied migration by name, so the
+    // statement never ran and every /app load returned 500 for eight hours.
+    const sql = read("prisma/migrations/20260910010000_publish_without_review/migration.sql");
+    expect(sql).toMatch(/ALTER TABLE "BrandVoice" ADD COLUMN IF NOT EXISTS "publishWithoutReview"/);
     expect(sql).toMatch(/NOT NULL DEFAULT false/);
+    // And it is NOT back in the migration it broke.
+    expect(read("prisma/migrations/20260910_geo_note_dismissed/migration.sql")).not.toMatch(
+      /publishWithoutReview/,
+    );
   });
 
   it("an existing shop does not inherit a per-run tick as a standing choice", () => {
     // Shops had been ticking a per-run box. That is not consent to publish
     // everything without review from now on, so the column defaults to false
     // and there is no backfill.
-    const sql = read("prisma/migrations/20260910_geo_note_dismissed/migration.sql");
+    const sql = read("prisma/migrations/20260910010000_publish_without_review/migration.sql");
     expect(sql).not.toMatch(/UPDATE "BrandVoice"/);
   });
 });

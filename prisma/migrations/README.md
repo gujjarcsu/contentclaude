@@ -91,3 +91,50 @@ half-happen.
 2. Fix the migration on a branch, verify against a shadow database, push.
 3. If a migration is recorded as failed, clear it with
    `npx prisma migrate resolve --rolled-back <name>` before retrying.
+
+---
+
+## Rule 1: an applied migration is immutable
+
+**Never edit a migration file that has already run.** New schema change, new file.
+
+Prisma records migrations by **name** in `_prisma_migrations`. If the name is already there, the file is
+skipped — whatever is now inside it. So editing an applied migration means:
+
+- the new statements never run against production;
+- `prisma migrate status` still reports **"Database schema is up to date!"**, because it compares names;
+- the deploy ships code expecting a schema the database does not have;
+- and the first merchant to touch that column gets a 500.
+
+### This has already happened here
+
+On **2026-09-09** a second `ALTER TABLE` was appended to `20260910_geo_note_dismissed`, which had been
+applied at 16:21:06 UTC. The statement never ran. Every `/app` load returned
+`P2022: column BrandVoice.publishWithoutReview does not exist` for roughly **eight hours**, until the
+column was added by hand.
+
+The record is unambiguous — that migration is stored with `applied_steps_count = 1`, the single
+statement it contained when it ran. `20260910010000_publish_without_review` is where the second
+statement should have gone in the first place.
+
+### What now enforces it
+
+- **CI fails** if any file under `prisma/migrations/` that already exists on `origin/main` is modified
+  or deleted. The checkout uses `fetch-depth: 0`, without which the comparison silently passes.
+  The one legitimate exception — restoring a wrongly-edited migration — is opted into per commit with
+  `[migration-restore]` in the commit message, and CI prints a warning saying so.
+- **The app checks at startup and on every deep health check** that every column in the Prisma schema
+  exists in the database, and reports `error` (503) if not. `SELECT 1` cannot catch this; comparing
+  columns can.
+- **The post-deploy smoke job** reads that schema check and fails the deploy on drift.
+
+### Naming
+
+Use a 14-digit timestamp: `20260910010000_publish_without_review`. Prisma orders by name, so a shorter
+prefix sorts unpredictably against generated ones.
+
+### Writing one that is safe to re-run
+
+Prefer `ADD COLUMN IF NOT EXISTS` / `DROP ... IF EXISTS` where the change may already have been applied
+by hand during an incident. A migration that fails on the very deploy meant to end an outage is worse
+than one that is a no-op.

@@ -1,0 +1,32 @@
+{
+  "label": "before",
+  "at": "2026-09-10T01:20:17.997Z",
+  "store": "navaal-qa-fresh",
+  "runs": 10,
+  "emulatedLatencyMs": 200,
+  "targets": {
+    "LCP_p75_ms": 2500,
+    "CLS_p75": 0.1,
+    "INP_p75_ms": 200
+  },
+  "results": {
+    "Home": {
+      "n": 10,
+      "LCP_p75_ms": 5892,
+      "CLS_p75": 0,
+      "INP_p75_ms": 16
+    },
+    "Products": {
+      "n": 10,
+      "LCP_p75_ms": 5036,
+      "CLS_p75": 0,
+      "INP_p75_ms": 16
+    },
+    "Review": {
+      "n": 10,
+      "LCP_p75_ms": 4644,
+      "CLS_p75": 0,
+      "INP_p75_ms": 16
+    }
+  }
+}

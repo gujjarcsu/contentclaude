@@ -350,13 +350,40 @@ describe("item 5 — a deploy that breaks the admin", () => {
     expect(emails[0].text).toMatch(/does not roll back the schema/);
   });
 
-  it("treats a redirect to authenticate as healthy — /app is an embedded route", async () => {
-    for (const code of [200, 302, 401]) {
+  it("only 200 and 302 are healthy — a browser gets one of those", async () => {
+    for (const code of [200, 302]) {
       emails.length = 0;
       const out = await checkAppShellOnce({ fetchImpl: shell(code), now: 310_000_000 });
       expect(out.ok, `HTTP ${code} should be healthy`).toBe(true);
       expect(emails).toHaveLength(0);
     }
+  });
+
+  it("410 is an alert, not a pass — that is the eight-hour hole", async () => {
+    // This probe treated 410 as healthy and ran every five minutes for eight
+    // hours against an app where every page returned 500. It sent no
+    // user-agent, the Shopify library classified it as a bot and answered 410,
+    // and 410 was on the healthy list. It never reached a loader.
+    await settle(311_000_000);
+    const out = await checkAppShellOnce({ fetchImpl: shell(410), now: 312_000_000 });
+    expect(out.ok).toBe(false);
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toMatch(/admin is broken/i);
+  });
+
+  it("401 is an alert too — a browser is never told to authenticate this way", async () => {
+    await settle(313_000_000);
+    const out = await checkAppShellOnce({ fetchImpl: shell(401), now: 314_000_000 });
+    expect(out.ok).toBe(false);
+  });
+
+  it("it sends a real browser user-agent", async () => {
+    await settle(315_000_000);
+    const fetchImpl = vi.fn(async () => ({ status: 302 }));
+    await checkAppShellOnce({ fetchImpl, now: 316_000_000 });
+    const [, opts] = fetchImpl.mock.calls[0];
+    expect(opts.headers["user-agent"]).toMatch(/Chrome\/\d+/);
+    expect(opts.headers["user-agent"]).not.toMatch(/Headless/);
   });
 
   it("stays quiet when the host does not answer at all", async () => {

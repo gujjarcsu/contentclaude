@@ -25,29 +25,45 @@ const chromePath = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 ].find((p) => fs.existsSync(p));
-if (!chromePath) { console.error("chrome.exe not found"); process.exit(2); }
+if (!chromePath) {
+  console.error("chrome.exe not found");
+  process.exit(2);
+}
 
 fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
 fs.rmSync(DIR, { recursive: true, force: true });
 fs.mkdirSync(DIR, { recursive: true });
 
 console.log("Opening a normal Chrome window for you to log in…");
-const child = spawn(chromePath, [
-  `--remote-debugging-port=${PORT}`,
-  `--user-data-dir=${DIR}`,
-  "--no-first-run", "--no-default-browser-check",
-  `https://admin.shopify.com/store/${STORE}`,
-], { detached: true, stdio: "ignore" });
+const child = spawn(
+  chromePath,
+  [
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${DIR}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    `https://admin.shopify.com/store/${STORE}`,
+  ],
+  { detached: true, stdio: "ignore" },
+);
 child.unref();
 
 async function waitForCDP(deadline) {
   while (Date.now() < deadline) {
-    try { const r = await fetch(`http://127.0.0.1:${PORT}/json/version`); if (r.ok) return true; } catch { /* wait */ }
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/json/version`);
+      if (r.ok) return true;
+    } catch {
+      /* wait */
+    }
     await new Promise((s) => setTimeout(s, 1000));
   }
   return false;
 }
-if (!(await waitForCDP(Date.now() + 40000))) { console.error("Debug endpoint never came up."); process.exit(3); }
+if (!(await waitForCDP(Date.now() + 40000))) {
+  console.error("Debug endpoint never came up.");
+  process.exit(3);
+}
 
 const browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`);
 const context = browser.contexts()[0];
@@ -67,24 +83,38 @@ while (Date.now() < deadline) {
   // the user is authenticated. Require it to persist across 2 polls (~5s) so we
   // don't snapshot mid-redirect. This is far more lenient than matching a
   // specific nav element (which varies across admin surfaces).
-  const page = context.pages().find(
-    (p) => /admin\.shopify\.com\/store\//.test(p.url())
-      && !/\/login|accounts\.shopify\.com|\/oauth\//.test(p.url())
-  );
+  const page = context
+    .pages()
+    .find(
+      (p) =>
+        /admin\.shopify\.com\/store\//.test(p.url()) &&
+        !/\/login|accounts\.shopify\.com|\/oauth\//.test(p.url()),
+    );
   if (page) {
     stableCount++;
     console.log(`  authenticated admin page detected (${stableCount}/2): ${page.url()}`);
-    if (stableCount >= 2) { ok = true; break; }
+    if (stableCount >= 2) {
+      ok = true;
+      break;
+    }
   } else {
     stableCount = 0;
   }
   await new Promise((s) => setTimeout(s, 2500));
 }
 
-if (!ok) { console.error("TIMEOUT: admin never loaded. Nothing saved."); await browser.close().catch(() => {}); process.exit(1); }
+if (!ok) {
+  console.error("TIMEOUT: admin never loaded. Nothing saved.");
+  await browser.close().catch(() => {});
+  process.exit(1);
+}
 
 await context.storageState({ path: AUTH_FILE });
 console.log(`SESSION SAVED to ${AUTH_FILE}`);
 await browser.close().catch(() => {});
-try { process.kill(-child.pid); } catch { /* best effort */ }
+try {
+  process.kill(-child.pid);
+} catch {
+  /* best effort */
+}
 process.exit(0);

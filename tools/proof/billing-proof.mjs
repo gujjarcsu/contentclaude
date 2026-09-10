@@ -15,10 +15,14 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(`${OUT}/video`, { recursive: true });
 
 const appFrame = (page) =>
-  page.frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]').first();
+  page
+    .frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]')
+    .first();
 
 const log = (m) => console.log(`[billing-proof] ${m}`);
-const shot = async (page, name) => { await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false }).catch(() => {}); };
+const shot = async (page, name) => {
+  await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false }).catch(() => {});
+};
 
 // Real Chrome, headed, with automation fingerprints stripped — this is what
 // gets past Shopify/Cloudflare bot detection (headless is challenged). Playwright
@@ -44,32 +48,51 @@ try {
   //    gets past the initial load), then the Plans page. Frame-body-visible
   //    wait like gotoApp.
   log("warming admin app root…");
-  await page.goto(`https://admin.shopify.com/store/${STORE}/apps/${APP}/app`, { waitUntil: "domcontentloaded" });
+  await page.goto(`https://admin.shopify.com/store/${STORE}/apps/${APP}/app`, {
+    waitUntil: "domcontentloaded",
+  });
   await page.waitForTimeout(4000);
   if (/challenge|verify you are human|needs to be verified/i.test(await page.content().catch(() => ""))) {
-    throw new Error("CLOUDFLARE_CHALLENGE: admin blocked the headless browser (bot detection). Screencast must be recorded in a real browser.");
+    throw new Error(
+      "CLOUDFLARE_CHALLENGE: admin blocked the headless browser (bot detection). Screencast must be recorded in a real browser.",
+    );
   }
 
   // Warm frame first
   const fWarm = appFrame(page);
-  await fWarm.locator("body").waitFor({ state: "visible", timeout: 60000 }).catch(() => {});
+  await fWarm
+    .locator("body")
+    .waitFor({ state: "visible", timeout: 60000 })
+    .catch(() => {});
   await page.waitForTimeout(3000);
 
   // 1) Plans page inside the admin. The admin SPA can bounce /app/plans -> /app
   //    on a cold load; navigate with a retry once it's warm.
   log("opening Plans page in admin…");
   const gotoPlans = async () => {
-    try { await page.goto(PLANS_URL, { waitUntil: "domcontentloaded" }); }
-    catch (e) { if (/interrupted by another navigation/i.test(e.message)) { await page.waitForTimeout(3000); await page.goto(PLANS_URL, { waitUntil: "domcontentloaded" }); } else throw e; }
+    try {
+      await page.goto(PLANS_URL, { waitUntil: "domcontentloaded" });
+    } catch (e) {
+      if (/interrupted by another navigation/i.test(e.message)) {
+        await page.waitForTimeout(3000);
+        await page.goto(PLANS_URL, { waitUntil: "domcontentloaded" });
+      } else throw e;
+    }
   };
   await gotoPlans();
   const f = appFrame(page);
   await f.locator("body").waitFor({ state: "visible", timeout: 60000 });
   await page.waitForTimeout(4000);
   // If it bounced to the dashboard, retry the Plans nav once more.
-  if (!/\/app\/plans/i.test(page.url())) { await gotoPlans(); await page.waitForTimeout(4000); }
+  if (!/\/app\/plans/i.test(page.url())) {
+    await gotoPlans();
+    await page.waitForTimeout(4000);
+  }
   await shot(page, "01-plans");
-  await f.getByText(/Professional|Growth|Starter/i).first().waitFor({ timeout: 30000 });
+  await f
+    .getByText(/Professional|Growth|Starter/i)
+    .first()
+    .waitFor({ timeout: 30000 });
 
   // 2) Click "Upgrade to Professional"
   log("clicking Upgrade to Professional…");
@@ -86,7 +109,8 @@ try {
 
   // 4) Approve the (test) charge
   log("clicking Approve…");
-  const approve = page.getByRole("button", { name: /^approve/i })
+  const approve = page
+    .getByRole("button", { name: /^approve/i })
     .or(page.getByRole("link", { name: /^approve/i }));
   await approve.first().waitFor({ timeout: 30000 });
   await approve.first().click();
@@ -102,11 +126,17 @@ try {
 
   // 6) Verify the plan is now Professional, in-admin
   const f2 = appFrame(page);
-  const bodyText = await f2.locator("body").innerText().catch(() => "");
-  const proActive = /Professional[\s\S]{0,40}(Active Plan|Current Plan)|(Active Plan|Current Plan)[\s\S]{0,40}Professional|You're on the Professional plan/i.test(bodyText);
+  const bodyText = await f2
+    .locator("body")
+    .innerText()
+    .catch(() => "");
+  const proActive =
+    /Professional[\s\S]{0,40}(Active Plan|Current Plan)|(Active Plan|Current Plan)[\s\S]{0,40}Professional|You're on the Professional plan/i.test(
+      bodyText,
+    );
   log(`in-admin: ${/admin\.shopify\.com/.test(finalUrl)}  professional-active: ${proActive}`);
   await shot(page, "04-professional-active");
-  result = (/admin\.shopify\.com/.test(finalUrl) && !/auth\/login/i.test(finalUrl)) ? "PASS" : "FAIL";
+  result = /admin\.shopify\.com/.test(finalUrl) && !/auth\/login/i.test(finalUrl) ? "PASS" : "FAIL";
   log(`RESULT: ${result}`);
 } catch (err) {
   result = "FAIL";

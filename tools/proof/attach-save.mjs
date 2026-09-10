@@ -11,8 +11,9 @@ try {
   console.log("open pages:");
   for (const p of pages) console.log("  " + p.url());
   const authed = pages.find(
-    (p) => /admin\.shopify\.com\/store\//.test(p.url())
-      && !/\/login|accounts\.shopify\.com|\/oauth\//.test(p.url())
+    (p) =>
+      /admin\.shopify\.com\/store\//.test(p.url()) &&
+      !/\/login|accounts\.shopify\.com|\/oauth\//.test(p.url()),
   );
   if (!authed) {
     console.log("NO_AUTHED_PAGE — no logged-in admin tab found. Log in first, then rerun.");

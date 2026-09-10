@@ -21,6 +21,53 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No migration that already exists on main may be modified
+        run: |
+          set -euo pipefail
+
+          # An applied migration is IMMUTABLE. Prisma records migrations by NAME
+          # in _prisma_migrations, so editing a file that has already run does
+          # not re-run it — the change is silently skipped, `migrate status`
+          # still says "up to date", and the deploy ships code expecting a
+          # column the database does not have.
+          #
+          # That is exactly the 2026-09-09 incident: a second ALTER was appended
+          # to 20260910_geo_note_dismissed after it had been applied, and every
+          # /app load returned 500 with P2022 for eight hours.
+          #
+          # New schema change, new file. This makes that a build failure rather
+          # than an eight-hour outage.
+          git fetch --no-tags --depth=1 origin main
+
+          changed=$(git diff --name-only --diff-filter=MD origin/main...HEAD -- 'prisma/migrations/**' || true)
+
+          if [ -z "$changed" ]; then
+            echo "ok — no existing migration was modified or deleted"
+            exit 0
+          fi
+
+          # One deliberate, auditable exception: restoring a migration that was
+          # wrongly edited. That is the fix for this class of incident, and it
+          # necessarily modifies a file already on main. It must be opted into
+          # per commit and it says so in the log, so it can never be a habit.
+          if git log -1 --pretty=%B "$GITHUB_SHA" | grep -qF "[migration-restore]"; then
+            echo "::warning::Migration files were modified, and the commit message carries [migration-restore]:"
+            echo "$changed" | sed "s/^/  /"
+            echo "Allowed. This is only ever correct when putting an edited migration back to its applied content."
+            exit 0
+          fi
+
+          echo "::error::These migration files already exist on main and were modified or deleted:"
+          echo "$changed" | sed 's/^/  /'
+          echo ""
+          echo "An applied migration cannot be changed. Prisma skips it by name, so the"
+          echo "change never runs against production and the deploy ships expecting a"
+          echo "schema that does not exist. Put the new statements in a NEW migration"
+          echo "directory with a 14-digit timestamp name, and restore these files."
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -143,18 +190,55 @@ jobs:
           [ "$code" = "302" ] || { echo "::error::GET / returned $code, expected 302"; exit 1; }
           case "$loc" in *"/reembed"*) ;; *) echo "::error::GET / redirected to $loc, expected /reembed"; exit 1;; esac
 
-      - name: /app is served by this build rather than crashing
+      - name: /app is served to a browser, and the schema matches this build
         run: |
           set -euo pipefail
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -I https://app.navaal.ai/app)
-          echo "HEAD /app -> $code"
-          # An UNAUTHENTICATED bare request to /app is answered by the Shopify
-          # library, which returns 410 Gone when there is no shop, no host, no
-          # session and no admin referer. That is expected, and it is not a dead
-          # end for any real user: merchants arrive through admin.shopify.com,
-          # which the G1 gauntlet exercises end to end. What this step catches is
-          # a 5xx — a build that boots but cannot serve its own main route.
+
+          # A REAL browser user-agent. This is the check that failed to catch the
+          # 2026-09-09 incident, and it failed for two reasons at once.
+          #
+          # 1. It used curl's default user-agent. The Shopify library treats a
+          #    non-browser agent as a bot and answers 410 Gone instead of
+          #    redirecting to auth. So this step was exercising the bot path,
+          #    which never touches a loader, never touches the database, and
+          #    would have passed with the entire app broken.
+          # 2. It then accepted 410 as healthy, which made the blind spot
+          #    permanent.
+          #
+          # A browser gets 302 (go and authenticate) or 200. Nothing else is
+          # healthy. 410 in particular is now a FAILURE: it means this request
+          # was classified as a bot, so the check did not test what it claims to.
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A "$UA" https://app.navaal.ai/app)
+          echo "GET /app (browser UA) -> $code"
           case "$code" in
-            2*|3*|401|410) echo "ok" ;;
-            *) echo "::error::HEAD /app returned $code"; exit 1 ;;
+            200|302) echo "ok" ;;
+            410) echo "::error::GET /app returned 410 to a BROWSER user-agent. Either the bot filter is misclassifying real browsers, or this check is not sending the UA it thinks it is."; exit 1 ;;
+            *)   echo "::error::GET /app returned $code, expected 200 or 302"; exit 1 ;;
           esac
+
+      - name: The database has the columns this build expects
+        run: |
+          set -euo pipefail
+          # The 2026-09-09 incident in one assertion. A migration edited after it
+          # had been applied was skipped by name, the column was never created,
+          # and every /app load returned 500 with P2022 for eight hours — while
+          # `prisma migrate status`, /api/health and this very job all said the
+          # deploy was fine.
+          body=$(curl -fsS --max-time 20 "https://app.navaal.ai/api/health?deep=1")
+          schema=$(echo "$body" | jq -c '.checks.schema // empty')
+          echo "schema check: ${schema:-<absent>}"
+
+          if [ -z "$schema" ]; then
+            echo "::error::/api/health?deep=1 did not report a schema check. This build predates the drift guard, or the guard failed to load."
+            exit 1
+          fi
+
+          ok=$(echo "$schema" | jq -r '.ok // "unknown"')
+          if [ "$ok" != "true" ]; then
+            missing=$(echo "$schema" | jq -r '.missing // [] | join(", ")')
+            echo "::error::SCHEMA DRIFT — columns this build needs are missing from the database: ${missing}. A migration was probably edited after it was applied; see docs/RUNBOOK.md."
+            exit 1
+          fi
+          echo "ok — $(echo "$schema" | jq -r '.columns') columns present"

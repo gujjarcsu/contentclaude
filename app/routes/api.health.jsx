@@ -136,6 +136,41 @@ export const loader = async ({ request }) => {
       logger.warn({ err: err.message }, "Health check: breaker probe failed");
     }
 
+    // ── Schema drift ─────────────────────────────────────────────────────
+    //
+    // Does the database have the columns this build expects? This is the check
+    // that was missing on 2026-09-09: a migration edited after it was applied
+    // is skipped by name, so the code shipped expecting
+    // BrandVoice.publishWithoutReview, the column never existed, and every
+    // /app load returned 500 with P2022 for eight hours - while this endpoint
+    // reported "ok", because its database check is SELECT 1 and SELECT 1 needs
+    // no columns.
+    //
+    // Drift is an ERROR, not a degrade. A deploy whose schema does not match
+    // production is not serving merchants, and it must fail the smoke job.
+    try {
+      const { checkSchemaDrift } = await import("../utils/schemaDrift.server.js");
+      const drift = await checkSchemaDrift();
+      if (drift.error) {
+        checks.schema = { error: "unavailable" };
+        degraded = true;
+      } else if (!drift.ok) {
+        checks.schema = {
+          ok: false,
+          missingColumns: drift.missing.length,
+          missing: drift.missing.slice(0, 10),
+        };
+        healthy = false;
+        logger.error({ missing: drift.missing, event: "schema_drift" }, "Health check: schema drift");
+      } else {
+        checks.schema = { ok: true, columns: drift.checked };
+      }
+    } catch (err) {
+      checks.schema = { error: "unavailable" };
+      degraded = true;
+      logger.warn({ err: err.message }, "Health check: schema probe failed");
+    }
+
     checks.build = process.env.GIT_SHA ? process.env.GIT_SHA.slice(0, 7) : "unknown";
   }
 

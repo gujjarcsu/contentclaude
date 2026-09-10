@@ -21,15 +21,19 @@ const OUT = "repro-incognito";
 fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(`${OUT}/video`, { recursive: true });
 
-const appFrame = (p) => p.frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]').first();
+const appFrame = (p) =>
+  p.frameLocator('iframe[name^="app-iframe"], iframe[src*="navaal"], iframe[src*="app.navaal.ai"]').first();
 const log = (m) => console.log(`[repro] ${new Date().toISOString()} ${m}`);
 const results = [];
 
 const browser = await chromium.launch({
-  headless: false, channel: "chrome",
+  headless: false,
+  channel: "chrome",
   ignoreDefaultArgs: ["--enable-automation"],
   args: [
-    "--disable-blink-features=AutomationControlled", "--no-default-browser-check", "--no-first-run",
+    "--disable-blink-features=AutomationControlled",
+    "--no-default-browser-check",
+    "--no-first-run",
     // Chrome's third-party-cookie phaseout — same policy incognito enforces.
     "--test-third-party-cookie-phaseout",
   ],
@@ -50,10 +54,15 @@ await context.route("https://app.navaal.ai/**", async (route) => {
     try {
       const resp = await route.fetch();
       const headers = { ...resp.headers() };
-      if (headers["set-cookie"]) { delete headers["set-cookie"]; strippedCount++; }
+      if (headers["set-cookie"]) {
+        delete headers["set-cookie"];
+        strippedCount++;
+      }
       const body = await resp.body().catch(() => undefined);
       await route.fulfill({ response: resp, headers, body });
-    } catch { await route.continue(); }
+    } catch {
+      await route.continue();
+    }
   } else {
     await route.continue();
   }
@@ -64,7 +73,11 @@ const check = async (label) => {
   await page.waitForTimeout(3000);
   let frameText = "";
   for (let i = 0; i < 10; i++) {
-    try { frameText = await appFrame(page).locator("body").innerText({ timeout: 2500 }); } catch { frameText = ""; }
+    try {
+      frameText = await appFrame(page).locator("body").innerText({ timeout: 2500 });
+    } catch {
+      frameText = "";
+    }
     if (frameText.trim().length > 30 || /Shop domain|>Log in<|name="shop"/i.test(frameText)) break;
     await page.waitForTimeout(1000);
   }
@@ -75,14 +88,34 @@ const check = async (label) => {
   const onLogin = /\/auth\/login/i.test(page.url());
   const rec = { label, url: page.url(), form, blank, onLogin, contentLen: frameText.trim().length };
   results.push(rec);
-  log(`${form || onLogin ? "❌ DEAD-END" : blank ? "⚠️ BLANK" : "✅ ok"} — ${label} | form=${form} blank=${blank} onLogin=${onLogin} len=${rec.contentLen} | ${page.url()}`);
-  await page.screenshot({ path: `${OUT}/${String(results.length).padStart(2,"0")}-${label.replace(/[^a-z0-9]+/gi,"_").slice(0,32)}.png` }).catch(() => {});
+  log(
+    `${form || onLogin ? "❌ DEAD-END" : blank ? "⚠️ BLANK" : "✅ ok"} — ${label} | form=${form} blank=${blank} onLogin=${onLogin} len=${rec.contentLen} | ${page.url()}`,
+  );
+  await page
+    .screenshot({
+      path: `${OUT}/${String(results.length).padStart(2, "0")}-${label.replace(/[^a-z0-9]+/gi, "_").slice(0, 32)}.png`,
+    })
+    .catch(() => {});
 };
-const gotoTop = async (url) => { await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {}); await appFrame(page).locator("body").waitFor({ state: "visible", timeout: 45000 }).catch(() => {}); };
+const gotoTop = async (url) => {
+  await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await appFrame(page)
+    .locator("body")
+    .waitFor({ state: "visible", timeout: 45000 })
+    .catch(() => {});
+};
 const clickNav = async (name) => {
   const f = appFrame(page);
-  const l = f.getByRole("link", { name: new RegExp("^" + name + "$", "i") }).first().or(f.locator(`s-link:has-text("${name}")`).first());
-  try { await l.click({ timeout: 6000 }); return true; } catch { return false; }
+  const l = f
+    .getByRole("link", { name: new RegExp("^" + name + "$", "i") })
+    .first()
+    .or(f.locator(`s-link:has-text("${name}")`).first());
+  try {
+    await l.click({ timeout: 6000 });
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 try {
@@ -128,10 +161,16 @@ try {
   if (vids.length) fs.renameSync(`${OUT}/video/${vids[0]}`, `${OUT}/repro-incognito.webm`);
   const deadEnds = results.filter((r) => r.form || r.onLogin);
   const blanks = results.filter((r) => r.blank && !r.form);
-  fs.writeFileSync(`${OUT}/results.json`, JSON.stringify({ strippedCookies: strippedCount, results }, null, 2));
+  fs.writeFileSync(
+    `${OUT}/results.json`,
+    JSON.stringify({ strippedCookies: strippedCount, results }, null, 2),
+  );
   console.log(`\n=== set-cookie stripped ${strippedCount}× (cookieless confirmed if >0) ===`);
-  console.log(`=== DEAD-ENDS (form/login): ${deadEnds.length} | BLANK: ${blanks.length} | total steps: ${results.length} ===`);
-  for (const r of results) console.log(`  ${r.form||r.onLogin ? "DEAD-END" : r.blank ? "BLANK   " : "ok      "}  ${r.label}`);
+  console.log(
+    `=== DEAD-ENDS (form/login): ${deadEnds.length} | BLANK: ${blanks.length} | total steps: ${results.length} ===`,
+  );
+  for (const r of results)
+    console.log(`  ${r.form || r.onLogin ? "DEAD-END" : r.blank ? "BLANK   " : "ok      "}  ${r.label}`);
   console.log(`REPRODUCED=${deadEnds.length > 0 || blanks.length > 0 ? "YES" : "NO"}`);
   process.exit(0);
 }

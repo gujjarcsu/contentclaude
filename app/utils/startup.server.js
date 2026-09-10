@@ -13,6 +13,7 @@
 import prisma, { DB_ROLE_URL_SOURCE } from "../db.server.js";
 import logger from "./logger.server.js";
 import { RUNS_JOBS, PROCESS_ROLE, MACHINE_ID, REGION } from "./processRole.server.js";
+import { logSchemaDriftAtStartup } from "./schemaDrift.server.js";
 
 // Refuse to boot if NODE_ENV is unset — billing test mode, cookie security and
 // other safety branches depend on it, so an unset value is unsafe to run with.
@@ -61,19 +62,23 @@ export async function recoverStuckJobs() {
       errorLog: JSON.stringify([
         {
           productId: "N/A",
-          error: "This job stopped responding and was ended. Use Resume to finish the remaining products — anything already generated will not be charged again.",
+          error:
+            "This job stopped responding and was ended. Use Resume to finish the remaining products — anything already generated will not be charged again.",
         },
       ]),
     },
   });
 
   for (const job of stuck) {
-    logger.warn({ jobId: job.id, shop: job.shop, startedAt: job.startedAt, lastTouched: job.updatedAt }, "Marked stuck job as failed");
+    logger.warn(
+      { jobId: job.id, shop: job.shop, startedAt: job.startedAt, lastTouched: job.updatedAt },
+      "Marked stuck job as failed",
+    );
   }
   return count;
 }
 
-export function runStartupChecks() {
+export async function runStartupChecks() {
   const warnings = [];
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -89,7 +94,7 @@ export function runStartupChecks() {
     // sail with a hole in it.
     throw new Error(
       "FATAL: REDIS_URL is not set in production — bulk jobs would not survive restarts. " +
-      "Set the REDIS_URL secret before deploying."
+        "Set the REDIS_URL secret before deploying.",
     );
   }
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
@@ -97,7 +102,8 @@ export function runStartupChecks() {
   }
   const appUrl = process.env.SHOPIFY_APP_URL || "";
   if (!appUrl || appUrl.includes("example.com")) {
-    const msg = "SHOPIFY_APP_URL is not set or is a placeholder — set it to your production URL before running shopify app deploy";
+    const msg =
+      "SHOPIFY_APP_URL is not set or is a placeholder — set it to your production URL before running shopify app deploy";
     if (process.env.NODE_ENV === "production") {
       warnings.push(msg);
     } else {
@@ -107,15 +113,24 @@ export function runStartupChecks() {
   // Exactly the scopes the code uses: write_products (products, media,
   // product metafields via metafieldsSet) and write_content (blogs/articles).
   // There is NO metaobject code in this app — do not add metaobject scopes.
-  const envScopes = new Set((process.env.SCOPES || "").split(",").map((s) => s.trim()).filter(Boolean));
+  const envScopes = new Set(
+    (process.env.SCOPES || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
   const requiredScopes = ["write_products", "write_content"];
   const missingScopes = requiredScopes.filter((s) => !envScopes.has(s));
   if (missingScopes.length > 0) {
-    warnings.push(`Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — product/blog writes will fail`);
+    warnings.push(
+      `Missing required scopes in SCOPES env var: ${missingScopes.join(", ")} — product/blog writes will fail`,
+    );
   }
   const extraScopes = [...envScopes].filter((s) => !requiredScopes.includes(s));
   if (extraScopes.length > 0) {
-    warnings.push(`SCOPES contains scopes this app never uses: ${extraScopes.join(", ")} — remove them (over-broad scopes are an App Store rejection risk, requirement 3.2)`);
+    warnings.push(
+      `SCOPES contains scopes this app never uses: ${extraScopes.join(", ")} — remove them (over-broad scopes are an App Store rejection risk, requirement 3.2)`,
+    );
   }
   if (process.env.NODE_ENV === "production" && !process.env.SENTRY_DSN) {
     warnings.push("SENTRY_DSN not set — runtime errors will not be captured by Sentry");
@@ -134,7 +149,9 @@ export function runStartupChecks() {
   // Each process checks the connection string it actually uses: the worker may
   // have its own (WORKER_DATABASE_URL), and warning about a URL this process
   // never opens would be a lie in the logs.
-  const dbUrl = (RUNS_JOBS ? process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL : process.env.DATABASE_URL) || "";
+  const dbUrl =
+    (RUNS_JOBS ? process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL : process.env.DATABASE_URL) ||
+    "";
   if (process.env.NODE_ENV === "production" && dbUrl) {
     const pooled = dbUrl.includes("pgbouncer=true") || dbUrl.includes("-pooler.");
     const limitMatch = dbUrl.match(/[?&]connection_limit=(\d+)/);
@@ -143,20 +160,32 @@ export function runStartupChecks() {
     if (!pooled) {
       warnings.push(
         `${DB_ROLE_URL_SOURCE} does not look like a pooled endpoint (no pgbouncer=true and no -pooler host) — ` +
-        "use the pooled connection string, or concurrent load will exhaust the database's own connection limit."
+          "use the pooled connection string, or concurrent load will exhaust the database's own connection limit.",
       );
     }
     if (limit === null) {
       warnings.push(
-        `${DB_ROLE_URL_SOURCE} has no connection_limit — set connection_limit=${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
+        `${DB_ROLE_URL_SOURCE} has no connection_limit — set connection_limit=${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`,
       );
     } else if (limit < 2) {
       warnings.push(
         `${DB_ROLE_URL_SOURCE} sets connection_limit=${limit}. One connection serialises the web process behind every ` +
-        "worker transaction and causes pool timeouts under modest load — " +
-        `raise it to ${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`
+          "worker transaction and causes pool timeouts under modest load — " +
+          `raise it to ${RECOMMENDED_CONNECTION_LIMIT} on the pooled endpoint.`,
       );
     }
+  }
+
+  // Does the database actually have the columns this build needs? The
+  // 2026-09-09 incident is the reason: a migration edited after it was applied
+  // is skipped by name, so the code ships expecting a column that was never
+  // created, and every query touching it fails with P2022. Nothing else here
+  // would notice - a connection check needs no columns.
+  const drift = await logSchemaDriftAtStartup();
+  if (!drift.ok && drift.missing?.length) {
+    warnings.push(
+      `SCHEMA DRIFT: ${drift.missing.length} column(s) missing from the database (${drift.missing.slice(0, 3).join(", ")}${drift.missing.length > 3 ? ", ..." : ""}). Deep health is reporting 503.`,
+    );
   }
 
   warnings.forEach((w) => logger.warn(`⚠️ STARTUP: ${w}`));
@@ -181,7 +210,7 @@ export const startupPromise = (async () => {
     logger.error({ err }, "Could not initialise error monitoring");
   }
 
-  runStartupChecks();
+  await runStartupChecks();
 
   if (RUNS_JOBS) {
     try {
@@ -231,8 +260,14 @@ export const startupPromise = (async () => {
   }
 
   logger.info(
-    { role: PROCESS_ROLE, machine: MACHINE_ID, region: REGION, runsJobs: RUNS_JOBS, dbUrlSource: DB_ROLE_URL_SOURCE },
-    "Startup complete"
+    {
+      role: PROCESS_ROLE,
+      machine: MACHINE_ID,
+      region: REGION,
+      runsJobs: RUNS_JOBS,
+      dbUrlSource: DB_ROLE_URL_SOURCE,
+    },
+    "Startup complete",
   );
 })();
 
@@ -268,4 +303,4 @@ async function gracefulShutdown(signal) {
 }
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

@@ -53,6 +53,91 @@ or backticks. The file form has no such hazard.
 
 ---
 
+## Rule 1 — never edit a migration that has already run
+
+**New schema change, new file.** Prisma records migrations by NAME in `_prisma_migrations`. If the name
+is already recorded, the file is skipped, whatever is now inside it.
+
+So an edited migration means the statement never runs, `prisma migrate status` still says
+**"Database schema is up to date!"** because it compares names, and the deploy ships code expecting a
+column that does not exist. The first merchant to touch it gets a 500.
+
+This caused an eight-hour outage on 2026-09-09 (below). CI now fails if any migration already on
+`origin/main` is modified. The one legitimate exception, restoring a wrongly-edited migration, needs
+`[migration-restore]` in the commit message and prints a warning.
+
+Full detail and naming rules: `prisma/migrations/README.md`.
+
+---
+
+## `/api/health?deep=1` returns 503 with `schema.ok: false`
+
+**The database is missing columns this build needs.** Every query touching them fails with
+`P2022: column ... does not exist`, so the affected screens return 500 while everything else looks fine.
+
+The response names them:
+
+```json
+"schema": { "ok": false, "missingColumns": 1, "missing": ["BrandVoice.publishWithoutReview"] }
+```
+
+**Almost always the cause is an edited migration** (Rule 1). Check it:
+
+```bash
+fly ssh console -a contentclaude -C "npx prisma migrate status"
+# "up to date" here does NOT mean the schema is correct — it compares names.
+
+# What actually ran, and how many statements each migration contained:
+#   SELECT migration_name, applied_steps_count, finished_at
+#   FROM _prisma_migrations ORDER BY started_at;
+```
+
+If a migration's `applied_steps_count` is smaller than the number of statements now in its file, that
+file was edited after it was applied. That is the bug.
+
+**To fix, in this order:**
+
+1. **Stop the bleeding.** Apply the missing DDL by hand against production. It is a plain `ALTER TABLE`;
+   run exactly the statement from the migration file.
+2. **Then repair the repository**, or the next deploy re-creates the problem: restore the edited file to
+   the content that actually ran, and move the new statements into a **new** migration using
+   `ADD COLUMN IF NOT EXISTS`, so it is a no-op on production and a real change on a fresh database.
+3. Commit the restore with `[migration-restore]` so CI's immutability guard lets it through, and say why.
+
+---
+
+## INCIDENT — 2026-09-09 → 10, ~8 hours: every `/app` load returned 500
+
+**Merchant-facing window:** roughly 17:00 UTC on 2026-09-09 (the `6bff05d` deploy) to 00:53 UTC on
+2026-09-10, when the column was added by hand.
+
+**What merchants saw:** every `/app` page returned 500. The app was completely unusable. `/api/health`
+reported `ok` throughout.
+
+**Cause.** `20260910_geo_note_dismissed` was applied at 16:21:06 UTC containing one statement, the
+`GrowthState.geoNoteDismissedAt` ALTER. The next commit **appended** the
+`BrandVoice.publishWithoutReview` ALTER to that same, already-applied file. Prisma skipped it by name.
+The code shipped expecting the column; the column did not exist.
+
+**Why nothing caught it — three separate blind spots, all of them ours:**
+
+1. `prisma migrate status` compares **names**, not columns, and said the schema was up to date.
+2. `/api/health?deep=1`'s database check is `SELECT 1`, which needs no columns, so it reported `ok`.
+3. The post-deploy smoke job and the five-minute `/app` probe both sent a **non-browser user-agent**.
+   The Shopify library answers those with **410 Gone**, and both treated 410 as healthy. Neither ever
+   reached a loader, so both would have passed with the app in any state at all.
+
+**Sentry was the only thing that noticed**, and only because a person read it.
+
+**What changed as a result:** the immutability rule above with a CI guard; a schema-drift check at
+startup and in deep health that reports `error`; the smoke job asserting that check; and both the smoke
+job and the operator probe now sending a real Chrome user-agent and treating **anything but 200 or 302
+as a failure — 410 is never healthy**.
+
+**The lesson, which is the same one the ESLint `--cache` incident taught:** a check that reports success
+is not evidence of success. Ask what the check would do if the thing it watches were completely broken.
+All three of these would have passed.
+
 ## Symptom → action
 
 ### `/api/health` returns 503 with `database: "error"`

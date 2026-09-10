@@ -25,6 +25,12 @@ vi.mock("../../app/utils/cache.server", () => ({ getCache: vi.fn(async (k, suppl
 vi.mock("../../app/utils/logger.server", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+// The schema-drift probe (added after the 2026-09-09 incident) shares this
+// endpoint but has its own suite in tests/utils/schemaDrift.test.js. Stub it
+// here so these assertions stay about the queue, Redis and the breaker.
+vi.mock("../../app/utils/schemaDrift.server.js", () => ({
+  checkSchemaDrift: vi.fn(async () => ({ ok: true, missing: [], checked: 210 })),
+}));
 vi.mock("../../app/queues/generationQueue.server.js", () => ({ getQueueHealth: queueHealth }));
 vi.mock("../../app/utils/ai.server.js", () => ({ getCircuitBreakerState: breaker }));
 

@@ -1,0 +1,103 @@
+{
+  "at": "2026-09-10T01:15:05.793Z",
+  "width": 375,
+  "store": "navaal-qa-fresh",
+  "results": [
+    {
+      "screen": "home",
+      "path": "/app",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "products",
+      "path": "/app/products",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": "BUTTON.Polaris-Tabs__DisclosureActivator @485px"
+    },
+    {
+      "screen": "review",
+      "path": "/app/review",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "blog",
+      "path": "/app/blog",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "settings",
+      "path": "/app/settings",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "plans",
+      "path": "/app/plans",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "optimize",
+      "path": "/app/optimize",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "seo-audit",
+      "path": "/app/seo-audit",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "jobs",
+      "path": "/app/jobs",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "collections",
+      "path": "/app/collections",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "results",
+      "path": "/app/results",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    },
+    {
+      "screen": "analytics",
+      "path": "/app/analytics",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "overflows": false,
+      "widest": null
+    }
+  ]
+}

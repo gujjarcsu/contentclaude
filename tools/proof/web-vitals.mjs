@@ -28,6 +28,10 @@ const AUTH = "tests/e2e/.auth/shopify.json";
 const OUT_DIR = "docs/history/web-vitals";
 const RUNS = Number(process.env.VITALS_RUNS || 10);
 
+/** A real Chrome UA. Without it the Shopify library answers 410 Gone. */
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 /**
  * The screens Built for Shopify would be measured on, in the order a merchant
  * meets them. `/app/products/…` needs a real product id, so it is resolved at
@@ -48,6 +52,28 @@ const US_LATENCY_MS = 200;
 
 /** web-vitals from a CDN, evaluated in the page. */
 const VITALS_SRC = "https://unpkg.com/web-vitals@4/dist/web-vitals.iife.js";
+
+/**
+ * Say WHICH failure this is. The first version of this guard reported every
+ * non-rendering page as "session expired", which sent the owner to re-run
+ * login-cdp.mjs when the session was perfectly valid and the real cause was the
+ * user-agent. A wrong diagnosis in an error message costs more time than no
+ * message at all.
+ */
+function renderFailure(text) {
+  const t = String(text || "");
+  if (/410\s+Gone/i.test(t)) {
+    return (
+      "app returned 410 Gone - this browser was identified as a BOT, not a session problem. " +
+      "Playwright reports HeadlessChrome and the Shopify library answers non-browser agents with 410. " +
+      "The harness sets a real Chrome user-agent; if you see this, that override is not reaching the request."
+    );
+  }
+  if (/40[13]\s+(Unauthorized|Forbidden)/i.test(t)) {
+    return "app returned 401/403 - the saved session has expired; run: node tools/proof/login-cdp.mjs";
+  }
+  return `app did not render (${JSON.stringify(t.slice(0, 60))}); run: node tools/proof/login-cdp.mjs if the session is stale`;
+}
 
 function p75(values) {
   if (values.length === 0) return null;
@@ -71,6 +97,17 @@ async function measureOnce(context, url) {
   await page.addInitScript({ path: undefined, content: "window.__vitals = {};" });
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
 
+  // Wait for the app's own frame to exist before measuring anything. The admin
+  // shell paints first and the embedded frame follows; without this the harness
+  // measured whichever of the two happened to be there, and reported "no app
+  // frame" whenever the iframe was a moment late.
+  await page
+    .waitForFunction(
+      () => [...document.querySelectorAll("iframe")].some((f) => (f.src || "").includes("app.navaal.ai")),
+      { timeout: 30_000 },
+    )
+    .catch(() => {});
+
   await page.addScriptTag({ url: VITALS_SRC }).catch(() => {});
   await page.evaluate(() => {
     if (!window.webVitals) return;
@@ -82,7 +119,7 @@ async function measureOnce(context, url) {
 
   // Give the page a chance to settle, then poke it so INP has an interaction to
   // measure. Without an interaction INP is simply absent, not zero.
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(4000);
   await page.mouse.move(200, 300);
   await page.keyboard.press("Tab").catch(() => {});
   await page.waitForTimeout(1500);
@@ -96,7 +133,11 @@ async function measureOnce(context, url) {
   // and the check would silently fall back to the ADMIN page text - which never
   // contains the app error, so it would pass on every broken run. That is the
   // same class of mistake this guard exists to catch.
-  const appFrame = page.frames().find((f) => f.url().includes("navaal.ai"));
+  // Strictly the APP frame. The admin page URL also contains "navaal" (the app
+  // handle is in the path), so a looser match silently measures the admin shell
+  // - which is what the sibling harness did for nine of twelve screens while
+  // reporting every one of them as passing.
+  const appFrame = page.frames().find((f) => f.url().includes("app.navaal.ai"));
   const rendered = appFrame
     ? await appFrame
         .evaluate(() => {
@@ -109,9 +150,7 @@ async function measureOnce(context, url) {
   const vitals = await page.evaluate(() => window.__vitals || {});
   await page.close();
   if (rendered.bad) {
-    throw new Error(
-      `app did not render (${JSON.stringify(rendered.t.slice(0, 60))}) - saved session is probably expired; run: node tools/proof/login-cdp.mjs`,
-    );
+    throw new Error(renderFailure(rendered.t));
   }
   return vitals;
 }
@@ -123,7 +162,15 @@ async function run(label) {
   }
 
   const browser = await chromium.launch();
-  const context = await browser.newContext({ storageState: AUTH, viewport: { width: 1600, height: 1000 } });
+  const context = await browser.newContext({
+    storageState: AUTH,
+    viewport: { width: 1600, height: 1000 },
+    // Playwright reports HeadlessChrome, which the Shopify library treats as a
+    // bot: it answers 410 Gone instead of the app. The first run of this
+    // harness measured that error page across ten loads and reported a
+    // confident LCP table. The session was fine; the user-agent was not.
+    userAgent: BROWSER_UA,
+  });
   const base = `https://admin.shopify.com/store/${STORE}`;
   const results = {};
 

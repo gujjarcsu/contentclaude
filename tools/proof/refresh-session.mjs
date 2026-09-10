@@ -15,7 +15,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const log = (m) => console.log(`[session] ${new Date().toISOString()} ${m}`);
 
 const browser = await chromium.launch({
-  headless: false, channel: "chrome",
+  headless: false,
+  channel: "chrome",
   ignoreDefaultArgs: ["--enable-automation"],
   args: ["--disable-blink-features=AutomationControlled", "--no-default-browser-check", "--no-first-run"],
 });
@@ -28,8 +29,15 @@ try {
   await page.waitForTimeout(5000);
   log("landed: " + page.url());
   if (/accounts\.shopify\.com/.test(page.url())) {
-    const account = page.getByRole("button", { name: /Waqas Ahmad|gujjarcsu@gmail\.com/i }).first()
-      .or(page.locator("a, button, [role=button]").filter({ hasText: /gujjarcsu@gmail\.com/i }).first());
+    const account = page
+      .getByRole("button", { name: /Waqas Ahmad|gujjarcsu@gmail\.com/i })
+      .first()
+      .or(
+        page
+          .locator("a, button, [role=button]")
+          .filter({ hasText: /gujjarcsu@gmail\.com/i })
+          .first(),
+      );
     await account.waitFor({ state: "visible", timeout: 15000 });
     await account.click();
     log("clicked the listed account");
@@ -45,13 +53,17 @@ try {
     log("admin reached — storage state refreshed");
     code = 0;
   } else {
-    const t = await page.locator("body").innerText().catch(() => "");
+    const t = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
     log("not in admin. page says: " + t.replace(/\s+/g, " ").slice(0, 300));
     code = /password|verification|code|passkey/i.test(t) ? 2 : 1;
   }
 } catch (e) {
   log("ERROR " + e.message);
 } finally {
-  await context.close(); await browser.close();
+  await context.close();
+  await browser.close();
   process.exit(code);
 }

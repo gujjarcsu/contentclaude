@@ -1,0 +1,34 @@
+-- Phase 2 item 2.6 — "Publish without review", one switch, in Settings.
+--
+-- ── Why this is its own migration ──────────────────────────────────────────
+--
+-- This ALTER was originally APPENDED to 20260910_geo_note_dismissed, a
+-- migration that had already been applied to production at 16:21:06 UTC on
+-- 2026-09-09. Prisma tracks migrations by NAME, so it saw that name in
+-- _prisma_migrations, skipped the file, and never ran the added statement.
+-- `prisma migrate status` reported "Database schema is up to date!", CI went
+-- green, and every /app load 500'd with
+-- `P2022: column BrandVoice.publishWithoutReview does not exist` for roughly
+-- eight hours.
+--
+-- The record proves it: that migration is stored with applied_steps_count = 1,
+-- which is the single GrowthState statement it contained when it ran.
+--
+-- **An applied migration is immutable.** New schema change, new file. A CI
+-- check now fails the build if any migration file already on origin/main is
+-- modified, so this cannot be repeated by hand.
+--
+-- ── Why IF NOT EXISTS ──────────────────────────────────────────────────────
+--
+-- The column was added manually on production at 00:53 UTC on 2026-09-10 to end
+-- the incident. This migration therefore has to be a no-op there and a real
+-- change everywhere else — a fresh database, a Neon branch restored for a drill,
+-- a local dev database. IF NOT EXISTS makes it correct in both directions
+-- rather than making the deploy that ends an outage fail on its own fix.
+--
+-- ── Why the default is false ───────────────────────────────────────────────
+--
+-- Auto-publish used to be a per-run checkbox in five places. A shop that ticked
+-- one has NOT consented to publishing everything without review from now on, so
+-- there is no backfill and no shop inherits one.
+ALTER TABLE "BrandVoice" ADD COLUMN IF NOT EXISTS "publishWithoutReview" BOOLEAN NOT NULL DEFAULT false;

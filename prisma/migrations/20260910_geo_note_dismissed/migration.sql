@@ -13,19 +13,3 @@
 -- row reads NULL, which means "not dismissed", which is the correct state for a
 -- banner nobody has seen yet.
 ALTER TABLE "GrowthState" ADD COLUMN "geoNoteDismissedAt" TIMESTAMP(3);
-
--- Phase 2 item 2.6 — "Publish without review", one switch, in Settings.
---
--- Auto-publish was exposed in five places: a checkbox on the product page, one
--- in the Products bulk panel, one in the Generate All modal, and two on
--- Optimise. The bulk panel submitted with NO confirmation at all, and a bug in
--- the product page skipped the confirm on five of its seven generate paths.
---
--- Merchants were told on the App Store listing that nothing goes live until
--- they approve it. That has to be literally true unless they deliberately
--- turned it off, and a promise that depends on which of five checkboxes was
--- last ticked is not a promise.
---
--- Default false: an existing shop that had ticked a per-run box has NOT opted
--- into publishing without review, so it must not inherit one.
-ALTER TABLE "BrandVoice" ADD COLUMN "publishWithoutReview" BOOLEAN NOT NULL DEFAULT false;
