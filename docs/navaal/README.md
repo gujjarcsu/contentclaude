@@ -11,6 +11,7 @@ Read these in order at the start of **every** session. They are the project's me
 | `04-DECISIONS.md` | Settled decisions incl. final pricing. Do not re-litigate. | Owner only |
 | `05-EVIDENCE.md` | Verified facts: the ladder, competitor pricing, churn maths, store shapes. Do not re-research. | Cowork |
 | `06-HUMAN-QUEUE.md` | Tasks an agent cannot do. One queue, worked in batches. | CC appends; owner clears |
+| `CC-STANDING-PROMPT.md` | The prompt every CC session is started with. Same text every time; state lives in these files, not the prompt. | Owner + Cowork |
 
 ## The three rules of this folder
 1. **`02-BACKLOG.md` is authoritative for WHAT, never blindly for STATUS.** Reconcile against the code each session.
