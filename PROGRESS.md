@@ -3209,3 +3209,55 @@ New migration `20260910140000_publish_verification` adds `GeneratedContent.verif
 both nullable with no default and no backfill: NULL on an older row means *published before verification
 existed*, which is the truth. Backfilling them as verified would have been a lie about rows nobody
 checked.
+
+## 4.3 — Before/after score, per product and for the store
+
+"13 products optimized" is activity. **"Your store scored 61 when you installed and scores 84 now"** is an
+outcome, and it is the only claim in the app a merchant can check against their own catalogue.
+
+### Both ends come from one scanner
+
+`scanStoreForStart` produces the before and the after. A before measured one way and an after measured
+another is not a delta — it is two unrelated numbers with an arrow between them. The scanner now also
+returns `scored` (every product it looked at), so the store average and the per-product rows come from a
+single pass.
+
+### The before cannot move
+
+`Shop.storeScoreAtInstall` is stamped with `where: { storeScoreAtInstall: null }` — first writer wins,
+and no later scan can rewrite it. Per product, `ProductScore` is upserted with the before fields in
+`create` and **deliberately absent from `update`**, so a product scored a hundred times keeps the score it
+had the first time. Both have a test whose failure would mean the delta is permanently zero and nothing
+else breaks — the silent kind.
+
+### Nothing is invented
+
+| Situation | What Home shows |
+|---|---|
+| Scan failed, or store never scanned | nothing at all |
+| Store has no products | nothing at all |
+| Scan returned no usable number | nothing at all |
+| Baseline unknown | the current score, with **no** comparison |
+| First ever scan (before == after) | the current score, no arrow — an arrow pointing at itself reads as broken |
+| Score went **down** | reported honestly, not hidden |
+
+A baseline defaulting to 0 would produce "0 → 84" — the most flattering claim possible, from no data at
+all, and the most damaging one to be caught making. There is a test named for it.
+
+### Cost
+
+One GraphQL page of 30 products, **cached 10 minutes per shop**, so reloading Home does not re-scan: at
+most 6 extra Shopify requests per hour per shop regardless of traffic. Nothing issues a request per
+product. The per-product rows ride the scan that already happened. On Products, the deltas are one
+indexed DB read for the visible page only.
+
+### Where it appears
+
+Home, in a Card **above the fold** — the first thing after the page title, before the quota banner and the
+stat cards. Products rows show `SEO 61 → 84` only when the change is real and positive: a product seen
+once has before == after, and "67 → 67" on every row of a long list is noise. A product that went down is
+not advertised in a list the merchant is scanning; that belongs on the product page where there is room to
+explain.
+
+New migration `20260910150000_before_after_score`: the `ProductScore` table plus
+`Shop.storeScoreAtInstall` / `storeScoreAtInstallAt`. All nullable, no backfill.

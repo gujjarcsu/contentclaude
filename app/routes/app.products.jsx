@@ -51,6 +51,7 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap } from "../utils/productState.js";
+import { productScoresFor } from "../utils/storeScore.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -155,9 +156,15 @@ export const loader = async ({ request }) => {
   // getQuotaWarning returns null below 80%, at 100%, or while dismissed;
   // getUpsell returns null unless the quota is actually exhausted. Neither
   // throws — an upsell is never worth a broken screen.
-  const [quotaWarning, upsell] = await Promise.all([
+  // Phase 4 item 4.3 — the per-product before/after for THIS page only. A
+  // scoreboard for products the merchant cannot see is a query for nothing.
+  const [quotaWarning, upsell, productScores] = await Promise.all([
     getQuotaWarning({ shop, plan, usageCount, surface: "products" }),
     getUpsell({ admin, shop, plan, usageCount, surface: "products" }),
+    productScoresFor(
+      shop,
+      products.map((p) => p.id),
+    ),
   ]);
 
   return Response.json({
@@ -173,6 +180,7 @@ export const loader = async ({ request }) => {
     usageRemaining,
     quotaWarning,
     upsell,
+    productScores,
     monthlyLimit: plan.monthlyLimit,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
@@ -362,6 +370,7 @@ export default function ProductsPage() {
     usageRemaining,
     quotaWarning,
     upsell,
+    productScores,
     monthlyLimit,
     planName,
     entitlements,
@@ -468,6 +477,25 @@ export default function ProductsPage() {
   function getStatusBadge(productId) {
     const state = stateOfContentMap(contentMap[productId]);
     return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
+  }
+
+  /**
+   * Phase 4 item 4.3 — what this product scored before we touched it, and now.
+   *
+   * Renders NOTHING unless there is a real, positive change. A product we have
+   * only ever seen once has a before equal to its after, and "67 -> 67" is
+   * noise on every row of a long list. A product that went DOWN is not
+   * advertised either — it is shown on the product page where there is room to
+   * explain, not as a red number in a list the merchant is scanning.
+   */
+  function getScoreDelta(productId) {
+    const sc = productScores?.[productId];
+    if (!sc || !Number.isFinite(sc.delta) || sc.delta <= 0) return null;
+    return (
+      <Text as="span" variant="bodySm" tone="success">
+        SEO {sc.before} &rarr; {sc.after}
+      </Text>
+    );
   }
 
   function getContentTypePills(productId) {
@@ -839,6 +867,7 @@ export default function ProductsPage() {
                     </BlockStack>
                     <BlockStack gap="200" inlineAlign="end">
                       {getStatusBadge(id)}
+                      {getScoreDelta(id)}
                       <Button size="slim" onClick={() => navigate(`/app/products/${numericId}`)}>
                         Generate
                       </Button>

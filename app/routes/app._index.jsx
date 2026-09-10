@@ -4,6 +4,7 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import { StartState } from "../components/StartState.jsx";
+import { scoreTone } from "../utils/scoreBands.js";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
 import { quotaPct } from "../utils/quota.js";
 import {
@@ -41,6 +42,7 @@ import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js"
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
+import { getStoreScore } from "../utils/storeScore.server.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -193,12 +195,13 @@ export const loader = async ({ request }) => {
   // 100% used. Null when the shop is below the threshold, already out (that is
   // the card's job, on the screens where the action lives), or dismissed it in
   // the last 7 days. Never throws.
-  const quotaWarning = await getQuotaWarning({
-    shop,
-    plan,
-    usageCount,
-    surface: "dashboard",
-  });
+  const [quotaWarning, storeScore] = await Promise.all([
+    getQuotaWarning({ shop, plan, usageCount, surface: "dashboard" }),
+    // Phase 4 item 4.3 — the merchant's proof the app worked. One GraphQL page,
+    // cached 10 minutes per shop, so reloading Home does not re-scan. Returns
+    // { available: false } rather than a number it cannot stand behind.
+    getStoreScore(admin, shop),
+  ]);
 
   const start = isFirstRun
     ? {
@@ -227,6 +230,7 @@ export const loader = async ({ request }) => {
     isNewShop,
     start,
     quotaWarning,
+    storeScore,
     plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
     usageCount,
     storeName,
@@ -264,6 +268,68 @@ export const loader = async ({ request }) => {
 export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
   if (formAction && formAction.startsWith("/app/quick-start")) return false;
   return defaultShouldRevalidate;
+}
+
+/**
+ * Phase 4 item 4.3 — "Store SEO score 61 -> 84 since install".
+ *
+ * Renders nothing at all when the score is unavailable: a store never scanned,
+ * a scan that failed, or a catalogue with no products. It does NOT fall back to
+ * zero. "0 -> 84" would be the most persuasive lie the app could tell, and a
+ * merchant who checked it against their own catalogue would never trust another
+ * number here.
+ *
+ * The delta is only shown once there is a real one. On the day of install the
+ * before and the after are the same number, and an arrow pointing at itself
+ * reads as broken — so the first view says what the store scores, and the
+ * comparison appears when it has something to say.
+ */
+function StoreScoreCard({ score }) {
+  if (!score?.available || !Number.isFinite(score.current)) return null;
+
+  const hasBaseline = Number.isFinite(score.atInstall);
+  const delta = hasBaseline ? score.current - score.atInstall : null;
+  const improved = delta != null && delta > 0;
+
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <InlineStack gap="300" blockAlign="center" wrap>
+          <Text as="h2" variant="headingMd">
+            Store SEO score
+          </Text>
+          {improved && <Badge tone="success">{`+${delta} since install`}</Badge>}
+        </InlineStack>
+
+        <InlineStack gap="200" blockAlign="baseline" wrap>
+          {improved && (
+            <>
+              <Text as="span" variant="headingLg" tone="subdued">
+                {score.atInstall}
+              </Text>
+              <Text as="span" variant="headingLg" tone="subdued">
+                &rarr;
+              </Text>
+            </>
+          )}
+          <Text as="span" variant="heading2xl" fontWeight="bold" tone={scoreTone(score.current)}>
+            {score.current}
+          </Text>
+          <Text as="span" variant="bodyMd" tone="subdued">
+            / 100
+          </Text>
+        </InlineStack>
+
+        <Text as="p" variant="bodySm" tone="subdued">
+          {improved
+            ? `Up ${delta} points since you installed, across the ${score.scanned} products we scanned.`
+            : hasBaseline && delta === 0
+              ? `Unchanged since you installed, across the ${score.scanned} products we scanned.`
+              : `Across the ${score.scanned} products we scanned. We will show the change once there is one.`}
+        </Text>
+      </BlockStack>
+    </Card>
+  );
 }
 
 function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
@@ -447,6 +513,7 @@ export default function Dashboard() {
     isNewShop,
     start,
     quotaWarning,
+    storeScore,
     plan,
     usageCount,
     storeName,
@@ -539,6 +606,10 @@ export default function Dashboard() {
   return (
     <Page primaryAction={primaryAction} secondaryActions={secondaryActions}>
       <BlockStack gap="600">
+        {/* Phase 4 item 4.3 — above the fold, on purpose. This is the one
+            number that tells a merchant the app did something for them. */}
+        <StoreScoreCard score={storeScore} />
+
         {/* Phase 3 item 3.4, surface (a) — the only upsell on this screen. */}
         <QuotaWarningBanner warning={quotaWarning} />
 

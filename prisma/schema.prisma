@@ -321,6 +321,12 @@ model Shop {
   // ("quota80" | "quota100"), stamped at activation. Null = organic, i.e. no
   // prompt was behind it — never guessed.
   upgradePromptSource  String?
+  // ── Item 4.3: the store-level before/after. Captured on the FIRST catalogue
+  // scan and never updated — a "before" that moves is not a before. The
+  // current score is computed live from the same scanner, so the two numbers
+  // are always produced the same way and the comparison is honest.
+  storeScoreAtInstall   Int?
+  storeScoreAtInstallAt DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -333,6 +339,32 @@ model Shop {
 // One row per shopify.reviews.request() call we decided to make. Created (code
 // null) inside the publish action the merchant pressed; completed by
 // /app/review-request with the code Shopify returned. Per-shop data: in GDPR_SHOP_MODELS.
+/// Phase 4 item 4.3 — one product's score before we touched it, and now.
+///
+/// `scoreBefore` is first-writer-wins and never updated; `scoreAfter` is
+/// refreshed by the catalogue scan that already scores every product, so
+/// keeping it current costs no extra Shopify request. A product with no row has
+/// never been scored, and a row with no `scoreAfter` has been seen once —
+/// neither is treated as zero, because "0 -> 84" in front of a merchant would
+/// be a fabricated improvement.
+model ProductScore {
+  id           String   @id @default(cuid())
+  shop         String
+  productId    String
+  productTitle String   @default("")
+  scoreBefore  Int?
+  scoreAfter   Int?
+  geoBefore    Int?
+  seoBefore    Int?
+  geoAfter     Int?
+  seoAfter     Int?
+  firstSeenAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([shop, productId])
+  @@index([shop])
+}
+
 model ReviewRequestAttempt {
   id                String    @id @default(cuid())
   shop              String

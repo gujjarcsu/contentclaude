@@ -120,7 +120,11 @@ export function pickWeakest(scored, n = START_TARGETS) {
  *   storeScore:number, storeGeo:number, storeSeo:number, totalScanned:number,
  *   targets:Array<object>, weakest:object }>}
  */
-export async function scanStoreForStart(admin, shop, { skipCache = false } = {}) {
+export async function scanStoreForStart(
+  admin,
+  shop,
+  { skipCache = false, ttlSeconds = START_SCAN_TTL_S } = {},
+) {
   const load = async () => {
     const resp = await admin.graphql(START_SCAN_QUERY, { variables: { n: SCAN_LIMIT } });
     const { data, errors } = await resp.json();
@@ -151,6 +155,10 @@ export async function scanStoreForStart(admin, shop, { skipCache = false } = {})
 
     return {
       empty: false,
+      // Phase 4 item 4.3 — every scored product, so the store score and the
+      // per-product before/after come from ONE scan. A "before" measured by a
+      // different code path from the "after" is not a delta.
+      scored,
       storeScore: meanOf(scored, (p) => p.scores.combined),
       storeGeo: meanOf(scored, (p) => p.scores.geo),
       storeSeo: meanOf(scored, (p) => p.scores.seo),
@@ -161,7 +169,7 @@ export async function scanStoreForStart(admin, shop, { skipCache = false } = {})
   };
 
   try {
-    return skipCache ? await load() : await getCache(`startscan:${shop}`, load, START_SCAN_TTL_S);
+    return skipCache ? await load() : await getCache(`startscan:${shop}`, load, ttlSeconds);
   } catch (err) {
     // A fabricated score is worse than no score. The screen offers a retry.
     logger.error(
