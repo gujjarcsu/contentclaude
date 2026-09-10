@@ -118,3 +118,21 @@ retention, which is INFRA2.
 5. A web-vitals harness measuring `admin.shopify.com` instead of our own iframe.
 
 The shape: **a check that never exercises the thing it appears to cover.**
+
+## 7b. A SEPARATE SHAPE — a safety fix that widens a different hole (2026-09-11)
+
+Not a false green. A fix that was correct, verified, and made the system **less** safe in a dimension
+nobody was looking at.
+
+INFRA1 stopped `ci.yml` and `deploy.yml` both deploying the same commit. Correct, and proved live.
+But `deploy.yml` runs **no tests**, and it had only been survivable because `ci.yml` *also* deployed
+the commit after its tests went green — a tested copy always landed. Removing the duplicate removed
+that accident: if the manual path wins the race it becomes the ONLY deploy, and can ship a commit
+whose tests are still running or already red.
+
+Measured on INFRA1's own proof run: the manual path deployed at **15:56:46**; CI's test job confirmed
+the commit at **16:00:36**. Four minutes of shipped-but-unverified. The tests happened to pass.
+
+**The lesson, which is the reusable part:** when you remove a redundancy, ask what that redundancy was
+*accidentally* protecting. And note that this was only visible because the item demanded a LIVE proof —
+a guard proved in the abstract would have shipped the regression with a green suite behind it.
