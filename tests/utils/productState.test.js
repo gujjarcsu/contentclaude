@@ -16,6 +16,7 @@
  * the first block is the one that keeps them that way.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 
 vi.mock("../../app/db.server.js", () => ({
   default: { $queryRaw: vi.fn(), generatedContent: { findMany: vi.fn() } },
@@ -26,6 +27,7 @@ const {
   PRODUCT_STATE,
   PRODUCT_STATE_LABEL,
   stateOf,
+  stateOfContentMap,
   primaryRowOf,
   getContentMetrics,
   getProductStates,
@@ -59,17 +61,13 @@ describe("one product is in exactly one state", () => {
     // the review screen come to disagree — which is the bug 2.1 exists to kill.
     // The brief says "description row first"; taken literally it would call
     // this published. Deliberate departure, recorded in PROGRESS.md.
-    expect(stateOf([row("description", "published"), row("metaTitle", "draft")])).toBe(
-      PRODUCT_STATE.DRAFT,
-    );
+    expect(stateOf([row("description", "published"), row("metaTitle", "draft")])).toBe(PRODUCT_STATE.DRAFT);
   });
 
   it("rejected only counts when nothing is draft or live", () => {
     expect(stateOf([row("description", "rejected")])).toBe(PRODUCT_STATE.REJECTED);
     expect(stateOf([row("description", "rejected"), row("faq", "draft")])).toBe(PRODUCT_STATE.DRAFT);
-    expect(stateOf([row("description", "rejected"), row("faq", "published")])).toBe(
-      PRODUCT_STATE.PUBLISHED,
-    );
+    expect(stateOf([row("description", "rejected"), row("faq", "published")])).toBe(PRODUCT_STATE.PUBLISHED);
   });
 
   it("an unknown status does not silently become published", () => {
@@ -251,5 +249,79 @@ describe("coverage never reads over 100%", () => {
     expect(coveragePct(9, 4)).toBe(100);
     expect(coveragePct(1, 4)).toBe(25);
     expect(coveragePct(0, 0)).toBe(0);
+  });
+});
+
+/**
+ * The Products screen contradicting itself — found by looking at a listing
+ * screenshot on 2026-09-10, not by any test here.
+ *
+ * The stat cards read "13 live · 4 ready to review". Directly beneath them the
+ * tabs read "Draft (3) · Published (14)". Same store, same screen, same second.
+ *
+ * The cards came from getContentMetrics (this rule). The tabs re-derived their
+ * own from `contentMap[id]?.description?.status` — the description row alone —
+ * so a product with a published description and a draft meta title was
+ * "Published" to the tabs and "draft" to the cards.
+ *
+ * The mechanical cause is worth naming because it will recur: the shared rule
+ * lived in metrics.server.js, which imports Prisma, so no component could
+ * import it. Faced with a rule it could not reach, the component wrote its own.
+ * A shared definition that half the app cannot import is not shared, and the
+ * fix is that the pure part now lives in productState.js.
+ */
+describe("the tabs and the cards cannot disagree", () => {
+  it("stateOfContentMap gives the same answer as stateOf for the same product", () => {
+    const cases = [
+      { description: { status: "published" }, metaTitle: { status: "draft" } },
+      { description: { status: "draft" } },
+      { description: { status: "published" } },
+      { description: { status: "rejected" }, faq: { status: "rejected" } },
+      { metaTitle: { status: "published" } },
+      {},
+    ];
+    for (const byType of cases) {
+      const rows = Object.entries(byType).map(([contentType, v]) => ({ contentType, status: v.status }));
+      expect(stateOfContentMap(byType), JSON.stringify(byType)).toBe(stateOf(rows));
+    }
+  });
+
+  it("a published description with a draft meta title is a DRAFT, not published", () => {
+    // This is the exact product that made 13 read as 14. It is still in the
+    // Review queue waiting for that meta title, so the merchant is not done.
+    expect(stateOfContentMap({ description: { status: "published" }, metaTitle: { status: "draft" } })).toBe(
+      PRODUCT_STATE.DRAFT,
+    );
+  });
+
+  it("a product with no rows at all needs content", () => {
+    expect(stateOfContentMap(undefined)).toBe(PRODUCT_STATE.NEEDS_CONTENT);
+    expect(stateOfContentMap(null)).toBe(PRODUCT_STATE.NEEDS_CONTENT);
+    expect(stateOfContentMap({})).toBe(PRODUCT_STATE.NEEDS_CONTENT);
+  });
+
+  it("ignores malformed rows rather than counting them as a state", () => {
+    expect(stateOfContentMap({ description: null, metaTitle: { status: "draft" } })).toBe(
+      PRODUCT_STATE.DRAFT,
+    );
+    expect(stateOfContentMap({ description: { status: 42 } })).toBe(PRODUCT_STATE.NEEDS_CONTENT);
+  });
+
+  it("the Products screen no longer classifies on the description row alone", () => {
+    // The source guard. Without it this reverts the moment somebody needs a
+    // count and reaches for the nearest field.
+    const src = readFileSync("app/routes/app.products.jsx", "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+    expect(src).not.toMatch(/contentMap\[[^\]]+\]\?\.description\?\.status/);
+    expect(src).toMatch(/stateOfContentMap\(/);
+  });
+
+  it("the pure rule is importable by a component — no server imports", () => {
+    // The root cause. If productState.js ever imports the database again, the
+    // components lose access to the shared rule and will re-invent it.
+    const src = readFileSync("app/utils/productState.js", "utf8");
+    expect(src).not.toMatch(/from\s+["'][^"']*db\.server/);
+    expect(src).not.toMatch(/from\s+["'][^"']*\.server(\.js)?["']/);
   });
 });

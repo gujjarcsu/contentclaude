@@ -1,0 +1,112 @@
+{
+  "at": "2026-09-10T03:25:29.957Z",
+  "results": [
+    {
+      "file": "01-home-desktop.png",
+      "store": "contentpilot-dev2",
+      "path": "/app",
+      "width": 1600,
+      "height": 900,
+      "must": {},
+      "label": "Home — store score and the one next action",
+      "ok": true,
+      "bytes": 264487,
+      "hash": "a01ffaba5fb616c5",
+      "excerpt": "Review 4 drafts Welcome back, E2E Test Store! 13 products optimized · 4 drafts awaiting review Written for Google and for AI search Your "
+    },
+    {
+      "file": "02-review-desktop.png",
+      "store": "contentpilot-dev2",
+      "path": "/app/review",
+      "width": 1600,
+      "height": 900,
+      "must": {},
+      "label": "Review — current copy beside the proposed copy",
+      "ok": true,
+      "bytes": 365405,
+      "hash": "68740bec1e3a296c",
+      "excerpt": "Review & Publish. This page is ready Review & Publish 4 products with draft content ready to review Review each draft, then publish. Publ"
+    },
+    {
+      "file": "03-products-desktop.png",
+      "store": "contentpilot-dev2",
+      "path": "/app/products",
+      "width": 1600,
+      "height": 900,
+      "must": {},
+      "label": "Products — every product and where it stands",
+      "ok": true,
+      "bytes": 336498,
+      "hash": "aa5f309359ed21de",
+      "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content Review 4 drafts Collections Activity 13"
+    },
+    {
+      "file": "04-start-desktop.png",
+      "store": "navaal-qa-fresh",
+      "path": "/app",
+      "width": 1600,
+      "height": 900,
+      "must": {},
+      "label": "First run — the store is scored and three drafts are written",
+      "ok": true,
+      "bytes": 179027,
+      "hash": "d6380b497cb17fab",
+      "excerpt": "Let's get your store found by AI. This page is ready Let's get your store found by AI Add a product and we'll get started Navaal writes A"
+    },
+    {
+      "file": "05-settings-desktop.png",
+      "store": "contentpilot-dev2",
+      "path": "/app/settings",
+      "width": 1600,
+      "height": 900,
+      "must": {},
+      "label": "Settings — brand voice and the current plan",
+      "ok": true,
+      "bytes": 328443,
+      "hash": "f934106a1edfdb23",
+      "excerpt": "Settings. This page is ready Settings Brand voice, autopilot, and content templates Store Identity Tell the AI who you are — the more sp"
+    },
+    {
+      "file": "06-home-mobile.png",
+      "store": "contentpilot-dev2",
+      "path": "/app",
+      "width": 375,
+      "height": 812,
+      "frameOnly": true,
+      "must": {},
+      "label": "Home on a phone",
+      "ok": true,
+      "bytes": 87567,
+      "hash": "0b54698e8725f2d5",
+      "excerpt": "Review 4 drafts Welcome back, E2E Test Store! 13 products optimized · 4 drafts awaiting review Written for Google and for AI search Your "
+    },
+    {
+      "file": "07-review-mobile.png",
+      "store": "contentpilot-dev2",
+      "path": "/app/review",
+      "width": 375,
+      "height": 812,
+      "frameOnly": true,
+      "must": {},
+      "label": "Review on a phone",
+      "ok": true,
+      "bytes": 111256,
+      "hash": "7b14259f88440cca",
+      "excerpt": "Review & Publish. This page is ready Review & Publish 4 products with draft content ready to review Review each draft, then publish. Publ"
+    },
+    {
+      "file": "08-products-mobile.png",
+      "store": "contentpilot-dev2",
+      "path": "/app/products",
+      "width": 375,
+      "height": 812,
+      "frameOnly": true,
+      "must": {},
+      "label": "Products on a phone",
+      "ok": true,
+      "bytes": 85165,
+      "hash": "ca4a63f8e07c42e0",
+      "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content 13 AI Content Published 4 Drafts to R"
+    }
+  ]
+}

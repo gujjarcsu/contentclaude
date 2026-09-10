@@ -49,6 +49,7 @@ import { getContentMetrics, needsContentFrom } from "../utils/metrics.server.js"
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
+import { PRODUCT_STATE, stateOfContentMap } from "../utils/productState.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -393,10 +394,17 @@ export default function ProductsPage() {
   const usagePct = monthlyLimit > 0 ? Math.min(100, Math.round((usageCount / monthlyLimit) * 100)) : 0;
   const isOutOfUsage = usageRemaining === 0;
 
+  // The SHARED rule — the same one the stat cards above are counted with.
+  // This used to read `contentMap[p.id]?.description?.status`, i.e. the
+  // description row alone, so a product with a published description and a
+  // draft meta title landed in "Published" here while the cards counted it as
+  // a draft. The screen contradicted itself: "13 live · 4 ready to review"
+  // above "Draft (3) · Published (14)".
   const tabFilteredProducts = products.filter((p) => {
-    if (statusFilter === "draft") return contentMap[p.id]?.description?.status === "draft";
-    if (statusFilter === "published") return contentMap[p.id]?.description?.status === "published";
-    if (statusFilter === "needsContent") return !contentMap[p.id]?.description;
+    const state = stateOfContentMap(contentMap[p.id]);
+    if (statusFilter === "draft") return state === PRODUCT_STATE.DRAFT;
+    if (statusFilter === "published") return state === PRODUCT_STATE.PUBLISHED;
+    if (statusFilter === "needsContent") return state === PRODUCT_STATE.NEEDS_CONTENT;
     return true;
   });
 
@@ -413,10 +421,11 @@ export default function ProductsPage() {
       published = 0,
       none = 0;
     for (const p of products) {
-      const s = contentMap[p.id]?.description?.status;
-      if (s === "published") published++;
-      else if (s === "draft") draft++;
-      else none++;
+      const state = stateOfContentMap(contentMap[p.id]);
+      if (state === PRODUCT_STATE.PUBLISHED) published++;
+      else if (state === PRODUCT_STATE.DRAFT) draft++;
+      else if (state === PRODUCT_STATE.NEEDS_CONTENT) none++;
+      // rejected is deliberately in no tab; it is counted in the cards above.
     }
     return { draft, published, none };
   }, [products, contentMap]);
