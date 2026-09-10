@@ -298,10 +298,18 @@ export default function JobsPage() {
       title="Bulk Generation Jobs"
       subtitle="Track the progress of all your bulk generation runs"
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
-      primaryAction={{
-        content: "Generate More",
-        onAction: () => navigate("/app/products"),
-      }}
+      /* Group 3.4 — "Generate More" sat on the empty state, where there is
+         nothing to generate more OF, and it duplicated the EmptyState's own
+         action two lines below. Phase 2's rule is one primary chosen by state,
+         and with nothing to do it is not rendered at all. */
+      primaryAction={
+        jobs.length > 0
+          ? {
+              content: "Optimize store",
+              onAction: () => navigate("/app/products"),
+            }
+          : undefined
+      }
     >
       <BlockStack gap="500">
         {hasActiveJobs && (
@@ -326,7 +334,8 @@ export default function JobsPage() {
             >
               <p>
                 Generate content for multiple products at once — jobs run in the background so you can keep
-                working.
+                working. Bulk generation is included from the Starter plan; on Free you can optimize products
+                one at a time from the Products page.
               </p>
             </EmptyState>
           </Card>

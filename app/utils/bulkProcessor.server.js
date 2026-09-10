@@ -379,6 +379,9 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
               options: product.options,
             },
             shopDomain: job.shop,
+            // Group 4.5 — what the merchant already had, so a rewrite that
+            // silently drops their shipping terms or price match is caught.
+            existingDescription: product.descriptionHtml || product.description || "",
             scoreOf: (c) => scoreContent(c)?.score ?? null,
             regenerate: async () =>
               job.mode === "enhance"

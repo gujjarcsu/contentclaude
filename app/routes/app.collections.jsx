@@ -22,6 +22,12 @@ import {
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { shopifyQuery } from "../utils/shopifyQuery.server.js";
+import { getCollectionCandidateCounts } from "../utils/candidates.server.js";
+import { hasRealContent } from "../utils/candidates.js";
+
+/** One page of collections. Shopify's ceiling for this connection is 250. */
+const COLLECTION_PAGE = 250;
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -30,22 +36,44 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const response = await admin.graphql(`
-    query {
-      collections(first: 250, sortKey: TITLE) {
-        edges {
-          node {
-            id title description
-            seo { title description }
-            image { url altText }
-            productsCount { count }
+  // Group 2.1 — this was a bare `admin.graphql` reading ONE page of 250 and
+  // presenting `collections.length` as the total. On a store with 395
+  // collections the header said "250 collections", 145 were invisible, and
+  // nothing signalled it: a cap presented as a total. That is the worst of the
+  // three sampling defects, because nothing on the screen was wrong enough to
+  // notice.
+  //
+  // It was also UNGUARDED. `data?.collections?.edges ?? []` means a THROTTLED
+  // response — where `data` is null — rendered "0 collections" as fact. Group 4
+  // item 6 fixed exactly this shape on three other screens and missed this one.
+  const [page, counts] = await Promise.all([
+    shopifyQuery(
+      admin.graphql,
+      `query collectionsPage($n: Int!) {
+        collections(first: $n, sortKey: TITLE) {
+          edges {
+            node {
+              id title description
+              seo { title description }
+              image { url altText }
+              productsCount { count }
+            }
           }
         }
-      }
-    }
-  `);
-  const { data } = await response.json();
-  const collections = (data?.collections?.edges ?? []).map(({ node }) => ({
+      }`,
+      { n: COLLECTION_PAGE },
+      { shop, label: "collections page" },
+    ),
+    getCollectionCandidateCounts(admin, shop),
+  ]);
+
+  const catalogError = page.ok
+    ? null
+    : page.throttled
+      ? "Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly."
+      : "We could not read your collections from Shopify just now. This list may be incomplete.";
+
+  const collections = (page.data?.collections?.edges ?? []).map(({ node }) => ({
     id: node.id,
     title: node.title,
     description: node.description || "",
@@ -53,6 +81,11 @@ export const loader = async ({ request }) => {
     seoDescription: node.seo?.description || "",
     imageUrl: node.image?.url || "",
     productsCount: node.productsCount?.count ?? 0,
+    // Group 7.3 / 4.3 — the header told the merchant to "generate SEO
+    // descriptions for each" on a page where most collections already carried
+    // hand-written copy better than ours. Whether copy exists decides whether
+    // the offer is Generate or Enhance, so the row needs to know.
+    hasOwnContent: hasRealContent(node.description),
   }));
 
   // Cross-reference with generated content
@@ -71,7 +104,22 @@ export const loader = async ({ request }) => {
     voiceMap[v.collectionId] = v;
   });
 
-  return Response.json({ collections, statusMap, voiceMap });
+  // Group 2.1 — say what was shown, out of what. `total` is null rather than 0
+  // when Shopify would not answer: "you have no collections" is a claim, and
+  // "we could not count them" is a different one.
+  const total = counts.total?.count ?? null;
+  const totalExact = counts.total?.exact ?? true;
+  const truncated = total !== null && total > collections.length;
+
+  return Response.json({
+    collections,
+    statusMap,
+    voiceMap,
+    catalogError,
+    total,
+    totalExact,
+    truncated,
+  });
 };
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -253,7 +301,8 @@ const TONE_OPTIONS = [
 ];
 
 export default function CollectionsPage() {
-  const { collections, statusMap, voiceMap } = useLoaderData();
+  const { collections, statusMap, voiceMap, catalogError, total, totalExact, truncated } =
+    useLoaderData();
   const navigate = useNavigate();
   const loadingThisRoute = useRouteLoading();
   const fetcher = useFetcher();
@@ -348,6 +397,26 @@ export default function CollectionsPage() {
     }));
   };
 
+  /**
+   * Group 2.1 — the old subtitle was
+   *   `${collections.length} collections · generate SEO descriptions for each`
+   * which on a 395-collection store read "250 collections" and instructed the
+   * merchant to overwrite copy that was mostly better than ours.
+   *
+   * Two separate lies in one line: a cap presented as a total, and an
+   * instruction to Generate over collections that already had descriptions.
+   */
+  const collectionsSubtitle = (() => {
+    if (total === null) return "We could not read your collection totals from Shopify just now.";
+    const shown = collections.length;
+    const totalText = totalExact ? `${total}` : `${total}+`;
+    const withCopy = collections.filter((c) => c.hasOwnContent).length;
+    const scope = truncated ? `Showing the first ${shown} of ${totalText} collections` : `${totalText} collections`;
+    return withCopy > 0
+      ? `${scope} · ${withCopy} already have a description of your own`
+      : `${scope} · none have a description yet`;
+  })();
+
   const updateVoiceForm = (collectionId, field, value) => {
     setVoiceForms((prev) => ({
       ...prev,
@@ -391,10 +460,28 @@ export default function CollectionsPage() {
   return (
     <Page
       title="Collections"
-      subtitle={`${collections.length} collection${collections.length !== 1 ? "s" : ""} · generate SEO descriptions for each`}
+      subtitle={collectionsSubtitle}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
+        {/* Group 2.1 — a throttled or failed read used to render an empty list
+            silently, so "you have no collections" and "Shopify would not answer"
+            looked identical. */}
+        {catalogError && (
+          <Banner tone="warning" title="This list may be incomplete">
+            <p>{catalogError}</p>
+          </Banner>
+        )}
+        {/* Group 2.1 — a cap must never be presented as a total. This says what
+            is missing, how much, and what to do about it, instead of showing 250
+            of 395 as though that were the whole store. */}
+        {truncated && (
+          <Banner tone="info" title="Showing part of your collections">
+            <p>
+              {`Your store has ${totalExact ? total : `more than ${total}`} collections and this page shows the first ${collections.length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.`}
+            </p>
+          </Banner>
+        )}
         {fetcherData?.error && (
           <Banner tone="critical">
             <p>{fetcherData.error}</p>
@@ -436,14 +523,29 @@ export default function CollectionsPage() {
                       <Badge tone="success">Content Published</Badge>
                     ) : status === "draft" ? (
                       <Badge tone="info">Draft Ready</Badge>
+                    ) : collection.hasOwnContent ? (
+                      /* Group 4.3 — 21 of 30 sampled collections carried
+                         hand-written copy naming certifications, the trade
+                         counter and 25 years of trading. Offering "Generate"
+                         over that, with no indication it exists, is how an app
+                         deletes a merchant's best writing. */
+                      <Badge tone="info">Your description</Badge>
                     ) : null}
+                    {/* Group 7.4 — several EMPTY collections legitimately carry
+                        hand-written copy, because the merchant wrote for ranges
+                        they can order in. So zero products is a WARNING, not a
+                        block: the count is already shown, and this says why it
+                        matters without deciding for them. */}
+                    {collection.productsCount === 0 && (
+                      <Badge tone="attention">No products</Badge>
+                    )}
                     <Button
                       size="slim"
                       onClick={() => handleGenerate(collection)}
                       loading={isGenerating && fetcher.formData?.get("collectionId") === collection.id}
                       disabled={isGenerating}
                     >
-                      {status ? "Regenerate" : "Generate"}
+                      {status ? "Regenerate" : collection.hasOwnContent ? "Enhance" : "Generate"}
                     </Button>
                   </InlineStack>
                 </InlineStack>

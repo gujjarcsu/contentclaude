@@ -87,6 +87,7 @@ export async function gateContent({
   locale = "en",
   scoreOf,
   regenerate = null,
+  existingDescription = "",
 }) {
   const recent = await recentFingerprints(shop, { excludeProductId: productId });
 
@@ -101,6 +102,9 @@ export async function gateContent({
       locale,
       recent,
       score: typeof scoreOf === "function" ? scoreOf(content) : null,
+      // Group 4.5 — the merchant's own copy, so the gate can see what a
+      // rewrite took away rather than only what it added.
+      existingDescription,
     });
 
   let content = generated;
@@ -137,7 +141,11 @@ export async function gateContent({
   // Group 5.4, stated rather than implied by a truthy string. Autopilot is the
   // only path where nobody is reading, and the only one where near-duplicate
   // content reaches a live storefront unseen.
-  const withholdFromAutopilot = !assessment.pass || !!assessment.warnOnly || assessment.differentiationOk === false;
+  const withholdFromAutopilot =
+    !assessment.pass ||
+    !!assessment.warnOnly ||
+    assessment.differentiationOk === false ||
+    (assessment.droppedClaims?.length ?? 0) > 0;
 
   if (note) {
     logger.info(

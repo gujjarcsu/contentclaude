@@ -23,6 +23,7 @@ import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { scoreTone } from "../utils/scoreBands.js";
 import { shopifyQuery } from "../utils/shopifyQuery.server.js";
+import { scopeForShop, scopeQueryFor } from "../utils/candidates.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -37,8 +38,29 @@ const MAX_AUDIT_PRODUCTS = 500; // cap the catalog walk so a huge store cannot h
 const AUDIT_TIMEOUT_MS = 10_000;
 const AUDIT_RETRY_DELAY_MS = 500; // one backoff before a page is written off
 
-const AUDIT_PAGE_QUERY = `query getProducts($cursor: String) {
-  products(first: ${AUDIT_PAGE_SIZE}, after: $cursor, sortKey: TITLE) {
+/**
+ * Group 2.2 — "the first 500 sorted by title" is not a sample.
+ *
+ * Two things were wrong with it, and the cap was the smaller one.
+ *
+ * TITLE ORDER CLUSTERS. A catalogue with numeric SKU prefixes or variant
+ * families returns near-identical siblings back to back — seven finishes of one
+ * hose, forty lengths of one bolt — so the first 500 can be a few dozen real
+ * products wearing 500 hats, and the score is an average over that.
+ * `UPDATED_AT` descending returns what the merchant has touched most recently,
+ * which is both less clustered and more useful: it is the work in front of them.
+ *
+ * IT INCLUDED PRODUCTS WITH NO PUBLIC PAGE. Archived and draft products, and
+ * products not published to the Online Store, have no URL to rank — auditing
+ * them drags the score down over pages nobody can reach and fills the fix list
+ * with work that cannot pay off. The scope is the same candidate rule the rest
+ * of the app now uses.
+ *
+ * The comment lives OUT here. A `//` inside a GraphQL template literal is a
+ * valid JS comment and a GraphQL syntax error, which nearly shipped once.
+ */
+const AUDIT_PAGE_QUERY = `query getProducts($cursor: String, $scoped: String) {
+  products(first: ${AUDIT_PAGE_SIZE}, after: $cursor, sortKey: UPDATED_AT, reverse: true, query: $scoped) {
     pageInfo { hasNextPage endCursor }
     edges {
       node {
@@ -62,6 +84,11 @@ export const loader = async ({ request }) => {
   // One page of the catalog, retried once after a short backoff. A single
   // failed page used to abort the whole audit; now the caller decides whether
   // to keep what it already has.
+  // Group 1 + 2.2 — the audit population is the same candidate set the rest of
+  // the app acts on: active products with a public page. Auditing archived and
+  // unpublished products drags the score down over pages nobody can reach.
+  const scoped = scopeQueryFor(await scopeForShop(shop));
+
   const fetchPage = async (cursor) => {
     // Phase 4 item 6 — through the shared backoff, so a throttled page waits
     // and retries instead of counting as a failed page. An audit that silently
@@ -71,7 +98,7 @@ export const loader = async ({ request }) => {
       const r = await shopifyQuery(
         admin.graphql,
         AUDIT_PAGE_QUERY,
-        { cursor },
+        { cursor, scoped: scoped || null },
         {
           shop,
           label: "audit page",

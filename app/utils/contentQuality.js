@@ -96,6 +96,7 @@ export const META_TITLE_MIN = 15;
 export const META_DESCRIPTION_MIN = 70;
 
 import { familyKeyOf, axisTermsFor, namesItsAttribute } from "./variantFamily.js";
+import { droppedClaims, describeDropped } from "./standingClaims.js";
 
 /** Text a model leaves behind when it has not actually written anything. */
 const PLACEHOLDER_PATTERNS = [
@@ -321,6 +322,7 @@ export function assessContent({
   recent = [],
   score = null,
   fingerprint = undefined,
+  existingDescription = "",
 } = {}) {
   // Group 5 — computed once here from whatever the caller knows about the
   // product (title always; tags and options when it has them).
@@ -390,6 +392,35 @@ export function assessContent({
     );
   }
 
+  // ── standing commercial claims (Group 4.5) ──────────────────────────────
+  //
+  // A rewrite that deletes "Ships in 2 business days. Free pickup & price
+  // match" and replaces it with "Available at EBS" is better on keywords and
+  // worse commercially — a click-through regression presented as an
+  // improvement, on an app sold on search performance.
+  //
+  // Two severities, because the claims are not equivalent:
+  //
+  //   COMPLIANCE and CERTIFICATION are a HARD FAILURE. Dropping "WaterMark
+  //   certified" or "installation by a licensed plumber is required by law" is
+  //   not a style choice, and on some products it is a legal exposure for the
+  //   merchant. Regenerate; do not save it quietly.
+  //
+  //   Everything else — shipping, pickup, price match, warranty, returns,
+  //   provenance, trade terms, stock — is a WARN. It saves, the merchant can
+  //   publish it, and autopilot will not. Blocking these would fail honest
+  //   rewrites that simply said it differently, and a gate that blocks honest
+  //   writing gets switched off.
+  const dropped = droppedClaims(existingDescription, description);
+  const droppedHard = dropped.filter((c) => c.kind === "compliance" || c.kind === "certification");
+  const droppedSoft = dropped.filter((c) => c.kind !== "compliance" && c.kind !== "certification");
+  if (droppedHard.length > 0) {
+    hardFailures.push(describeDropped(droppedHard));
+  }
+  if (droppedSoft.length > 0) {
+    reasons.push(describeDropped(droppedSoft));
+  }
+
   // ── the score ────────────────────────────────────────────────────────────
   const numericScore = Number.isFinite(score) ? score : null;
   if (numericScore != null && numericScore < QUALITY_THRESHOLD) {
@@ -409,6 +440,9 @@ export function assessContent({
     warnOnly: dup.verdict === DUPLICATE_VERDICT.WARN,
     familyKey,
     familySiblingsSkipped: dup.skippedFamily ?? 0,
+    /** Group 4.5 — what the rewrite took away, so the diff can show it. */
+    droppedClaims: dropped,
+    droppedClaimKinds: dropped.map((c) => c.kind),
     differentiationChecked: !!diff.checked,
     differentiationOk: diff.ok !== false,
     languageChecked: lang.checked,
