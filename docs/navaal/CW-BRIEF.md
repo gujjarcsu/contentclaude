@@ -1,146 +1,170 @@
 # CW BRIEF — the current batch
 
-**Regenerated 2026-09-10 from the pending `CW` rows of `06-QUEUE.md` and from `12-OFFER.md`.**
-Read `CW-STANDING-PROMPT.md` first — it carries the context and the rules. This file is the work.
+**Regenerated 2026-09-13.** Read `CW-STANDING-PROMPT.md` first for context and rules.
 
-Five tasks, in this order. Report each as you finish it; do not batch to the end.
+**The correction that changes your plan:** the last CW session concluded that everything was blocked
+and that no dev store had a usable catalogue. Both were checked against the repo and production, and
+both were too strong.
 
----
+- **Task 1 below needs no Partner Dashboard, no login and no Shopify access at all.** It is the
+  single highest-value piece of work available to anyone on this project right now, because it
+  decides whether a whole phase gets built.
+- **`contentpilot-dev2` is clean.** Every excerpt in `listing-assets/manifest.json` was grepped for
+  snowboard, ski, wax, hydrogen and gift card: **zero hits.** The demo catalogue belongs to
+  `navaal-ttv-01`, not to every dev store. What is actually stale about the existing assets is the
+  store *name* — they read *"Welcome back, E2E Test Store!"* and dev2 is now *Northline Supply*.
 
-## TASK 1 — Publish the approved listing copy *(replaces H11 and H15)*
-
-**Why first.** Two things are wrong on the live listing right now. It promises **"Dedicated account
-manager"** and **"SLA support"**, which are commitments we cannot define. And the five feature
-bullets describe the app as it was before two phases of change.
-
-The approved replacement text is in **`docs/navaal/12-OFFER.md` §4**. It is already
-character-counted against every Shopify limit. **Copy it exactly. Do not improve it, shorten it or
-add to it** — the wording is constrained by App Store requirements 4.3.3, 4.3.4, 4.3.6 and 4.4.1.
-
-**Do:** Partner Dashboard → Apps → Navaal → Distribution → App Store listing.
-
-- **App introduction** → replace with §4's introduction (86 characters).
-- **App details** → replace with §4's details paragraph (478 characters).
-- **Feature bullets** → replace all five with §4's five bullets.
-- **Search terms** → set the five in §4: `seo audit` · `product descriptions` · `meta tags` ·
-  `alt text` · `ai visibility`. Complete words, one idea each, no symbols.
-- **Pricing section, Professional tier** → replace the line "Dedicated account manager" with
-  **"Direct access to the founder"**, and "SLA support" with **"Every question answered within one
-  business day"**. Add **"Setup call when you start"** if there is room. *The service is real and the
-  owner does it personally; it is the two undefined words that go.*
-- **Sales channel requirements** → tick **"Merchant must have online store"**.
-- Fill **every** optional field. Shopify's search engine parses the listing, and empty fields are
-  wasted surface. But **do not repeat keywords to game it** — Shopify says overuse *"can DECREASE
-  your app's discoverability."*
-- Confirm one plan is marked **Free**, so search results show *"Free plan available"*.
-
-Submit for review if submission is required.
-
-**⚠️ Do NOT publish anything from `12-OFFER.md` §5.** Those bullets describe daily monitoring, AI
-traffic reporting and crawl-speed proof, none of which exists yet. Advertising them would be exactly
-the false promise this whole project is built to avoid.
-
-**Done looks like:** load the public page `apps.shopify.com/navaal-ai-seo-geo-content` fresh and
-search the text. Neither banned phrase appears. The new intro, details and five bullets are live.
-
-**Paste back:** the tier's wording before and after, whether the change needed review, and how long
-review is expected to take.
+Do them in this order. Report each as you finish it.
 
 ---
 
-## TASK 2 — Look at the "Include draft products" checkbox with your own eyes *(H13)*
+## TASK 1 — The eligibility base-rate study *(W1 — needs nothing but a browser and patience)*
 
-**Why.** This setting shipped with a database column, a read path, a write path and a passing test
-suite — and for one commit, **no control on any screen.** No merchant could ever turn it on. It now
-has a control, and two of the three requirements are proved: it is wired, and its label appears in
-the rendered DOM. What is **not** proved is that a human can see it and that the value sticks.
+**Why this is first.** We are about to build a feature that tells merchants what is blocking their
+products from search and AI shopping. The whole phase rests on an untested assumption: **that a
+typical Shopify store actually has something wrong.** Shopify auto-generates canonicals, sitemaps,
+robots.txt and title tags, requires every theme to emit product schema, and syndicates products to
+AI channels with no merchant action. **If the default store is already fine, our audit's most common
+output is "everything looks fine" — and a first run that says that is a churn event, not an
+activation.**
 
-**Do:** open the app on the dev store **`contentpilot-dev2`** (renamed *Northline Supply*) →
-**Settings** → the card headed **"Review before publishing"** → directly under "Publish without
-review". Scroll to it. Tick it. Save. Then **hard-reload** and look again.
+**The kill criterion is written down in advance: if fewer than 40% of stores have at least one
+actionable finding, the phase gets re-scoped.** We would rather learn that in two days than two
+months.
 
-**Done looks like:** a screenshot showing the checkbox on screen, and confirmation the tick survived
-the hard reload.
+**Do:** assemble **300–500 live Shopify storefronts**. Find them however is cheapest — Shopify's own
+customer-story pages, `myshopify.com` directories, the `apps.shopify.com` reviews on big apps (each
+reviewer names their store), BuiltWith-style lists. Record the domain list in a file so the study is
+reproducible.
 
-**Paste back:** the screenshot, and whether it was above or below the fold when the page loaded.
+For each store, from the public web only — **no logins, no admin, no writes anywhere**:
 
----
+1. **`robots.txt`** — fetch it, then test-fetch the homepage and one product URL with each of these
+   user agents and record the status code: `OAI-SearchBot`, `PerplexityBot`, `Claude-SearchBot`,
+   `bingbot`, `Googlebot`. A block on `OAI-SearchBot` means, in OpenAI's own words, the store
+   *"won't appear in ChatGPT search answers."*
+2. **Product attribute completeness** — most storefronts expose `/products/<handle>.json` or
+   `/products.json`. Pull a sample of products and record whether each has: a barcode, variant
+   option names, an availability value, a price, at least one image, a product type, and a
+   description longer than ~120 characters.
+3. **Structured data** — is `application/ld+json` present on a product page? Is there **more than
+   one** `Product` block (the duplicate-schema problem, which Google resolves unpredictably)?
+4. **Canonical sanity** — does the product page's canonical point at itself?
+5. **Policies** — do `/policies/terms-of-service`, `/policies/privacy-policy` and
+   `/policies/refund-policy` return 200? These are required for agentic storefronts.
+6. **Agent endpoints** — `/llms.txt`, `/agents.md`, `/.well-known/ucp`. Record the status code.
+   *(Expect 200 on live stores — Shopify serves these natively. This is a control, not a finding.)*
 
-## TASK 3 — Re-capture and upload the listing screenshots *(H7)*
+**Be a good citizen:** identify yourself in the user agent for the non-UA-specific fetches, no more
+than a couple of requests per second per host, and honour `robots.txt` for anything beyond the
+product JSON and the policy pages.
 
-**Why.** The listing still shows the app as it was before Phase 2 and Phase 4. Everything a merchant
-sees before installing is out of date.
+**Done looks like** a table and four numbers:
+- what percentage of stores have **at least one** actionable finding,
+- the **median number** of findings per store,
+- the **frequency of each individual check** failing, ranked,
+- and how many stores had **zero** findings.
 
-**Do:** capture on **`navaal-ttv-01`** (renamed *Harbourline Goods*) — 17 products, three drafts, a
-store score of 34/100. **Never on the EBS store**: its catalogue is commercial and its numbers are
-not representative.
+**Paste back:** those four numbers first, then the ranked table, then the domain list file path. And
+say plainly whether the 40% bar was cleared.
 
-Capture **five desktop** frames at **1600×900**: Home with the score · the audit results · a product
-with a proposal · the review screen showing approve-before-publish · Settings. Then three mobile.
-
-Rules, all of them Shopify's: app UI only · **no browser chrome** · no pricing anywhere in an image ·
-no personal data · **every image unique** · alt text on each one.
-
-Upload under Distribution → App Store listing → Media, replacing the existing set, and write a
-caption for each saying what the merchant is looking at.
-
-**Done looks like:** five desktop and three mobile live on the public page, checked on a fresh load.
-
-**Paste back:** the eight captions, **and anything the app showed that looked wrong while you were
-capturing** — that last part has been the most valuable output of every session on this project.
-
----
-
-## TASK 4 — Read the webhook reliability figures *(H10)*
-
-**Why.** A webhook fix shipped 2026-09-10 (commit `224211a`): the age window was 24h, but Shopify
-retries for ~48h carrying the *original* triggered-at, so valid retries were rejected. The window is
-now 7 days plus dedup by webhook id. The dashboard shows a **7-day trailing window**, so pre-fix
-failures age out on 15 Sep — a reading from 16 Sep onward contains only post-fix deliveries.
-
-Two scheduled tasks were meant to do this but are **not bound to this computer**, so they fire into a
-browserless cloud session and produce nothing. Do it by hand.
-
-**Do:** Partner Dashboard → Navaal → Monitoring → Webhooks. Read verbatim: overall failure rate and
-severity · per-topic rate **and delivery count** for `app/uninstalled` and `shop/redact` · p90
-response time · Removed-webhooks count · the per-day ok/failed split for the whole visible range.
-
-**Baseline** (2026-09-10, ~11:00 UTC): overall **75.0% High** · `app/uninstalled` 68.182% of **22**
-@ 1,403 ms · `shop/redact` 100.0% of **9** @ 816 ms · `app/scopes_update` 0% of **1** @ 534 ms ·
-Removed webhooks **0** · Sep 8 = 1 ok / 18 failed, Sep 9 = 2 ok / 5 failed, Sep 10 = 5 ok / 1 failed.
-
-**The trap:** never report an improvement from the percentage alone. **An unchanged delivery COUNT
-means nothing happened**, whatever the percentage says. State the count beside every rate.
-
-**Done looks like:** the numbers, then one line — post-fix deliveries occurred and succeeded /
-occurred and failed / did not occur at all.
+*This output is also the one kind of statistic we are allowed to publish — an aggregate about the
+market, on navaal.ai, which Shopify says improves App Store ranking.*
 
 ---
 
-## TASK 5 — Check what Shopify's Agentic sales channel already reports
+## TASK 2 — Re-capture the listing screenshots on `contentpilot-dev2`
 
-**Why.** We are about to build per-product eligibility reporting. Shopify shipped `llms.txt`,
-`agents.md`, Catalog syndication and Magic without announcing any of it, and we only found out by
-looking. **Before CC writes a line of that feature, we need to know what Shopify already gives the
-merchant for free.**
+**Why:** the existing eight frames say *"Welcome back, E2E Test Store!"*. The store is now
+*Northline Supply*. The catalogue itself is fine — **use dev2, not `navaal-ttv-01`**, which is
+stocked with Shopify's demo snowboards.
 
-**Do:** on a dev store, open **Settings → Sales channels → Agentic** (or the Agentic entry in the
-admin sidebar). Photograph and describe: what it shows about the store's eligibility · whether it
-reports **per-product** problems and in what detail · what it says about which AI channels are
-active · anything about product data completeness or feed errors.
+**Do:** capture **five desktop at 1600×900** — Home with the store score · the audit results · a
+product with a proposal · the Review screen showing approve-before-publish · Settings — and **three
+mobile**. App UI only, no browser chrome, no pricing in any image, no personal data, every image
+unique, alt text on each.
 
-**Done looks like:** screenshots plus a plain list of what Shopify already reports, so we can build
-only the difference.
+**Then fix the manifest.** `listing-assets/manifest.json` still lists `04-start-desktop.png`, which
+no longer exists on disk. Either capture it or remove its entry — a manifest that lies costs the
+next session an hour.
+
+**Done looks like:** eight files on disk, the manifest matching the directory exactly, and every
+excerpt free of demo-store words and of the old store name. **Hold the upload** until Task 4.
+
+**Paste back:** the eight captions, and anything the app showed that looked wrong while you were
+capturing.
+
+---
+
+## TASK 3 — Check what Shopify's Agentic channel reports, per product
+
+**Why:** a previous session read `/apps/agentic` and found four channels with a binary status, a
+master toggle, "Shopify Catalog — 0 products in Catalog", and **nothing per product**. That is the
+gap our eligibility feature exists to fill, and it is worth a second look now that a store has
+products in it.
+
+**Do:** on `contentpilot-dev2`, activate the Agentic channel if it is off, wait for Catalog to pick
+up products, and then look again. Specifically: does it ever name **which** products are excluded,
+and **why**? Any error or reason codes? Any completeness detail?
+
+**Done looks like:** screenshots plus a plain list of what Shopify already reports.
 
 **Paste back:** the list, and your honest read on whether a merchant would still need our version.
 
 ---
 
-## NOT IN THIS BRIEF, AND WHY
+## TASK 4 — The moment the Partner Dashboard opens, publish the listing
 
-- **Listing pricing display** — waits for the new plans to ship in the app. Changing the listing
-  before the app matches it creates the exact promise gap we keep removing.
-- **Second UptimeRobot alert contact** — blocked on an owner decision: a second contact needs a paid
-  seat, and the free workaround is a Gmail forward.
-- **Built for Shopify scorecard** — no BFS section is exposed anywhere in the dashboards yet, almost
-  certainly because the app is far below the 50-install eligibility bar. Nothing to read today.
+**This needs one human click first:** open `https://partners.shopify.com/4937813/apps` in Chrome and
+pick the **Waqas Ahmad** account. Every previous attempt landed on `accounts.shopify.com/select`, an
+account chooser rather than a password prompt. **If you still land there, stop and say so — do not
+try to sign in.**
+
+Once in, from **`docs/navaal/12-OFFER.md` §4**, copied exactly — it is already character-counted
+against every Shopify limit and constrained by App Store requirements 4.3.3, 4.3.4, 4.3.6 and 4.4.1:
+
+- **App introduction** → §4's introduction.
+- **App details** → §4's details paragraph.
+- **Feature bullets** → all five from §4.
+- **Search terms** → `seo audit` · `product descriptions` · `meta tags` · `alt text` ·
+  `ai visibility`.
+- **Professional tier** → replace **"Dedicated account manager"** with **"Direct access to the
+  founder"**, and **"SLA support"** with **"Every question answered within one business day"**. Add
+  **"Setup call when you start"** if there is room. *The service is real and the owner does it
+  personally; the two undefined words are what go.*
+- Tick **"Merchant must have online store"**. Confirm one plan is marked Free. Fill every optional
+  field, without repeating keywords.
+- Upload Task 2's screenshots.
+
+**⚠️ Publish nothing from `12-OFFER.md` §5.** Those bullets describe daily monitoring, AI traffic
+reporting and crawl-speed proof, none of which exists yet.
+
+**Done looks like:** load the public listing fresh and search the text — neither banned phrase
+present, new copy and new screenshots live.
+
+---
+
+## TASK 5 — Read the webhook figures, same visit
+
+Partner Dashboard → Navaal → Monitoring → Webhooks. Read verbatim: overall failure rate and
+severity · per-topic rate **and delivery count** · p90 · Removed-webhooks · the per-day ok/failed
+split.
+
+**Baseline** (2026-09-10): overall **75.0% High** · `app/uninstalled` 68.182% of **22** @ 1,403 ms ·
+`shop/redact` 100.0% of **9** @ 816 ms · Sep 10 = 5 ok / 1 failed.
+
+The pre-fix failures of Sep 8–9 have now rolled out of the 7-day window, so **this reading settles
+it.** `shop/redact` deliveries from the 10 Sep uninstalls should have surfaced around 12 Sep — check
+whether they arrived and succeeded, because that topic was failing 100% and it is a mandatory GDPR
+topic.
+
+**The trap:** state the delivery count beside every percentage. **0% over 0 deliveries is not a
+pass**, and an unchanged count means nothing happened.
+
+---
+
+## WHEN YOU FINISH
+
+Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an
+owner tag, and report: what you completed with the evidence · what you could not do and exactly what
+blocks it · **what you found that nobody asked about** · what is left, by ID.
