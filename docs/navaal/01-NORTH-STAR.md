@@ -192,6 +192,12 @@ That is why G is a phase with named owners and not a hope, and why most of its r
 - Phase A, CC: standing commercial claims (`ea6ee27`) — a rewrite deleted the merchant's two-day
   dispatch, free pickup and price match and replaced them with "Available at EBS". Now two
   severities: compliance/certification hard-fail, commercial claims warn.
+- H13 CLOSED, CC: the drafts setting **persists in both directions**, proved with the DOM state beside
+  the STORED value at three points — `true/true` → untick → `false/false` → tick → `true/true`, each
+  DOM read from a fresh full document load, `updatedAt` advancing on every write. Reading storage at
+  all required building `scripts/shop-settings-diag.mjs` + a read-only workflow, because local
+  `flyctl` has had no token since 09-10 and there is no ops route — nothing on this machine could see
+  the database. That gap also still blocks INFRA7.
 - INFRA, CC: **log retention shipped** (INFRA2) — Fly keeps ~100 lines, so no incident was traceable
   minutes later and A6.6 was blocked on it. A `LogEvent` table now keeps WARN-and-above plus tagged
   events for **30 days**, written through a pino multistream so redaction has already run. No new

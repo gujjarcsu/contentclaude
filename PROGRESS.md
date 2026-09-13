@@ -4204,3 +4204,49 @@ because a status API was slow is the wrong way to be wrong. A known-bad status s
 Worth naming plainly: **INFRA1 made the system safer in one dimension and less safe in another**, and
 the only reason that surfaced is that the item demanded a live proof rather than a unit test. A guard
 proved only in the abstract would have shipped the regression.
+
+---
+
+## H13 (13 Sep 2026) — does the value actually stick?
+
+`includeDraftProducts` shipped with a column, a read path, a write path and a green suite, and for one
+commit no control on any screen. Two of L15's three requirements were already proved. This is the
+third, and the part that matters: **the stored value, read beside the rendered value.**
+
+Those are two different things. A read path that disagrees with storage is the entire bug class, and a
+suite that mocks Prisma cannot tell them apart.
+
+| # | state | DOM | database | stored `updatedAt` |
+| --- | --- | --- | --- | --- |
+| 1 | before | `true` | `true` | 2026-09-10T18:13:56.988Z |
+| 2 | after untick + hard reload | `false` | `false` | 2026-09-13T23:21:50.705Z |
+| 3 | after tick + hard reload | `true` | `true` | 2026-09-13T23:22:34.443Z |
+
+**The DOM and the database agreed at every step, in both directions.** `updatedAt` advanced on each
+write, so these are real writes rather than a cached render — the check that distinguishes "it
+persisted" from "the page happened to show the same thing".
+
+Each DOM reading came from a **fresh browser context and a full document load** (`waitUntil: "load"`),
+never a re-render or a client-side navigation.
+
+It began `true` because the CW session left it so, hence false-then-true rather than the brief's
+tick-then-untick. The same two directions are covered, and a write path that only ever sets true would
+have failed reading 2.
+
+**Something nobody asked about:** `publishWithoutReview` stayed `false` across all three writes. The
+Settings form posts every flag together, so a careless write would have reset the neighbouring toggle
+— the one that decides whether content reaches a live storefront without review. It did not.
+
+### Reading storage at all needed building something
+
+Local `flyctl` has had no token since 2026-09-10 and there is no ops route, so **nothing on this
+machine could read the database.** That blocked this task and still blocks INFRA7.
+
+`scripts/shop-settings-diag.mjs` does one `findUnique` and prints the toggle flags, `storeName`,
+`language` and CHARACTER COUNTS rather than the merchant's own copy. `.github/workflows/shop-diag.yml`
+reaches it without a Fly token, following the pattern `ttv-weekly.yml` already used. It runs a command
+on the machine that is already running; it does not deploy.
+
+**Guard:** the shop argument is user input reaching a shell on a production machine, so the workflow
+refuses anything that is not `<store>.myshopify.com`. Proved against four inputs — the real domain
+ACCEPTED, `evil.com; rm -rf /` REFUSED, a bare handle REFUSED, empty REFUSED.
