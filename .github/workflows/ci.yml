@@ -91,6 +91,25 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      # P0.3 - an app calling an unsupported Shopify API version is DELISTED
+      # and its installs are blocked for at least seven days. Nothing watched for
+      # that: the version is pinned in two places, agreed by luck, and the first
+      # notice would have been the delisting itself.
+      #
+      # It also encodes the answer to P0.1 so that scare cannot recur. P0.1 read
+      # "the theme extension declares no api_version - pin it before 1 Oct 2026
+      # or we are frozen out of our own storefront code". That was false: a theme
+      # app extension's config takes only name/type/handle and is versioned as
+      # part of the APP version, and the 1 Oct 2026 date is the React -> Polaris
+      # cutover, which binds ui_extension-family extensions. We ship none.
+      # This step asserts BOTH directions mechanically, so nobody has to remember
+      # which type takes an api_version and which does not.
+      #
+      # It has no dependencies, so it runs before `npm ci`: a version that has
+      # already sunset should not wait on an install to say so.
+      - name: Shopify API versions are pinned and not near sunset
+        run: node scripts/check-api-versions.mjs
+
       - name: Install dependencies
         run: npm ci
 
