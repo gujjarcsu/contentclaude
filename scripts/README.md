@@ -1,6 +1,6 @@
 # scripts — operational scripts that run on the machine
 
-Nine scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
+Ten scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
 already exist:
 
 ```bash
@@ -33,6 +33,7 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `diag-shop.cjs` | read-only | One shop's install, plan and session state. |
 | `shop-install-diag.cjs` | read-only | Install and reinstall history. |
 | `store-products-diag.cjs` | read-only | Product and generated-content counts for a shop. |
+| `shop-settings-diag.mjs` | read-only | One shop's STORED settings straight from the database — the toggle flags, `storeName`, `language`, and character counts rather than the merchant's own copy. Use it when you must compare what is stored against what the app renders; those are two different things. Also reachable without a Fly token via the **Shop settings diagnostic** workflow. |
 | `logs.mjs` | read-only | **INFRA2 — the durable log.** `fly logs` keeps ~100 lines; this queries the 30-day `LogEvent` table (WARN-and-above plus tagged events). `--since 2h` · `--around 2026-09-10T03:45 --window 10m` · `--event autopilot_withheld` · `--shop x.myshopify.com` · `--level warn`. Never writes. |
 
 Anything with `--apply`: **run it without the flag first and read the output.** Both backfills print

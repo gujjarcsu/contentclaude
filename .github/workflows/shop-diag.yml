@@ -1,0 +1,48 @@
+name: Shop settings diagnostic
+
+# Read a shop's STORED settings from the database, for a session that has no Fly
+# token on its own machine.
+#
+# This exists because proving a setting persists needs the stored value, not the
+# value the app renders — and local `flyctl` has had no token since 2026-09-10,
+# which blocked both this and the INFRA7 restore drill.
+#
+# READ ONLY. It runs one script that performs a single `findUnique` and prints
+# booleans and lengths. It cannot write, and it prints no secrets.
+#
+# It does NOT deploy: it runs a command on the machine that is already running.
+
+on:
+  workflow_dispatch:
+    inputs:
+      shop:
+        description: "Shop domain, e.g. contentpilot-dev2.myshopify.com"
+        type: string
+        required: true
+
+jobs:
+  read:
+    name: Read stored settings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Read the shop's stored settings
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SHOP: ${{ inputs.shop }}
+        run: |
+          set -euo pipefail
+          # Refuse anything that is not a myshopify domain. This command only
+          # ever reads, but a shop argument is still user input reaching a shell
+          # on a production machine.
+          case "$SHOP" in
+            *.myshopify.com) : ;;
+            *) echo "::error::refusing '$SHOP' — expected a <store>.myshopify.com domain"; exit 1 ;;
+          esac
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/shop-settings-diag.mjs $SHOP" | tee settings.json
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat settings.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
