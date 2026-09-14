@@ -31,7 +31,7 @@ import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
-import { invalidateStoreScan } from "../utils/storeScanCache.server.js";
+import { invalidateContentCaches } from "../utils/storeScanCache.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -283,12 +283,12 @@ export async function action({ request, params }) {
 
       if (!enhanceOutcome.allowed) {
         return {
-          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          error: "You've used all your credits for this month. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
       if (enhanceOutcome.refunded) {
-        return { error: "The AI returned nothing to enhance. Please retry — this did not use a generation." };
+        return { error: "The AI returned nothing to enhance. Please retry — no credit was used." };
       }
       const { p, generated } = enhanceOutcome.result;
 
@@ -347,7 +347,7 @@ export async function action({ request, params }) {
       const gate = await tryConsumeGeneration(shop, primaryContentType, productId);
       if (!gate.allowed) {
         return {
-          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          error: "You've used all your credits for this month. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
@@ -379,7 +379,7 @@ export async function action({ request, params }) {
         product = productData?.product;
         if (!product) {
           await refundThisGeneration();
-          return { error: "This product no longer exists in your store. This did not use a generation." };
+          return { error: "This product no longer exists in your store. No credit was used." };
         }
         productImages = mediaToImages(product.media);
 
@@ -431,7 +431,7 @@ export async function action({ request, params }) {
         // response and the merchant saw a "success" with no content.
         if (typesToSave.length === 0 && !doAltText) {
           await refundThisGeneration();
-          return { error: "The AI returned nothing usable. Please retry — this did not use a generation." };
+          return { error: "The AI returned nothing usable. Please retry — no credit was used." };
         }
 
         // Snapshot existing content into version history before overwriting
@@ -522,7 +522,7 @@ export async function action({ request, params }) {
           } catch (err) {
             logger.warn(
               { shop, productId, mediaId: img.id, err: err.message },
-              "Alt text generation failed for image",
+              "Alt text failed for image",
             );
             altTextResults.push({
               imageId: img.id,
@@ -625,7 +625,7 @@ export async function action({ request, params }) {
         await refundThisGeneration();
         return {
           error:
-            "Alt text could not be applied to any image. Please try again — this did not use a generation.",
+            "Alt text could not be applied to any image. Please try again — no credit was used.",
           altTextResults,
         };
       }
@@ -730,7 +730,7 @@ export async function action({ request, params }) {
       );
       // P5.2 — see startState.server.js. One product moves the store score by
       // less than a bulk run does, but "by less" is not "not at all".
-      void invalidateStoreScan(shop);
+      void invalidateContentCaches(shop);
 
       // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
       let faqWarning = null;
@@ -858,12 +858,12 @@ export async function action({ request, params }) {
 
       if (!socialOutcome.allowed) {
         return {
-          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          error: "You've used all your credits for this month. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
       if (socialOutcome.refunded) {
-        return { error: "The AI returned nothing. Please retry — this did not use a generation." };
+        return { error: "The AI returned nothing. Please retry — no credit was used." };
       }
       return { success: true, social: socialOutcome.result };
     }
@@ -932,7 +932,7 @@ export async function action({ request, params }) {
       const gate1 = await tryConsumeGeneration(shop, contentTypes[0], productId);
       if (!gate1.allowed) {
         return {
-          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          error: "You've used all your credits for this month. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
@@ -942,7 +942,7 @@ export async function action({ request, params }) {
         // consumed so the merchant isn't charged for a generation that won't run.
         await refundGeneration(shop, { productId, contentType: contentTypes[0] });
         return {
-          error: "Only 1 generation remaining — comparing two options requires 2. Upgrade your plan to continue.",
+          error: "Only 1 credit left — comparing two options needs 2. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
@@ -975,7 +975,7 @@ export async function action({ request, params }) {
         const p = pd?.product;
         if (!p) {
           await refundBoth();
-          return { error: "This product no longer exists in your store. This did not use any generations." };
+          return { error: "This product no longer exists in your store. No credits were used." };
         }
         const targetKeywords = (formData.get("targetKeywords") || "").trim();
         const productData = {
@@ -1009,7 +1009,7 @@ export async function action({ request, params }) {
       const usable = (v) => v && contentTypes.some((t) => v[t]);
       if (!usable(variantA) && !usable(variantB)) {
         await refundBoth();
-        return { error: "The AI returned nothing usable. Please retry — this did not use any generations." };
+        return { error: "The AI returned nothing usable. Please retry — no credits were used." };
       }
 
       // Phase 2 item 2.12 - the variant preview is the one place model output
@@ -1682,7 +1682,7 @@ export default function ProductGeneratePage() {
                     helpText={
                       noImages
                         ? "No images on this product"
-                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}${product.hasMoreImages ? " (first 50)" : ""} — one generation covers all of them`
+                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}${product.hasMoreImages ? " (first 50)" : ""} — alt text costs no credits`
                     }
                   />
 

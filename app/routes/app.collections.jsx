@@ -175,20 +175,20 @@ export const action = async ({ request }) => {
       );
     } catch (err) {
       return Response.json(
-        { error: `We couldn't write this collection: ${err.message}. This did not use a generation.` },
+        { error: `We couldn't write this collection: ${err.message}. No credit was used.` },
         { status: 502 },
       );
     }
     if (!outcome.allowed) {
       return Response.json({
-        error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+        error: "You've used all your credits for this month. Upgrade your plan to continue.",
         limitReached: true,
       });
     }
     if (outcome.refunded) {
       return Response.json(
         {
-          error: "The AI returned nothing for this collection. Please retry — this did not use a generation.",
+          error: "The AI returned nothing for this collection. Please retry — no credit was used.",
         },
         { status: 502 },
       );

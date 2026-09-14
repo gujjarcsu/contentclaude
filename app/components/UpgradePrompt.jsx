@@ -247,7 +247,7 @@ export function QuotaWarningBanner({ warning }) {
     <div data-quota-prompt="warn">
       <Banner
         tone="info"
-        title={`${usageCount} of ${monthlyCredits} ${planLabel} generations used`}
+        title={`${usageCount} of ${monthlyCredits} ${planLabel} credits used`}
         onDismiss={dismiss}
       >
         <BlockStack gap="300">
@@ -321,7 +321,7 @@ export function QuotaReachedCard({ upsell, surface = "" }) {
       <Card>
         <BlockStack gap="300">
           <Text as="h3" variant="headingMd">
-            {`You've used all ${upsell.monthlyCredits} ${planLabel} generations for ${upsell.monthName}`}
+            {`You've used all ${upsell.monthlyCredits} ${planLabel} credits for ${upsell.monthName}`}
           </Text>
           {fit && (
             <Text as="p" variant="bodyMd">

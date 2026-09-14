@@ -1,5 +1,5 @@
 import prisma from "../db.server.js";
-import { invalidateStoreScan } from "./storeScanCache.server.js";
+import { invalidateContentCaches } from "./storeScanCache.server.js";
 import { generateProductContent, enhanceExistingContent } from "./ai.server.js";
 import logger from "./logger.server.js";
 import { captureException } from "./errorMonitoring.server.js";
@@ -525,7 +525,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
             // P5.2 — the store score is cached for ten minutes and was never
             // invalidated, so a bulk run could finish and leave Home showing
             // the score from before it started.
-            void invalidateStoreScan(job.shop);
+            void invalidateContentCaches(job.shop);
           }
 
           // Write the FAQ JSON-LD metafield so the storefront emits FAQPage schema

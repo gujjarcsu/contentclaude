@@ -39,7 +39,10 @@ export function quotaPct(usageCount, monthlyCredits) {
   const limit = Number(monthlyCredits) || 0;
   if (limit <= 0) return 0;
   const used = Math.max(0, Number(usageCount) || 0);
-  return Math.min(100, Math.round((used / limit) * 100));
+  // FR14 (Phase 8) — 19 of 4,000 is 0.475%, which rounded to "0%" and told a
+  // merchant their spend was nothing. Anything spent shows as at least 1%.
+  const pct = Math.round((used / limit) * 100);
+  return Math.min(100, used > 0 ? Math.max(1, pct) : 0);
 }
 
 /**

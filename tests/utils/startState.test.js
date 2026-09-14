@@ -326,25 +326,27 @@ describe("the Start screen itself — structural guarantees", () => {
     expect(code).not.toMatch(/<TextField|<Form\b|<Select\b|<Checkbox/);
   });
 
-  it("calls the allowance FREE only on the free plan", () => {
+  it("names the plan only on the free plan, and never calls a paid allowance free", () => {
     // Caught on a real Pro store while capturing listing screenshots: the copy
     // read "1000 remaining free generations" to a merchant who is paying for
-    // them. Telling somebody the thing they bought is free is not a rounding
-    // error in trust.
-    expect(code).toMatch(/start\.planName === "free" \? "free generations" : "generations"/);
-    expect(code).not.toMatch(/remaining free generations/);
+    // them. A4 (Phase 8) then retired the word "generations" from every screen:
+    // credits are weighted (alt text 0, blog 3) and the two units must never mix.
+    expect(code).toMatch(/start\.planName === "free" \? " on the Free plan" : ""/);
+    expect(code).not.toMatch(/free generations/);
+    expect(code).not.toMatch(/generations/);
   });
 
-  it("says what it will spend, in the same breath as what is left", () => {
+  it("says what it will spend, in credits, in the same breath as what is left — and never re-announces a charge for a draft that exists", () => {
     // Auto-spending credits without saying so would be indefensible. This is
     // the sentence that makes it defensible, so it is pinned.
-    expect(code).toMatch(/free generations/);
-    expect(code).toMatch(/remaining/);
+    expect(code).toMatch(/credit\$\{canStart === 1 \? "" : "s"\} of the \$\{start\.remaining\} you have left this month/);
     expect(code).toMatch(/Nothing is published until you approve it/);
+    expect(code).toMatch(/no credits charged again/);
+    expect(code).toMatch(/draftedIds/);
   });
 
   it("starts no more generations than the quota can pay for", () => {
-    expect(code).toMatch(/Math\.min\(targets\.length, start\.remaining\)/);
+    expect(code).toMatch(/Math\.min\(fresh, start\.remaining\)/);
   });
 
   it("fires each product exactly once, from a ref rather than state", () => {
@@ -360,7 +362,7 @@ describe("the Start screen itself — structural guarantees", () => {
   });
 
   it("tells the truth when a generation fails: the credit is intact", () => {
-    expect(code).toMatch(/no generation was used/);
+    expect(code).toMatch(/no credit was used/);
   });
 
   it("shows an empty store an empty state rather than a score of zero", () => {

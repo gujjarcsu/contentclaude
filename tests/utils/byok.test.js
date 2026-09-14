@@ -383,7 +383,7 @@ describe("the billing rule a merchant can read", () => {
 
   it("the Settings card says it too, in bold, not in a help article", () => {
     const src = readFileSync("app/routes/app.settings.jsx", "utf8");
-    expect(src).toMatch(/don&apos;t count against your monthly/i);
+    expect(src).toMatch(/doesn&apos;t count against your monthly/i);
   });
 
   it("04-DECISIONS.md recorded the decision before the code", () => {

@@ -311,7 +311,7 @@ const PLAN_DISPLAY = [
       // comparison table showed it as Growth-and-up while the code granted it,
       // so a Starter subscriber had no way to learn they were already paying
       // for the feature that saves them the time.
-      "Bulk generation jobs",
+      "Bulk runs",
       "Content templates",
       "Version history",
       // 12-OFFER.md 5.5 - "Priority support" is the same undefined-promise
@@ -438,7 +438,7 @@ const FEATURE_TABLE = [
   },
   {
     // This row said Starter: NO while the code granted it. Derived now.
-    feature: "Bulk generation jobs",
+    feature: "Bulk runs",
     free: ent("free", "bulkJobs"), starter: ent("starter", "bulkJobs"),
     growth: ent("growth", "bulkJobs"), pro: ent("pro", "bulkJobs"),
   },
@@ -469,9 +469,9 @@ const FAQ_ITEMS = [
     // the flat "one generation" model it replaced. Alt text costs nothing now
     // and a blog post costs three, so the old answer understated one and
     // overstated the other.
-    q: "What does a generation cost in credits?",
+    q: "What does one credit buy?",
     a:
-      `Most generations cost ${CREDIT_WEIGHTS.description} credit: a product description, a meta title and ` +
+      `Most things cost ${CREDIT_WEIGHTS.description} credit: a product description, a meta title and ` +
       `description, or FAQ content. Image alt text is free — ${CREDIT_WEIGHTS.altText} credits, however many ` +
       `images the product has. A blog post costs ${CREDIT_WEIGHTS.blog} credits, because it is several times ` +
       `the work. When you select more than one content type in a single run, you are charged the most ` +
@@ -703,7 +703,7 @@ export default function PlansPage() {
             tone="success"
             title={`You're on the ${PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName} plan`}
           >
-            <p>Your subscription is active. Your new monthly generation limit is live.</p>
+            <p>Your subscription is active. Your new monthly credits are live.</p>
           </Banner>
         )}
         {billingNotice === "declined" && (
@@ -740,7 +740,7 @@ export default function PlansPage() {
             <BlockStack gap="100">
               <InlineStack gap="200" blockAlign="center" wrap>
                 <Text as="h2" variant="headingMd">
-                  Monthly Usage
+                  Monthly credits
                 </Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {currentDisplay?.label ?? plan.planName} Plan

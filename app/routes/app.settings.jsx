@@ -97,7 +97,7 @@ export const action = async ({ request }) => {
 
     if (actionType === "removeAiKey") {
       await removeKey(shop);
-      return Response.json({ success: true, message: "Your AI key was removed. Generations use ours again." });
+      return Response.json({ success: true, message: "Your AI key was removed. Content is written with ours again." });
     }
 
     // The raw value is read here, handed straight to saveKey, and never put in
@@ -108,7 +108,7 @@ export const action = async ({ request }) => {
       return Response.json({
         success: true,
         message:
-          "Your key was checked against Anthropic and saved. Generations that use it don't count against your monthly credits.",
+          "Your key was checked against Anthropic and saved. Content written with it doesn't count against your monthly credits.",
       });
     }
 
@@ -699,7 +699,7 @@ export default function SettingsPage() {
 
               <Text as="p" variant="bodySm" tone="subdued">
                 Paste an Anthropic API key and this app will generate on your account instead of
-                ours. <b>Generations that use your key don&apos;t count against your monthly
+                ours. <b>Content written with your key doesn&apos;t count against your monthly
                 credits</b> — you pay Anthropic for the usage and us for the software.
               </Text>
 
@@ -771,7 +771,7 @@ export default function SettingsPage() {
                 Content Templates
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Save generation presets and apply them from any product page with one click. Available on the
+                Save writing presets and apply them from any product page with one click. Available on the
                 Starter plan and above.
               </Text>
               <InlineStack>
@@ -787,7 +787,7 @@ export default function SettingsPage() {
                   Content Templates
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Save generation presets — apply from the product page with one click.
+                  Save writing presets — apply from the product page with one click.
                 </Text>
               </BlockStack>
 

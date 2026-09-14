@@ -276,7 +276,7 @@ export default function JobsPage() {
   // Skeleton while navigating to this page — no blank flash
   if (loadingThisRoute) {
     return (
-      <SkeletonPage title="Bulk Generation Jobs" primaryAction>
+      <SkeletonPage title="Bulk runs" primaryAction>
         <BlockStack gap="400">
           <Card>
             <SkeletonDisplayText size="small" />
@@ -297,8 +297,8 @@ export default function JobsPage() {
 
   return (
     <Page
-      title="Bulk Generation Jobs"
-      subtitle="Track the progress of all your bulk generation runs"
+      title="Bulk runs"
+      subtitle="Track the progress of all your bulk runs"
       backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
       /* Group 3.4 — "Generate More" sat on the empty state, where there is
          nothing to generate more OF, and it duplicated the EmptyState's own
@@ -332,20 +332,20 @@ export default function JobsPage() {
         {jobs.length === 0 ? (
           <Card>
             <EmptyState
-              heading="No generation jobs yet"
+              heading="No bulk runs yet"
               image="/empty-jobs.svg"
               action={{
                 content: "Go to Products",
                 onAction: () => navigate("/app/products"),
               }}
               secondaryAction={{
-                content: "How bulk generation works",
+                content: "How bulk runs work",
                 onAction: () => navigate("/app/optimize"),
               }}
             >
               <p>
                 Generate content for multiple products at once — jobs run in the background so you can keep
-                working. Bulk generation is included from the Starter plan; on Free you can optimize products
+                working. Bulk runs are included from the Starter plan; on Free you can optimize products
                 one at a time from the Products page.
               </p>
             </EmptyState>

@@ -47,6 +47,7 @@ import {
   sliceToQuota,
 } from "../utils/plans.server.js";
 import { getEntitlements, bulkRefusal } from "../utils/billing-plans.js";
+import { runQuickStartOne, PRODUCT_GID_RE } from "../utils/quickStart.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
@@ -347,6 +348,29 @@ export const action = async ({ request }) => {
     };
   }
 
+  // A5/FR10 (Phase 8) — the Free plan's one-press action: up to three drafts
+  // through the first run's per-product path. Same credits, same idempotency,
+  // same Review page. Never a bulk job, so no bulk entitlement is needed.
+  if (actionType === "quickBatch") {
+    let ids = [];
+    try {
+      ids = JSON.parse(formData.get("quickIds") || "[]");
+    } catch {
+      ids = [];
+    }
+    ids = (Array.isArray(ids) ? ids : []).filter((id) => PRODUCT_GID_RE.test(String(id))).slice(0, 3);
+    if (ids.length === 0) return { error: "Nothing on this page needs a draft." };
+    let ok = 0;
+    let limitReached = false;
+    for (const productId of ids) {
+      const r = await runQuickStartOne({ admin, shop, productId, mode: "generate" });
+      if (r?.ok) ok += 1;
+      if (r?.limitReached) limitReached = true;
+    }
+    if (ok > 0) return redirect("/app/review");
+    return { error: limitReached ? "You have no credits left this month." : "We couldn't write those drafts — no credit was used.", limitReached };
+  }
+
   if (actionType === "generateAll") {
     const allIds = [];
     let cursor = null;
@@ -395,7 +419,7 @@ export const action = async ({ request }) => {
     const { targetIds: runAllIds, quotaSkipped: skippedAll } = sliceToQuota(allIds, remainingAll);
     if (runAllIds.length === 0) {
       return {
-        error: "You have no generations left this month, so there is nothing to run.",
+        error: "You have no credits left this month, so there is nothing to run.",
         limitReached: true,
       };
     }
@@ -439,7 +463,7 @@ export const action = async ({ request }) => {
   const { targetIds: runSelIds, quotaSkipped: skippedSel } = sliceToQuota(selectedIds, remainingSel);
   if (runSelIds.length === 0) {
     return {
-      error: "You have no generations left this month, so there is nothing to run.",
+      error: "You have no credits left this month, so there is nothing to run.",
       limitReached: true,
     };
   }
@@ -562,6 +586,23 @@ export default function ProductsPage() {
   // Store-wide coverage counts come from the loader (aggregated, accurate across
   // all pages). contentMap below is scoped to the visible page for per-row pills.
   const usagePct = quotaPct(usageCount, monthlyCredits);
+  // A5/FR10 — what one press can do on Free: up to three not-yet-optimized,
+  // active products on this page, bounded by the credits left.
+  const quickIds = useMemo(
+    () =>
+      products
+        .filter((p) => String(p.status ?? "").toUpperCase() === "ACTIVE" && stateOfContentMap(contentMap[p.id]) === PRODUCT_STATE.NEEDS_CONTENT)
+        .slice(0, 3)
+        .map((p) => p.id),
+    [products, contentMap],
+  );
+  const quickBatch = Math.min(quickIds.length, Math.max(0, monthlyCredits - usageCount));
+  const handleQuickBatch = () => {
+    const fd = new FormData();
+    fd.append("actionType", "quickBatch");
+    fd.append("quickIds", JSON.stringify(quickIds.slice(0, quickBatch)));
+    submit(fd, { method: "post" });
+  };
   const isOutOfUsage = usageRemaining === 0;
 
   // The SHARED rule — the same one the stat cards above are counted with.
@@ -643,6 +684,8 @@ export default function ProductsPage() {
   // visible 50-product page). Using store-wide counts here made labels like
   // "Draft (120)" sit above an empty list — the store-wide totals live in the
   // stat cards above instead.
+  const statusById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.status])), [products]);
+
   const pageCounts = useMemo(() => {
     let draft = 0,
       published = 0,
@@ -714,6 +757,13 @@ export default function ProductsPage() {
   function getStatusBadge(productId, description) {
     const state = stateOfContentMap(contentMap[productId]);
     if (state !== PRODUCT_STATE.NEEDS_CONTENT) {
+      // A7 (Phase 8) — published content on a product Shopify holds as a draft
+      // or archived has no storefront page. Say both things.
+      const shopifyStatus = String(statusById[productId] ?? "ACTIVE").toUpperCase();
+      const notLive = (state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED) && shopifyStatus !== "ACTIVE";
+      if (notLive) {
+        return <Badge tone="attention">{`${PRODUCT_STATE_LABEL[state]} · product is a Shopify ${shopifyStatus.toLowerCase()}, not on your storefront`}</Badge>;
+      }
       return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
     }
     // Group 4.1 — NEEDS_CONTENT means "we hold nothing for this product". It
@@ -874,14 +924,23 @@ export default function ProductsPage() {
               // Shopify calls that a dark pattern and a reviewer finds it in
               // thirty seconds. The plan is now named in the label, and the
               // click opens a modal that explains rather than a checkout.
-              content: entitlements?.bulkJobs
-                ? `Optimize store (${notOptimized})`
-                : `Optimize store (${notOptimized}) · Starter`,
-              onAction: () => setGenerateAllModal(true),
+              // A5/FR10 (Phase 8) — on Free the primary does what Free can do:
+              // three drafts through the same per-product path as the first run,
+              // three credits, to Review. The bulk run is offered as a secondary
+              // action that names what it needs, and the modal explains.
+              ...(entitlements?.bulkJobs
+                ? { content: `Optimize store (${notOptimized})`, onAction: () => setGenerateAllModal(true) }
+                : {
+                    content: quickBatch > 0 ? `Write the next ${quickBatch} draft${quickBatch === 1 ? "" : "s"}` : "Review your drafts",
+                    onAction: () => (quickBatch > 0 ? handleQuickBatch() : navigate("/app/review")),
+                  }),
             }
           : undefined
       }
       secondaryActions={[
+        ...(notOptimized > 0 && !entitlements?.bulkJobs
+          ? [{ content: `Optimize all ${notOptimized} at once · needs Starter`, onAction: () => setGenerateAllModal(true) }]
+          : []),
         ...(draftProducts > 0
           ? [{ content: `Review ${draftProducts} drafts`, onAction: () => navigate("/app/review") }]
           : []),
@@ -895,7 +954,7 @@ export default function ProductsPage() {
         {actionData?.error && (
           <Banner
             tone={actionData.limitReached ? "warning" : "critical"}
-            title={actionData.limitReached ? "Plan upgrade required" : "Could not start generation"}
+            title={actionData.limitReached ? "Plan upgrade required" : "Could not start writing"}
             action={
               actionData.limitReached
                 ? { content: "View Plans", onAction: () => navigate("/app/plans") }
@@ -988,7 +1047,7 @@ export default function ProductsPage() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                  Monthly Generations
+                  Monthly credits
                 </Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">
@@ -1198,7 +1257,12 @@ export default function ProductsPage() {
                             screen told the merchant two different things about the same
                             product. Routing, not new work: the product page already has
                             a real `enhance` action. */}
-                        <Button size="slim" onClick={() => navigate(`/app/products/${numericId}`)}>
+                        <Button
+                          size="slim"
+                          onClick={() =>
+                            rowActionLabel(id, description) === "Review" ? navigate("/app/review") : navigate(`/app/products/${numericId}`)
+                          }
+                        >
                           {rowActionLabel(id, description)}
                         </Button>
                       </InlineStack>

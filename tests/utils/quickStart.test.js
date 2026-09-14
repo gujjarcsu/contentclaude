@@ -238,7 +238,7 @@ describe("a merchant is never charged for a draft they did not get", () => {
     // their credit. Every one of these states that the credit is intact.
     for (const [key, msg] of Object.entries(QUICK_START_MESSAGES)) {
       if (typeof msg !== "string" || key === "invalid" || key === "notFound") continue;
-      expect(msg, key).toMatch(/no generation was used/i);
+      expect(msg, key).toMatch(/no credit was used/i);
     }
     generateProductContent.mockRejectedValue(new Error("ECONNRESET at 10.0.0.4:443"));
     const r = await runQuickStartOne({ admin: adminOk(), shop: SHOP, productId: PID });

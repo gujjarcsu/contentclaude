@@ -20,8 +20,14 @@
 import { getCache } from "./cache.server.js";
 import logger from "./logger.server.js";
 
-/** One hour. A shop name changes approximately never. */
-const SHOP_NAME_TTL_SECONDS = 3600;
+/**
+ * A2 (Phase 8) — two minutes, keyed by SESSION, not by install. CW renamed a
+ * store after install and five loads over twenty minutes still greeted the
+ * old name: the one-hour cache was carrying the value the install had read.
+ * The name is now read from Shopify on every session (the key carries the
+ * session id) and re-read within two minutes inside one.
+ */
+const SHOP_NAME_TTL_SECONDS = 120;
 
 export const SHOP_NAME_CACHE_PREFIX = "shopName:";
 
@@ -30,11 +36,11 @@ export const SHOP_NAME_CACHE_PREFIX = "shopName:";
  * @param {string} shop  - myshopify domain
  * @returns {Promise<string|null>} the live name, or null if it could not be read
  */
-export async function getLiveShopName(admin, shop) {
+export async function getLiveShopName(admin, shop, { sessionId = null } = {}) {
   if (!admin || !shop) return null;
   try {
     return await getCache(
-      `${SHOP_NAME_CACHE_PREFIX}${shop}`,
+      `${SHOP_NAME_CACHE_PREFIX}${shop}:${sessionId || "any"}`,
       async () => {
         const response = await admin.graphql(`query { shop { name } }`);
         const { data } = await response.json();

@@ -48,8 +48,11 @@ export const PRODUCT_STATE = Object.freeze({
 export const PRODUCT_STATE_LABEL = Object.freeze({
   needs_content: "Needs content",
   draft: "Ready to review",
-  published_unverified: "Live, needs a check",
-  published: "Live",
+  // A7 (Phase 8) — "Live" meant live on the storefront, and a Shopify DRAFT
+  // product has no storefront page. This is the state of OUR content on the
+  // product; the Products list adds the product's own status beside it.
+  published_unverified: "Published, needs a check",
+  published: "Published",
   rejected: "Rejected",
 });
 

@@ -136,7 +136,7 @@ export const action = async ({ request }) => {
       );
     } catch (err) {
       return Response.json(
-        { error: `We couldn't write this post: ${err.message}. This did not use a generation.` },
+        { error: `We couldn't write this post: ${err.message}. No credit was used.` },
         { status: 502 },
       );
     }
@@ -144,7 +144,7 @@ export const action = async ({ request }) => {
     if (!outcome.allowed) {
       return Response.json(
         {
-          error: "You've reached your monthly generation limit. Upgrade your plan to continue.",
+          error: "You've used all your credits for this month. Upgrade your plan to continue.",
           limitReached: true,
         },
         { status: 429 },
@@ -152,7 +152,7 @@ export const action = async ({ request }) => {
     }
     if (outcome.refunded) {
       return Response.json(
-        { error: "The AI returned an empty post. Please retry — this did not use a generation." },
+        { error: "The AI returned an empty post. Please retry — no credit was used." },
         { status: 502 },
       );
     }
@@ -437,7 +437,7 @@ export default function BlogPage() {
             <p>
               Saved as a draft. Review and edit below, then publish when ready.
               {actionData.remaining !== undefined &&
-                ` · ${actionData.remaining} generations remaining this month.`}
+                ` · ${actionData.remaining} credits left this month.`}
             </p>
           </Banner>
         )}
@@ -593,7 +593,7 @@ export default function BlogPage() {
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
                       <Text as="p" variant="bodySm" fontWeight="semibold">
-                        Monthly Generations
+                        Monthly credits
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         {usageCount}/{monthlyCredits}

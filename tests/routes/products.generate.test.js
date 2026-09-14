@@ -114,7 +114,7 @@ describe("Generate All is bounded by the quota, not by the catalogue", () => {
     const res = await generateAll();
 
     expect(res.limitReached).toBe(true);
-    expect(res.error).toMatch(/no generations left/i);
+    expect(res.error).toMatch(/no credits left/i);
     expect(prisma.generationJob.create).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
   });

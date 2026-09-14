@@ -57,3 +57,23 @@ export async function invalidateStoreScan(shop) {
     return false;
   }
 }
+
+/**
+ * A3 (Phase 8) — everything a write to GeneratedContent must clear, in ONE
+ * call. The first-run writer cleared the catalog-gaps cache and not the two
+ * that Home's draft count and the Products header read (`catcontent:`, 600 s;
+ * `startscan:`), so a new merchant saw "0 drafts" under a Review page showing
+ * three — for the whole TTL. A guard test now fails any file that writes
+ * GeneratedContent without calling this.
+ */
+export async function invalidateContentCaches(shop) {
+  if (!shop) return false;
+  const ok = await invalidateStoreScan(shop);
+  try {
+    const { invalidateCatalogGaps } = await import("./catalogGaps.server.js");
+    await invalidateCatalogGaps(shop);
+  } catch {
+    // non-fatal: the gaps cache has its own TTL
+  }
+  return ok;
+}

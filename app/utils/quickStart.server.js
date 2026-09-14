@@ -38,7 +38,7 @@ import {
   stampQuickStartStarted,
   incrementQuickStartDrafts,
 } from "./firstValue.server.js";
-import { invalidateCatalogGaps } from "./catalogGaps.server.js";
+import { invalidateContentCaches } from "./storeScanCache.server.js";
 import { gateContent, fingerprintFor } from "./qualityGate.server.js";
 
 /** Worst-case life of one generation request: 45 s × 3 attempts + 2 × 60 s 429 backoff ≈ 255 s. */
@@ -50,15 +50,38 @@ export const PRODUCT_GID_RE = /^gid:\/\/shopify\/Product\/\d+$/;
 const PRODUCT_GID_PREFIX = "gid://shopify/Product/";
 const REUSABLE_STATUSES = new Set(["draft", "approved", "published"]);
 
+/**
+ * A4/FR9 (Phase 8) — products whose description draft is inside the reuse
+ * window, so the first screen can say "already written, nothing charged
+ * again" instead of announcing a spend that will not happen. Never throws.
+ */
+export async function recentDraftIds(shop, now = new Date()) {
+  try {
+    const rows = await prisma.generatedContent.findMany({
+      where: {
+        shop,
+        contentType: "description",
+        status: { in: [...REUSABLE_STATUSES] },
+        productId: { startsWith: PRODUCT_GID_PREFIX },
+        updatedAt: { gte: new Date(now.getTime() - REUSE_MS) },
+      },
+      select: { productId: true },
+    });
+    return rows.map((r) => r.productId);
+  } catch {
+    return [];
+  }
+}
+
 /** Merchant-safe failure copy (exact strings — locked by tests). Never an internal error message. */
 export const QUICK_START_MESSAGES = {
-  timeout: "This one took too long — no generation was used.",
-  busy: "Our AI is busy — no generation was used. Retry in a minute.",
-  empty: "The AI returned an empty draft — no generation was used.",
+  timeout: "This one took too long — no credit was used.",
+  busy: "Our AI is busy — no credit was used. Retry in a minute.",
+  empty: "The AI returned an empty draft — no credit was used.",
   notFound: "This product no longer exists in your store.",
-  contention: "Busy for a moment — no generation was used.",
-  generic: "We couldn't write this one — no generation was used.",
-  save: "We couldn't save this draft — no generation was used.",
+  contention: "Busy for a moment — no credit was used.",
+  generic: "We couldn't write this one — no credit was used.",
+  save: "We couldn't save this draft — no credit was used.",
   invalid: "Invalid product.",
   rateLimited: (seconds) => `Too many at once — try again in ${seconds}s.`,
 };
@@ -423,7 +446,7 @@ export async function runQuickStartOne({ admin, shop, productId, mode = "generat
   // The draft is real and stored: milestones, counters, cache — all non-fatal.
   await markFirstDraftSeen(shop, "quick_start");
   await incrementQuickStartDrafts(shop);
-  await invalidateCatalogGaps(shop);
+  await invalidateContentCaches(shop);
   logger.info(
     { shop, productId, mode, credit: res.kind, event: "quick_start_result" },
     "quick start: draft written",

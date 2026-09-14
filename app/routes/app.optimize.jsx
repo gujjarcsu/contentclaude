@@ -208,7 +208,7 @@ export const action = async ({ request }) => {
   const { targetIds: runIds, quotaSkipped } = sliceToQuota(targetIds, remaining);
   if (runIds.length === 0) {
     return Response.json({
-      error: `You have no generations left this month, so there is nothing to run. ${targetIds.length} product${targetIds.length === 1 ? "" : "s"} are waiting.`,
+      error: `You have no credits left this month, so there is nothing to run. ${targetIds.length} product${targetIds.length === 1 ? "" : "s"} are waiting.`,
       limitReached: true,
     });
   }
@@ -416,7 +416,7 @@ export default function OptimizePage() {
                   {remaining}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Generations left this month
+                  Credits left this month
                   <br />
                   <Badge tone={planName === "free" ? "attention" : "success"}>
                     {planLabels[planName] ?? planName} — {monthlyCredits}/mo

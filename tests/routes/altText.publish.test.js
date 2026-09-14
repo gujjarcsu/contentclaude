@@ -137,7 +137,7 @@ describe("P0-1: alt text publish honesty", () => {
     // Phase 0 item 5 strengthened this: an alt-text-only run that reached no
     // image at all is now a plain error AND the credit is refunded, rather than
     // a "success" carrying zero applied images.
-    expect(result.error).toMatch(/did not use a generation/i);
+    expect(result.error).toMatch(/no credit was used/i);
     const { refundGeneration } = await import("../../app/utils/plans.server.js");
     expect(refundGeneration).toHaveBeenCalled();
   });

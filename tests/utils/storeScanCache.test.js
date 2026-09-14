@@ -113,7 +113,7 @@ describe("every path that publishes product content clears the cache", () => {
 
   it.each(PUBLISH_SITES)("%s (%s) invalidates", (file) => {
     const src = readFileSync(file, "utf8");
-    expect(src).toMatch(/invalidateStoreScan\(/);
+    expect(src).toMatch(/invalidate(StoreScan|ContentCaches)\(/);
     expect(src).toMatch(/from ["'][^"']*storeScanCache\.server\.js["']/);
   });
 
@@ -136,7 +136,7 @@ describe("every path that publishes product content clears the cache", () => {
       .filter((f) => {
         const src = readFileSync(f, "utf8");
         const writesPublished = /data:\s*\{[^}]*status:\s*["']published["']/s.test(src);
-        return writesPublished && !src.includes("invalidateStoreScan(");
+        return writesPublished && !/invalidate(StoreScan|ContentCaches)\(/.test(src);
       });
     expect(
       offenders,

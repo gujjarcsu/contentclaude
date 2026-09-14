@@ -45,12 +45,16 @@ import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
 import { attentionFor, blockersFor } from "../utils/catalogueWatch.server.js";
+import { recentDraftIds } from "../utils/quickStart.server.js";
 import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { getStoreScore } from "../utils/storeScore.server.js";
 import { recentAutopilotWork } from "../utils/autopilot.server.js";
+
+/** A2 (Phase 8) — how long after the first draft a visit is still the first one. */
+const FIRST_VISIT_MS = 24 * 3600 * 1000;
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -211,6 +215,10 @@ export const loader = async ({ request }) => {
   // established merchant. Absent evidence of a first draft, the safe default is
   // the normal dashboard.
   const isFirstRun = !!shopRow && shopRow.firstDraftSeenAt == null;
+  // A2 (Phase 8) — "Welcome back" to somebody who has never been here. The
+  // hero renders the moment the first drafts are seen; for the first day it
+  // greets a first visit, not a return.
+  const firstVisit = !!shopRow?.firstDraftSeenAt && Date.now() - new Date(shopRow.firstDraftSeenAt).getTime() < FIRST_VISIT_MS;
 
   // Context for the time-to-value report: how big was the catalogue when this
   // merchant first arrived? It explains an install that never reaches a draft.
@@ -244,6 +252,8 @@ export const loader = async ({ request }) => {
   // P2.7 — the first run names the three specific things holding THIS store
   // back, from the walk that just ran. One query; never throws.
   const blockers = isFirstRun ? await blockersFor(shop) : [];
+  // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
+  const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
 
   const start = isFirstRun
     ? {
@@ -254,6 +264,7 @@ export const loader = async ({ request }) => {
         // merchant paying for Pro must not be told their allowance is free.
         planName: plan.planName,
         blockers,
+        draftedIds,
         scan: scanStoreForStart(admin, shop),
       }
     : null;
@@ -265,7 +276,7 @@ export const loader = async ({ request }) => {
   // merchant's editable brand-voice field. greetingName() returns null when
   // neither is real, and the hero greets without a name rather than with a bad
   // one. See app/utils/shopName.js.
-  const liveShopName = await getLiveShopName(admin, shop);
+  const liveShopName = await getLiveShopName(admin, shop, { sessionId: session?.id ?? null });
   const storeName = greetingName(liveShopName, brandVoice?.storeName, shop);
 
   const payload = {
@@ -293,6 +304,7 @@ export const loader = async ({ request }) => {
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
     storeName,
+    firstVisit,
     recentlyCompletedJob: recentlyCompletedJob
       ? {
           completedProducts: recentlyCompletedJob.completedProducts,
@@ -637,6 +649,7 @@ export default function Dashboard() {
     plan,
     usageCount,
     storeName,
+    firstVisit,
     recentlyCompletedJob,
     shopDomain,
     embedConfirmed,
@@ -782,7 +795,7 @@ export default function Dashboard() {
             title={`${activeJobCount} bulk job${activeJobCount > 1 ? "s" : ""} generating in the background`}
             action={{ content: "View progress", onAction: () => navigate("/app/jobs") }}
           >
-            <p>You can navigate freely — generation continues without this tab open.</p>
+            <p>You can navigate freely — writing continues without this tab open.</p>
           </Banner>
         )}
 
@@ -796,7 +809,7 @@ export default function Dashboard() {
                   <Icon source={MagicIcon} tone="inherit" />
                 </span>
                 <Text as="h1" variant="headingXl" fontWeight="bold">
-                  <span style={{ color: "#ffffff" }}>{storeName ? `Welcome back, ${storeName}!` : "Welcome back!"}</span>
+                  <span style={{ color: "#ffffff" }}>{`${firstVisit ? "Welcome" : "Welcome back"}${storeName ? `, ${storeName}` : ""}!`}</span>
                 </Text>
               </InlineStack>
               <Text as="p" variant="bodyMd">
@@ -987,7 +1000,7 @@ export default function Dashboard() {
               <InlineStack gap="200" blockAlign="center">
                 <Icon source={PlanIcon} tone={usagePct >= 60 ? "caution" : "success"} />
                 <Text as="h2" variant="headingMd">
-                  Monthly Usage
+                  Monthly credits
                 </Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
                   {planLabels[plan.planName] ?? plan.planName} Plan
@@ -1012,7 +1025,7 @@ export default function Dashboard() {
                 dismissed for a week. */}
             <Text as="p" variant="bodySm" tone="subdued">
               {remaining === 0
-                ? `You've used all ${plan.monthlyCredits} generations for this month. They reset on the 1st.`
+                ? `You've used all ${plan.monthlyCredits} credits for this month. They reset on the 1st.`
                 : `${remaining} of ${plan.monthlyCredits} left this month.`}
             </Text>
           </BlockStack>

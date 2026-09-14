@@ -127,7 +127,7 @@ function TargetCard({ target, autoStart, onDraft }) {
             {target.title}
           </Text>
           <InlineStack gap="200">
-            <Badge tone={scoreTone(target.scoreBefore)}>{`Now ${target.scoreBefore}/100`}</Badge>
+            <Badge tone={scoreTone(target.scoreBefore)}>{`This product: ${target.scoreBefore}/100`}</Badge>
             {lift != null && lift > 0 && <Badge tone="success">{`+${lift}`}</Badge>}
           </InlineStack>
         </InlineStack>
@@ -166,13 +166,13 @@ function TargetCard({ target, autoStart, onDraft }) {
                   </Text>
                 ) : data?.limitReached ? (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Saved for later — you are out of free generations this month.
+                    Saved for later — you are out of credits this month.
                   </Text>
                 ) : timedOut || data?.error || data?.inFlight ? (
                   <BlockStack gap="200">
                     <Text as="p" variant="bodySm" tone="subdued">
                       {timedOut
-                        ? "This one is taking longer than expected — no generation was used."
+                        ? "This one is taking longer than expected — no credit was used."
                         : data?.error || "Still working on this one."}
                     </Text>
                     <InlineStack>
@@ -227,29 +227,49 @@ function StartBody({ scan, start, navigate, onRetry }) {
           action={{
             content: "Add a product in Shopify",
             url: "shopify://admin/products/new",
-            target: "_top",
+            target: "_blank",
           }}
+          secondaryAction={{ content: "I've added one — check again", onAction: onRetry }}
         >
           <p>
             Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one,
-            we&apos;ll score it and write the first draft for you.
+            we&apos;ll score it and write the first draft for you. Adding a product opens Shopify in a new
+            tab; come back to this one when it is saved and press check again — or just reopen the app,
+            we look every time.
           </p>
         </EmptyState>
       </Card>
     );
   }
 
-  // "free generations" is only true on the free plan. A merchant paying for
-  // Pro reading "1000 remaining free generations" is being told something
-  // false about the thing they are paying for — caught on a real store while
-  // capturing listing screenshots, which is exactly what looking at the
-  // screen is for.
-  const allowanceWord = start.planName === "free" ? "free generations" : "generations";
-
   const targets = scan?.targets ?? [];
-  // Only start as many as the quota can actually pay for, so a merchant near
+  // A4/FR9 (Phase 8) — one unit, credits, and never a charge notice for a
+  // draft that already exists. Targets inside the reuse window are shown at
+  // no charge; only the fresh ones count against what is left.
+  const draftedIds = new Set(Array.isArray(start.draftedIds) ? start.draftedIds : []);
+  const alreadyDrafted = targets.filter((t) => draftedIds.has(t.productId)).length;
+  const fresh = targets.length - alreadyDrafted;
+  // Only start as many as the credits can actually pay for, so a merchant near
   // their limit is never shown three spinners that resolve into two refusals.
-  const canStart = Math.max(0, Math.min(targets.length, start.remaining));
+  const canStart = Math.max(0, Math.min(fresh, start.remaining));
+  let freshStarted = 0;
+  const autoStartFor = (t) => {
+    if (draftedIds.has(t.productId)) return true;
+    if (freshStarted < canStart) {
+      freshStarted += 1;
+      return true;
+    }
+    return false;
+  };
+  const planNote = start.planName === "free" ? " on the Free plan" : "";
+  const costSentence =
+    targets.length === 0
+      ? ""
+      : fresh === 0
+        ? `Your ${targets.length} draft${targets.length === 1 ? " is" : "s are"} below — written earlier, no credits charged again. Nothing is published until you approve it.`
+        : canStart > 0
+          ? `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — ${canStart} credit${canStart === 1 ? "" : "s"} of the ${start.remaining} you have left this month${planNote}. Nothing is published until you approve it.${alreadyDrafted > 0 ? ` ${alreadyDrafted} ${alreadyDrafted === 1 ? "is" : "are"} already written and shown at no charge.` : ""}`
+          : `You have no credits left this month. Your drafts are still here to review and publish.`;
   const done = drafted.size;
   // P2.7 — the specific things holding this store back, from the first walk.
   const blockers = Array.isArray(start.blockers) ? start.blockers : [];
@@ -260,11 +280,19 @@ function StartBody({ scan, start, navigate, onRetry }) {
       <Card>
         <BlockStack gap="400">
           <BlockStack gap="200">
-            <Text as="h2" variant="heading2xl" fontWeight="bold" tone={scoreTone(scan.storeScore)}>
-              Your store scores {scan.storeScore}/100
+            {/* A6 (Phase 8) — the headline is labelled for what it is (the GEO
+                number), not painted red above the fold, and framed as a
+                starting point: the score measures the page, and every draft
+                below moves it. Traditional SEO is shown for comparison and
+                said to be excluded. */}
+            <Text as="p" variant="bodySm" tone="subdued">
+              Your AI-search (GEO) score, from the products we scanned just now
+            </Text>
+            <Text as="h2" variant="heading2xl" fontWeight="bold">
+              {scan.storeScore}/100
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              {`These ${Math.min(targets.length, start.targetCount)} products hurt that score most. We scanned ${scan.totalScanned} of your products just now.`}
+              {`Most stores start here: the score measures what is on your product pages, and every draft below moves it. These ${Math.min(targets.length, start.targetCount)} products hurt it most; we scanned ${scan.totalScanned} of your products.`}
             </Text>
           </BlockStack>
 
@@ -274,7 +302,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 {scan.storeGeo}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                AI search (GEO)
+                AI search (GEO) — the score above
               </Text>
             </BlockStack>
             <BlockStack gap="050">
@@ -282,7 +310,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 {scan.storeSeo}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Traditional SEO
+                Traditional SEO — for comparison, not part of the score
               </Text>
             </BlockStack>
           </InlineStack>
@@ -338,9 +366,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
       <Box paddingInlineStart="200" paddingInlineEnd="200">
         <BlockStack gap="200">
           <Text as="p" variant="bodySm" tone="subdued">
-            {canStart > 0
-              ? `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — that uses ${canStart} of your ${start.remaining} remaining ${allowanceWord} this month. Nothing is published until you approve it.`
-              : `You have no ${allowanceWord} left this month. Your drafts are still here to review and publish.`}
+            {costSentence}
           </Text>
           {done > 0 && (
             <ProgressBar
@@ -352,8 +378,8 @@ function StartBody({ scan, start, navigate, onRetry }) {
         </BlockStack>
       </Box>
 
-      {targets.map((t, i) => (
-        <TargetCard key={t.productId} target={t} autoStart={i < canStart} onDraft={onDraft} />
+      {targets.map((t) => (
+        <TargetCard key={t.productId} target={t} autoStart={autoStartFor(t)} onDraft={onDraft} />
       ))}
 
       {done > 0 && (

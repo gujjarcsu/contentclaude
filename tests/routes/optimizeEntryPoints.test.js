@@ -69,7 +69,9 @@ describe("the label still tells the truth before the click", () => {
   it("Products names the plan when the shop cannot run it", () => {
     // A3.1 — the entitlement is visible BEFORE the click, wherever the click
     // came from. Unifying the destination must not lose that.
-    expect(products).toMatch(/Optimize store \(\$\{notOptimized\}\) · Starter/);
+    // A5/FR10 (Phase 8): the plan is still named before the click — on the SECONDARY action, with "needs",
+    // because a primary that reads "· Starter" on a Free store reads as the plan you are on.
+    expect(products).toMatch(/Optimize all \$\{notOptimized\} at once · needs Starter/);
   });
 });
 
