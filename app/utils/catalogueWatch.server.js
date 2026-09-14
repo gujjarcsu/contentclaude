@@ -13,11 +13,19 @@
  *
  * ── Bounds ─────────────────────────────────────────────────────────────────
  *
- * Same walk discipline as the catalogue join: 20 pages (5,000 products — the
- * Growth cap) and a time budget, through `shopifyQuery`'s backoff. Past the
- * bound the run is reported PARTIAL and the summary says so; it is never
- * presented as the whole catalogue. Upserts go in chunks of 50 so a 5,000-row
- * day does not open 5,000 connections.
+ * Same walk discipline as the catalogue join: 50 pages of 100 (5,000 products
+ * — the Growth cap) and a time budget — 8 s inline from Home, where a page is
+ * waiting, 30 s from the daily job, where nothing is — through `shopifyQuery`'s
+ * backoff. Past the bound the run is reported PARTIAL and the summary says so;
+ * it is never presented as the whole catalogue. Upserts go in chunks of 50 so
+ * a 5,000-row day does not open 5,000 connections.
+ *
+ * ── One walk, three findings ───────────────────────────────────────────────
+ *
+ * P2.3 diffs each product against yesterday. P2.2 grades the same node against
+ * what each AI surface asks for. P2.1 checks, once per walk, whether the six
+ * crawlers can reach the storefront at all. Three methods, one read of the
+ * catalogue, one page for the merchant.
  *
  * ── What "installed" means here ────────────────────────────────────────────
  *
@@ -32,12 +40,16 @@ import { shopifyQuery } from "./shopifyQuery.server.js";
 import { getFreshOfflineSession } from "./offlineToken.server.js";
 import { scopeForShop, scopeQueryFor } from "./candidates.server.js";
 import { sydneyParts } from "./scheduler.server.js";
-import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise } from "./catalogueWatch.js";
+import { checkCrawlerAccess, latestCrawlerAccess } from "./crawlerAccess.server.js";
+import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
 
 export const WATCH_HOUR_SYDNEY = 2; // before the 08:00 digest, after most edits
-export const WATCH_PAGE = 250;
-export const WATCH_MAX_PAGES = 20;
-export const WATCH_BUDGET_MS = 8_000;
+// 100, not 250: grading widened the query (options, first variant) and Shopify
+// caps one query at 1,000 cost points. ~8 points a product × 100 ≈ 800.
+export const WATCH_PAGE = 100;
+export const WATCH_MAX_PAGES = 50; // 5,000 products — the Growth cap
+export const WATCH_BUDGET_MS = 8_000; // inline from Home: a page is waiting
+export const WATCH_DAILY_BUDGET_MS = 30_000; // the daily job: nothing is
 const WATCH_KEY = "cc:catalogue-watch:day";
 const UPSERT_CHUNK = 50;
 const API_VERSION = "2026-04";
@@ -46,9 +58,11 @@ const WATCH_QUERY = `query catalogueWatch($cursor: String, $q: String) {
   products(first: ${WATCH_PAGE}, after: $cursor, sortKey: UPDATED_AT, reverse: true, query: $q) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id title handle productType createdAt
+      id title handle productType vendor status createdAt onlineStoreUrl hasOnlyDefaultVariant
       description(truncateAt: ${WATCH_DESC_CAP})
-      featuredImage { altText }
+      featuredImage { url altText }
+      options(first: 3) { name }
+      variants(first: 1) { nodes { barcode } }
     }
   }
 }`;
@@ -75,10 +89,14 @@ export function offlineGraphql(session) {
  *
  * @param {(q: string, o: object) => Promise<Response>} graphql
  * @param {string} shop
+ * @param {{now?: Date, budgetMs?: number, crawler?: boolean|"background"}} [opts]
+ *   `crawler: "background"` runs the crawler check after this returns — Home
+ *   must not wait on six storefront fetches; the daily job awaits them.
  * @returns {Promise<{ok: boolean, partial: boolean, scanned: number, updated: number,
- *   needAttention: number, sinceYesterday: number, reason: string|null}>}
+ *   needAttention: number, sinceYesterday: number, blocking: number,
+ *   crawlerBlocked: number|null, reason: string|null}>}
  */
-export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}) {
+export async function runCatalogueWatch(graphql, shop, { now = new Date(), budgetMs = WATCH_BUDGET_MS, crawler = true } = {}) {
   const t0 = Date.now();
   let cursor = null;
   let pages = 0;
@@ -96,7 +114,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}
     const watchStartedAt = agg?._min?.firstSeenAt ?? now;
 
     for (;;) {
-      if (pages >= WATCH_MAX_PAGES || (pages > 0 && Date.now() - t0 >= WATCH_BUDGET_MS)) {
+      if (pages >= WATCH_MAX_PAGES || (pages > 0 && Date.now() - t0 >= budgetMs)) {
         partial = true;
         break;
       }
@@ -124,6 +142,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}
           const next = snapshotFromNode(node);
           const prev = prevById.get(next.productId) ?? null;
           const attention = diffProduct(prev, next, { hasContent: hasContent.has(next.productId), watchStartedAt, now });
+          const g = gradeProduct(node);
           const data = {
             title: next.title,
             handle: next.handle,
@@ -133,6 +152,10 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}
             createdAtShop: next.createdAtShop,
             lastSeenAt: now,
             attention: JSON.stringify(attention),
+            grade: JSON.stringify(g.findings),
+            blocking: g.blocking,
+            degrading: g.degrading,
+            cosmetic: g.cosmetic,
           };
           return prisma.productWatch.upsert({
             where: { shop_productId: { shop, productId: next.productId } },
@@ -151,19 +174,40 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}
       cursor = page.pageInfo.endCursor;
     }
 
-    const rows = await prisma.productWatch.findMany({
-      where: { shop, NOT: { attention: "{}" } },
-      select: { attention: true },
-    });
+    // P2.1 — crawler access is a component of the same walk: one robots.txt
+    // read and six GETs, diffed against yesterday's row. Never throws.
+    let crawlerResult = null;
+    if (crawler === "background") {
+      void checkCrawlerAccess(graphql, shop, { now });
+    } else if (crawler) {
+      crawlerResult = await checkCrawlerAccess(graphql, shop, { now });
+    }
+
+    const [rows, blocking] = await Promise.all([
+      prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
+      prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
+    ]);
     const s = summarise(rows, now);
+    const crawlerBlocked = crawlerResult?.ok ? crawlerResult.blocked.length : null;
     logger.info(
-      { shop, event: "catalogue_watch_ran", scanned, updated, partial, ...s, ms: Date.now() - t0 },
+      { shop, event: "catalogue_watch_ran", scanned, updated, partial, ...s, blocking, crawlerBlocked, ms: Date.now() - t0 },
       "catalogue watch ran",
     );
-    return { ok: true, partial, scanned, updated, ...s, reason: null };
+    return { ok: true, partial, scanned, updated, ...s, blocking, crawlerBlocked, reason: null };
   } catch (err) {
     logger.warn({ shop, err: err?.message, event: "catalogue_watch_failed" }, "catalogue watch failed (non-fatal)");
-    return { ok: false, partial, scanned, updated, needAttention: 0, sinceYesterday: 0, byKind: {}, reason: err?.message ?? "failed" };
+    return {
+      ok: false,
+      partial,
+      scanned,
+      updated,
+      needAttention: 0,
+      sinceYesterday: 0,
+      byKind: {},
+      blocking: 0,
+      crawlerBlocked: null,
+      reason: err?.message ?? "failed",
+    };
   }
 }
 
@@ -172,34 +216,57 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date() } = {}
  * been walked, so the first load has a number.
  *
  * @returns {Promise<{available: boolean, everWalked: boolean, partial: boolean,
- *   needAttention: number, sinceYesterday: number, byKind: object, lastRunAt: string|null}>}
+ *   needAttention: number, sinceYesterday: number, byKind: object,
+ *   blocking: number, degrading: number, graded: number,
+ *   crawler: {available: boolean, blocked: string[], newlyBlocked: string[], checkedAt: string|null},
+ *   lastRunAt: string|null}>}
  */
 export async function attentionFor(admin, shop, { now = new Date() } = {}) {
+  const noCrawler = { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
   try {
     const last = await prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true } });
     let everWalked = !!last?._max?.lastSeenAt;
     let partial = false;
     if (!everWalked && admin?.graphql) {
-      const r = await runCatalogueWatch(admin.graphql, shop, { now });
+      const r = await runCatalogueWatch(admin.graphql, shop, { now, crawler: "background" });
       everWalked = r.ok;
       partial = r.partial;
     }
-    const rows = await prisma.productWatch.findMany({
-      where: { shop, NOT: { attention: "{}" } },
-      select: { attention: true },
-    });
+    const [rows, blocking, degrading, graded, crawler, lastRun] = await Promise.all([
+      prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
+      prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
+      prisma.productWatch.count({ where: { shop, degrading: { gt: 0 } } }),
+      prisma.productWatch.count({ where: { shop, grade: { not: null } } }),
+      latestCrawlerAccess(shop, { now }),
+      prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true } }),
+    ]);
     const s = summarise(rows, now);
-    const lastRun = await prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true } });
     return {
       available: everWalked,
       everWalked,
       partial,
       ...s,
+      blocking,
+      degrading,
+      graded,
+      crawler,
       lastRunAt: lastRun?._max?.lastSeenAt?.toISOString() ?? null,
     };
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "attention summary unavailable (non-fatal)");
-    return { available: false, everWalked: false, partial: false, needAttention: 0, sinceYesterday: 0, byKind: {}, lastRunAt: null };
+    return {
+      available: false,
+      everWalked: false,
+      partial: false,
+      needAttention: 0,
+      sinceYesterday: 0,
+      byKind: {},
+      blocking: 0,
+      degrading: 0,
+      graded: 0,
+      crawler: noCrawler,
+      lastRunAt: null,
+    };
   }
 }
 
@@ -215,6 +282,19 @@ export async function attentionList(shop, { limit = 200 } = {}) {
 }
 
 /**
+ * Every graded product with a blocking or degrading finding, worst first.
+ * Cosmetic-only products are not listed: nothing a surface asks for is missing.
+ */
+export async function blockingList(shop, { limit = 200 } = {}) {
+  return prisma.productWatch.findMany({
+    where: { shop, OR: [{ blocking: { gt: 0 } }, { degrading: { gt: 0 } }] },
+    select: { productId: true, title: true, handle: true, grade: true, blocking: true, degrading: true, cosmetic: true },
+    orderBy: [{ blocking: "desc" }, { degrading: "desc" }, { updatedAt: "desc" }],
+    take: limit,
+  });
+}
+
+/**
  * The daily run across every installed shop. Never throws; counts everything
  * it skipped, because an unreachable shop is unknown, not decay-free.
  */
@@ -223,7 +303,17 @@ export async function runCatalogueWatchForAllShops({ now = new Date() } = {}) {
     where: { uninstalledAt: null, redactedAt: null },
     select: { shop: true },
   });
-  const out = { shops: shops.length, walked: 0, skipped: 0, partial: 0, failed: 0, needAttention: 0 };
+  const out = {
+    shops: shops.length,
+    walked: 0,
+    skipped: 0,
+    partial: 0,
+    failed: 0,
+    needAttention: 0,
+    blocking: 0,
+    crawlerChecked: 0,
+    crawlerBlockedShops: 0,
+  };
   for (const { shop } of shops) {
     let session = null;
     try {
@@ -235,12 +325,17 @@ export async function runCatalogueWatchForAllShops({ now = new Date() } = {}) {
       out.skipped++;
       continue;
     }
-    const r = await runCatalogueWatch(offlineGraphql(session), shop, { now });
+    const r = await runCatalogueWatch(offlineGraphql(session), shop, { now, budgetMs: WATCH_DAILY_BUDGET_MS });
     if (!r.ok) out.failed++;
     else {
       out.walked++;
       if (r.partial) out.partial++;
       out.needAttention += r.needAttention;
+      out.blocking += r.blocking;
+      if (r.crawlerBlocked !== null) {
+        out.crawlerChecked++;
+        if (r.crawlerBlocked > 0) out.crawlerBlockedShops++;
+      }
     }
   }
   logger.info({ event: "catalogue_watch_daily", ...out }, "catalogue watch: daily run");

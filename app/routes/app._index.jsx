@@ -45,7 +45,7 @@ import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
 import { attentionFor } from "../utils/catalogueWatch.server.js";
-import { attentionSentence } from "../utils/catalogueWatch.js";
+import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
@@ -875,20 +875,31 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* P2.3 — told the day it happens. One sentence, and a way in. Rendered
-            only when there is something to say: an empty "nothing needs you"
-            card on every load teaches a merchant to stop reading the card. */}
-        {attention?.available && attention.needAttention > 0 && (
+        {/* P2.3 · P2.2 · P2.1 — told the day it happens. Up to three lines,
+            most expensive first (a blocked crawler, then products a surface
+            cannot list, then what changed), and a way in. Rendered only when
+            there is something to say: an empty "nothing needs you" card on
+            every load teaches a merchant to stop reading the card. */}
+        {attention?.available && homeAttentionLines(attention).length > 0 && (
           <Banner
-            tone="warning"
-            title={attentionSentence(attention)}
+            tone={attention.crawler?.blocked?.length ? "critical" : "warning"}
+            title={homeAttentionLines(attention)[0]}
             action={{ content: "See what changed", onAction: () => navigate("/app/attention") }}
           >
-            <Text as="p" variant="bodySm">
-              {attention.partial
-                ? "From the products we could reach in one check — the daily check covers the rest."
-                : "Checked against yesterday’s snapshot of your catalogue."}
-            </Text>
+            <BlockStack gap="100">
+              {homeAttentionLines(attention)
+                .slice(1)
+                .map((line) => (
+                  <Text key={line} as="p" variant="bodySm">
+                    {line}
+                  </Text>
+                ))}
+              <Text as="p" variant="bodySm" tone="subdued">
+                {attention.partial
+                  ? "From the products we could reach in one check — the daily check covers the rest."
+                  : "Checked daily against yesterday’s snapshot of your catalogue and what each AI surface asks for."}
+              </Text>
+            </BlockStack>
           </Banner>
         )}
         {/* ── Stats Grid ───────────────────────────────────────────────── */}

@@ -38,13 +38,32 @@ for (const r of rows) {
 out.acrossShops = summarise(rows);
 out.shopsWithAttention = perShop.size;
 out.productsWatched = await prisma.productWatch.count();
+
+// P2.2 — grading, as counts. P2.1 — crawler access, as counts of shops.
+out.eligibility = {
+  graded: await prisma.productWatch.count({ where: { grade: { not: null } } }),
+  productsWithBlocking: await prisma.productWatch.count({ where: { blocking: { gt: 0 } } }),
+  productsWithDegrading: await prisma.productWatch.count({ where: { degrading: { gt: 0 } } }),
+  cosmeticOnly: await prisma.productWatch.count({ where: { blocking: 0, degrading: 0, cosmetic: { gt: 0 } } }),
+};
+const crawlerRows = await prisma.crawlerAccess.findMany({
+  where: { checkedAt: { gte: new Date(t0 - 60_000) } },
+  select: { blocked: true, robotsSeen: true },
+});
+out.crawler = {
+  shopsChecked: crawlerRows.length,
+  shopsWithABlockedAgent: crawlerRows.filter((r) => r.blocked > 0).length,
+  shopsWithRobotsTxt: crawlerRows.filter((r) => r.robotsSeen).length,
+};
 out.ms = Date.now() - t0;
 
 out.verdict =
   out.run.walked === 0
     ? "NO SHOP WAS WALKED — every installed shop was skipped or failed. The mechanism is unproven."
     : `Walked ${out.run.walked} shop(s) (${out.run.partial} partial, ${out.run.skipped} skipped, ${out.run.failed} failed). ` +
-      `${out.productsWatched} products under watch; ${out.acrossShops.needAttention} need attention across ${out.shopsWithAttention} shop(s).`;
+      `${out.productsWatched} products under watch; ${out.acrossShops.needAttention} need attention across ${out.shopsWithAttention} shop(s). ` +
+      `${out.eligibility.graded} graded: ${out.eligibility.productsWithBlocking} with a blocking gap, ${out.eligibility.productsWithDegrading} degrading. ` +
+      `Crawlers checked on ${out.crawler.shopsChecked} shop(s); ${out.crawler.shopsWithABlockedAgent} block at least one.`;
 
 console.log(JSON.stringify(out, null, 2));
 await prisma.$disconnect();

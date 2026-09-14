@@ -185,3 +185,171 @@ export function attentionSentence({ needAttention, sinceYesterday }) {
   const since = sinceYesterday > 0 ? `, ${sinceYesterday} since yesterday` : "";
   return `${needAttention} ${p} attention${since}.`;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * P2.2 — eligibility, graded per surface.
+ *
+ * W1 killed eligibility as a PILLAR (36.2% of stores below the 40% bar once
+ * content checks are stripped out). It survives as a COMPONENT of the same
+ * daily walk: for each product, what the two surfaces that publish a field
+ * list would do with it. Three grades and never a verdict:
+ *
+ *   BLOCKING   the surface cannot list the product without this field.
+ *   DEGRADING  the surface lists it, but shows it worse or trusts it less.
+ *   COSMETIC   no surface asks for it; Shopify's own housekeeping.
+ *
+ * Doctrine (09-DOCTRINE.md §1): a recommended field is never called a
+ * disqualification. `product_type` is Shopify's taxonomy and is on no
+ * surface's required list, so it is cosmetic. GTIN is on OpenAI's list but
+ * exempt for own-brand and handmade goods, so it is degrading with the
+ * exemption stated in the note — never blocking.
+ *
+ * What each surface asks for, so the next reader checks the list rather than
+ * trusting it:
+ *   OpenAI product feed: title, description, link, price, availability, brand,
+ *   image_link. Shopify always supplies price and availability, so those two
+ *   are not checked here — a check that cannot fail is a false comfort.
+ *   Google Search product results: a crawlable URL. Description and image feed
+ *   the snippet and the image result; their absence is a worse listing, not
+ *   no listing.
+ *
+ * Draft products are not graded. A draft is not for sale, and "your 40 drafts
+ * are missing something" is a number nobody asked for.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export const SURFACE = Object.freeze({ OPENAI: "openai", GOOGLE: "google" });
+export const SURFACE_LABEL = Object.freeze({
+  [SURFACE.OPENAI]: "OpenAI product feed",
+  [SURFACE.GOOGLE]: "Google Search",
+});
+export const GRADE = Object.freeze({ BLOCKING: "blocking", DEGRADING: "degrading", COSMETIC: "cosmetic" });
+
+/** Below this a description is a label, not evidence a surface can quote. */
+export const EVIDENCE_MIN_CHARS = 120;
+
+/** Option names Shopify assigns when nobody chose one. */
+export const GENERIC_OPTION_NAMES = Object.freeze(new Set(["title", "default title", "default"]));
+
+/**
+ * Grade one product node against both surfaces.
+ *
+ * @param {object} node a Shopify product with title, description, vendor,
+ *   status, onlineStoreUrl, productType, hasOnlyDefaultVariant,
+ *   featuredImage { url altText }, options [{ name }], variants.nodes [{ barcode }]
+ * @returns {{findings: Array<{surface: string|null, grade: string, field: string, note: string}>,
+ *   blocking: number, degrading: number, cosmetic: number, skipped?: string}}
+ */
+export function gradeProduct(node) {
+  const findings = [];
+  const add = (surface, grade, field, note) => findings.push({ surface, grade, field, note });
+  const tally = () => {
+    const counts = { blocking: 0, degrading: 0, cosmetic: 0 };
+    for (const f of findings) counts[f.grade] = (counts[f.grade] ?? 0) + 1;
+    return { findings, ...counts };
+  };
+
+  if (String(node?.status ?? "").toUpperCase() === "DRAFT") return { ...tally(), skipped: "draft" };
+
+  const title = String(node?.title ?? "").trim();
+  const desc = String(node?.description ?? "").trim();
+  const url = String(node?.onlineStoreUrl ?? "").trim();
+  const vendor = String(node?.vendor ?? "").trim();
+  const imageUrl = String(node?.featuredImage?.url ?? "").trim();
+  const alt = String(node?.featuredImage?.altText ?? "").trim();
+  const firstVariant = node?.variants?.nodes?.[0] ?? null;
+  const barcode = firstVariant ? String(firstVariant?.barcode ?? "").trim() : null;
+  const optionNames = (node?.options ?? []).map((o) => String(o?.name ?? "").trim().toLowerCase()).filter(Boolean);
+  const multiVariant = node?.hasOnlyDefaultVariant === false;
+
+  // ── OpenAI product feed ──────────────────────────────────────────────────
+  if (!title) add(SURFACE.OPENAI, GRADE.BLOCKING, "title", "The feed requires a title. This product has none.");
+  if (!desc) {
+    add(SURFACE.OPENAI, GRADE.BLOCKING, "description", "The feed requires a description. This product's is empty.");
+  } else if (desc.length < EVIDENCE_MIN_CHARS) {
+    add(
+      SURFACE.OPENAI,
+      GRADE.DEGRADING,
+      "description",
+      `Under ${EVIDENCE_MIN_CHARS} characters — a label, not something an answer can quote. Listed, but with little to say.`,
+    );
+  }
+  if (!url) {
+    add(
+      SURFACE.OPENAI,
+      GRADE.BLOCKING,
+      "link",
+      "Not available on the Online Store channel, so it has no public address for the feed to point at.",
+    );
+  }
+  if (!vendor) add(SURFACE.OPENAI, GRADE.BLOCKING, "brand", "The feed requires a brand. Shopify's vendor field is empty.");
+  if (!imageUrl) {
+    add(SURFACE.OPENAI, GRADE.BLOCKING, "image_link", "The feed requires an image. This product has no featured image.");
+  } else if (!alt) {
+    add(SURFACE.OPENAI, GRADE.DEGRADING, "image alt", "The image has no alt text, so nothing describes it to a system that cannot see it. Free to generate.");
+  }
+  if (firstVariant && !barcode) {
+    add(
+      SURFACE.OPENAI,
+      GRADE.DEGRADING,
+      "gtin",
+      "No barcode on the first variant. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add.",
+    );
+  }
+  if (multiVariant && optionNames.length > 0 && optionNames.every((n) => GENERIC_OPTION_NAMES.has(n))) {
+    add(
+      SURFACE.OPENAI,
+      GRADE.DEGRADING,
+      "variant options",
+      "Variants exist but the option is still called “Title”. Naming it (Size, Colour) tells a shopper what they are choosing between.",
+    );
+  }
+
+  // ── Google Search ────────────────────────────────────────────────────────
+  if (!url) {
+    add(SURFACE.GOOGLE, GRADE.BLOCKING, "url", "Not on the Online Store channel, so there is no page for Google to crawl.");
+  }
+  if (desc && desc.length < EVIDENCE_MIN_CHARS) {
+    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", "Too short to make a snippet from; Google will pick text from elsewhere on the page.");
+  } else if (!desc) {
+    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", "No description; Google will pick text from elsewhere on the page.");
+  }
+  if (!imageUrl) add(SURFACE.GOOGLE, GRADE.DEGRADING, "image", "No image, so no image result and a plainer snippet.");
+
+  // ── Shopify housekeeping ─────────────────────────────────────────────────
+  if (!String(node?.productType ?? "").trim()) {
+    add(null, GRADE.COSMETIC, "product_type", "Shopify's own taxonomy field. No AI surface requires it; it feeds Shopify's categorisation and your filters.");
+  }
+
+  return tally();
+}
+
+/** Parse a stored grade JSON safely. Bad JSON is "no findings", never a crash. */
+export function parseFindings(json) {
+  try {
+    const v = JSON.parse(json || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The Home banner's lines, most important first. Empty array = no banner.
+ *
+ * @param {{needAttention?: number, sinceYesterday?: number, blocking?: number,
+ *   crawler?: {blocked?: string[]}}} s
+ */
+export function homeAttentionLines(s) {
+  const lines = [];
+  const blocked = s?.crawler?.blocked ?? [];
+  if (blocked.length) {
+    lines.push(`${blocked.join(", ")} ${blocked.length === 1 ? "is" : "are"} blocked from your storefront.`);
+  }
+  const blocking = Number(s?.blocking ?? 0);
+  if (blocking > 0) {
+    lines.push(`${blocking} ${blocking === 1 ? "product is" : "products are"} missing something an AI shopping surface requires.`);
+  }
+  const changed = attentionSentence(s ?? {});
+  if (changed) lines.push(changed);
+  return lines;
+}
