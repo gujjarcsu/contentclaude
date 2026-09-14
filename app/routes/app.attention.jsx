@@ -286,9 +286,14 @@ export default function AttentionPage() {
             cosmetic lives on the product, not on a list. */}
         {gaps.length > 0 && (
           <BlockStack gap="200">
-            <Text as="h2" variant="headingMd">
-              Missing what a surface asks for
-            </Text>
+            <InlineStack align="space-between" blockAlign="center" wrap>
+              <Text as="h2" variant="headingMd">
+                Missing what a surface asks for
+              </Text>
+              <Button variant="primary" onClick={() => navigate("/app/fix")}>
+                Fix in bulk
+              </Button>
+            </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               {summary.blocking} of {summary.graded} products cannot be listed by at least one surface
               as they stand; {summary.degrading} would be listed but shown worse.

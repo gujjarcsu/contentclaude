@@ -504,6 +504,9 @@ model ProductWatch {
   pageHops      Int       @default(0)
   noindex       Boolean?
   canonical     String?
+  // P2.6 — the merchant told us this product has no GTIN by design (own brand,
+  // handmade). The gtin finding is not raised again while this is true.
+  gtinExempt    Boolean   @default(false)
   updatedAt     DateTime  @updatedAt
 
   @@unique([shop, productId])

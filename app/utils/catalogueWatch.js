@@ -255,12 +255,14 @@ export const GENERIC_OPTION_NAMES = Object.freeze(new Set(["title", "default tit
  * @param {object} node a Shopify product with title, description, vendor,
  *   status, onlineStoreUrl, productType, hasOnlyDefaultVariant,
  *   featuredImage { url altText }, options [{ name }], variants.nodes [{ barcode }]
- * @param {{storefrontPublic?: boolean}} [ctx] false while the storefront is
- *   password-protected — onlineStoreUrl is null for everything then.
+ * @param {{storefrontPublic?: boolean, gtinExempt?: boolean}} [ctx]
+ *   storefrontPublic false while the storefront is password-protected —
+ *   onlineStoreUrl is null for everything then. gtinExempt true once the
+ *   merchant said the product has no GTIN by design (P2.6).
  * @returns {{findings: Array<{surface: string|null, grade: string, field: string, note: string}>,
  *   blocking: number, degrading: number, cosmetic: number, skipped?: string}}
  */
-export function gradeProduct(node, { storefrontPublic = true } = {}) {
+export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false } = {}) {
   const findings = [];
   const add = (surface, grade, field, note) => findings.push({ surface, grade, field, note });
   const tally = () => {
@@ -311,7 +313,7 @@ export function gradeProduct(node, { storefrontPublic = true } = {}) {
   } else if (!alt) {
     add(SURFACE.OPENAI, GRADE.DEGRADING, "image alt", "The image has no alt text, so nothing describes it to a system that cannot see it. Free to generate.");
   }
-  if (firstVariant && !barcode) {
+  if (firstVariant && !barcode && !gtinExempt) {
     add(
       SURFACE.OPENAI,
       GRADE.DEGRADING,

@@ -151,7 +151,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
           const next = snapshotFromNode(node);
           const prev = prevById.get(next.productId) ?? null;
           const attention = diffProduct(prev, next, { hasContent: hasContent.has(next.productId), watchStartedAt, now });
-          const g = gradeProduct(node, { storefrontPublic });
+          const g = gradeProduct(node, { storefrontPublic, gtinExempt: prev?.gtinExempt === true });
           const data = {
             title: next.title,
             handle: next.handle,

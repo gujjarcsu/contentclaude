@@ -58,6 +58,17 @@ for (const g of graded) {
 }
 out.eligibility.byField = Object.fromEntries(Object.entries(byField).sort((a, b) => b[1] - a[1]));
 
+// P2.4 — indexability, as counts. Null is "not checked", so it is counted as such.
+out.indexability = {
+  sitemapKnown: await prisma.productWatch.count({ where: { inSitemap: { not: null } } }),
+  notInSitemap: await prisma.productWatch.count({ where: { inSitemap: false } }),
+  pagesChecked: await prisma.productWatch.count({ where: { pageCheckedAt: { not: null } } }),
+  noindex: await prisma.productWatch.count({ where: { noindex: true } }),
+  missing: await prisma.productWatch.count({ where: { pageStatus: { in: [404, 410] } } }),
+  chains: await prisma.productWatch.count({ where: { pageHops: { gte: 2 } } }),
+  gtinExempt: await prisma.productWatch.count({ where: { gtinExempt: true } }),
+};
+
 const crawlerRows = await prisma.crawlerAccess.findMany({
   where: { checkedAt: { gte: new Date(t0 - 60_000) } },
   select: { blocked: true, robotsSeen: true, results: true },

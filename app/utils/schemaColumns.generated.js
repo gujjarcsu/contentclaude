@@ -156,6 +156,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "ProductWatch.descLen",
   "ProductWatch.firstSeenAt",
   "ProductWatch.grade",
+  "ProductWatch.gtinExempt",
   "ProductWatch.handle",
   "ProductWatch.hasAlt",
   "ProductWatch.hasType",
