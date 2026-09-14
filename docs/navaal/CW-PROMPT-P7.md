@@ -1,90 +1,140 @@
-# CW — PHASE 7 BRIEF: PROVE THE RELEASE, LINK THE LEGAL PAGES, THEN THE LAST CAPTURE
+# CW — PHASE 7 BRIEF (revised 2026-09-14, second pass): THE LEDGER, THE PRICE CARDS, THE CAPTURE
 
-Paste this whole file. It replaces `CW-PROMPT-P0-VERIFY.md`, `CW-PROMPT-P6.md` and
-`CW-PROMPT-P6B.md` (moved to `_superseded/`).
+Paste this whole file. It replaces the earlier `CW-PROMPT-P7.md` in full. One current brief per
+worker; nothing else in `docs/navaal/` is a CW instruction.
 
-**Your Task 0 was the finding of the project** — not for cleverness, for discipline: the commit fact
-from the repo first, the page's own timezone read rather than assumed, 0b reported as *could not be
-run, not a pass*, and the two unprovable things named instead of implied. Three workers, including
-me, read green deploys all week. You opened the page none of us did. It is false green **#12**, and
-a mandatory ship-gate step for CC from now on.
+**Your last report was read in full, including the 28-row table in `06-QUEUE.md` §PHASE 7.** Four
+things in it changed what everyone else is doing:
 
----
+- **Task 2 was a no-op and you proved it rather than "fixing" it.** Privacy URL already
+  `https://navaal.ai/privacy` at exactly 25/255; Shopify's form has no Terms field. CC's premise was
+  wrong; you did not overwrite `/docs` to manufacture a result. Correct.
+- **The 28-row table is the deliverable CC needed and could not produce from code.** Four
+  populations in one viewport, the largest bigger than the catalogue a merchant can see; `14 active
+  and draft` is Active only; `AI Content Published` means *published and not superseded* and moved
+  30 → 27 → 24 while nothing was unpublished. CC is fixing it as a class in Part B against your table.
+- **The achievement is not a shortcut.** Your Task 7 read corrected `11-MASTERPLAN.md` §2 — the
+  "Visible" rung is gated on the same installs / reviews / rating as BFS, with no dashboard surface.
+  That is now written into the plan.
+- **The blast radius is real merchants.** `Merchants with your app: 8`; `Peter Shops — Installed`
+  on 12 Sep is not one of ours. The scoreboard's "real merchants" moved from 0 to ≥1 on your read,
+  and the P0 exposure population is at least three non-test shops until counted.
 
-## TASK 1 — PROVE THE RELEASE (gated on CC posting a version number)
-
-When the queue carries CC's new version number and created time:
-1. **Versions page.** Quote the active version's name and *Created* line verbatim with the `+0000`.
-   It must be newer than `navaal-seo-geo-content-15` and created after **11:26:53 UTC 9 Sep**. If it
-   is still v15, the release did not happen whatever CC's terminal said.
-2. **Side-effect read.** Public listing: `save 17%` and `7-day`. Last time **3 / 3** on the page,
-   **0** in every field we author. After a real release: **0 / 0** with nobody editing anything. If
-   still 3, the release did not carry the billing config — a finding, not a wait.
-3. **Pricing details.** Cards should read **95.90 / 287.90 / 767.90** and **14-day**. Quote one.
-4. **0b, only if unblocked** (storefront password entered once in your browser, or protection off on
-   `contentpilot-dev2` — never a real store): read the rendered product page for a FAQ containing a
-   special character; say whether it is `&lt;`-escaped. Otherwise one line: *still blocked*.
-
----
-
-## TASK 2 — THE TWO LEGAL URLS ON THE LISTING. NOT GATED. DO IT NOW.
-
-CC's Phase 6 put `/privacy` and `/terms` live (HTTP 200, footer-linked on every page). The App
-Store listing has a privacy-policy field, and it is empty. CC's instruction in the queue is the whole
-brief: **link, don't paraphrase.** Read the exact URLs from CC's queue row, enter them in the listing
-editor, save, read back on a fresh load, then confirm on the public page. A listing without a
-privacy URL is a submission defect.
+And the release proof was the right shape: `git merge-base --is-ancestor`, the `+0000` read off the
+page, and *"proved by provenance, not by a rendered page"* kept as a distinction rather than
+collapsed into a pass.
 
 ---
 
-## TASK 3 — THE TABLE THAT LETS CC FIX THE SCREEN ONCE
+## ORIENT
 
-On `contentpilot-dev2`, list **every number** visible on Home and on Products with its **exact
-label**, verbatim, and the store's real product count beside it. Frame 01 alone showed six. CC is
-producing the same table from its harness; yours is the one read by eye, and the comparison is the
-point. Post it to the queue.
+`CW-STANDING-PROMPT.md` · `06-QUEUE.md` **INBOX (H12b) and §PHASE 7** · `07-VERIFICATION.md` #12
+(with Cowork's correction under it) · `12-OFFER.md` §4 · `14-PRICING.md` §4.
+`curl -s "https://app.navaal.ai/api/build-info?cb=$RANDOM"` — and re-read it mid-session.
 
-## TASK 4 — SET THE STORE UP SO THE NEXT CAPTURE IS THE LAST
+---
 
-Do not capture yet. But: leave **several drafts pending** so Review is not `Nothing to review` over
-a blank frame; make sure the greeting shows the store name on every entry path; and write into the
-queue the exact state the store is in plus **a capture window** during which nothing else may
-mutate it — the last set was stale by one product because another worker's probe was running.
-Generating drafts on a dev store is fine. **EBS stays read-only, always.**
+## TASK 1 — H12b: EDIT THE PRICE CARDS. THE OWNER HAS READ THIS BRIEF; PASTING IT IS THE CONSENT.
+
+You refused to edit this on 2026-09-14 because you could not tell from the screen whether it was
+charging or display. That was the right refusal. It is now settled three ways: the app is on the
+Billing API (`billing:` config, `billing.request()` at `app.plans.jsx:154`, one live subscription
+id created through it); the released version moved nothing on this page (your 19-minute read,
+Cowork's 12-minute read); and the editor shows the values as hand-typed cards. **Display, typed,
+wrong in public.** Cowork's earlier claim that the release would clear it was wrong and is
+corrected in `07-VERIFICATION.md` #12.
+
+In the Partner Dashboard pricing section (the cards reading `$9.99/month or $99.90/year, 7-day
+trial` etc.), via the `Edit` control on each of the three paid plans:
+
+| Plan | Annual | Trial |
+|---|---|---|
+| Starter | **95.90** | **14 days** |
+| Growth | **287.90** | **14 days** |
+| Professional | **767.90** | **14 days** |
+
+Monthly prices are already right. **Remove the 17% claim** (`14-PRICING.md` §4 bans it by name; the
+true figure is 20% and it does not need stating). Free plan: leave it. Credits/feature lines: leave
+them — H12 already put the true lines there.
+
+**Read back on a fresh load**, then the public page cache-busted: expect `save 17%` **0**,
+`7-day` **0**, `99.90` / `299.90` / `799.90` **0**, `95.90` / `287.90` / `767.90` **≥1** each,
+`14-day` still present. If any card refuses the value or the form has a field you did not expect,
+stop and quote it — do not improvise.
+
+---
+
+## TASK 2 — THE MERCHANT LEDGER. WHO ACTUALLY HAS THIS APP.
+
+Partner Dashboard → app → App history (installs / uninstalls), read in full, oldest to newest.
+For each event: date, store name, install or uninstall. Then classify each store: **ours** (`ttv-*`,
+`qa-fresh`, `contentpilot-dev2`, EBS, elitepeps, anything the queue already names) or **real**.
+Then, per real store: is it **currently installed**? That gives three integers the plan needs
+today:
+
+1. Real merchants currently installed (scoreboard metric 1)
+2. Real merchants who ever installed (the P0 population)
+3. Real merchants who uninstalled, and how long after installing
+
+Post the ledger to the queue under §PHASE 7. **Merchant names stay in the queue file and in
+`docs/history/`; never in a commit message, never in CI output.** This ledger is also what the
+owner uses to decide disclosure once CC posts the A5 count, so accuracy over speed.
+
+---
+
+## TASK 3 — B8, WHICH YOU MAY BE ABLE TO CLOSE WITHOUT THE OWNER
+
+`OWNER-CHECKLIST.md` carries B8: one active **Professional** subscription in our database, and
+nobody knows whether it is a real charge or a `(Test)` one. The Partner Dashboard shows charges. On
+2026-09-10 you read `Total earnings to date $0.00`. Read it again, and find the app's charges /
+payouts list: is there any subscription charge at all, and is it flagged **(Test)**? The app history
+already showed `Starter Plan $9.99 USD (Test)` on 10 Sep — the same page will show a Professional
+one if it exists. Quote what you find. If earnings are still $0.00 and the only charges are marked
+Test, B8 is closed and the owner's item goes away.
+
+---
+
+## TASK 4 — THE SUBTITLE FLAG
+
+The editor flagged Subtitle: *"Review the updated guidance for this field and refresh your
+content."* at 62/62. Open the guidance link, read it, and quote what changed — limit, banned
+content, or format. **Do not rewrite the subtitle.** If the current text violates the new guidance,
+route it to Cowork with the guidance quoted; approved copy comes from `12-OFFER.md`, never from a
+session.
+
+---
 
 ## TASK 5 — CAPTURE AND UPLOAD (gated on CC's Part B sha)
 
-When CC posts the sha for the reconciled screen: capture all eight in your announced window, look
-at every PNG yourself, one sentence per unusable frame saying precisely why. Upload only with **at
-least 3 clean desktop frames**. Read the live listing back on a fresh load and confirm the images
-showing are the ones you uploaded.
+The store is frozen and capture-ready on your declaration; nobody mutates it until you post
+`CAPTURE COMPLETE`. When CC posts the sha for the reconciled counts:
 
-## TASK 6 — THE SWEEP, EVERY SESSION
+1. Re-read `/api/build-info` — the sha must be live, not merged.
+2. Re-read Home and Products and confirm the four populations now agree with your table's "Real"
+   column: `15` non-archived, `14 active + 1 draft`, and no count larger than the catalogue.
+   **If they do not, do not capture.** Post the numbers and stop.
+3. Capture all eight in the window. Look at every PNG. One sentence per unusable frame. Frame 04's
+   nameless greeting is on a different store and is the owner's decision — capture it and report it.
+4. Upload only with **≥3 clean desktop frames**. Read the live listing back on a fresh load.
+5. Post `CAPTURE COMPLETE`.
 
-Editor fields, cross-checked cache-busted, fetch-sanity first. Expect **0** on doctrine phrases,
-superlatives, `A/B variant testing`, `Priority support`, `ai content generations`, statistics,
-testimonials in our fields, and now `save 17%` and `7-day` on the public page. Expect **1** each on
-the two approved replacements. Name ≤30, intro ≤100, details ≤500, bullets ≤80, exactly 5 terms.
-**Integers, not adjectives.**
+---
 
-## TASK 7 — ONE READ FOR TRACK B: THE ACHIEVEMENT CRITERIA
+## TASK 6 — THE SWEEP
 
-`11-MASTERPLAN.md` B4.1: the **"Increased visibility on key merchant surfaces"** achievement is our
-real near-term target — a published search-ranking boost *without* the manual BFS design review.
-Find its criteria page in the Partner Dashboard (Distribution, where you found the BFS scorecard) and
-read every criterion with its current state, verbatim, the way you did for BFS on 2026-09-14. That
-read tells the owner exactly how far the app is from the first rung.
+Unchanged, and now with the Task 1 expectations folded in: `save 17%` 0, `7-day` 0, `99.90` 0,
+`95.90` ≥1 on the public page; everything else as before. Integers.
 
 ## STILL OWNER-BLOCKED
 
-The W1 post upload (Hostinger password). Unchanged.
+- 0b (rendered storefront read): dev2 storefront password.
+- W1 post upload: Hostinger password.
 
 ---
 
 ## ORDER
 
-Task 2 (unblocked, five minutes) → Task 3 → Task 4 → Task 7 → Task 6 → then **wait** for CC's two
-posts: the version number unblocks Task 1, the Part B sha unblocks Task 5.
+Task 1 → Task 3 → Task 2 → Task 4 → Task 6 → wait for CC's sha → Task 5.
 
-Report the difference between claim and screen first. Quote verbatim. *Could not read* when you could
-not. INBOX, **no ID**. Re-read `/api/build-info` and the Versions page mid-session.
+Report claim-vs-screen first, verbatim, *could not read* when you could not. Queue under §PHASE 7.
+Re-read `/api/build-info` and the Versions page mid-session — you have caught both moving before.

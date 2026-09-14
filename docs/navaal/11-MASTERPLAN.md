@@ -57,7 +57,7 @@ nobody is told a $10k/month plan is a category-domination plan.
 
 | Rung | What it requires | What it takes |
 |---|---|---|
-| **Visible** | The **"Increased visibility on key merchant surfaces"** achievement — a published search-ranking boost **without** the manual design review | good standing · App Store requirements · clean uninstall · minimum installs, reviews and rating |
+| **Visible** | The **"Increased visibility on key merchant surfaces"** achievement — a published search-ranking boost **without** the manual design review | good standing · App Store requirements · clean uninstall · minimum installs, reviews and rating. **⚠ Re-read by CW 2026-09-14: the Partner Dashboard exposes NO criteria page or state for this achievement** (the strings do not appear on Distribution or Overview); the seven criteria come from shopify.dev only, all mandatory, and **three of them are the same merchant-utility numbers that gate BFS** — minimum installs, reviews and rating, thresholds unpublished. So this rung is not a way *around* those numbers; it is the same numbers without the design review. Two criteria (Partner standing, checkout-speed impact) have no dashboard surface at all. |
 | **Credible** | Built for Shopify | **50 net installs from paid-plan shops · 5 reviews · minimum rating · LCP ≤2.5s, CLS ≤0.1, INP ≤200ms at p75 over 28 days with ≥100 calls each** |
 | **Top ten among real SEO apps** | ~150 reviews at 4.9 | IndexGPT ranks #8 on **143 reviews**; SEO HERO #16 on 171. Reachable. |
 | **#1 among real SEO apps** | Beat **SEOLab: 2,596 reviews, and free** | At a generous 3% install-to-review rate that is **~85,000 installs**. Years, or a deliberate free-tier land-grab. |
@@ -349,7 +349,7 @@ they are the critical path.
 
 | # | Metric | Now (2026-09-10) | Next gate | Who |
 |---|---|---|---|---|
-| 1 | **Real merchants (not our stores)** | **0** | 10, then 50 | B0 — OWNER |
+| 1 | **Real merchants (not our stores)** | **0 → ≥1 (2026-09-14: Partner Overview `Merchants with your app: 8`; App history shows `Peter Shops — Installed` 12 Sep, not one of ours — classification of all 8 is a CW task)** | 10, then 50 | B0 — OWNER |
 | 2 | **Paying merchants** | **0** | 1, then 10 | B0.5, Phase 4 |
 | 3 | Net installs from paid-plan shops | 2 | 50 | Track B |
 | 4 | Reviews | 0 | 5, then ~150 | B3 |
