@@ -10,7 +10,7 @@
  * weekly report.
  */
 import { useLoaderData, useNavigate } from "react-router";
-import { Page, Card, Text, BlockStack, InlineStack, Badge, EmptyState } from "@shopify/polaris";
+import { Page, Card, Text, BlockStack, InlineStack, Badge, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import { verdictSentence, formatHours, MIN_PER_ARM, CENSOR_DAYS } from "../utils/crawlHoldout.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -140,6 +140,10 @@ export default function ProofPage() {
           their medians, and the difference carries a 95% bootstrap interval — a batch under {MIN_PER_ARM} pages per arm gets no
           verdict. A page not crawled by day {CENSOR_DAYS} is counted at {CENSOR_DAYS} days and the sentence says so. The seed is
           stored so the split can be reproduced. Crawl timing is not ranking; nothing here is a ranking claim.
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          The two AI-visibility reports that have no API — Google&apos;s generative-AI report and Bing&apos;s AI Performance — are
+          taught, not scraped: <Link url="/app/ai-reports">the two reports you read yourself</Link>.
         </Text>
       </BlockStack>
     </Page>

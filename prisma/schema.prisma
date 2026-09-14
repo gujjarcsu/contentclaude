@@ -312,6 +312,10 @@ model GrowthState {
   // we keep the answer — "default" | "excluded" | "no_gsc" — and when.
   gscAiControl       String?
   gscAiControlAt     DateTime?
+  // P3.3 (Phase 8) — the two AI-visibility reports that have no API (Google's
+  // generative-AI performance report, Bing's AI Performance). We teach the
+  // merchant to read them and keep what THEY read, dated, as JSON. Never scraped.
+  aiReportReadings   String    @default("{}")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

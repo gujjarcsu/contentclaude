@@ -130,6 +130,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "GenerationJob.status",
   "GenerationJob.totalProducts",
   "GenerationJob.updatedAt",
+  "GrowthState.aiReportReadings",
   "GrowthState.createdAt",
   "GrowthState.embedConfirmedAt",
   "GrowthState.geoNoteDismissedAt",

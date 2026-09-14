@@ -148,6 +148,10 @@ function GscCard({ gsc }) {
           Method: your answer, kept with its date and asked again after {GSC_RECHECK_DAYS} days. Nothing
           here is read from Google — there is no API that would let us.
         </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          While you are in Search Console: <Link url="/app/ai-reports">the two AI reports you read yourself</Link> — Google&apos;s
+          generative-AI report and Bing&apos;s AI Performance, neither of which has an API.
+        </Text>
       </BlockStack>
     </Card>
   );
