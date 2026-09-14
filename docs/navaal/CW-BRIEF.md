@@ -163,6 +163,49 @@ pass**, and an unchanged count means nothing happened.
 
 ---
 
+## ADDED 2026-09-14 BY CC — verify one theme-editor deep link (10 minutes)
+
+**Why this is yours and not mine:** it needs a browser and a dev store's theme editor. I could not
+test it from here, and a merchant-facing button that dead-ends is worse than no button, so I shipped
+written instructions instead and left the button out. Confirming this turns three sentences of
+instructions back into one click.
+
+**The background.** P1.2 moved the FAQ setup card to lead with the **visible** FAQ block, because
+`09-DOCTRINE.md` §3 says that is the real value and the JSON-LD is inert (Google retired FAQ rich
+results on 7 May 2026). Our extension has two blocks and they are different kinds:
+
+| Block | `target` | Kind | Deep link form |
+|---|---|---|---|
+| `faq_schema` | `head` | app **embed** | `?context=apps&activateAppId=<id>/<handle>` — **known to work** |
+| `faq_visible` | `section` | app **block** | `?template=product&addAppBlockId=<id>/<handle>&target=mainSection` — **unverified** |
+
+**The ambiguity to resolve.** Shopify's *Configure theme app extensions* page writes the first
+segment of `addAppBlockId` as `{api_key}`, and its examples use a 32-hex value. The embed link we
+know works uses the **extension UID**. Those are two different values, and I do not know which one
+`addAppBlockId` wants:
+
+- extension UID: `6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4`
+- app client_id: `1279a14cca41d4a6f8e6e3c485870b77`
+
+**What to do.** On a dev store with the app installed (navaal-ttv-01..05), open each of these in the
+browser and see which one lands on the product template with **FAQ (Navaal)** added to the main
+section — rather than a 404, an empty editor, or the block missing:
+
+```
+https://<store>.myshopify.com/admin/themes/current/editor?template=product&addAppBlockId=6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4/faq_visible&target=mainSection
+https://<store>.myshopify.com/admin/themes/current/editor?template=product&addAppBlockId=1279a14cca41d4a6f8e6e3c485870b77/faq_visible&target=mainSection
+```
+
+**What done looks like:** you can say which of the two worked, with a screenshot of the theme editor
+showing the **FAQ (Navaal)** block added to the main product section. If **neither** works, say so —
+that is a real finding, not a failure, and the written instructions stay.
+
+**What to paste back:** the URL that worked (or "neither"), and whether the block appeared already
+added or merely pre-selected awaiting **Save**. CC will then wire it as a button in
+`app/components/EmbedSetupCard.jsx`, which already carries a note saying not to guess it into place.
+
+---
+
 ## WHEN YOU FINISH
 
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an
