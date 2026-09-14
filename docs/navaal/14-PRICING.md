@@ -1,8 +1,9 @@
 # PRICING — the analysis, the arithmetic, and the proposal
 
-**2026-09-14. A PROPOSAL, not yet locked.** Costs are `MEASURED` (P0.6, `08-ECONOMICS.md` §2).
+**2026-09-14. LOCKED — approved by the owner on 2026-09-14.** Recorded in `04-DECISIONS.md`.
+This is now instruction, not proposal. Section 6 is the build list. Costs are `MEASURED` (P0.6, `08-ECONOMICS.md` §2).
 Competitor prices were read from live listings on 2026-09-10 (`10-MARKET.md` §1).
-Locking this closes the owner decision at the top of `OWNER-CHECKLIST.md`.
+It closed the owner decision at the top of `OWNER-CHECKLIST.md`.
 
 ---
 

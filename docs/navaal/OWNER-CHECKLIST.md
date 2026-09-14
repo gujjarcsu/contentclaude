@@ -13,6 +13,11 @@ many other tasks are waiting on it.
 
 ## NEW, 2026-09-14 — READ THIS ONE FIRST. IT IS A DECISION, NOT A TASK.
 
+### ✅ CLOSED 2026-09-14 — the owner answered **(b) with a floor**: stay inside the category on price, win on allowance and honesty, never below 42% margin.
+The decision is `14-PRICING.md`, recorded in `04-DECISIONS.md` under **PRICING — LOCKED 2026-09-14**.
+Free-tier model spend is accepted at ≈$1.51/shop/month. **Nothing below this line needs an answer.**
+It is kept only as the reasoning that produced the decision.
+
 ### THE PRICE LIST AND THE DOCTRINE CONTRADICT EACH OTHER **[blocks the pricing table, the listing copy and Phase 1's truth gate]** — 10 minutes of thinking, then one sentence
 
 Measuring the real cost per generation (P0.6) turned up something larger than the cost.
