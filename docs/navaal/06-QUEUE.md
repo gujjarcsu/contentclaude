@@ -796,3 +796,40 @@ was; the review flow is as it was.
 
 **Owner, informed here and in `OWNER-CHECKLIST.md`:** F8 was mine to fix and is fixed — both real
 merchants now read against 100. No action needed from you.
+
+## POSTED 2026-09-14 BY CC — PHASE 8 PARTS B AND C ARE LIVE (`a3fa978`, `b3cba8e`). THE PROOF ENGINE RUNS; ITS FIRST RESULT IS THE OWNER'S TWENTY MINUTES.
+
+**Part B (`a2e69af`, pushed in `ee9dd4d`):** `app.navaal.ai/privacy` and `/terms` now emit their
+canonical. The redirect shells and the two-rule `.htaccess` snippet are in
+`docs/navaal/_upload-legal-redirects/`, instructions in `_UPLOAD-LEGAL-REDIRECTS.md` beside
+`_UPLOAD-W1-POST.md` — one Hostinger session, three files, four cache-busted checks. CW: once your
+listing field points at `https://app.navaal.ai/privacy`, all three homes resolve to one page.
+
+**Part C gate 1 (`a3fa978`) — corrected under verification before a line was written:** an IndexNow
+key file anywhere but the storefront root only authorises its own directory (indexnow.org, quoted in
+`crawlHoldout.js`), and a Shopify store cannot serve a root file from an app. The holdout therefore
+submits through **Bing's URL Submission API with the merchant's own key** — same crawl scheduler,
+sanctioned for commerce pages, named on the screen. Seeded split (seed stored, reproducible — tested),
+both arms always shown, censoring at day 14 said aloud, seeded 95% bootstrap interval on the
+difference of medians, **no verdict under 5 per arm**. `/app/proof` and a Home card. The key is stored
+like the AI key; a test walks every logger call. The weekly report sends only in a week with a result;
+the review ask is gated on the first proved result. **Nothing is submitted while
+`REMEDIATION_LOCKED_SHOPS` is unset** — the code refuses.
+
+Read live on `navaal-ttv-03`: Home *"5 drafts awaiting review"* = Review *"5 products with draft
+content"* (Part A's 4/5 closed); `/app/proof` empty state + method; Settings *"Measure crawl time with
+Bing"* card.
+
+**Part C gate 2 (`b3cba8e`):** `/app/ai-reports` — Google's generative-AI report and Bing's AI
+Performance taught step by step, readings kept as the merchant's, a test that nothing fetches either
+console (read live). P3.4's classification half is built and tested; the query is **blocked on P0.10**
+(Level 2 + `read_reports`) — backlog F9. P3.5 scoped, not started — F11.
+
+**Owner — the first proved result (F10, `OWNER-CHECKLIST.md`):** set `REMEDIATION_LOCKED_SHOPS` from
+a file; on one `navaal-ttv-*` store remove the storefront password, verify it in Bing Webmaster Tools,
+paste the key in Settings, switch measurement on, publish content for ten or more products, run the
+**Crawl holdout** workflow that night. `/app/proof` reads out within 72 hours. Every dev store is
+password-protected today, which is why this cannot be proved from here.
+
+**§5's two Phase 3 lines stay unpublished** until a merchant sees a result inside the trial — that is
+the gate the masterplan wrote, and it has not happened yet.
