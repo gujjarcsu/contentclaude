@@ -15,11 +15,15 @@ Better still, and now the standard: **verify a guard by breaking it.** Disable t
 watches and show the test count that fails. CC did this for the claim check (2 tests) and the
 family skip (4 tests). That is the bar.
 
-*Seven false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
+*Ten false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
 comparing an empty commit range, a passing test suite over a GraphQL query with a `//` syntax
-error, a harness measuring `admin.shopify.com` instead of our own iframe, and a setting with a column,
-a read path and a green suite that no merchant could reach (L15), and a folder of
-guiding documents that confidently described a workflow nobody had read to the end (L16).*
+error, a harness measuring `admin.shopify.com` instead of our own iframe, a setting with a column,
+a read path and a green suite that no merchant could reach (L15), a folder of
+guiding documents that confidently described a workflow nobody had read to the end (L16), a
+page-wide listing scan that counted Judge.me's numbers out of Shopify's own carousel, a live read
+of a cached score that had been stale for hours, and two sections in one file answering to the
+same name with the dead one first. The full list, with the rule each one produced, is
+`07-VERIFICATION.md`.*
 
 ## L2 — THE STORE-SHAPE LAW
 Name the store shapes every fix must hold for, and prove it against them.

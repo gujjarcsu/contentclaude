@@ -104,7 +104,7 @@ worked. Screenshot or quote the value. If access failed, the finding is **"could
 
 ---
 
-## THE SEVEN FALSE GREENS, AS A CHECKLIST
+## THE FALSE GREENS, AS A CHECKLIST
 
 Before claiming a pass, check you are not repeating one of these:
 
@@ -115,3 +115,40 @@ Before claiming a pass, check you are not repeating one of these:
 5. A harness measuring the wrong document, page or process.
 6. A feature complete in every layer except a screen a merchant can reach.
 7. A document confidently describing a file nobody read to the end.
+8. A page-wide scan that counted content belonging to someone else's app.
+9. A read that was fresh while the cached value behind it was not.
+10. Two sections in one file answering to the same name, the dead one first.
+
+---
+
+## FALSE GREENS 8, 9 AND 10 — all three found on 2026-09-14
+
+**8. A page-wide scan that counts someone else's page.** CW checked the live App Store listing for
+statistics and testimonials by scanning the whole public page, and found the number **46,877** and
+the word **testimonial** — both belonging to **Judge.me**, in Shopify's own "other apps" carousel.
+Neither is our copy and neither can be removed by us.
+**The rule: a claim about OUR listing is proved in the listing EDITOR, field by field**, and the
+public page is used only to cross-check that the field values actually went live. A whole-page grep
+over a Shopify-rendered page measures Shopify, not us — the same shape as false green 5.
+
+**9. A read that is fresh but the value is not.** Home reported **48/100**, then **78/100** on the
+same store **with no deploy between the two reads**. The read was live; the value was served from a
+cache (`STORE_SCORE_TTL_S = 600` in `storeScore.server.js`) and was lagging behind published
+content by far more than its own TTL.
+**The rule: for any number the app computes and caches, a single read proves nothing.** Read it,
+change something that must move it, read it again, and say how long the change took to appear. A
+merchant who publishes and then looks at Home is in exactly that window, and a number that is
+stale there is a number that is wrong there.
+
+**10. Two sections in one file with the same name.** A brief said *"read `04-DECISIONS.md`
+§PRICING"*. The file had **two** matching sections, and the one that came first was the dead one —
+five tiers at $19/$49/$99/$299, plus a row naming two things `09-DOCTRINE.md` §2 bans. A session
+following the brief exactly would have published false prices and banned claims.
+**The rule: superseded content is renamed, not just annotated.** A heading that still answers to
+the live name is reachable, and being reachable is the whole problem. This was Cowork's own bug,
+introduced by appending a new section instead of replacing the old one.
+
+**Also worth a line, from the same day:** Playwright on this computer's Linux VM dies with
+*"Target page, context or browser has been closed"* unless `libxdamage1` is extracted by hand
+(`apt-get download libxdamage1; dpkg-deb -x`) and `LD_LIBRARY_PATH` points at it. That error reads
+exactly like a broken harness and is not one.
