@@ -31,6 +31,65 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
+- **OWNER — DECISION: the shipped price list contradicts the doctrine, and P0.6 cannot close the gap
+  with code.** *Why it matters:* `09-DOCTRINE.md` says we sell **proof**, not a utility, and should price
+  at roughly **double** the category ARPU of $25–35. The plans we actually bill
+  (`app/utils/billing-plans.js`, read 2026-09-14) are **Free $0/25, Starter $9.99/50, Growth $29.99/200,
+  Pro $79.99/1,000**. At an illustrative mix that is ~**$27.49** ARPU — *inside* the category norm, not
+  double it. `08-ECONOMICS.md` had been modelling **$0/$19/$49/$99/$299** with a Scale and an Enterprise
+  tier; **none of those exist in the code**, and its ladder promised ~**$9.9k** MRR at 150 merchants where
+  the real list gives ~**$4.1k**. *What is NOT the problem:* cost. Measured, every paid plan clears
+  **62.5%–85%** margin at 100% utilisation, so there is room to move prices in either direction.
+  *The decision, and only you can make it:* either the **prices** rise toward the premium the doctrine
+  claims, or the **doctrine's premium claim** is dropped and we position inside the category. *What done
+  looks like:* one sentence in `04-DECISIONS.md` saying which, dated. Until then §4 of `08-ECONOMICS.md`
+  says in writing that none of its figures should be used for planning. *Paste back:* the chosen direction.
+
+- **OWNER — the only cost figure still `ASSUMED` needs your billing dashboards.** *Why:* `08-ECONOMICS.md`
+  §2 now has every per-generation cost `MEASURED`, but infrastructure (Fly web + worker, Neon, Redis) is
+  still assumed "fixed and small relative to model spend". Nothing in this repo can see an invoice. *What
+  to do:* read last month's actual totals from Fly, Neon and whoever bills the Redis, and paste the three
+  numbers. *What done looks like:* three USD figures with the month they cover. *Why it matters:* at 25
+  installs model spend is pennies, so infrastructure may well be the **larger** line — which would change
+  where the free-tier ceiling actually binds.
+
+- **COWORK — read the AI-visibility probe's real cost per question out of the `navaal.ai` repo.**
+  *Why:* `08-ECONOMICS.md` §2 claimed *"the probe already records cost in cents per run — read it, do not
+  estimate it"*, as though the number were one command away. It is not: `ai-visibility.cjs` **is not in
+  the contentclaude repository** (searched 2026-09-14). *What to do:* open it in the `navaal.ai` project
+  and read the recorded cents-per-run. *What done looks like:* a USD-per-question figure with the date and
+  the model it used. *What it unblocks:* monitoring is "the business" per §1, and it is the only part of
+  the cost model with no number at all.
+
+- **CC — P0.4 needs a rendered document before the fix, not after.** *Why:* verified 2026-09-14 that
+  `app/root.jsx` carries **no App Bridge script and no `shopify-api-key` meta**; the tag is emitted by
+  `<AppProvider embedded>` **inside the body**, and React is **18.3.1** so it is not hoisted (that is a
+  React 19 feature). Shopify documents the head. *The blocker:* adding it to `root.jsx` while AppProvider
+  still emits its own **double-loads app-bridge.js on every page**; removing AppProvider's copy means
+  `embedded={false}`, which also drops the redirect-to-admin behaviour tied to **App Store rejection
+  2.1.1**. *What to do:* capture the real `<head>` of an authenticated `/app` document (the H13 CDP route
+  works), make the change, capture it again, and confirm no App Bridge double-load warning in the console.
+  *What done looks like:* before/after head HTML, plus a server-render regression test asserting App
+  Bridge is the first script in the head.
+
+- **CC — `UsageRecord.tokensUsed` is a dead column and should either be filled or dropped.** *Why:* it is
+  typed, indexed and named as if it measures something, and is written as the literal **0** at both of the
+  only two places it is ever written (`plans.server.js:174`, `:430`). This is the same shape as the
+  `includeDraftProducts` bug — a column with no real write path. *Why it was not fixed in P0.6:* the record
+  is created inside the **serializable quota transaction before** generation runs (correct for a gate —
+  the credit must be reserved first), so the real count is only known afterwards and filling it means
+  threading a record id back through every caller of `tryConsumeGeneration`. That is the billing path.
+  *Mitigation already shipped:* every call now emits an `ai.usage` event with real tokens and cost, which
+  `logs.mjs --event ai.usage` can query. *Decide:* fill it properly, or drop the column so it stops looking
+  like data.
+
+- **CC — identify what the "16 Oct 2026" deadline actually is, or delete it.** *Why:* `11-MASTERPLAN.md`'s
+  risk table says *"1 Oct and 16 Oct 2026 are three and five weeks away"*. The 1 Oct half is now resolved
+  (P0.1 never applied to us; P0.2 is clean and is the real one — **1 Oct 2026: you can no longer create or
+  update storefront script tags**, with **1 Mar 2027** when Shopify stops injecting them). **Nothing in the
+  folder says what 16 Oct is**, and an unidentified date in a risk table is either a real deadline nobody
+  is working, or a scare. Find it in Shopify's changelog or remove the reference.
+
 - **COWORK — three corrections to the CW session report of 2026-09-13, verified from production and git.**
   **(1) The 410 is narrower than reported, and it is not ours.** A CW session concluded "any harness
   without a real browser UA looks like an outage". Tested 2026-09-13 against production: `curl`,

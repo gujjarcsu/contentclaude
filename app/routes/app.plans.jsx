@@ -310,9 +310,14 @@ const PLAN_DISPLAY = [
       `${BILLING_PLANS.pro.monthlyLimit} generations / month`,
       "Everything in Growth",
       "7-day free trial",
-      "Dedicated account manager",
-      "Custom onboarding",
-      "SLA support",
+      // P0.8 / 08-ECONOMICS.md guardrail 6 — the SERVICE stays, the two
+      // undefined words go. "SLA" means a contractual guarantee with remedies;
+      // saying it without one written is a promise we cannot keep, and at low
+      // review volume one unmet promise halves the rating. Exact replacement
+      // wording from 12-OFFER.md #6.
+      "Direct access to the founder",
+      "Setup call when you start",
+      "Every question answered within one business day",
     ],
   },
 ];
