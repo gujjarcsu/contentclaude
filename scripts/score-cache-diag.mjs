@@ -40,16 +40,41 @@ import { storeScanKey, invalidateStoreScan } from "../app/utils/storeScanCache.s
 import prisma from "../app/db.server.js";
 
 const PEEK = process.argv.includes("--peek");
+/**
+ * P6.0 — which shop to look at.
+ *
+ * The default picks the shop with the most content, which is the one whose
+ * score a merchant would notice. That is right for the general question and
+ * wrong for the end-to-end proof: the busiest store is fully optimised and
+ * auto-publishes, so its Review screen is permanently empty and there is no
+ * Publish button to click. The proof has to run where drafts actually exist.
+ */
+const shopArgIdx = process.argv.indexOf("--shop");
+const SHOP_HANDLE = shopArgIdx > -1 ? process.argv[shopArgIdx + 1] : null;
 const out = { readAt: new Date().toISOString(), mode: PEEK ? "peek" : "invalidate" };
 
-// The shop with the most content — the one whose score a merchant would notice.
-const busiest = await prisma.generatedContent.groupBy({
-  by: ["shop"],
-  _count: { shop: true },
-  orderBy: { _count: { shop: "desc" } },
-  take: 1,
-});
-const shop = busiest[0]?.shop;
+// Named shop, or the one with the most content.
+let shop = null;
+if (SHOP_HANDLE) {
+  const want = SHOP_HANDLE.includes(".") ? SHOP_HANDLE : `${SHOP_HANDLE}.myshopify.com`;
+  const row = await prisma.shop.findUnique({ where: { shop: want }, select: { shop: true } });
+  if (!row) {
+    // Named and not found is an ERROR, not a silent fallback to a different
+    // shop — reporting a reading from the wrong store would be worse than
+    // reporting nothing.
+    console.log(JSON.stringify({ ...out, error: `no such shop: ${SHOP_HANDLE}` }, null, 2));
+    process.exit(1);
+  }
+  shop = row.shop;
+} else {
+  const busiest = await prisma.generatedContent.groupBy({
+    by: ["shop"],
+    _count: { shop: true },
+    orderBy: { _count: { shop: "desc" } },
+    take: 1,
+  });
+  shop = busiest[0]?.shop ?? null;
+}
 if (!shop) {
   console.log(JSON.stringify({ ...out, error: "no shop has generated content" }, null, 2));
   process.exit(1);

@@ -13,6 +13,10 @@ on:
         type: choice
         options: ["peek", "invalidate"]
         default: "peek"
+      shop:
+        description: "Shop handle to inspect. Empty = the shop with the most content."
+        type: string
+        default: ""
 
 jobs:
   check:
@@ -26,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           flyctl ssh console --app contentclaude \
-            -C "node /app/scripts/score-cache-diag.mjs ${{ inputs.mode == 'peek' && '--peek' || '' }}" | tee cache.json
+            -C "node /app/scripts/score-cache-diag.mjs ${{ inputs.mode == 'peek' && '--peek' || '' }} ${{ inputs.shop != '' && format('--shop {0}', inputs.shop) || '' }}" | tee cache.json
           {
             echo '## Store-score cache'
             echo ''

@@ -65,7 +65,14 @@ async function frameAt(path) {
     const fr = page.frames().find((f) => f.url().includes("app.navaal.ai"));
     if (fr) {
       const n = await fr.evaluate(() => (document.body?.innerText || "").trim().length).catch(() => 0);
-      if (n > 120) return fr;
+      if (n > 120) {
+        // Painted is not the same as SETTLED. The frame reports text as soon as
+        // the page shell renders; the product rows and their per-row buttons
+        // arrive after. Looking immediately found "no Generate button on
+        // /app/products" on a page that plainly has one.
+        await page.waitForTimeout(3000);
+        return fr;
+      }
     }
     await page.waitForTimeout(700);
   }
@@ -78,8 +85,11 @@ const out = { step: STEP, at: new Date().toISOString(), store: STORE };
 async function setAutoPublish(want) {
   const fr = await frameAt("/app/settings");
   if (!fr) return { ok: false, note: "no app frame on /app/settings" };
-  const box = fr.locator('input[type="checkbox"][name="publishWithoutReview"]').first();
-  if ((await box.count()) === 0) return { ok: false, note: "publishWithoutReview checkbox not found" };
+  // Polaris renders checkboxes with a GENERATED id (":R2cq9jmr5:") and no name
+  // attribute, so `input[name=...]` matches nothing. The label is the stable
+  // handle, and it is also what a merchant actually reads.
+  const box = fr.getByLabel("Publish without review").first();
+  if ((await box.count()) === 0) return { ok: false, note: "'Publish without review' checkbox not found" };
   const before = await box.isChecked();
   if (before !== want) {
     await box.setChecked(want, { force: true }).catch(() => {});
@@ -89,11 +99,7 @@ async function setAutoPublish(want) {
   }
   const fr2 = await frameAt("/app/settings");
   const after = fr2
-    ? await fr2
-        .locator('input[type="checkbox"][name="publishWithoutReview"]')
-        .first()
-        .isChecked()
-        .catch(() => null)
+    ? await fr2.getByLabel("Publish without review").first().isChecked().catch(() => null)
     : null;
   return { ok: after === want, before, after };
 }
