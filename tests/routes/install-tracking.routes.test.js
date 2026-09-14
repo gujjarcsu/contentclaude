@@ -25,25 +25,34 @@ const { db, tx, webhook } = vi.hoisted(() => {
     create: vi.fn(async ({ data }) => data),
     updateMany: vi.fn(async () => ({ count: 1 })),
   });
-  const tx = {};
-  for (const m of [
-    "generatedContent",
-    "contentVersion",
-    "contentTemplate",
-    "collectionVoice",
-    "brandVoice",
-    "blogPost",
-    "generationJob",
-    "usageRecord",
-    "plan",
-    "growthState",
-    "reviewRequestAttempt",
-    "upgradePrompt",
-    "session",
-    "gDPRRequest",
-    "shop",
-  ])
-    tx[m] = model();
+  // A transaction client that mocks ANY model, rather than a hand-copied list
+  // of the thirteen that existed when this was written.
+  //
+  // It used to restate every name. P6.2 added `productScore` and
+  // `supportRequest` to `GDPR_SHOP_MODELS` — two shop-scoped tables that had
+  // never been deleted on redaction — and this mock did not know them, so
+  // `chunkDelete` threw on an undefined accessor and the anonymisation never
+  // ran. The failure read "expected spy to be called 1 times, but got 0", which
+  // points nowhere near the cause.
+  //
+  // Importing the real list here is not possible: this block is inside
+  // `vi.hoisted`, which runs before imports are initialised. So the mock stops
+  // having a list at all — a model is created on first access and memoised, and
+  // assertions like `tx.shop.updateMany` work unchanged.
+  //
+  // Symbols and `then` return undefined deliberately: a Proxy that answers
+  // `then` with an object makes anything that awaits `tx` behave strangely, and
+  // that is a debugging afternoon nobody needs.
+  const tx = new Proxy(
+    {},
+    {
+      get(target, key) {
+        if (typeof key === "symbol" || key === "then") return undefined;
+        if (!target[key]) target[key] = model();
+        return target[key];
+      },
+    },
+  );
   const db = {
     $transaction: vi.fn(async (fn) => fn(tx)),
     shop: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(async () => null) },

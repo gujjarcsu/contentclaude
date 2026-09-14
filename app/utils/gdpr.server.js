@@ -20,7 +20,49 @@ export const GDPR_SHOP_MODELS = [
   "reviewRequestAttempt",
   "upgradePrompt",
   "session",
+  // ── Added 2026-09-14 (P6.2), and both were real gaps ──────────────────────
+  //
+  // This list is what `shop/redact` actually deletes, and it was assembled by
+  // hand. Two shop-scoped tables had never been on it:
+  //
+  //   productScore    every product's SEO score before and after we worked on
+  //                   it, keyed by shop. A merchant who uninstalled and asked
+  //                   Shopify to erase them kept a per-product scoreboard here.
+  //   supportRequest  worse, and mine: it holds the EMAIL ADDRESS a merchant
+  //                   typed to be replied to. I added the table in this same
+  //                   phase and did not add it here, which is precisely how the
+  //                   other one got missed.
+  //
+  // A hand-maintained deletion list drifts silently, because nothing fails when
+  // you forget. `tests/utils/gdprCoverage.test.js` now walks the schema and
+  // fails on any model with a `shop` column that is neither deleted here nor
+  // exempted with a stated reason.
+  "productScore",
+  "supportRequest",
 ];
+
+/**
+ * Models that have a `shop` column and are deliberately NOT deleted on
+ * redaction. Each needs a reason, because an exemption list without reasons
+ * becomes the place things go to avoid the rule.
+ *
+ * Asserted against the schema by `tests/utils/gdprCoverage.test.js`.
+ */
+export const GDPR_EXEMPT_MODELS = {
+  Shop:
+    "ANONYMISED, not deleted. The domain is rewritten to redacted:<hash> and the row keeps counters " +
+    "and timestamps only. It survives so that uninstalling and reinstalling cannot reset the free " +
+    "trial or the free-tier allowance — Phase 0 item 10. It holds no content after redaction.",
+  GDPRRequest:
+    "The audit trail OF the redaction. Deleting it would destroy the record that we honoured the " +
+    "request. It stores identifiers only — never the customer email or phone from Shopify's payload " +
+    "— and is pruned after two years.",
+  LogEvent:
+    "Operational logs, WARN and above, carrying a shop domain and no content. Retained 30 days by " +
+    "LOG_RETENTION_DAYS and pruned on a schedule, so it self-clears well inside any reasonable " +
+    "retention expectation. Deleting it inside the redaction transaction would also mean deleting " +
+    "the log lines describing the redaction while it is running.",
+};
 
 /**
  * Delete all rows matching `where` from `model` in batches of `batchSize`.

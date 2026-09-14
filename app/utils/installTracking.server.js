@@ -334,6 +334,24 @@ export async function redactShopRecord(tx, shop) {
       installReferer: null,
       installLandingPath: null,
       reinstallReferer: null,
+      // ── C0.7 / P6.2: THE MERCHANT'S OWN AI KEY MUST NOT SURVIVE AN ERASURE ──
+      //
+      // The Shop row deliberately survives redaction (anonymised, so that
+      // uninstall/reinstall cannot reset the free trial). That exemption was
+      // written when this row held nothing but counters and timestamps. It now
+      // holds a merchant's encrypted Anthropic credential, and "we keep an
+      // anonymised counter row" and "we keep your API key after you asked us to
+      // erase you" are not the same sentence.
+      //
+      // It is encrypted and unreadable without BYOK_ENCRYPTION_KEY, which is
+      // mitigation, not a reason to retain it. Found by tracing what survives
+      // uninstall -> reinstall rather than by any test failing, because nothing
+      // was looking.
+      aiKeyCiphertext: null,
+      aiKeyIv: null,
+      aiKeyTag: null,
+      aiKeyValidatedAt: null,
+      aiKeyFailedAt: null,
       redactedAt: new Date(),
     },
   });
