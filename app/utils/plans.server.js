@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
 import { BILLING_PLANS, FREE_PLAN, getEntitlements, planLimitsFor, TRIAL_CREDITS } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
+import { rebasedCredits } from "./planRebase.js";
 import logger from "./logger.server.js";
 import { withUsageRecord, withMerchantKey } from "./usageContext.server.js";
 import { creditsFor } from "./credits.js";
@@ -47,7 +48,7 @@ export async function getOrCreatePlan(shop) {
       // reconcile all fire within milliseconds of each other, all miss, and all
       // try to create the row: two of them get P2002 and the merchant's very
       // first page load is a 500. upsert makes it one atomic statement.
-      return prisma.plan.upsert({
+      const row = await prisma.plan.upsert({
         where: { shop },
         update: {},
         create: {
@@ -57,6 +58,22 @@ export async function getOrCreatePlan(shop) {
           monthlyCredits: FREE_PLAN.monthlyCredits,
         },
       });
+      // A1 (Phase 8) — a row below the locked table for its plan name is raised
+      // on read. Favourable only (planRebase.js); `lt` in the predicate so a
+      // concurrent raise is never undone. This is how the two merchants who
+      // installed before B2 stop reading "of 25" under a listing that says 100.
+      const want = rebasedCredits(row);
+      if (want > row.monthlyCredits) {
+        try {
+          await prisma.plan.updateMany({ where: { shop, status: "active", monthlyCredits: { lt: want } }, data: { monthlyCredits: want } });
+          logger.info({ shop, event: "plan_rebased", from: row.monthlyCredits, to: want }, "plan row raised to the locked table");
+          return { ...row, monthlyCredits: want };
+        } catch (err) {
+          // A raise that fails must never fail the page; the one-shot script covers it.
+          logger.warn({ shop, err: err?.message, event: "plan_rebase_failed" }, "plan row raise failed (non-fatal)");
+        }
+      }
+      return row;
     },
     60,
   ); // 60-second TTL — plan changes only via billing webhooks which call syncBillingToPlan

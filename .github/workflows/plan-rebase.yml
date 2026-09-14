@@ -1,0 +1,28 @@
+name: Plan re-base (writes Plan rows)
+
+# A1 (Phase 8) — raise every active Plan row that is below the locked table to
+# the locked number for its plan name. Favourable only; nothing is lowered.
+# Prints counts per plan name, before and after. Never a shop domain.
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    name: Re-base Plan rows to the locked table
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/plan-rebase--writes-plan-rows.mjs" | tee rebase.json
+          {
+            echo '## Plan re-base'
+            echo ''
+            echo '```json'
+            cat rebase.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
