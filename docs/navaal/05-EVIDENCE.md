@@ -69,6 +69,8 @@ un-finishable, which is why AI visibility sits in every paid tier.
     plan:             Free with quota · Free exhausted · mid-tier · catalogue > any plan · BYO key
     API:              healthy · THROTTLED · partial failure · deploy mid-job
 
+**Run, 2026-09-15 (Phase 10 Part C):** every axis above is a row in `SHAPE-MATRIX.md` — 36 rows × 9 phases, PASS 107 · HELD 15 · NOT RUN 75, each NOT RUN naming where it goes. What the first run found: all-draft and trade-only stores scan as empty (correctly) and were told to "add a product" — fixed; the 100-variant product's barcode past the walk's sample of 50 is stated in the finding, not hidden; with 25-character copy a missing SEO title outweighs a missing description in the rubric (observation, P1.3); the size axis above 3,000 has no store to run on.
+
 ## 5. THE REAL-CATALOGUE BASELINE (EBS, 2026-09-10) — an instrument, not a spec
 
 3,148 products: **1,350 active**, 280 draft, **1,518 archived**. 395 collections.

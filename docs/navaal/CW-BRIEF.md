@@ -1,6 +1,6 @@
 # CW BRIEF — the current batch
 
-**Regenerated 2026-09-13.** Read `CW-STANDING-PROMPT.md` first for context and rules.
+**Regenerated 2026-09-13; the shape stores added 2026-09-15.** Read `CW-STANDING-PROMPT.md` first for context and rules.
 
 **The correction that changes your plan:** the last CW session concluded that everything was blocked
 and that no dev store had a usable catalogue. Both were checked against the repo and production, and
@@ -296,6 +296,40 @@ an assertion that fires if it is ever resolved.
 listing and the app can be compared line by line.
 
 ---
+
+## ADDED 2026-09-15 BY CC — SIX `navaal-shape-*` DEV STORES: CREATE, IMPORT, INSTALL, POST THE HANDLES (F2; ~10 minutes each)
+
+The store-shape matrix (`docs/navaal/SHAPE-MATRIX.md`) ran every shape a fixture can reach. What a
+fixture cannot reach — the screen a merchant actually sees, the AI draft, the Shopify publish — needs a
+real store of that shape. The catalogues are built: five CSVs generated from the matrix's own fixtures,
+under `tools/proof/fixtures/shapes/`. Creating a development store is a Partner Dashboard action, so it
+is yours. **None of these stores is captured, none is frozen, none is EBS**, and every dev-store guard
+and the funnel's test-shop exclusion already recognise the `navaal-shape-` prefix.
+
+For each store, in this order — the order matters because the app's first run scores whatever is in
+the catalogue at install time:
+
+1. Partner Dashboard → Stores → **Add store → Create development store**, store name exactly as below
+   (the `.myshopify.com` handle must start with `navaal-shape-`).
+2. In the new store's admin: **Products → Import → choose the file → Upload and preview → Import.** Wait
+   for the "import complete" email (a minute or two; the 150-row file may take five).
+3. **Then** install the app on it from the Partner Dashboard (Apps → Navaal → Test on development
+   store). Installing last is the point.
+4. Open the app once and read `/app` with your eyes. Paste the handle and the first screen's wording
+   back into `06-QUEUE.md`.
+
+| store name | import file | what `/app` should say on the first run |
+|---|---|---|
+| `navaal-shape-drafts` | `alldraft.csv` — 20 drafts, none on the Online Store | *"Your products aren't on your Online Store yet"* — never "add a product" |
+| `navaal-shape-variants` | `variants.csv` — 6 × 7-variant products with barcodes from variant 3, plus 1 × 100 variants with its only barcode on variant 60 | a score and three targets; later, the Catalogue screen shows *"No barcode on any of the 50 variants we read"* on the 100-variant product only |
+| `navaal-shape-fr` | `fr.csv` — 8 French products | a score and three French targets; **then approve and publish ONE draft through Review** and tell me whether the draft is French and the accents survived |
+| `navaal-shape-b2b` | `b2b.csv` — 12 active trade-only products, not on the Online Store | *"Your products aren't on your Online Store yet"* |
+| `navaal-shape-cap` | `cap.csv` — 150 products; the Free cap is 100 | a score and three targets; on Products, the bulk confirmation should say 100 now / 50 waiting |
+| `navaal-shape-zero` | no import | *"Add a product and we'll get started"* — and no screen congratulates you |
+
+When the handles are posted, CC runs the **First-run scores** workflow and `read-screen.mjs` on each and
+closes the matrix cells. If a store's first screen says something other than the column above, that
+sentence is the finding — paste it verbatim.
 
 ## WHEN YOU FINISH
 

@@ -1014,3 +1014,54 @@ all drafts"* way back.
 **FR14 —** 3/100 → 3% and 19/4,000 → 1%, both asserted.
 
 **Then capture the same session.** Part B does not start until this is posted, and it is.
+
+## POSTED 2026-09-15 BY CC — PHASE 10 PARTS B AND C ARE LIVE (`c7bfb0e`, `da265c4`). CW: SIX `navaal-shape-*` STORES TO CREATE, IMPORT, INSTALL.
+
+**Part B — the funnel is instrumented.** `installed → first screen → first draft seen → first approve →
+first publish → returned on a later day → (uninstalled)`, timestamps only, one row per shop, no PII, no
+content, no name in any log line it writes. Three nullable Shop columns by an additive migration
+(`/api/build-info` deep-health read `columns=324`, was 321). The owner gets one digest a week — counts at
+each stage across non-test shops and the median hours between stages — Monday 08:30 Sydney, through the
+support mailer, and nothing at all while there is no non-test shop. Test shops are out by the same name
+pattern the reset workflow uses plus dev2 and qa-fresh, so **every `navaal-shape-*` store you create is
+excluded by construction.** On demand, read-only: the **Funnel (read-only)** workflow prints the same
+arithmetic to a job summary. **First reading, production, 2026-09-14 23:32Z, counts only:** 11 real shops (5 test shops
+excluded by name) → first draft seen **7 (64 %)** → first approve 0 → first publish **0** → returned 0; uninstalled
+**4**. First-screen and first-approve are stamped from today, so those two read 0 until the next real install. The
+number the owner has been asking for since B0.3 is now a number: **eleven merchants installed, seven saw a draft,
+none published.** That is the conversation, and the Monday digest will carry it without anyone reading a dashboard.
+
+**Found while wiring it, nobody asked:** `sydneyParts()` returned `{day, hour}` and the P3.6 weekly report
+destructured `weekday` from it — `undefined !== 1`, so its Monday could never have come. It returns
+`weekday` and `minute` now, held by a test across the AEDT flip. No Monday had passed since P3.6 went
+live, so no report was missed.
+
+**Part C — the shape matrix (F1) ran, and it found something.** 36 rows over every §4 axis × 9 phases,
+**PASS 107 · HELD 15 · NOT RUN 75**, every PASS cell run against the real code and every NOT RUN naming
+where it goes — `docs/navaal/SHAPE-MATRIX.md`, held verbatim by a doc test. The finding: an all-draft
+store, a trade-only store and an active-but-unpublished store all scan as EMPTY (correctly — the scan is
+scoped to Active on the Online Store) and the empty screen then told a merchant with twenty products to
+**"add a product and we'll get started."** Fixed: the screen now reads *"Your products aren't on your Online
+Store yet"*, names drafts / archived / another channel, and opens the product list. "Add a product" is
+for zero products only.
+
+**F2 — the six stores are yours; everything else is built.** Creating a development store is a Partner
+Dashboard action. For each, in this order:
+
+| store name | import file | then |
+|---|---|---|
+| `navaal-shape-drafts` | `tools/proof/fixtures/shapes/alldraft.csv` (20 drafts) | install the app, read `/app` — it should say *aren't on your Online Store yet* |
+| `navaal-shape-variants` | `shapes/variants.csv` (6 × 7 variants, barcodes from variant 3; 1 × 100 with its only barcode on variant 60) | install; Catalogue screen should show the "50 variants we read" finding on the 100-variant product and none on the others |
+| `navaal-shape-fr` | `shapes/fr.csv` (8 French products) | install; approve and publish ONE draft through Review — is it in French, are the accents intact? |
+| `navaal-shape-b2b` | `shapes/b2b.csv` (12 active, not on the Online Store) | install; `/app` should read *aren't on your Online Store yet*, never "add a product" |
+| `navaal-shape-cap` | `shapes/cap.csv` (150 products, Free cap is 100) | install; Products should offer 100 now / 50 waiting on the bulk confirmation |
+| `navaal-shape-zero` | no import | install; the "add a product" screen, and nothing else congratulates you |
+
+**Create → Products › Import › the file → wait for the import email → install the app LAST** (so the
+first run sees the catalogue) **→ post the handles here.** I then run **First-run scores** and
+`read-screen.mjs` on each and close the cells. None of these stores is captured, none is frozen, none is
+EBS; the files are generated from the matrix's own fixtures (`scripts/shape-csv.mjs`) so each store is
+the fixture made real.
+
+**Standing:** dev2 and qa-fresh stay frozen until your `CAPTURE COMPLETE`. Part A's gate is still your
+capture; qa-fresh still has no install (that install IS the first run — see the previous post).

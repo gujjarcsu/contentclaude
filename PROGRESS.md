@@ -5077,3 +5077,64 @@ green 15, sibling of 13. `6d7f556` fixed it and the push is now chained on the s
 **Routed, unchanged:** P3.1 on a real batch (F10), P3.4 (P0.10), P3.5 (F11), Phase 5 (ten merchants).
 **CW:** the Part A second count is still theirs; `/terms` and `/privacy` to re-read at `dd12c8f`; F3 to
 verify on a dev store with a multi-variant product at `6d7f556`.
+
+## Phase 10 — four small things that block the listing images, the funnel, the shapes (2026-09-15)
+
+**Part A (`f77eef9`).** FR8: a row's score is the product's own, and always was — the First-run scores
+workflow (read-only, one dev store, numbers only) showed ttv-03 with four distinct product scores
+(31/32/33/44) under a store score of 33, targets 31/32/32; qa-fresh is a uniform catalogue, so every
+row equals the mean by arithmetic. A test with two products of different completeness asserts two
+numbers and that the badge never renders the store score; when every target ties, the splash says so.
+N1: the splash's credits sentence is the usage card's arithmetic (`costSentence`, one definition,
+`creditsLeft`), held equal by a test. FR13: a row's Review opens `/app/review?product=<id>` — scoped
+loader, "Showing one product" banner, way back — proved read-only on ttv-03 (5 cards → 1, approve and
+publish present). FR14: 3/100 → 3 %, 19/4000 → 1 %. The qa-fresh reset was refused — no install there —
+so the first run is CW's install, posted at `1d05aaa`.
+
+**Part B (`c7bfb0e`, live; `/api/build-info` deep health `columns=324`, was 321).** The funnel:
+`installed → first screen → first draft seen → first approve → first publish → returned on a later
+day → (uninstalled)`, three nullable Shop columns by an additive migration, stamps first-writer-wins
+and fire-and-forget (`markFirstScreen`, `markFirstApprove` after the approved filter and before
+Shopify is asked, `markReturned` only on a LATER UTC day than the install/reinstall). `funnel.js` is
+pure — counts per stage over non-test shops (the reset workflow's name pattern plus dev2 and
+qa-fresh), medians over pairs with both ends, stages counted independently because earlier installs
+have no first-screen stamp. One digest to the operator address, Monday 08:30 Sydney, Redis-claimed by
+week, only when at least one non-test shop exists; counts and medians, no shop domain in the email or
+in any funnel log line — asserted. The **Funnel (read-only)** workflow prints the same arithmetic on
+demand — first reading on production (2026-09-14 23:32Z, counts only): 11 real shops, 5 test shops excluded;
+first draft seen 7 (64 %), first approve 0 (stamped from today), first publish 0, returned 0, uninstalled 4.
+Eleven installed, seven saw a draft, none published — B0.3 as a number. Break test: removing the Review stamp
+fails one test; suite 4046. **Found, nobody asked:**
+`sydneyParts()` returned `{day, hour}` and the P3.6 weekly report destructured `weekday` — its Monday
+check compared `undefined !== 1` and could never pass. Now `{day, hour, minute, weekday}`, a known
+Monday held across the AEDT flip; no Monday had passed since P3.6 went live. The first deploy of this
+sha failed at the Fly release command with no prisma error line in the log ("timeout waiting for
+release command logs"); `gh run rerun --failed` re-ran only the deploy and it went live — `migrate
+deploy` is transactional, so the rerun was safe.
+
+**Part C (`da265c4`).** F1: the matrix is data over every §4 axis — 36 rows × 9 phases — and
+`tests/utils/shapeMatrix.test.js` runs every PASS cell against the real function; it refuses a PASS
+cell without an assertion and an assertion without a PASS cell, and `SHAPE-MATRIX.md` carries the
+table verbatim under a doc test. **PASS 107 · HELD 15 · NOT RUN 75**, every NOT RUN naming where it
+goes. Six shapes the first fixture file never built: the empty store, barcodes on later variants
+(F3's shape), one product with a hundred variants, multipacks, 150 products on Free, Translations;
+plus the plan and API axes as contexts. **The first run found a defect:** ALL_DRAFT, B2B_ONLY and
+ACTIVE_NOT_PUBLISHED scan as EMPTY — correctly, the scan is scoped to Active on the Online Store —
+and the empty screen told a merchant with twenty products to "add a product and we'll get started".
+Home now passes the two counts into the Start payload and the screen says *"Your products aren't on
+your Online Store yet"*, names drafts / archived / another channel, and opens the product list;
+"add a product" is for zero products only. Three observations recorded, not changed: the 100-variant
+product's barcode past the walk's sample of 50 is stated in the finding; with 25-character copy the
+rubric ranks a missing SEO title below a missing description (P1.3 weights); the walk's grader calls
+`<p>&nbsp;</p>` short where the classifier calls it empty. The size axis above 3,000 has no store —
+eight NOT RUN cells that name that. Break test: renaming the new heading fails three cells; suite
+4170. F2: the five `navaal-shape-*` catalogues are Shopify CSV imports generated from the matrix's own
+fixtures (`scripts/shape-csv.mjs`, held to the generator and to each shape by `shapeCsv.test.js`);
+CSV import publishes to the Online Store and creates variants with barcodes without the
+`write_publications` scope this app deliberately lacks, and the app writes products to no store.
+Creating the stores is a Partner Dashboard action — six names and the runbook (create → import →
+install LAST → post the handle) are in the queue for CW.
+
+**Routed, unchanged:** P3.1 real batch, the Lighthouse number and the storefront read (owner F10);
+P3.4 (P0.10); P3.5 (F11); Phase 5 (ten merchants); BFS Apply (100 calls); the qa-fresh install and
+frame 04 (CW); the six shape stores (CW).
