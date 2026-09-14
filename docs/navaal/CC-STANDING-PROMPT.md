@@ -18,10 +18,19 @@ Listing: `apps.shopify.com/navaal-ai-seo-geo-content`.
 real paying merchants and real revenue. If a piece of work does not move a number on the
 scoreboard in `01-NORTH-STAR.md`, it is a distraction — however good an idea it is.
 
-**Where the project stands, so you understand the stakes:** 5 merchants, **2 net installs, 0
-reviews, $0.00 earned**. 19 installs produced 17 uninstalls, **16 of them the same day**. Phase A
-fixed the defects that caused that. Nothing after this point matters more than a merchant reaching
-one visibly correct result and staying.
+**Where the project stands, so you understand the stakes.** *(Scoreboard re-read from the Partner
+Dashboard by CW on 2026-09-14; this section previously said 5 merchants and 2 net installs.)*
+**8 merchants with the app · 6 net installs · 26 installs, 20 uninstalls, 16 of them same-day ·
+0 reviews · $0.00 earned.**
+
+**AND THE FOUNDING PREMISE HAS CHANGED. Two of those installs are not ours, and both have kept the
+app:** `peter-shops-2.myshopify.com` (China, installed 12 Sep) and
+`zephyrin-wynter-a01g3uy4.myshopify.com` (UK, installed 11 Sep). Neither appears in our Dev
+Dashboard store list, and each has **Navaal as the only app installed**. Being fair to the evidence:
+*two people who are not us* is proved; *two established merchants* is not — both are gmail-registered
+and one handle looks freshly generated. **Either way, work now ships in front of people who are not
+us.** Phase A fixed the defects behind the same-day uninstalls. Nothing after this point matters
+more than a merchant reaching one visibly correct result and staying.
 
 **You are one of four workers.** CC (you — code), CW (a browser and the owner's computer), COWORK
 (research, strategy, copy, navaal.ai), OWNER (a human: logins, money, recordings, decisions).

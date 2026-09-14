@@ -3,6 +3,8 @@ import logger from "./logger.server.js";
 import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
 import { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } from "./text.js";
 import { modelFor, costUsd, costMicroUsd } from "./modelPricing.js";
+import { currentUsageRecord } from "./usageContext.server.js";
+import { recordTokensUsed } from "./plans.server.js";
 
 // ─── P0.6 — real cost accounting ─────────────────────────────────────────────
 //
@@ -41,6 +43,15 @@ function recordUsage({ contentType, model, usage, ms }) {
 
   const record = { event: "ai.usage", contentType, model, inputTokens, outputTokens, microUsd, ms };
   logger.info(record, "AI call usage");
+
+  // Charge it to the UsageRecord this generation belongs to, if it is inside
+  // one. Fire-and-forget on purpose: the content is already produced and the
+  // credit already spent, so a failed write here is a lost statistic and must
+  // never become a failed generation.
+  const ctx = currentUsageRecord();
+  if (ctx?.usageRecordId && inputTokens + outputTokens > 0) {
+    recordTokensUsed(ctx.usageRecordId, inputTokens + outputTokens).catch(() => {});
+  }
 
   if (usageObserver) {
     try {

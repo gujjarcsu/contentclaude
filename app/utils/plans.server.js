@@ -3,6 +3,7 @@ import prisma from "../db.server.js";
 import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 import logger from "./logger.server.js";
+import { withUsageRecord } from "./usageContext.server.js";
 
 export { FREE_PLAN };
 
@@ -170,7 +171,12 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
 
         // Write the record atomically — inside the transaction this is the
         // only writer for this shop in this transaction, preventing double-spend.
-        await tx.usageRecord.create({
+        // tokensUsed starts at 0 because the real count is not known until the
+        // generation has RUN, and this transaction reserves the credit BEFORE
+        // it does. recordTokensUsed() fills it in afterwards; see
+        // app/utils/usageContext.server.js for how the right record is found
+        // when several generations run at once.
+        const record = await tx.usageRecord.create({
           data: { shop, month, contentType, productId, tokensUsed: 0 },
         });
 
@@ -179,6 +185,7 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           planName: plan.planName,
           monthlyLimit: plan.monthlyLimit,
           remaining: plan.monthlyLimit - usageCount - 1,
+          usageRecordId: record.id,
         };
       },
       {
@@ -217,6 +224,31 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
       };
     }
     throw err;
+  }
+}
+
+/**
+ * Charge the real token count to a usage record, after the generation has run.
+ *
+ * BEST EFFORT, ALWAYS. Accounting must never fail a merchant's generation: the
+ * content is already produced and the credit is already spent, so a failure here
+ * is a lost statistic, not a lost result. It logs and moves on.
+ *
+ * ADDITIVE, because one logical generation can be more than one API call — a
+ * retry, or the two calls behind a two-option comparison — and each reports its
+ * own usage.
+ */
+export async function recordTokensUsed(usageRecordId, tokens) {
+  if (!usageRecordId || !Number.isFinite(tokens) || tokens <= 0) return false;
+  try {
+    await prisma.usageRecord.update({
+      where: { id: usageRecordId },
+      data: { tokensUsed: { increment: Math.round(tokens) } },
+    });
+    return true;
+  } catch (err) {
+    logger.warn({ usageRecordId, err: err?.message }, "could not record tokens used (non-fatal)");
+    return false;
   }
 }
 
@@ -279,7 +311,10 @@ export async function withGenerationCredit(shop, { contentType, productId = null
 
   let result;
   try {
-    result = await work(gate);
+    // The generation runs inside a context naming the record it belongs to, so
+    // ai.server.js can charge its real token counts to the right row even when
+    // the bulk processor has several generations in flight at once.
+    result = await withUsageRecord({ usageRecordId: gate.usageRecordId, shop }, () => work(gate));
   } catch (err) {
     await refundGeneration(shop, { productId, contentType }).catch(() => {});
     logger.info(
