@@ -168,7 +168,12 @@ Do not publish any part of this early. Each line names the phase that must be li
 **Added bullets:**
 - `Daily checks tell you when a theme or import breaks your product data` *(Phase 2)*
 - `See which of your products AI shopping assistants can and cannot read` *(Phase 2)*
-- `Fix missing barcodes, options and availability across your catalog in bulk` *(Phase 2)*
+- `Fix missing barcodes, option names and alt text across your catalog in bulk` *(Phase 2)*
+  *(Corrected 2026-09-14 by CC when P2.6 went live: the earlier wording said "availability", which
+  the app does not and cannot fix — Shopify supplies availability to every feed from inventory, so
+  there is nothing to add. Barcodes are typed by the merchant or the product is marked own-brand;
+  option names are proposed and applied; alt text is written at 0 credits and reviewed. Verified on
+  `/app/fix`.)*
 - `See sessions referred from ChatGPT, Copilot and Google AI` *(Phase 3)*
 - `Compare changed pages against a holdout to see if crawling sped up` *(Phase 3)*
 

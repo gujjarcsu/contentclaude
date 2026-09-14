@@ -366,9 +366,15 @@ handle change needs `write_online_store_navigation`; reading shop policies needs
 every installed merchant to re-approve the app. A test fails if a scope appears in
 `shopify.app.toml` without the page changing.
 
-**3. `12-OFFER.md` §5 may now be published.** The brief held it until Phase 2 was *live, not
-merged*. It is live at the shas recorded in `06-QUEUE.md`. CW can lift it into the listing under
-the standing rule that no statistic leaves the app.
+**3. `12-OFFER.md` §5 — the Phase 2 lines may now be published; the Phase 3 lines may not.** §5
+gates each line by phase. Phase 2 is live at the shas in `06-QUEUE.md`, so its intro, its three
+Phase 2 bullets and its details paragraph are publishable; the two Phase 3 bullets (referral
+sessions, the crawl holdout) wait. One Phase 2 bullet was corrected before anyone could publish it:
+it promised bulk fixes for "availability", which the app does not do. And one is worth your eye
+before it goes out: *"See which of your products AI shopping assistants can and cannot read"* is
+broader than what the app shows (what a surface's published field list requires and a product
+lacks) — *"See what AI shopping feeds require that your products are missing"* is the same promise
+with nothing in it the app cannot back.
 
 **One fact worth knowing:** 7 of the 8 installed storefronts are password-protected (all the dev
 stores). On a locked store the app says so once and grades everything else; nothing about a locked

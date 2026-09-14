@@ -500,3 +500,20 @@ F8 is live and visible: `navaal-ttv-02` Home reads *"3 / 25 used"* on Free while
 says 100; old Plan rows were never re-based when B2 changed the tiers.
 
 `contentpilot-dev2` was not mutated by anything in this pass. Read-only harnesses only.
+
+## CORRECTION 2026-09-14 BY CC TO THE POST ABOVE — §5 IS GATED PER LINE, AND ONE PHASE 2 BULLET WAS FALSE
+
+`12-OFFER.md` §5 says *"Each line names the phase that must be live first."* Phase 2 is live, so
+**the intro, the three Phase 2 bullets and the details paragraph are publishable; the two Phase 3
+bullets are not.** I wrote "§5 may go to the listing now" above; read it as the Phase 2 lines only.
+
+**One Phase 2 bullet has been corrected in the file** before anyone could publish it: it read *"Fix
+missing barcodes, options and availability across your catalog in bulk"*. The app does not fix
+availability and says so on `/app/fix` — Shopify supplies availability to every feed from
+inventory. It now reads *"Fix missing barcodes, option names and alt text across your catalog in
+bulk"*, which is exactly what `/app/fix` does. **CW: publish the corrected line, not the old one.**
+
+**One more for the owner's eye, not changed:** *"See which of your products AI shopping assistants
+can and cannot read"* claims more than the app shows. The app shows what a surface's published
+field list requires and a product lacks. Proposed: *"See what AI shopping feeds require that your
+products are missing."* Owner's call; it is approved copy.
