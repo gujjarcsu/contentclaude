@@ -11,6 +11,34 @@ many other tasks are waiting on it.
 
 ---
 
+## FYI 2026-09-14 — `BYOK_ENCRYPTION_KEY` IS NOW SET IN PRODUCTION. No action needed; one hazard to know.
+
+**Bring-your-own-AI-key at Pro is live.** A Pro merchant can now paste their own Anthropic key in
+Settings, and generations that use it cost them **zero credits** (the reasoning is in
+`04-DECISIONS.md` — a credit is a unit of model spend, and when they pay Anthropic there is none).
+
+**The secret was generated and installed without any human, or any log, ever seeing it.** The
+`BYOK encryption key — one-time init` workflow creates it on the GitHub runner, pipes it straight
+into `flyctl secrets import` from a file, and shreds the file. It is not an argument, not an
+environment variable in a log line, and not recoverable from the run. The only thing the log shows
+is the name and Fly's own digest. **I did not see it either.**
+
+**THE ONE HAZARD, and it is the reason this note exists: rotating that secret DESTROYS every stored
+merchant key.** There is no re-encryption path, and building one would mean holding every merchant's
+key in memory at once. If it is rotated, each affected Pro merchant has to paste their key again —
+they are not silently moved back onto our key and our money; their jobs **pause** and tell them.
+
+The init workflow **refuses to run a second time** unless you type the exact phrase
+`ROTATE-AND-BREAK-EXISTING-KEYS`, so it cannot be done by accident. `docs/SECRETS.md` carries the
+same warning in the rotation table.
+
+**Verified live at `43f56a2`:** the card renders on a Professional shop, the input is write-only
+(`type="password"`, nothing prefilled, because the loader never receives key material), the page
+contains no key material anywhere, and deep health is `status: ok` with the worker running after the
+machines restarted for the secret.
+
+---
+
 ## ⚠ 2026-09-14, B8 — "THERE ARE NO PAYING MERCHANTS" IS NOT TRUE. ONE ACTIVE PAID SUBSCRIPTION EXISTS.
 
 **Read before anything else on this page. 2 minutes.**
