@@ -94,6 +94,67 @@ describe("09-DOCTRINE.md §2 — the things we will never say", () => {
   }
 });
 
+describe("09-DOCTRINE.md §3 — FAQPage JSON-LD is harmless, claiming a benefit is not", () => {
+  // §3, verbatim: "The rich result NO LONGER EXISTS. The markup is inert.
+  // Emitting it is harmless; CLAIMING A BENEFIT IS NOT." Google retired FAQ
+  // rich results from Search on 7 May 2026. The value is the VISIBLE FAQ:
+  // "This is the real value... Promote it. It is the answer-first content,
+  // not the schema."
+  //
+  // These patterns ban the CLAIM SHAPE, not the words. Saying plainly that
+  // "Google retired FAQ rich results in May 2026" is a fact a merchant should
+  // be told, and must keep passing.
+  const CLAIMS = [
+    {
+      why: "says the schema makes FAQs appear in search",
+      pattern: /(faq|schema|markup|structured data)[^.]{0,60}\b(appears?|show up|reach)\b[^.]{0,25}\b(google|search engines?|serps?)\b/i,
+    },
+    {
+      why: "says an engine reads our structured data",
+      pattern: /(structured data|schema|json-?ld)[^.]{0,60}\b(chatgpt|perplexity|gemini)\b[^.]{0,30}\bread\b/i,
+    },
+    {
+      why: "promises a rich result that no longer exists",
+      pattern: /\b(get|gain|earn|unlock)[^.]{0,30}\brich (result|snippet)s?\b/i,
+    },
+  ];
+
+  it("the doctrine still carries the FAQ verdict", () => {
+    expect(DOCTRINE).toContain("The rich result **no longer exists**");
+    expect(DOCTRINE).toContain("**This is the real value**");
+  });
+
+  for (const { why, pattern } of CLAIMS) {
+    it.each(FILES)(`%s — ${why}`, (file) => {
+      expect(visibleSource(file), `${file} matches ${pattern}`).not.toMatch(pattern);
+    });
+  }
+
+  // COMMENT-STRIPPED, and that is not a detail. The first version of the
+  // assertion below read the raw file, and this component's docstring quotes
+  // §3 — including the phrase "Google retired FAQ rich results from Search on
+  // 7 May 2026". So deleting the sentence the MERCHANT reads still passed,
+  // because the comment explaining the rule satisfied the test. Found by
+  // breaking it. An assertion that a string is PRESENT must read only what
+  // ships, or a comment can satisfy it forever.
+  const cardCopy = () => visibleSource("app/components/EmbedSetupCard.jsx");
+
+  it("the setup card leads with the visible FAQ, not the schema", () => {
+    const card = cardCopy();
+    const visibleAt = card.indexOf("Show the FAQ to shoppers");
+    const schemaAt = card.indexOf("Add the FAQ structured data");
+    expect(visibleAt, "the visible-FAQ step is missing").toBeGreaterThan(-1);
+    expect(schemaAt, "the schema step is missing").toBeGreaterThan(-1);
+    expect(visibleAt, "the schema step comes before the visible-FAQ step").toBeLessThan(schemaAt);
+  });
+
+  it("the setup card tells the merchant the Google truth rather than hiding it", () => {
+    // A merchant turning on FAQ schema deserves to know it will not change
+    // anything in Google Search. Saying so is the honest version of the feature.
+    expect(cardCopy()).toMatch(/retired FAQ rich results/i);
+  });
+});
+
 describe("the GEO score describes itself honestly", () => {
   // The specific claim P1.1 found and removed: a caption under the GEO number
   // saying it "measures how ready your products are to be cited by ChatGPT,

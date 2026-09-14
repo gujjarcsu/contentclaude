@@ -798,8 +798,8 @@ export default function Dashboard() {
                 />
                 <OnboardingStep
                   number="4"
-                  title="Enable the AI-search FAQ schema in your theme"
-                  description="One-time toggle in the theme editor — required for your FAQ content to reach the storefront and be readable by ChatGPT and Perplexity."
+                  title="Show your FAQ content on your product pages"
+                  description="Add the &quot;FAQ (Navaal)&quot; block to your product template so shoppers can read the answers. The optional FAQ-schema app embed lives in the same theme editor."
                   done={embedConfirmed}
                   actionLabel="Open theme editor"
                   onAction={() => window.open(embedDeepLink(shopDomain), "_top")}

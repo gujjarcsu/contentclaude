@@ -489,8 +489,11 @@ export const action = async ({ request }) => {
     if (publishedFaq) {
       const gs = await prisma.growthState.findUnique({ where: { shop }, select: { embedConfirmedAt: true } });
       if (!gs?.embedConfirmedAt) {
+        // P1.2 — was: "your FAQ schema won't appear to search engines until
+        // you enable the app embed". The schema is inert for Google since
+        // 7 May 2026; the visible block is what a shopper actually sees.
         embedNotice =
-          ' Note: your FAQ schema won\'t appear to search engines until you enable the "AI-search FAQ schema" app embed in your theme (see the setup card).';
+          ' Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the "FAQ (Navaal)" block to your product template (see the setup card).';
       }
     }
 

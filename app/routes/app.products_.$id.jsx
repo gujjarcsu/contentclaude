@@ -788,7 +788,11 @@ export async function action({ request, params }) {
         });
         if (!gs?.embedConfirmedAt) {
           embedNotice =
-            ' Note: enable the "AI-search FAQ schema" app embed in your theme (see the Dashboard setup card) for the FAQ schema to appear to search engines.';
+            // P1.2 — this said the embed makes the FAQ "appear to search
+            // engines". Google retired FAQ rich results on 7 May 2026, so the
+            // markup changes nothing in Google Search (09-DOCTRINE.md §3). What
+            // actually puts the answers on the page is the visible FAQ block.
+            ' Note: your FAQ answers are saved, but nothing shows them until you add the "FAQ (Navaal)" block to your product template (see the Dashboard setup card).';
         }
       }
 
