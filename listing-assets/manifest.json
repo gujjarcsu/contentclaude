@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-10T03:43:15.165Z",
+  "at": "2026-09-14T05:22:32.914Z",
   "results": [
     {
       "file": "01-home-desktop.png",
@@ -10,9 +10,9 @@
       "must": {},
       "label": "Home — store score and the one next action",
       "ok": true,
-      "bytes": 264568,
-      "hash": "6309136791b9c21c",
-      "excerpt": "Review 4 drafts Welcome back, E2E Test Store! 13 products optimized · 4 drafts awaiting review Written for Google and for AI search Your "
+      "bytes": 193965,
+      "hash": "b9a4c992874d8bd1",
+      "excerpt": "Write a blog post Run audit Store SEO score 65 / 100 across 14 products sampled Your starting score, across the 14 products we sampled. Ho"
     },
     {
       "file": "02-review-desktop.png",
@@ -23,9 +23,9 @@
       "must": {},
       "label": "Review — current copy beside the proposed copy",
       "ok": true,
-      "bytes": 365405,
-      "hash": "68740bec1e3a296c",
-      "excerpt": "Review & Publish. This page is ready Review & Publish 4 products with draft content ready to review Review each draft, then publish. Publ"
+      "bytes": 54799,
+      "hash": "b7459a8d15b24aaf",
+      "excerpt": "Review & Publish. This page is ready Review & Publish Nothing to review — you're all caught up Generate content from the Products page, t"
     },
     {
       "file": "03-products-desktop.png",
@@ -36,20 +36,22 @@
       "must": {},
       "label": "Products — every product and where it stands",
       "ok": true,
-      "bytes": 334942,
-      "hash": "8e35e845a7b2a2fa",
-      "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content Review 4 drafts Collections Activity 13"
+      "bytes": 190595,
+      "hash": "b16012809eaf60c6",
+      "excerpt": "Products. This page is ready Products 32 products in your catalog · 14 active and draft products published to your online store · 30 with "
     },
     {
       "file": "04-start-desktop.png",
-      "store": "navaal-qa-fresh",
+      "store": "navaal-ttv-02",
       "path": "/app",
       "width": 1600,
       "height": 900,
       "must": {},
       "label": "First run — the store is scored and three drafts are written",
-      "ok": false,
-      "error": "this is not the First run — the store is scored and three drafts are written screen — no match for /scores \\d+\\/100/i in: Let's get your store found by AI. This page is ready\n\nLet's get your store found by AI\n\nAdd a product and we'll get star"
+      "ok": true,
+      "bytes": 231180,
+      "hash": "e5293961b9604895",
+      "excerpt": "Review 3 drafts Store SEO score 33 / 100 across 13 products sampled Your starting score, across the 13 products we sampled. How is this sc"
     },
     {
       "file": "05-settings-desktop.png",
@@ -60,8 +62,8 @@
       "must": {},
       "label": "Settings — brand voice and the current plan",
       "ok": true,
-      "bytes": 328443,
-      "hash": "f934106a1edfdb23",
+      "bytes": 222582,
+      "hash": "0008d508560965ef",
       "excerpt": "Settings. This page is ready Settings Brand voice, autopilot, and content templates Store Identity Tell the AI who you are — the more sp"
     },
     {
@@ -70,13 +72,12 @@
       "path": "/app",
       "width": 375,
       "height": 812,
-      "frameOnly": true,
       "must": {},
       "label": "Home on a phone",
       "ok": true,
-      "bytes": 87567,
-      "hash": "0b54698e8725f2d5",
-      "excerpt": "Review 4 drafts Welcome back, E2E Test Store! 13 products optimized · 4 drafts awaiting review Written for Google and for AI search Your "
+      "bytes": 106130,
+      "hash": "c8aad87895b25c6d",
+      "excerpt": "Run audit Store SEO score 65 / 100 across 14 products sampled Your starting score, across the 14 products we sampled. How is this scored? "
     },
     {
       "file": "07-review-mobile.png",
@@ -84,13 +85,12 @@
       "path": "/app/review",
       "width": 375,
       "height": 812,
-      "frameOnly": true,
       "must": {},
       "label": "Review on a phone",
       "ok": true,
-      "bytes": 111256,
-      "hash": "7b14259f88440cca",
-      "excerpt": "Review & Publish. This page is ready Review & Publish 4 products with draft content ready to review Review each draft, then publish. Publ"
+      "bytes": 47026,
+      "hash": "f48cc3b3ccf256e5",
+      "excerpt": "Review & Publish. This page is ready Review & Publish Nothing to review — you're all caught up Generate content from the Products page, t"
     },
     {
       "file": "08-products-mobile.png",
@@ -98,13 +98,12 @@
       "path": "/app/products",
       "width": 375,
       "height": 812,
-      "frameOnly": true,
       "must": {},
       "label": "Products on a phone",
       "ok": true,
-      "bytes": 85403,
-      "hash": "d56719eacb1d1e80",
-      "excerpt": "Products. This page is ready Products 17 products · 13 live · 4 ready to review · 0 need content 13 AI Content Published 4 Drafts to R"
+      "bytes": 81651,
+      "hash": "f2c67070753f9ca1",
+      "excerpt": "Products. This page is ready Products 32 products in your catalog · 14 active and draft products published to your online store · 30 with "
     }
   ]
 }
