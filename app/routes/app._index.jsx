@@ -35,6 +35,7 @@ import {
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import { getLiveShopName } from "../utils/shopName.server.js";
+import { GeoRubric } from "../components/GeoRubric.jsx";
 import { greetingName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
@@ -376,6 +377,11 @@ function StoreScoreCard({ score }) {
                   ? `Down ${Math.abs(delta)} points ${sincePhrase}, across the ${score.scanned} products we sampled.`
                   : `Across the ${score.scanned} products we sampled. We will show the change once there is one.`}
         </Text>
+
+        {/* P1.3 - the same rubric, on the surface EVERY merchant sees. StartState
+            only renders during first run, so publishing it only there would hide it
+            from everyone past that point. */}
+        <GeoRubric />
 
         {/* Group 6.1 — the OTHER score, named, so the two are never mistaken for
             one number disagreeing with itself. */}

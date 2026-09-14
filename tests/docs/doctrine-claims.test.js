@@ -155,20 +155,54 @@ describe("09-DOCTRINE.md §3 — FAQPage JSON-LD is harmless, claiming a benefit
   });
 });
 
-describe("the GEO score describes itself honestly", () => {
-  // The specific claim P1.1 found and removed: a caption under the GEO number
-  // saying it "measures how ready your products are to be cited by ChatGPT,
-  // Perplexity, Gemini and Google AI Overviews". calculateGeoScore() grades six
-  // properties of the merchant's OWN content — answer-first opening, Q&A,
-  // schema, attributes, meta, alt text. It never observes a citation, and no
-  // evidence links those six inputs to being cited by any named engine.
-  const start = readFileSync("app/components/StartState.jsx", "utf8");
-
-  it("says what it scores", () => {
-    expect(start).toMatch(/scores six things on your product pages/i);
-  });
+describe("the GEO score describes itself honestly, and publishes its rubric", () => {
+  // P1.1 removed a caption claiming the score "measures how ready your products
+  // are to be cited by ChatGPT, Perplexity, Gemini and Google AI Overviews".
+  // calculateGeoScore grades properties of the merchant's OWN content and never
+  // observes a citation.
+  //
+  // P1.3 then rebuilt the rubric, which made P1.1's replacement caption stale in
+  // turn: it listed "structured data" as one of six things scored, and that
+  // dimension no longer exists. THIS GUARD CAUGHT THAT. The fix was not a new
+  // hand-written sentence — it was publishing the rubric from GEO_RUBRIC, the
+  // same table the score adds up, so the description cannot go stale again.
+  //
+  // Whitespace-normalised because JSX wraps prose across lines, and a reflow is
+  // not a copy change.
+  const startCopy = () => visibleSource("app/components/StartState.jsx").replace(/\s+/g, " ");
 
   it("says out loud what it cannot see", () => {
-    expect(start).toMatch(/not whether you were cited/i);
+    expect(startCopy()).toMatch(/not whether you were cited/i);
+  });
+
+  it("does not describe the rubric by hand any more", () => {
+    // The stale sentence, and the dimension P1.3 removed.
+    expect(startCopy()).not.toMatch(/scores six things/i);
+    expect(startCopy()).not.toMatch(/attribute completeness, meta tags and image alt text/i);
+  });
+
+  it("publishes the rubric from the same table the score uses", () => {
+    // Rendered from GEO_RUBRIC, never a second hand-written copy of it.
+    const rubric = visibleSource("app/components/GeoRubric.jsx");
+    expect(rubric, "GeoRubric must render GEO_RUBRIC, not a copy of it").toMatch(
+      /import \{ GEO_RUBRIC \} from "\.\.\/utils\/geoRubric\.js"/,
+    );
+    expect(rubric).toMatch(/GEO_RUBRIC\.map\(/);
+  });
+
+  it("the merchant can actually open it", () => {
+    // L15 — a rubric a merchant cannot reach is not published. There has to be a
+    // control, and it has to say what it does.
+    const rubric = visibleSource("app/components/GeoRubric.jsx");
+    expect(rubric).toMatch(/How is this scored\?/i);
+    expect(rubric).toMatch(/<Collapsible/);
+  });
+
+  it("is published on BOTH surfaces the score appears on", () => {
+    // StartState only renders while Shop.firstDraftSeenAt is null. Publishing
+    // the rubric only there would hide it from every merchant past their first
+    // run — which is most of them, and all of the paying ones.
+    expect(visibleSource("app/components/StartState.jsx")).toMatch(/<GeoRubric \/>/);
+    expect(visibleSource("app/routes/app._index.jsx")).toMatch(/<GeoRubric \/>/);
   });
 });

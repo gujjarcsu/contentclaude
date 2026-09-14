@@ -47,6 +47,7 @@ import {
   SkeletonDisplayText,
   ProgressBar,
 } from "@shopify/polaris";
+import { GeoRubric } from "./GeoRubric.jsx";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
@@ -284,11 +285,11 @@ function StartBody({ scan, start, navigate, onRetry }) {
           </InlineStack>
 
           <Text as="p" variant="bodySm" tone="subdued">
-            GEO scores six things on your product pages: an answer-first opening, Q&A content, structured
-            data, attribute completeness, meta tags and image alt text. Those are the inputs AI answer
-            engines read. It scores your content, not whether you were cited — nothing inside an app can
-            see that.
+            GEO scores what is on your product pages. It scores your content, not whether you were
+            cited — nothing inside an app can see that.
           </Text>
+
+          <GeoRubric />
         </BlockStack>
       </Card>
 

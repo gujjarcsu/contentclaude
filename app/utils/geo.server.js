@@ -11,6 +11,11 @@
 // and clearly labelled.
 
 import { parseFaqPairs, faqToJsonLd } from "./seo.server.js";
+import { GEO_RUBRIC, ATTRIBUTE_GRADES } from "./geoRubric.js";
+
+// Re-exported so existing importers keep working, and so there is still exactly
+// one definition of the rubric.
+export { GEO_RUBRIC, ATTRIBUTE_GRADES };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,112 +41,164 @@ function clamp(n, lo, hi) {
 
 // ─── GEO Readiness Score ──────────────────────────────────────────────────────
 
+/** A year. Older than this and "recently reviewed" stops being true. */
+const FRESH_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
 /**
- * Compute a GEO Readiness Score (0–100) for a single product from data the store
- * ALREADY has — no external API calls.
+ * Concrete, checkable facts: a number attached to a unit.
  *
- * P1.1 — what this DOES and does not measure. It grades six properties of the
+ * The separator is `[\s-]*`, not `\s*`, because real product copy hyphenates
+ * constantly \u2014 "14-inch laptop", "3-metre cable", "500-gram bag". The first
+ * version required whitespace, so it scored every one of those as zero evidence
+ * and would have called a genuinely specific description thin. Found by running
+ * it against this repo's own RICH_PRODUCT fixture instead of against strings
+ * written to make it pass.
+ */
+const EVIDENCE_PATTERN =
+  /\d+(?:[.,]\d+)?[\s-]*(?:mm|cm|m|km|kg|g|mg|ml|l|oz|lb|lbs|in|inch|inches|ft|foot|feet|"|%|\u00b0c|\u00b0f|w|kw|v|ah|mah|gb|tb|hz|px|pcs|pack|ply|thread|count|litre|liter|gram|metre|meter)\b/gi;
+
+/**
+ * Compute a GEO Readiness Score (0\u2013100) for a single product from data the store
+ * ALREADY has \u2014 no external API calls.
+ *
+ * P1.1 \u2014 what this DOES and does not measure. It grades properties of the
  * merchant's own content. It cannot observe a citation, and no evidence links
- * these six inputs to being cited by any named engine. This used to say it
- * "grades how citable the content is by AI answer engines", which asserted
- * exactly that link. The score is a content-readiness score; say that and
- * nothing more (09-DOCTRINE.md §2).
+ * these inputs to being cited by any named engine. The score is a
+ * content-readiness score; say that and nothing more (`09-DOCTRINE.md` §2).
  *
- * input shape (all optional, missing = not credited — never fabricated):
- *   description     – product description (HTML or text)
- *   seoTitle        – meta title
- *   seoDescription  – meta description
- *   images          – [{ altText }]
- *   productType, vendor, tags[]            – entity attributes
- *   price | variants[{price}]              – pricing entity
- *   faq             – FAQ text in "Q:/A:" format (from generation)
- *   rating          – { value, count } from a reviews source (never invented)
+ * input shape (all optional, missing = not credited \u2014 never fabricated):
+ *   description     \u2013 product description (HTML or text)
+ *   seoTitle        \u2013 meta title
+ *   seoDescription  \u2013 meta description
+ *   images          \u2013 [{ altText }]
+ *   productType, vendor, tags[]            \u2013 entity attributes
+ *   price | variants[{price}]              \u2013 pricing entity
+ *   barcode | variants[{barcode}]          \u2013 Admin-API-only; scored only if supplied
+ *   faq             \u2013 FAQ text in "Q:/A:" format (from generation)
+ *   updatedAt       \u2013 ISO date or Date; scored only if supplied
  *
- * @returns {{ score:number, checks:object, breakdown:Array }}
+ * @returns {{ score:number, checks:object, breakdown:Array, notMeasured:string[] }}
  */
 export function calculateGeoScore(input = {}) {
   const descText = stripHtml(input.description);
   const faqPairs = parseFaqPairs(input.faq);
   const images = Array.isArray(input.images) ? input.images : [];
   const tags = Array.isArray(input.tags) ? input.tags : [];
-  const prices = Array.isArray(input.variants)
-    ? input.variants.map((v) => parseFloat(v?.price)).filter((p) => !isNaN(p))
-    : [];
+  const variants = Array.isArray(input.variants) ? input.variants : [];
+
+  const prices = variants.map((v) => parseFloat(v?.price)).filter((n) => !isNaN(n));
   const hasPrice = prices.length > 0 || !isNaN(parseFloat(input.price));
 
-  // 1) Answer-first structure (15) — leads with a concise, self-contained answer.
-  //    Heuristic: a real opening sentence that is declarative and standalone,
-  //    on a description of usable length.
+  // "Not supplied" and "supplied but empty" are different findings (L3). Only
+  // an attribute the caller actually asked about is scored.
+  const barcodeSupplied = "barcode" in input || variants.some((v) => v && "barcode" in v);
+  const hasBarcode =
+    !!String(input.barcode || "").trim() ||
+    variants.some((v) => !!String(v?.barcode || "").trim());
+
+  // ── 1. Content density (25) ────────────────────────────────────────────
+  // Length band plus concrete detail. A long description of adjectives is not
+  // dense; "26cm, 3.2kg, cast iron" is.
+  const len = descText.length;
+  const lengthPts = len >= 600 ? 15 : len >= 300 ? 12 : len >= 120 ? 7 : len > 0 ? 2 : 0;
+  const evidenceHits = (descText.match(EVIDENCE_PATTERN) || []).length;
+  const evidencePts = Math.min(10, evidenceHits * 2.5);
+  const contentDensityPts = Math.round(lengthPts + evidencePts);
+
+  // ── 2. Attributes (20), graded ─────────────────────────────────────────
+  const attributePresence = {
+    price: hasPrice,
+    vendor: !!String(input.vendor || "").trim(),
+    barcode: hasBarcode,
+    productType: !!String(input.productType || "").trim(),
+    tags: tags.length >= 1,
+  };
+  const gradedAttributes = ATTRIBUTE_GRADES.filter(
+    (a) => !a.adminOnly || barcodeSupplied,
+  ).map((a) => ({ ...a, present: !!attributePresence[a.key] }));
+
+  const attributesAvailable = gradedAttributes.reduce((sum, a) => sum + a.weight, 0);
+  const attributesEarned = gradedAttributes
+    .filter((a) => a.present)
+    .reduce((sum, a) => sum + a.weight, 0);
+  // Renormalised within the dimension, so not supplying barcode does not cost
+  // points it was never possible to earn.
+  const attributePts = attributesAvailable
+    ? Math.round((attributesEarned / attributesAvailable) * 20)
+    : 0;
+
+  // ── 3. Answer-first opening (15) ───────────────────────────────────────
   const opener = firstSentence(input.description);
-  const answerFirst =
-    descText.length >= 120 && opener.length >= 40 && opener.length <= 300;
+  const answerFirst = descText.length >= 120 && opener.length >= 40 && opener.length <= 300;
   const answerFirstPartial = !answerFirst && descText.length >= 60 && opener.length >= 20;
   const answerFirstPts = answerFirst ? 15 : answerFirstPartial ? 8 : 0;
 
-  // 2) Q&A / FAQ block (20) — AI engines extract Q&A directly.
+  // ── 4. Questions and answers (15) ──────────────────────────────────────
   const faqCount = faqPairs.length;
-  const faqPts = faqCount >= 3 ? 20 : faqCount === 2 ? 14 : faqCount === 1 ? 7 : 0;
+  const qaPts = faqCount >= 3 ? 15 : faqCount === 2 ? 10 : faqCount === 1 ? 5 : 0;
 
-  // 3) Schema breadth & validity (25) — valid JSON-LD the engines can parse.
-  const schema = buildProductJsonLd(input);
-  const types = schemaTypes(schema);
-  // Product is the backbone; FAQPage/Offer/AggregateRating add breadth.
-  let schemaPts = 0;
-  if (types.includes("Product")) schemaPts += 12;
-  if (types.includes("Offer")) schemaPts += 5;
-  if (types.includes("FAQPage")) schemaPts += 5;
-  if (types.includes("AggregateRating")) schemaPts += 3;
-  schemaPts = clamp(schemaPts, 0, 25);
-
-  // 4) Entity / attribute completeness (20) — facts LLMs need to answer "which
-  //    product fits X?": type, brand, price, tags/keywords, descriptive depth.
-  const entitySignals = [
-    !!(input.productType && String(input.productType).trim()),
-    !!(input.vendor && String(input.vendor).trim()),
-    hasPrice,
-    tags.length >= 1,
-    descText.length >= 250, // enough descriptive substance to carry attributes
-  ];
-  const entityFilled = entitySignals.filter(Boolean).length;
-  const entityPts = Math.round((entityFilled / entitySignals.length) * 20);
-
-  // 5) Meta quality (10) — concise, length-appropriate title + description.
+  // ── 5. Meta (10) ───────────────────────────────────────────────────────
   const metaTitle = (input.seoTitle || "").trim();
   const metaDesc = (input.seoDescription || "").trim();
   const titleOk = metaTitle.length > 0 && metaTitle.length <= 60;
   const descOk = metaDesc.length > 0 && metaDesc.length <= 160;
   const metaPts = (titleOk ? 5 : metaTitle ? 2 : 0) + (descOk ? 5 : metaDesc ? 2 : 0);
 
-  // 6) Media / alt text (10) — image alt text gives multimodal engines context.
+  // ── 6. Image alt text (10) ─────────────────────────────────────────────
   const hasImages = images.length > 0;
-  const hasAlt = hasImages && images.some((i) => i?.altText && i.altText.trim());
+  const hasAlt = hasImages && images.some((i) => i?.altText && String(i.altText).trim());
   const mediaPts = (hasImages ? 4 : 0) + (hasAlt ? 6 : 0);
 
-  const checks = {
-    answerFirst: { pass: answerFirst, partial: answerFirstPartial },
-    faqBlock: { pass: faqCount >= 2, count: faqCount },
-    schema: { pass: schemaPts >= 12, types },
-    entities: { pass: entityFilled >= 4, filled: entityFilled, total: entitySignals.length },
-    meta: { pass: titleOk && descOk },
-    media: { pass: hasAlt },
+  // ── 7. Freshness (5), only when the date is known ──────────────────────
+  const updatedAt = input.updatedAt ? new Date(input.updatedAt) : null;
+  const freshnessKnown = !!updatedAt && !isNaN(updatedAt.getTime());
+  const ageMs = freshnessKnown ? Date.now() - updatedAt.getTime() : null;
+  const freshnessPts = freshnessKnown ? (ageMs <= FRESH_MAX_AGE_MS ? 5 : 0) : 0;
+
+  const earned = {
+    contentDensity: contentDensityPts,
+    attributes: attributePts,
+    answerFirst: answerFirstPts,
+    qa: qaPts,
+    meta: metaPts,
+    media: mediaPts,
+    freshness: freshnessPts,
   };
 
-  const breakdown = [
-    { key: "answerFirst", label: "Answer-first structure", points: answerFirstPts, max: 15 },
-    { key: "faqBlock", label: "Q&A / FAQ block", points: faqPts, max: 20 },
-    { key: "schema", label: "Structured data (JSON-LD)", points: schemaPts, max: 25 },
-    { key: "entities", label: "Entity / attribute completeness", points: entityPts, max: 20 },
-    { key: "meta", label: "Meta title & description", points: metaPts, max: 10 },
-    { key: "media", label: "Image alt text", points: mediaPts, max: 10 },
-  ];
+  // A dimension we could not measure is EXCLUDED, not zeroed, and the rest is
+  // renormalised to 100.
+  const measurable = GEO_RUBRIC.filter((d) => !(d.key === "freshness" && !freshnessKnown));
+  const notMeasured = GEO_RUBRIC.filter((d) => !measurable.includes(d)).map((d) => d.key);
 
-  const score = clamp(
-    answerFirstPts + faqPts + schemaPts + entityPts + metaPts + mediaPts,
-    0,
-    100
-  );
+  const availableMax = measurable.reduce((sum, d) => sum + d.max, 0);
+  const totalEarned = measurable.reduce((sum, d) => sum + (earned[d.key] || 0), 0);
+  const score = availableMax ? clamp(Math.round((totalEarned / availableMax) * 100), 0, 100) : 0;
 
-  return { score, checks, breakdown };
+  const breakdown = measurable.map((d) => ({
+    key: d.key,
+    label: d.label,
+    points: earned[d.key] || 0,
+    max: d.max,
+    why: d.why,
+    ...(d.key === "attributes" ? { attributes: gradedAttributes } : {}),
+  }));
+
+  const checks = {
+    contentDensity: { pass: contentDensityPts >= 15, chars: len, evidence: evidenceHits },
+    attributes: {
+      pass: gradedAttributes.filter((a) => a.grade === "blocking").every((a) => a.present),
+      missingBlocking: gradedAttributes.filter((a) => a.grade === "blocking" && !a.present).map((a) => a.key),
+      missingDegrading: gradedAttributes.filter((a) => a.grade === "degrading" && !a.present).map((a) => a.key),
+      missingCosmetic: gradedAttributes.filter((a) => a.grade === "cosmetic" && !a.present).map((a) => a.key),
+    },
+    answerFirst: { pass: answerFirst, partial: answerFirstPartial },
+    qa: { pass: faqCount >= 2, count: faqCount },
+    meta: { pass: titleOk && descOk },
+    media: { pass: hasAlt },
+    freshness: { pass: freshnessKnown && freshnessPts > 0, known: freshnessKnown },
+  };
+
+  return { score, checks, breakdown, notMeasured };
 }
 
 /** Aggregate a store-level GEO score from an array of per-product scores. */
