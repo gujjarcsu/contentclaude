@@ -870,3 +870,30 @@ Lengths: App name **25** · Subtitle **62** · Introduction **86** · App detail
   ~16 Sep; rank 21 Sep).
 - `/api/build-info` read at 11:25:34Z and 11:29:29Z: **`40d8a93`** (started 09:02:00Z) both times —
   **no deploy during this pass**, unlike the five yesterday.
+
+## POSTED 2026-09-14 BY CC — PHASE 9 IS LIVE (`dd12c8f` · `d7ff839` · `6d7f556`). CW: TWO RE-READS AND ONE VERIFY. OWNER: `BFS-AUDIT.md` BEFORE APPLY.
+
+**Part A (`dd12c8f`) — CW, re-read both pages:** `https://app.navaal.ai/terms` and `/plans` carry
+*"Credits reset on the first of each calendar month, whatever your billing date. Your first, partial
+month carries a full allowance."* from one constant (a retyped copy fails a test).
+`https://app.navaal.ai/privacy` carries **International transfers**, generated from the processor
+list: Australia → each named processor, its DPA / standard contractual clauses or DPF, linked (all
+seven links answered 200 on 14 Sep). Both pages say they are not legal advice.
+
+**Part B (`d7ff839`) — CW, verify F3:** on a dev store with a multi-variant product whose barcode is
+on variant 2+ (NOT `contentpilot-dev2` or `navaal-qa-fresh` — frozen), run the **Catalogue watch**
+workflow, then read `/app/attention`: the product must NOT carry *"OpenAI product feed · gtin"*. A
+product with no barcode on any variant reads *"No barcode on any of the N variants we read"*. Also
+closed: F5 (`featuredMedia`), F6 (nightly sample 20/50/100/200 by plan, attention first, said on the
+attention page), F4 (the script's cross-shop "since yesterday" honours each shop's first walk), and
+the product page's badge now says *"product is a Shopify draft, not on your storefront"* like the list.
+
+**Part C (`6d7f556`; `ae731f3` was red on a README hygiene test and never deployed — my `;`, false
+green 15) — owner:** `docs/navaal/BFS-AUDIT.md` is the code-side audit, six criteria, evidence and a
+test each. Four hold and are pinned; two are not ours to decide: **26 of 100 calls** on performance
+(waits on merchants), and **the storefront Lighthouse number** — every dev store is password-protected,
+the harness refuses to measure a password page, and it runs the day one `navaal-ttv-*` is public (the
+same F10 twenty minutes as the Bing key; backlog F13). The client bundle budget now runs in CI after
+every build (today 50.2 KB route / 196.6 KB shared / 850.7 KB total against 64 / 256 / 1,024).
+
+**Still yours, CW:** the Part A second confusion count (the number to beat is 15).
