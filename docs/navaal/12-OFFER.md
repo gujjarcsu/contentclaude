@@ -13,8 +13,28 @@ and §3, all read live that day). Feature allocation follows `09-DOCTRINE.md`.
 
 ## 1. THE PLANS
 
-Annual billing is **20% off** — better than the 17% every competitor shows. Trial is **14 days**,
-against 3–7 days from competitors and Shopify's own recommendation of 14.
+> **⛔ SUPERSEDED 2026-09-14. THE TABLE BELOW IS NOT THE PRICE LIST.**
+> The locked plans are in **`14-PRICING.md` §4**, recorded in `04-DECISIONS.md` under
+> **PRICING — LOCKED 2026-09-14**, and they are what the code bills as of `7d23792`:
+>
+> | | Free | Starter | Growth | Pro |
+> |---|---|---|---|---|
+> | Monthly | $0 | $9.99 | $29.99 | $79.99 |
+> | Annual (save 20%) | — | $95.90 | $287.90 | $767.90 |
+> | Credits / month | 100 | 500 | 1,500 | 4,000 |
+> | Products covered | 100 | 1,000 | 5,000 | Unlimited |
+> | Bulk generation | ✗ | ✓ | ✓ | ✓ |
+> | Trial | — | 14 days, 250 credits | 14 days, 250 credits | 14 days, 250 credits |
+>
+> **Four tiers, not five. There is no Scale and no Enterprise tier.** Credits are weighted —
+> alt text 0, blog post 3, everything else 1 — so "AI generations / month" below is not the same
+> unit as "credits" above and the two must never be mixed in one sentence.
+> The table below is kept for its **feature-to-tier allocation and its competitor column only**,
+> and even those rows must be re-read against the four locked tiers before anything is published.
+> Found stale by CW on 2026-09-14, while checking the listing against this file.
+
+Annual billing is **20% off**. Trial is **14 days**, against 3–7 days from competitors and
+Shopify's own recommendation of 14.
 
 | | **Free** | **Starter** | **Growth** ★ | **Scale** | **Enterprise** |
 |---|---|---|---|---|---|

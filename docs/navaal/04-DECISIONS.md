@@ -13,7 +13,48 @@ To reopen one you must bring **new evidence**, not a preference. Say so explicit
 
 ---
 
-## PRICING — final
+## PRICING — LOCKED 2026-09-14 BY THE OWNER
+
+**The owner approved `14-PRICING.md` in full on 2026-09-14.** It supersedes every pricing row above
+and the "re-decide in P4.0" note in the superseded banner at the top of this file. The table below
+is the single source of truth for what the app bills, what the plans page shows, and what the App
+Store listing says.
+
+| | Free | Starter | Growth (recommended) | Pro |
+|---|---|---|---|---|
+| Monthly | $0 | $9.99 | $29.99 | $79.99 |
+| Annual (save 20%) | — | $95.90 | $287.90 | $767.90 |
+| Credits / month | 100 | 500 | 1,500 | 4,000 |
+| Products covered | 100 | 1,000 | 5,000 | Unlimited |
+| Bulk generation | ✗ — one at a time | ✓ | ✓ | ✓ |
+| Trial | — | 14 days, 250 credits | 14 days, 250 credits | 14 days, 250 credits |
+
+Credit weighting: **alt text 0 credits (unmetered), blog post 3, everything else 1.**
+Uniform **2.00¢ per credit** across all three paid plans. Full-burn margin ≥ 42% on every plan.
+Packs: 1,000 / $19 · 2,000 / $39 · 4,000 / $79 (one-time, Billing API).
+Annual carries a **one-time 2× credit allowance in the first month**.
+**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.
+
+**What this decision closes:** the first OPEN item below (free-tier model spend) is answered — the
+free ceiling is ≈$1.51/shop/month and it is accepted. The rest of the arithmetic, the competitor
+comparison and the eight build items are in `14-PRICING.md`; do not restate them here.
+
+**What it does not license:** none of these numbers may appear on the App Store listing until the
+code actually bills them (App Store requirement — the listing must match the app). The listing plan
+table is updated only after the billing change is live in production. That is queue item H12.
+
+
+---
+
+## ⛔ ARCHIVE — THE PRICING TABLE THIS FILE USED TO CARRY. NOT INSTRUCTION. DO NOT PUBLISH.
+
+> **Superseded in full on 2026-09-14 by `## PRICING — LOCKED` above.** Kept only as the reasoning
+> that produced the locked table. **Every price, tier count and feature row below is wrong now:**
+> five tiers at $19/$49/$99/$299 became four at $9.99/$29.99/$79.99, and the `llms.txt + instant
+> indexing` row names two things `09-DOCTRINE.md` §2 bans outright (Shopify serves llms.txt free on
+> every store; Google's Indexing API excludes product pages). **A session that publishes from this
+> table publishes false prices and banned claims.** Found by CW on 2026-09-14, because two sections
+> in this file both matched "§PRICING" and this one came first.
 
 | | Free | Starter | Growth ★ | Scale | Enterprise |
 |---|---|---|---|---|---|
@@ -73,37 +114,6 @@ extra competitor $10 each · done-for-you setup $750 one-time (contact action, n
 | Two severities on every gate (L6). | ✔ |
 | EBS is an instrument, not the customer (L13). | ✔ |
 
----
-
-## PRICING — LOCKED 2026-09-14 BY THE OWNER
-
-**The owner approved `14-PRICING.md` in full on 2026-09-14.** It supersedes every pricing row above
-and the "re-decide in P4.0" note in the superseded banner at the top of this file. The table below
-is the single source of truth for what the app bills, what the plans page shows, and what the App
-Store listing says.
-
-| | Free | Starter | Growth (recommended) | Pro |
-|---|---|---|---|---|
-| Monthly | $0 | $9.99 | $29.99 | $79.99 |
-| Annual (save 20%) | — | $95.90 | $287.90 | $767.90 |
-| Credits / month | 100 | 500 | 1,500 | 4,000 |
-| Products covered | 100 | 1,000 | 5,000 | Unlimited |
-| Bulk generation | ✗ — one at a time | ✓ | ✓ | ✓ |
-| Trial | — | 14 days, 250 credits | 14 days, 250 credits | 14 days, 250 credits |
-
-Credit weighting: **alt text 0 credits (unmetered), blog post 3, everything else 1.**
-Uniform **2.00¢ per credit** across all three paid plans. Full-burn margin ≥ 42% on every plan.
-Packs: 1,000 / $19 · 2,000 / $39 · 4,000 / $79 (one-time, Billing API).
-Annual carries a **one-time 2× credit allowance in the first month**.
-**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.
-
-**What this decision closes:** the first OPEN item below (free-tier model spend) is answered — the
-free ceiling is ≈$1.51/shop/month and it is accepted. The rest of the arithmetic, the competitor
-comparison and the eight build items are in `14-PRICING.md`; do not restate them here.
-
-**What it does not license:** none of these numbers may appear on the App Store listing until the
-code actually bills them (App Store requirement — the listing must match the app). The listing plan
-table is updated only after the billing change is live in production. That is queue item H12.
 
 ---
 
