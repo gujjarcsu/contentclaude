@@ -62,16 +62,28 @@ describe("asking Shopify the scoped question", () => {
 
     const [, query, variables] = shopifyQuery.mock.calls[0];
     expect(variables.scoped).toBe("status:active AND published_status:published");
-    // Both halves in ONE document: the true catalogue total AND the candidates.
-    expect(query).toMatch(/total:\s*productsCount\s*\{/);
+    // Three counts in ONE document: the catalogue, the candidates, the archived.
+    //
+    // Part B (2026-09-14) — `total` used to be an UNFILTERED productsCount, and
+    // this test pinned it under Group 1.5's reasoning that "3,148 products in
+    // your catalog" is true and must keep its meaning. It is true of Shopify's
+    // records and false about the merchant's catalogue: on a 15-product store
+    // it printed 32 beside a list of 15, because 17 were archived. A merchant's
+    // catalogue is what is not archived, so `total` now carries the same scope
+    // constant the Products list uses, and the archived count is read so the
+    // exclusion can be STATED on screen rather than left as a contradiction.
+    expect(query).toMatch(/total:\s*productsCount\(query:\s*"-status:archived"\)/);
     expect(query).toMatch(/candidates:\s*productsCount\(query:\s*\$scoped\)/);
+    expect(query).toMatch(/archived:\s*productsCount\(query:\s*"status:archived"\)/);
     // Group 2: precision is read, not just count.
     expect(query).toMatch(/precision/);
   });
 
   it("reports the real catalogue total AND the candidates, both labelled", async () => {
-    // Group 1.5 — "3,148 products in your catalog" is TRUE and keeps its
-    // meaning. Replacing it with 1,350 would break a true sentence.
+    // Group 1.5, amended by Part B — `total` is the NON-ARCHIVED catalogue now
+    // (this mock answers 3,148 to that query), and the candidates are named
+    // beside it. Replacing the total with the candidate count would still break
+    // a true sentence; the change is what "total" is a count OF.
     shopifyQuery.mockResolvedValue(ok(3148, 1350));
     const r = await getCandidateCounts(admin, SHOP);
 

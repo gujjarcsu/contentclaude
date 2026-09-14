@@ -57,7 +57,19 @@ export function isPlaceholderName(name, shop) {
  */
 export function greetingName(liveName, storedName, shop) {
   const live = String(liveName || "").trim();
-  if (live && !isPlaceholderName(live, shop)) return live;
+  // THE LIVE NAME IS TRUSTED unless it is byte-identical to the raw handle.
+  //
+  // This used to apply isPlaceholderName() to it, which rejects anything that
+  // NORMALISES to the handle. That heuristic exists to detect OUR seeded copy
+  // in brandVoice.storeName. Applied to Shopify's own value it is wrong for
+  // most real stores, because Shopify DERIVES the handle from the name at
+  // signup: "Acme Co" becomes acme-co, and "Navaal TTV 02" (read from the
+  // admin on 2026-09-14) becomes navaal-ttv-02. Both normalise to their handle
+  // and both are names a person typed. The result was frame 04 greeting
+  // "Welcome back!" with no name on a store that plainly has one.
+  //
+  // Only the exact lowercase-hyphenated form means nobody ever set a name.
+  if (live && live !== handleOf(shop)) return live;
   const stored = String(storedName || "").trim();
   if (stored && !isPlaceholderName(stored, shop)) return stored;
   return null;

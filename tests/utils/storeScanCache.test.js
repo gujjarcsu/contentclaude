@@ -82,6 +82,9 @@ describe("invalidateStoreScan", () => {
   it("clears the key for the shop", async () => {
     await expect(invalidateStoreScan("s.myshopify.com")).resolves.toBe(true);
     expect(invalidateCache).toHaveBeenCalledWith("startscan:s.myshopify.com");
+    // Part B — the catalogue join shares the invalidator, so a publish moves
+    // the joined counts with the score instead of leaving them ten minutes stale.
+    expect(invalidateCache).toHaveBeenCalledWith("catcontent:s.myshopify.com");
   });
 
   it("never throws — a failed cache delete must not fail a publish", async () => {

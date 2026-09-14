@@ -49,6 +49,8 @@ import {
 import { getEntitlements, bulkRefusal } from "../utils/billing-plans.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
+import { contentInCatalogue } from "../utils/catalogueContent.server.js";
+import { publishedSubtext } from "../utils/catalogueContent.js";
 import {
   actionFor,
   hasRealContent,
@@ -194,8 +196,16 @@ export const loader = async ({ request }) => {
   // product that had a published description AND a draft meta title, because
   // those were counted in both. The states are mutually exclusive now and
   // sum to totalStoreProducts.
-  const publishedProducts = metrics.publishedProducts;
-  const draftProducts = metrics.draftProducts;
+  // Part B — joined to the candidate scope, so "with content published",
+  // "ready to review" and "not yet optimized" describe the same N products the
+  // subtitle names. The lifetime record is `recordPublished`, shown as
+  // secondary text. See catalogueContent.js.
+  const catalogue = await contentInCatalogue(admin, shop);
+  const catalogueOk = catalogue.ok;
+  const recordPublished = metrics.publishedProducts;
+  const publishedProducts = catalogue.ok ? catalogue.published : metrics.publishedProducts;
+  const draftProducts = catalogue.ok ? catalogue.draft : metrics.draftProducts;
+  const archivedProducts = candidateCounts.archived?.count ?? null;
 
   // Group 4.1 — "has no content at all" and "not yet optimized by us" are two
   // different states and must never share a number, a label, a badge or a
@@ -205,7 +215,10 @@ export const loader = async ({ request }) => {
   //
   // Counted against CANDIDATES, not the catalogue: offering to optimize an
   // archived product spends a generation on a page nobody can reach.
-  const notOptimized = notOptimizedFrom(candidateProducts, metrics.withContent);
+  const notOptimized = notOptimizedFrom(
+    candidateProducts,
+    catalogue.ok ? catalogue.withContent : metrics.withContent,
+  );
 
   // Group 3.3 — what will ACTUALLY happen when they press the button. The app
   // already knew this before the click and still promised the whole catalogue.
@@ -243,6 +256,9 @@ export const loader = async ({ request }) => {
     totalExact: candidateCounts.total?.exact ?? true,
     countsOk: candidateCounts.ok,
     notOptimized,
+    archivedProducts,
+    recordPublished,
+    catalogueOk,
     willProcessNow,
     waitingForQuota,
     remaining,
@@ -498,6 +514,9 @@ export default function ProductsPage() {
     publishedProducts,
     draftProducts,
     notOptimized,
+    archivedProducts,
+    recordPublished,
+    catalogueOk,
     willProcessNow,
     waitingForQuota,
     usageCount,
@@ -598,10 +617,14 @@ export default function ProductsPage() {
     //
     // The count stays (the stat card "AI Content Published" is exactly right).
     // The word goes.
+    // Part B — one population. `total` is non-archived; every count after the
+    // scope clause is about the candidates it names. The archived count is
+    // stated so "15" beside a Shopify admin showing 32 is not a contradiction.
+    const archivedNote = archivedProducts > 0 ? ` · ${archivedProducts} archived not shown` : "";
     return (
       `${total} products in your catalog${scope} · ` +
       `${publishedProducts} with content published · ${draftProducts} ready to review · ` +
-      `${notOptimized} not yet optimized`
+      `${notOptimized} not yet optimized${archivedNote}`
     );
   }, [
     countsOk,
@@ -613,6 +636,7 @@ export default function ProductsPage() {
     publishedProducts,
     draftProducts,
     notOptimized,
+    archivedProducts,
   ]);
 
   // Tab counts are scoped to the CURRENT page (the tabs filter only the
@@ -907,6 +931,15 @@ export default function ProductsPage() {
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
                   AI Content Published
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {publishedSubtext({
+                    ok: catalogueOk,
+                    inScope: publishedProducts,
+                    candidateCount: candidateProducts,
+                    candidateLabel,
+                    record: recordPublished,
+                  })}
                 </Text>
               </BlockStack>
             </Card>

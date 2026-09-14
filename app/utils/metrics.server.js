@@ -105,7 +105,7 @@ export {
 } from "./productState.js";
 
 /** Only product GIDs. GeneratedContent also stores collection content. */
-const PRODUCT_GID = "gid://shopify/Product/%";
+export const PRODUCT_GID = "gid://shopify/Product/%";
 
 /**
  * Coverage metrics for a shop, in ONE round-trip.
@@ -245,6 +245,35 @@ export function stateForProduct(states, productId) {
  * Coverage percentage: products live on the storefront over total products.
  * Clamped, so it can never read over 100%.
  */
+/**
+ * Part B — one row per product that has content, with its single state.
+ *
+ * The CASE is the SAME precedence as getContentMetrics above, and a test
+ * asserts the two CASE blocks in this file are textually identical, so the
+ * rule cannot fork. It is a separate query rather than a widening of the
+ * existing one because getContentMetrics returns COUNTS and is on every page;
+ * this returns ids and is only needed where they are joined to the catalogue.
+ *
+ * @returns {Promise<Array<{productId: string, state: string}>>}
+ */
+export async function productStateRows(shop) {
+  const rows = await prisma.$queryRaw`
+    SELECT "productId",
+           CASE
+             WHEN bool_or(status = 'draft')                THEN 'draft'
+             WHEN bool_or(status = 'published_unverified') THEN 'published_unverified'
+             WHEN bool_or(status = 'published')            THEN 'published'
+             WHEN bool_or(status = 'rejected')             THEN 'rejected'
+             ELSE 'needs_content'
+           END AS state
+    FROM "GeneratedContent"
+    WHERE shop = ${shop}
+      AND "productId" LIKE ${PRODUCT_GID}
+    GROUP BY "productId"
+  `;
+  return Array.isArray(rows) ? rows.map((r) => ({ productId: r.productId, state: r.state })) : [];
+}
+
 export function coveragePct(publishedProducts, totalProducts) {
   if (!totalProducts || totalProducts <= 0) return 0;
   return Math.min(100, Math.round((publishedProducts / totalProducts) * 100));

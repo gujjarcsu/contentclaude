@@ -42,6 +42,8 @@ import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
+import { contentInCatalogue } from "../utils/catalogueContent.server.js";
+import { publishedSubtext } from "../utils/catalogueContent.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
@@ -165,20 +167,37 @@ export const loader = async ({ request }) => {
   // Group 1.5 — "Total Products 3,148 — In your Shopify catalog" is a TRUE
   // sentence and keeps its meaning. What changes is that the number the app
   // ACTS on is no longer the same number.
+  // Part B — the join. Cached ten minutes, cleared on publish, and honest
+  // about being unavailable: `ok: false` means the screen shows the lifetime
+  // record with wording that says so, never a partial join presented as whole.
+  const catalogue = await contentInCatalogue(admin, shop);
+  const catalogueOk = catalogue.ok;
+
   const totalProducts = candidateCounts.total?.count ?? null;
   const candidateProducts = candidateCounts.candidates?.count ?? null;
+  const archivedProducts = candidateCounts.archived?.count ?? null;
 
-  const generatedCount = metrics.publishedProducts;
-  const draftCount = metrics.draftProducts;
+  // Part B — every count on this screen is about the SAME population: the
+  // candidate scope. The lifetime record is kept beside it as `recordPublished`
+  // and shown as secondary text, never redefined (metrics.server.js, top).
+  const recordPublished = metrics.publishedProducts;
+  const generatedCount = catalogue.ok ? catalogue.published : metrics.publishedProducts;
+  const draftCount = catalogue.ok ? catalogue.draft : metrics.draftProducts;
   // Group 4.1 — not "needs content". These are candidates WE have not written
   // for, which on a store with its own copy is a completely different set.
-  const notOptimizedCount = notOptimizedFrom(candidateProducts, metrics.withContent);
+  const notOptimizedCount = notOptimizedFrom(
+    candidateProducts,
+    catalogue.ok ? catalogue.withContent : metrics.withContent,
+  );
 
   const hasBrandVoice = !!(
     brandVoice &&
     (brandVoice.storeName?.trim() || brandVoice.targetAudience?.trim() || brandVoice.sampleContent?.trim())
   );
-  const isNewShop = generatedCount === 0 && draftCount === 0;
+  // "New" is about whether the merchant has ever done anything, so it reads
+  // the RECORD: a shop whose only content sits on since-archived products is
+  // not new, and must not be shown the first-run experience again.
+  const isNewShop = metrics.publishedProducts === 0 && metrics.draftProducts === 0;
 
   // Phase 3 items 3.1/3.2 — Home IS the first run. A brand-new shop used to be
   // redirected to /app/welcome (magic moment) or /app/setup (a form wizard).
@@ -245,6 +264,9 @@ export const loader = async ({ request }) => {
     generatedCount,
     draftCount,
     notOptimizedCount,
+    archivedProducts,
+    recordPublished,
+    catalogueOk,
     candidateProducts,
     candidateLabel: candidateCounts.label,
     countsOk: candidateCounts.ok,
@@ -586,6 +608,9 @@ export default function Dashboard() {
     generatedCount,
     draftCount,
     notOptimizedCount,
+    archivedProducts,
+    recordPublished,
+    catalogueOk,
     candidateProducts,
     candidateLabel,
     countsOk,
@@ -856,9 +881,15 @@ export default function Dashboard() {
                    rather than silently substituted for it. */
                 !countsOk
                   ? "We could not read this from Shopify just now"
-                  : candidateProducts === totalProducts
-                    ? "In your Shopify catalog"
-                    : `In your Shopify catalog · ${candidateProducts} ${candidateLabel}`
+                  : [
+                      candidateProducts === totalProducts
+                        ? "In your Shopify catalog"
+                        : `In your Shopify catalog · ${candidateProducts} ${candidateLabel}`,
+                      // The exclusion is STATED. "32" used to be this number.
+                      archivedProducts > 0 ? `${archivedProducts} archived not counted` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
               }
             />
           </Layout.Section>
@@ -882,7 +913,13 @@ export default function Dashboard() {
               iconTone="success"
               label="AI Content Published"
               value={generatedCount}
-              subtext="Products we have published content for"
+              subtext={publishedSubtext({
+                ok: catalogueOk,
+                inScope: generatedCount,
+                candidateCount: candidateProducts,
+                candidateLabel,
+                record: recordPublished,
+              })}
               tone="success"
             />
           </Layout.Section>

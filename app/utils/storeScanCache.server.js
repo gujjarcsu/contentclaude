@@ -32,6 +32,14 @@ import { invalidateCache } from "./cache.server.js";
 export const storeScanKey = (shop) => `startscan:${shop}`;
 
 /**
+ * Part B — the catalogue join has the same lifecycle as the scan: computed on
+ * a Home/Products load, cached ten minutes, and STALE the moment the merchant
+ * publishes. So it shares the invalidator rather than growing a second one
+ * that a fourth publish site would have to remember to call.
+ */
+export const catalogueContentKey = (shop) => `catcontent:${shop}`;
+
+/**
  * Drop the cached store scan so the next read of Home re-scores the catalogue.
  *
  * Never throws, and is never meant to be awaited into a merchant's critical
@@ -43,7 +51,7 @@ export const storeScanKey = (shop) => `startscan:${shop}`;
 export async function invalidateStoreScan(shop) {
   if (!shop) return false;
   try {
-    await invalidateCache(storeScanKey(shop));
+    await Promise.all([invalidateCache(storeScanKey(shop)), invalidateCache(catalogueContentKey(shop))]);
     return true;
   } catch {
     return false;

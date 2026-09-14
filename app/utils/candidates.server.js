@@ -100,9 +100,19 @@ export async function scopeForShop(shop) {
  * catalogue past that ceiling the old code was showing a capped value as an
  * exact total.
  */
+// Part B — `total` was an UNFILTERED productsCount, so "Total Products 32"
+// stood on a 15-product store: the same archived-products bug as A1, in a
+// fourth place. A merchant's catalogue is what is not archived; that is what
+// the Products list shows and what "total" now counts. The archived count is
+// read too, so the exclusion is STATED on screen rather than silent.
+//
+// LIST_SCOPE_QUERY is the one constant, never a literal: Shopify IGNORES a
+// query with an invalid field and returns everything, so a typo here would
+// quietly put the 32 back.
 const COUNTS_QUERY = `query candidateCounts($scoped: String) {
-  total: productsCount { count precision }
+  total: productsCount(query: "${LIST_SCOPE_QUERY}") { count precision }
   candidates: productsCount(query: $scoped) { count precision }
+  archived: productsCount(query: "status:${PRODUCT_STATUS.ARCHIVED.toLowerCase()}") { count precision }
 }`;
 
 /** The same for collections, which have publication but no status. */
@@ -134,6 +144,7 @@ export async function getCandidateCounts(admin, shop, { scope: given = null, ttl
   const empty = (extra) => ({
     total: null,
     candidates: null,
+    archived: null,
     excluded: null,
     scope,
     label,
@@ -163,9 +174,11 @@ export async function getCandidateCounts(admin, shop, { scope: given = null, ttl
 
         const total = readCount(r.data?.total);
         const candidates = readCount(r.data?.candidates);
+        const archived = readCount(r.data?.archived);
         return {
           total,
           candidates,
+          archived,
           // Only meaningful when BOTH are exact: subtracting a floor from a
           // floor produces a number that means nothing.
           excluded: total?.exact && candidates?.exact ? Math.max(0, total.count - candidates.count) : null,
@@ -207,9 +220,11 @@ export async function getCollectionCandidateCounts(
         if (!r.ok) throw Object.assign(new Error(r.error ?? "counts unavailable"), { throttled: !!r.throttled });
         const total = readCount(r.data?.total);
         const candidates = readCount(r.data?.candidates);
+        const archived = readCount(r.data?.archived);
         return {
           total,
           candidates,
+          archived,
           excluded: total?.exact && candidates?.exact ? Math.max(0, total.count - candidates.count) : null,
           scope,
           label,

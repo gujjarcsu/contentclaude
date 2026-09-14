@@ -28,6 +28,7 @@ import { FREE_PLAN, bulkRefusal } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY } from "../utils/candidates.server.js";
+import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { enumerateProductIds } from "../utils/enumerateProducts.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
@@ -65,7 +66,11 @@ export const loader = async ({ request }) => {
   const draftCount = metrics.draftProducts;
   // Group 4.1 — candidates we have not written for, not "products with no
   // content". The two are only the same on a store that has written nothing.
-  const needsContent = notOptimizedFrom(candidateProducts, metrics.withContent) ?? 0;
+  // Part B — the number the bulk run is pointed at must be about the
+  // candidates, not about every product this app has ever touched.
+  const catalogue = await contentInCatalogue(admin, shop);
+  const needsContent =
+    notOptimizedFrom(candidateProducts, catalogue.ok ? catalogue.withContent : metrics.withContent) ?? 0;
   const remaining = Math.max(0, (plan?.monthlyCredits ?? FREE_PLAN.monthlyCredits) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
