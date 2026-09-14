@@ -38,7 +38,7 @@ export const DATA_INVENTORY = [
       "Your shop domain and the access token Shopify issues us. If Shopify sends us the details of the staff member who installed the app, that can include their name and email address.",
     personal: true,
   },
-  { model: "Shop", holds: "Your shop domain, when you installed, how you found us, your plan milestones, your store's SEO score over time, and — if you choose to add them — your own AI provider key and your own Bing Webmaster API key, each encrypted.", personal: false },
+  { model: "Shop", holds: "Your shop domain, when you installed, how you found us, your plan milestones (including when you first opened the app, first approved and published content, and first came back on a later day — timestamps only), your store's SEO score over time, and — if you choose to add them — your own AI provider key and your own Bing Webmaster API key, each encrypted.", personal: false },
   { model: "BrandVoice", holds: "The brand voice settings you type in: store name, tone, audience, what makes you different, phrases to avoid.", personal: false },
   { model: "GeneratedContent", holds: "The product descriptions, titles, meta descriptions, FAQ content and image alt text this app generated for your products, and their review status.", personal: false },
   { model: "ContentVersion", holds: "Previous versions of that content, so you can roll back.", personal: false },

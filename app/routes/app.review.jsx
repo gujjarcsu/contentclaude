@@ -30,6 +30,7 @@ import {
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server.js";
+import { markFirstApprove } from "../utils/firstValue.server.js";
 import prisma from "../db.server.js";
 import { invalidateContentCaches } from "../utils/storeScanCache.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
@@ -340,6 +341,10 @@ export const action = async ({ request }) => {
     }
 
     // Fetch draft content for each approved product
+    // Phase 10 Part B — the funnel's "first approve": the first time this
+    // merchant submitted Review with something approved. Before Shopify is
+    // asked, deliberately: approving is the merchant's act; publishing is ours.
+    void markFirstApprove(shop, "review_page");
     const draftRecords = await prisma.generatedContent.findMany({
       where: { shop, productId: { in: approved }, status: "draft" },
     });

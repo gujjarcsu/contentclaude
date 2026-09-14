@@ -50,7 +50,7 @@ import { proofSummary } from "../utils/proofCard.server.js";
 import { proofCardLines } from "../utils/proofCard.js";
 import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
-import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
+import { stampProductCountAtFirstLoad, markFirstScreen, markReturned } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
 import { getStoreScore } from "../utils/storeScore.server.js";
 import { recentAutopilotWork } from "../utils/autopilot.server.js";
@@ -230,6 +230,10 @@ export const loader = async ({ request }) => {
   // merchant first arrived? It explains an install that never reaches a draft.
   // First-writer-wins, never throws, not awaited — nothing renders from it.
   if (isFirstRun) void stampProductCountAtFirstLoad(shop, totalProducts);
+  // Phase 10 Part B — the funnel: first screen (once) and returned on a later
+  // day (once). Timestamps only; never awaited, never fatal.
+  void markFirstScreen(shop);
+  void markReturned(shop);
 
   // The scan is the slow part (an Admin GraphQL page plus scoring), so it is
   // streamed exactly like the below-fold queries: the Start shell and the

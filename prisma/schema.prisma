@@ -399,6 +399,13 @@ model Shop {
   firstDraftSeenAt        DateTime? // first HTTP response that put an AI draft on the merchant screen
   firstDraftSource        String? // quick_start | quick_start_reload | product_page | review_page | welcome
   firstPublishAt          DateTime? // first Shopify-ACCEPTED productUpdate of AI content
+  // Phase 10 Part B — the funnel, timestamps only, one row per shop:
+  // installed → first screen → first draft → first approve → first publish →
+  // returned on a later day → (uninstalled). No PII, no content, nothing a
+  // merchant sees; the weekly digest to the owner is counts and medians.
+  firstScreenAt           DateTime? // first authenticated dashboard render
+  firstApproveAt          DateTime? // first Review submission with ≥1 product approved
+  returnedAt              DateTime? // first dashboard render on a calendar day after the install day
   firstPublishSource      String? // review_page | product_page | product_page_auto | bulk_auto_publish
   // ── Item 4: durable review-ask summary. SURVIVES uninstall/reinstall (never reset); anonymised at shop/redact.
   reviewAskCount          Int       @default(0) // reviews.request() calls opened for this shop (optimistic-lock key)

@@ -62,6 +62,34 @@ export const stampProductCountAtFirstLoad = (shop, n) =>
     ? stampOnce(shop, "productCountAtFirstLoad", { productCountAtFirstLoad: Math.max(0, Math.round(n)) }, "ttv_product_count")
     : Promise.resolve(false);
 
+/** Phase 10 Part B — the first authenticated dashboard render. */
+export const markFirstScreen = (shop) => stampOnce(shop, "firstScreenAt", { firstScreenAt: new Date() }, "funnel_first_screen");
+
+/** Phase 10 Part B — the first Review submission with at least one product approved. */
+export const markFirstApprove = (shop, source) =>
+  stampOnce(shop, "firstApproveAt", { firstApproveAt: new Date() }, `funnel_first_approve${source ? `:${source}` : ""}`);
+
+/**
+ * Phase 10 Part B — the first dashboard render on a calendar day AFTER the
+ * install day (UTC). "Returned" means came back, not reloaded: the same day as
+ * the install never counts. Reads the row it needs itself; never throws.
+ */
+export async function markReturned(shop, now = new Date()) {
+  if (!shop || !prisma.shop?.findUnique) return false;
+  try {
+    const row = await prisma.shop.findUnique({ where: { shop }, select: { installedAt: true, reinstalledAt: true, returnedAt: true } });
+    if (!row || row.returnedAt) return false;
+    const installAt = installAtOf(row);
+    if (!installAt) return false;
+    const day = (d) => new Date(d).toISOString().slice(0, 10);
+    if (day(installAt) >= day(now)) return false;
+    return stampOnce(shop, "returnedAt", { returnedAt: now }, "funnel_returned");
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "returned stamp failed (non-fatal)");
+    return false;
+  }
+}
+
 /** One more quick-start draft landed (never throws). */
 export async function incrementQuickStartDrafts(shop) {
   if (!shop || !prisma.shop?.updateMany) return 0;

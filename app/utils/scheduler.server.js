@@ -83,7 +83,14 @@ let _degradedAlerted = false;
 let _lastShellAlertAt = 0;
 let _shellBroken = false;
 
-/** The current hour and calendar day in Sydney, whatever the machine's clock is set to. */
+/**
+ * The current calendar day, hour, minute and weekday (0 = Sunday … 6 =
+ * Saturday) in Sydney, whatever the machine's clock is set to.
+ *
+ * `weekday` was missing until Phase 10 Part B: the P3.6 weekly report read
+ * it as undefined and its Monday check could never pass. The funnel digest
+ * and the weekly report both read it now, and a test holds a known Monday.
+ */
 export function sydneyParts(now = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Sydney",
@@ -91,10 +98,12 @@ export function sydneyParts(now = new Date()) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
   });
   const parts = Object.fromEntries(fmt.formatToParts(now).map((p) => [p.type, p.value]));
-  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+  const weekday = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day))).getUTCDay();
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) % 24, minute: Number(parts.minute), weekday };
 }
 
 /**
@@ -392,6 +401,10 @@ export function startScheduler() {
     import("./weeklyReport.server.js")
       .then((m) => m.maybeSendWeeklyReports())
       .catch((err) => logger.error({ err }, "weekly report threw"));
+    // Phase 10 Part B — the funnel digest to the owner (Monday 08:30 Sydney).
+    import("./funnel.server.js")
+      .then((m) => m.maybeSendFunnelDigest())
+      .catch((err) => logger.error({ err }, "funnel digest threw"));
   }, 60_000);
   _digestTimer.unref?.();
 

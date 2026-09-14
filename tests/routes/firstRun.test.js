@@ -79,7 +79,13 @@ vi.mock("../../app/utils/startState.server.js", async () => {
   const actual = await vi.importActual("../../app/utils/startState.server.js");
   return { ...actual, scanStoreForStart };
 });
-vi.mock("../../app/utils/firstValue.server.js", () => ({ stampProductCountAtFirstLoad }));
+// Phase 10 Part B — Home also stamps the funnel's first screen and returned-on-
+// a-later-day; both fire-and-forget, neither decides anything on this screen.
+vi.mock("../../app/utils/firstValue.server.js", () => ({
+  stampProductCountAtFirstLoad,
+  markFirstScreen: vi.fn(async () => true),
+  markReturned: vi.fn(async () => false),
+}));
 
 const { loader } = await import("../../app/routes/app._index.jsx");
 

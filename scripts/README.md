@@ -32,6 +32,7 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `webhook-probe--writes-fake-shop-only.mjs` | **writes** | Sends real HMAC-signed webhook deliveries to production and prints the status and time for each. This is what found the 88.5% failure rate. **Refuses any domain but the fake probe shop**, because app/uninstalled deletes everything for the shop in the header. Removes its own GDPR audit rows. |
 | `generate-schema-columns.mjs` | read-only | Regenerates the expected-column list the schema-drift guard compares against. Run it after ANY change to `prisma/schema.prisma`; a test fails if the committed list is stale. `--check` exits 1 instead of writing. Touches no database. |
 | `ttv-report.mjs` | read-only | Time-to-first-value, review-ask outcomes, upgrade funnel. No writes. |
+| `funnel-digest.mjs` | read-only | **Phase 10 Part B — the funnel** (installed → first screen → first draft → first approve → first publish → returned on a later day, plus uninstalled) as counts and medians over non-test shops. No shop name is read or printed. Same arithmetic as the weekly owner digest the scheduler sends. Reachable via the **Funnel (read-only)** workflow. |
 | `diag-shop.cjs` | read-only | One shop's install, plan and session state. |
 | `shop-install-diag.cjs` | read-only | Install and reinstall history. |
 | `store-products-diag.cjs` | read-only | Product and generated-content counts for a shop. |

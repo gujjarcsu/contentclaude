@@ -1,0 +1,24 @@
+name: Funnel (read-only)
+
+# Phase 10 Part B: the install → first screen → first draft → first approve →
+# first publish → returned funnel, as counts and medians over non-test shops.
+# Read-only: runs scripts/funnel-digest.mjs on the Fly machine and writes the
+# Markdown to the job summary. No shop name is read or printed. The weekly
+# email to the owner is sent by the app's scheduler, not by this workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  funnel:
+    name: Funnel counts (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run the funnel on the Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console --app contentclaude -C "sh -c 'FUNNEL_FORMAT=md node /app/scripts/funnel-digest.mjs'" | tee funnel.md
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat funnel.md >> "$GITHUB_STEP_SUMMARY"
