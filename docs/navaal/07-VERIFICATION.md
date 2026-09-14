@@ -175,3 +175,41 @@ one definition and at least one non-test consumer.** Grep for the value, not the
 hardcoded copy on the path to Shopify or to a screen is what makes the first one decorative. An
 exported constant whose only consumer is a test asserting its own value is dead code that greps as
 shipped.
+
+**FIXED at `f38838f`, and the prescribed fix has a trap inside it that I fell into first.**
+
+Rule one above says *"assert on the object actually handed to the external service."* I did, and
+wrote it as `expect(entry.trialDays).toBe(TRIAL_DAYS)` across all six subscription entries. Then I
+ran the break — `TRIAL_DAYS = 9` — and got **one** failure: the tautological assertion I was in the
+middle of deleting. **Both sides of my new assertion moved with the constant, so it carried exactly
+the defect it replaced, one level further out.**
+
+So the rule needs a third clause. **Asserting on the consumer proves the WIRING. It does not prove
+the VALUE.** Those are two defects — a literal on the path, and a wrong number in the one
+definition — and they need two assertions:
+
+```js
+expect(entry.trialDays).toBe(TRIAL_DAYS);  // wiring: fails when a literal reappears
+expect(entry.trialDays).toBe(14);          // value:  fails when the definition drifts from the doc
+```
+
+The second one restates the locked number on purpose. It is the only assertion in the pair that
+connects the code to `14-PRICING.md` rather than to itself.
+
+**Both breaks now produce 7 failures across 2 files**, demonstrated, and a third break (a stale
+price string and "7-day free trial" put back on the plans page) produces 2. A guard nobody has
+broken is not a guard.
+
+**What the value-grep found once it was actually run.** The trial length was one of four: the plans
+page was a complete second copy of the locked table, carrying the pre-20% annual prices
+($99.90/$299.90/$799.90 against $95.90/$287.90/$767.90), the pre-B2 allowances (25/50/200/1,000
+against 100/500/1,500/4,000), bulk shown as Growth-and-up after B3 moved it to Starter, and the
+banned phrase **"2 months free"** rendering on every paid card. `14-PRICING.md` §4 bans that phrase
+by name. Every one of those was live while 3,120 tests were green.
+
+**And I reintroduced the class myself inside the same commit.** Having rewritten the FAQ to describe
+credit weighting, I typed "3 credits" and "0 credits" into it — while `credits.js` opens with *"the
+plans page and the quota surfaces show these numbers."* A second hardcoded copy, written by the
+person fixing second hardcoded copies, ten minutes after reading the rule. The guard is mechanical
+now because judgement demonstrably is not enough: `tests/utils/billingConfig.test.js` asserts every
+constant exported from `billing-plans.js` has an importer that is not a test.
