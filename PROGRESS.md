@@ -5003,3 +5003,46 @@ accepted, count before grade.
 **Still the owner's:** `REMEDIATION_LOCKED_SHOPS`; the three scope decisions; publishing
 `12-OFFER.md` §5 now that Phase 2 is live; B8 (real vs Test charge); H12b listing plan cards (CW).
 Follow-ups F3–F7 in `02-BACKLOG.md`.
+
+## Phase 8 — what a new merchant actually hits, then proof on Bing (2026-09-14)
+
+**Part A — the first run, fixed as classes (`45147e5`, `978bcb8`; second pass in `a3fa978`).**
+CW's clean-install walk: ~20 s to a good draft, then fifteen confusions (FR0–FR14). A1/F8 was
+reassigned to me: **9 Free Plan rows raised 25 → 100, 0 lowered** (favourable by construction,
+property-tested; `getOrCreatePlan` now raises on read), ttv-02 reads *"Monthly credits · 6 / 100
+used"*. A2: the live name is read per session (120 s, session-keyed) — the one-hour cache carried
+the install's value; a first visit is *"Welcome, …"*. A3: the first-run writer cleared one cache of
+three — `invalidateContentCaches()` and a guard that fails any GeneratedContent writer without it;
+the proof then showed Home 4 / Review 5 (a draft outside the Online Store scope), so drafts became
+a content-state number on every screen, and the header names how many are outside the scope. A4:
+"generations" removed from 46 merchant-visible strings; *"Monthly credits"* everywhere; a reload
+never re-announces a charge. A5: Review opens Review; the Free primary is *"Write the next 3
+drafts"*; the bulk run is a secondary that says *"needs Starter"*; an empty store keeps a way back
+in. A6: the score is labelled GEO, framed as a start, product rows say *"This product: N/100"*,
+spent credits never 0%. A7: "Live" → "Published", with the product's own Shopify status when it is
+not active. **The gate is CW's second count** — posted to the queue with the reset workflow named.
+Tests 3,754 → 3,787.
+
+**Part B — the legal pages' two homes (`a2e69af`).** `app.navaal.ai/privacy|terms` emit their
+canonical; redirect shells and a two-rule `.htaccess` snippet sit beside `_UPLOAD-W1-POST.md` with
+four cache-busted checks; the local static-site copy carries the same, so a re-upload cannot revert
+it. Seen, not changed: 43 footer hrefs (left to the 301) and `support@` on five marketing pages.
+
+**Part C — proof on Bing, gate 1 (`a3fa978`).** Verified before building and corrected under it:
+an IndexNow key file anywhere but the storefront root only authorises its own directory, and a
+Shopify store cannot serve a root file from an app — so the submit arm is Bing's URL Submission API
+through the merchant's own key (same crawl scheduler, named on the screen). P3.1: seeded split,
+both arms, censoring at 14 days, seeded bootstrap interval, no verdict under 5 per arm; `/app/proof`
+and a Home card. P3.2: the key stored like the AI key; a test walks every logger call. P3.6: the
+weekly report only in a week with a result; the review ask gated on `provedResultAt` as the last
+rung of its ladder. Boundaries mechanical: merchant-switched, never a locked shop, nothing while
+`REMEDIATION_LOCKED_SHOPS` is unset. **A proved result needs a Bing key on a public storefront —
+every dev store is password-protected — routed to the owner as twenty minutes (F10).**
+
+**Gate 2 (this push).** P3.3: the two reports with no API taught in-app, readings kept as the
+merchant's, a test that nothing fetches either console. P3.4: the classification half built and
+tested; the query waits on P0.10 (Level 2) — routed (F9). P3.5: scoped, not started (F11).
+
+**Read → change → read, every time:** 978bcb8 ttv-03 first run (headline labelled, credits sentence,
+product badge), Home 75 s later (*"Welcome, Navaal TTV 03!"*, drafts counted immediately), then
+the 4/5 disagreement, then 5/5 at `a3fa978`. Tests 3,787 → 3,946.
