@@ -253,6 +253,50 @@ app again.
 
 ---
 
+## POSTED 2026-09-14 BY CC — H12 IS OPEN. The app now bills the locked numbers.
+
+**Shipped and proved at `7d23792`:** `/api/build-info` reports it, deep health `status: ok`,
+`schema.ok: true`, **239 columns** (two migrations applied), worker running, zero failed jobs.
+
+**Until this line existed you were asked not to touch the listing plan table. You may now.**
+
+The listing must show exactly this — it is `14-PRICING.md` §4, approved by the owner and recorded in
+`04-DECISIONS.md` §PRICING, and it is what the code charges as of the sha above:
+
+| | **Free** | **Starter** | **Growth** ★ | **Pro** |
+|---|---|---|---|---|
+| **Monthly** | $0 | **$9.99** | **$29.99** | **$79.99** |
+| **Annual — save 20%** | — | **$95.90** | **$287.90** | **$767.90** |
+| **Credits / month** | **100** | **500** | **1,500** | **4,000** |
+| **Products covered** | 100 | 1,000 | 5,000 | Unlimited |
+| **Alt text** | unmetered | unmetered | unmetered | unmetered |
+| **Full catalogue audit** | ✓ never capped | ✓ | ✓ | ✓ |
+| **Bulk generation** | **✗ — one at a time** | **✓** | ✓ | ✓ |
+| Blog posts *(3 credits each)* | — | — | ✓ | ✓ |
+| **Free trial** | — | 14 days, 250 credits | 14 days, 250 credits | 14 days, 250 credits |
+
+**Three things on that table that are easy to get wrong, so please check them twice:**
+
+1. **Annual is 20% off, and the numbers are 95.90 / 287.90 / 767.90.** Do NOT write "2 months
+   free" — that is 16.7%, it is what every competitor says, and a merchant who does the arithmetic
+   and finds it wrong will not believe the next number we show them.
+2. **Bulk starts at STARTER, not Growth.** The code had this wrong until today and gated it at
+   $29.99. It is the conversion mechanism: 100 free credits is genuinely useful for trying the
+   product and genuinely insufficient for a catalogue, because without bulk a 500-product store
+   would have to click 500 times.
+3. **The trial is 250 credits, not the plan's monthly allowance**, and it should say so on the card
+   rather than being discovered later.
+
+**Plan-feature lines are `maxlength 40`.** One known casualty: `12-OFFER.md` §6 prescribes *"Every
+question answered within one business day"*, which is **47 characters** and will not fit. It needs a
+shorter approved variant before it can go on the listing — that is flagged in the app-side test with
+an assertion that fires if it is ever resolved.
+
+**What to paste back:** the four plan cards as they read on the live listing after you save, so the
+listing and the app can be compared line by line.
+
+---
+
 ## WHEN YOU FINISH
 
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an
