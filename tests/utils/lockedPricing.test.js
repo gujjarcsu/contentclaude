@@ -44,6 +44,19 @@ describe("the locked table, exactly as approved", () => {
     expect(BILLING_PLANS.pro.annualAmount).toBe(767.9);
   });
 
+  it("bulk generation starts at STARTER — it is the conversion mechanism", () => {
+    // 14-PRICING.md §4: Free no, Starter yes, Growth yes, Pro yes. The code
+    // gated it at Growth, three times further away than the pricing was designed
+    // around. §5 is explicit: 100 free credits is genuinely useful for trying the
+    // product and genuinely insufficient for the job, because without bulk a
+    // 500-product store would have to click 500 times. "The thing you pay for is
+    // the thing that saves the time."
+    expect(FREE_PLAN.entitlements.bulkJobs).toBe(false);
+    expect(BILLING_PLANS.starter.entitlements.bulkJobs).toBe(true);
+    expect(BILLING_PLANS.growth.entitlements.bulkJobs).toBe(true);
+    expect(BILLING_PLANS.pro.entitlements.bulkJobs).toBe(true);
+  });
+
   it("every paid tier is a uniform 2.00¢ per credit", () => {
     // 14-PRICING.md §4.1. No tier punishes a merchant for being small: the
     // ladder is about capability and scale, never a worse unit price.

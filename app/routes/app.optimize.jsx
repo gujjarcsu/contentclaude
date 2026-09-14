@@ -24,7 +24,7 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
-import { FREE_PLAN } from "../utils/billing-plans.js";
+import { FREE_PLAN, bulkRefusal } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
@@ -101,7 +101,7 @@ export const action = async ({ request }) => {
   const bulkEnt = await checkEntitlement(shop, "bulkJobs");
   if (!bulkEnt.allowed) {
     return Response.json({
-      error: `Bulk optimization requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock.`,
+      error: bulkRefusal("Optimising your whole store at once"),
       limitReached: true,
     });
   }

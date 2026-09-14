@@ -46,7 +46,7 @@ import {
   remainingGenerations,
   sliceToQuota,
 } from "../utils/plans.server.js";
-import { getEntitlements } from "../utils/billing-plans.js";
+import { getEntitlements, bulkRefusal } from "../utils/billing-plans.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
 import {
@@ -326,7 +326,7 @@ export const action = async ({ request }) => {
   const bulkEnt = await checkEntitlement(shop, "bulkJobs");
   if (!bulkEnt.allowed) {
     return {
-      error: `Bulk generation requires the ${bulkEnt.requiredPlan ?? "Growth"} plan. Upgrade to unlock bulk jobs.`,
+      error: bulkRefusal("Generating for many products at once"),
       limitReached: true,
     };
   }

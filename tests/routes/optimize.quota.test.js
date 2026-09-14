@@ -162,7 +162,7 @@ describe("the entitlement gate comes first", () => {
     const body = await (await post()).json();
 
     expect(body.limitReached).toBe(true);
-    expect(body.error).toMatch(/requires the Growth plan/i);
+    expect(body.error).toMatch(/Starter adds bulk from \$9\.99/i);
     // Not one Shopify call, not one row.
     expect(graphql).not.toHaveBeenCalled();
     expect(prisma.generationJob.create).not.toHaveBeenCalled();

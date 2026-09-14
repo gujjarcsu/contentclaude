@@ -203,6 +203,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "Shop.surfaceInterPosition",
   "Shop.surfaceIntraPosition",
   "Shop.surfaceType",
+  "Shop.trialCreditsUsed",
   "Shop.trialUsedAt",
   "Shop.uninstalledAt",
   "Shop.updatedAt",

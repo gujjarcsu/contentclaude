@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../db.server.js";
-import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
+import { BILLING_PLANS, FREE_PLAN, getEntitlements, planLimitsFor, TRIAL_CREDITS } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 import logger from "./logger.server.js";
 import { withUsageRecord } from "./usageContext.server.js";
@@ -68,6 +68,36 @@ export async function getOrCreatePlan(shop) {
     }
   }
   return plan;
+}
+
+/**
+ * B2 — how many DISTINCT products this shop has had the app act on, ever.
+ *
+ * "Products covered" is a catalogue fact, not a monthly one: a merchant on Free
+ * covers 100 products, and next month they still cover those same 100 rather
+ * than a fresh hundred. Counting per-month would make the cap meaningless — a
+ * 3,000-product store would work through the whole catalogue in thirty months
+ * on the free tier.
+ *
+ * Rows with a null productId (blog posts, `carryover`) are excluded: they are
+ * not products and must not consume a product slot.
+ */
+export async function countCoveredProducts(shop, tx = prisma) {
+  const rows = await tx.usageRecord.groupBy({
+    by: ["productId"],
+    where: { shop, productId: { not: null } },
+  });
+  return rows.length;
+}
+
+/**
+ * Has this shop already had the app act on this product? A product already
+ * covered never consumes a second slot, however many times it is regenerated.
+ */
+export async function isProductCovered(shop, productId, tx = prisma) {
+  if (!productId) return true; // not a product; never consumes a slot
+  const hit = await tx.usageRecord.findFirst({ where: { shop, productId }, select: { id: true } });
+  return !!hit;
 }
 
 /**
@@ -181,11 +211,57 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
 
         const spent = await sumMonthlyCredits(shop, month, tx);
 
+        // B4 — IS THIS SHOP IN A TRIAL? If so the allowance is the trial's 250
+        // credits for the whole trial, not the plan's monthly allowance, and it
+        // is counted in its own column on Shop.
+        //
+        // Shop, not Plan, because the counter has to survive a plan change
+        // mid-trial, a cancellation, and an uninstall/reinstall — Plan and
+        // UsageRecord are deleted on uninstall and Shop is not. One trial per
+        // shop, ever.
+        const inTrial = !!plan.trialEndsAt && new Date(plan.trialEndsAt) > new Date();
+        const shopRow = inTrial
+          ? await tx.shop.findUnique({ where: { shop }, select: { trialCreditsUsed: true } }).catch(() => null)
+          : null;
+        const trialUsed = shopRow?.trialCreditsUsed ?? 0;
+
         // B1 — what THIS generation costs. Throws on an unrecognised content
         // type rather than defaulting to 1: a silent default is how the margin
         // arithmetic in 14-PRICING.md §3 stops being true without anyone
         // noticing. The throw is caught by the outer try, which denies safely.
         const cost = creditsFor(contentType);
+
+        // B2 — THE SECOND AXIS. A plan is a pair: a credit budget and a number of
+        // products the app will act on. Both are enforced, and the refusal says
+        // WHICH one was hit.
+        //
+        // This is what bounds the free tier. Alt text is unmetered (0 credits),
+        // so the credit budget alone puts no ceiling on it at all: without a
+        // product cap, unmetered alt text on a 10,000-image store is unbounded.
+        // 14-PRICING.md §4.4 prices the worst realistic free install at ~$1.51 a
+        // month, and that number is only true because of the 100-product cap.
+        //
+        // Checked BEFORE the credit test so a merchant who has hit the product
+        // cap is told that, rather than being told they are out of credits while
+        // holding 400 of them — which is a support ticket we pay for.
+        const productLimit = planLimitsFor(plan.planName).productLimit;
+        if (Number.isFinite(productLimit) && productId) {
+          const alreadyCovered = await isProductCovered(shop, productId, tx);
+          if (!alreadyCovered) {
+            const covered = await countCoveredProducts(shop, tx);
+            if (covered >= productLimit) {
+              return {
+                allowed: false,
+                reason: "product_limit",
+                planName: plan.planName,
+                monthlyCredits: plan.monthlyCredits,
+                remaining: Math.max(0, plan.monthlyCredits - spent),
+                productLimit,
+                productsCovered: covered,
+              };
+            }
+          }
+        }
 
         // UNMETERED CONTENT IS ALLOWED AT ZERO REMAINING. Alt text costs 0
         // credits on every plan (14-PRICING.md §4), so a merchant who has spent
@@ -195,9 +271,26 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // It is NOT unbounded: alt text is bounded by the PRODUCT cap (B2), not
         // by the credit allowance. Without that cap the free tier has no ceiling
         // at all.
-        if (cost > 0 && spent + cost > plan.monthlyCredits) {
+        // The trial bucket is checked FIRST and separately. A merchant on a
+        // trial has not paid for the monthly allowance, so the monthly number is
+        // not the one that binds them.
+        if (cost > 0 && inTrial && trialUsed + cost > TRIAL_CREDITS) {
           return {
             allowed: false,
+            reason: "trial_limit",
+            planName: plan.planName,
+            monthlyCredits: plan.monthlyCredits,
+            trialCredits: TRIAL_CREDITS,
+            trialCreditsUsed: trialUsed,
+            remaining: Math.max(0, TRIAL_CREDITS - trialUsed),
+            required: cost,
+          };
+        }
+
+        if (cost > 0 && !inTrial && spent + cost > plan.monthlyCredits) {
+          return {
+            allowed: false,
+            reason: "credit_limit",
             planName: plan.planName,
             monthlyCredits: plan.monthlyCredits,
             remaining: Math.max(0, plan.monthlyCredits - spent),
@@ -218,11 +311,22 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           data: { shop, month, contentType, productId, tokensUsed: 0, credits: cost },
         });
 
+        // Trial spend is tracked in its own column as well as in UsageRecord, so
+        // the trial balance survives the uninstall that deletes UsageRecord.
+        if (inTrial && cost > 0) {
+          await tx.shop
+            .update({ where: { shop }, data: { trialCreditsUsed: { increment: cost } } })
+            .catch(() => {});
+        }
+
         return {
           allowed: true,
           planName: plan.planName,
           monthlyCredits: plan.monthlyCredits,
-          remaining: Math.max(0, plan.monthlyCredits - spent - cost),
+          remaining: inTrial
+            ? Math.max(0, TRIAL_CREDITS - trialUsed - cost)
+            : Math.max(0, plan.monthlyCredits - spent - cost),
+          inTrial,
           credits: cost,
           usageRecordId: record.id,
         };

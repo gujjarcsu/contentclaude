@@ -461,7 +461,9 @@ describe("planFit", () => {
       monthsToCover: 2,
     });
     expect(planFit.fitPlanFor({ n: 600, currentPlan: "starter" }).planName).toBe("growth");
-    expect(planFit.fitPlanFor({ n: 10, currentPlan: "free", needsBulk: true }).planName).toBe("growth");
+    // B3 — bulk starts at Starter now (14-PRICING.md §4), so a merchant who
+    // needs bulk is pointed at $9.99 rather than $29.99.
+    expect(planFit.fitPlanFor({ n: 10, currentPlan: "free", needsBulk: true }).planName).toBe("starter");
     expect(planFit.fitPlanFor({ n: 1600, currentPlan: "growth" }).planName).toBe("pro");
     expect(planFit.fitPlanFor({ n: 5, currentPlan: "pro" })).toBeNull();
     expect(planFit.fitPlanFor({ n: 0, currentPlan: "free" })).toBeNull();

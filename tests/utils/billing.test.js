@@ -77,6 +77,12 @@ vi.mock("../../app/utils/billing-plans.js", () => ({
     };
     return map[planName] ?? map.free;
   }),
+  // B2 — the gate now reads BOTH axes. These mocks deliberately keep their own
+  // small plan values (they test gate arithmetic, not the locked table — that is
+  // tests/utils/lockedPricing.test.js), so planLimitsFor mirrors them and
+  // returns no product cap, keeping every existing assertion about the CREDIT
+  // gate meaning exactly what it meant.
+  planLimitsFor: () => ({ monthlyCredits: 0, productLimit: null }),
 }));
 
 // Import after mocks

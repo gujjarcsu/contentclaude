@@ -1,0 +1,25 @@
+-- B4 — trial credits, in their own bucket.
+--
+-- New file, new name. Nothing here edits an applied migration (L8).
+--
+-- WHY A SEPARATE COLUMN AND NOT A FLAG ON THE MONTHLY BUCKET. The arithmetic:
+-- a 14-day trial carrying the full Growth allowance exposes $17.25 per abusive
+-- trial — $1,725 across a hundred of them. 250 credits caps that at $2.88
+-- (14-PRICING.md §5). Reusing the monthly bucket with an "is trialling" flag
+-- would work until the first time somebody reads the monthly number without
+-- checking the flag, and then the two meanings would be silently mixed. They
+-- are different quantities with different reset semantics, so they get
+-- different columns.
+--
+-- WHY IT LIVES ON Shop AND NOT Plan. It has to survive three things:
+--   a plan change mid-trial — Plan rows are rewritten on upgrade/downgrade;
+--   a cancellation;
+--   an uninstall and reinstall — Plan and UsageRecord are DELETED on uninstall,
+--     and Shop is not. That is the existing Phase 0 item 10 design, and it is
+--     why trialUsedAt already lives here.
+-- One trial per shop, ever. A merchant who uninstalls and reinstalls does not
+-- mint a second one.
+--
+-- It NEVER resets. Unlike the monthly allowance there is no period to reset to:
+-- the 250 credits are for the whole trial.
+ALTER TABLE "Shop" ADD COLUMN IF NOT EXISTS "trialCreditsUsed" INTEGER NOT NULL DEFAULT 0;

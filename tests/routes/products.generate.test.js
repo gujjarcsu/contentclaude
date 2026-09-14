@@ -201,7 +201,7 @@ describe("the gates in front of both", () => {
     const res = await generateAll();
 
     expect(res.limitReached).toBe(true);
-    expect(res.error).toMatch(/Growth plan/);
+    expect(res.error).toMatch(/Starter adds bulk from \$9\.99/);
     expect(graphql).not.toHaveBeenCalled();
   });
 

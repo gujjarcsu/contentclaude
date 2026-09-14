@@ -329,6 +329,12 @@ model Shop {
   // is not). Numbers and timestamps only — nothing here identifies a customer,
   // and shop/redact anonymises this row like every other column.
   trialUsedAt             DateTime? // first time this shop held a paid subscription; the next subscribe sends trialDays 0
+  // B4 — credits spent during the free trial, in their own bucket. Separate
+  // from the monthly allowance because they are a different quantity with
+  // different reset semantics: 250 for the WHOLE trial, and it never resets.
+  // On Shop rather than Plan so it survives a plan change, a cancellation and
+  // an uninstall/reinstall — one trial per shop, ever.
+  trialCreditsUsed        Int       @default(0)
   usageMonth              String? // "YYYY-MM" that usageCarryover belongs to
   usageCarryover          Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
   // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).

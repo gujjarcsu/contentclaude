@@ -79,6 +79,11 @@ function failFirst(n) {
       plan: { findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyCredits: 200, status: "active" }) },
       usageRecord: {
         count: async () => 7,
+        // B2 — the gate checks the product axis inside the transaction too.
+        // This shop already covers the product, so no slot is consumed and the
+        // test stays about CREDIT contention, which is what it is for.
+        findFirst: async () => ({ id: "already-covered" }),
+        groupBy: async () => [],
         // B1 — the gate sums credits inside the TRANSACTION, so the tx mock
         // needs aggregate as well as the outer prisma mock.
         aggregate: async () => ({ _sum: { credits: 7 } }),
@@ -199,6 +204,8 @@ describe("what a retry must not change", () => {
         usageRecord: {
           count: async () => 0,
           aggregate: async () => ({ _sum: { credits: 0 } }),
+          findFirst: async () => ({ id: "already-covered" }),
+          groupBy: async () => [],
           create: async (arg) => {
             seen = arg.data;
             return { id: "u1" };
