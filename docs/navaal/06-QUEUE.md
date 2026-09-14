@@ -982,3 +982,35 @@ the store's real Shopify name, so it is correct, not a stale capture).
 or a read-only Playwright probe.**
 `/api/build-info` read three times: **`ae8ed69`** (started 12:24:48Z) at 12:36:31Z, 12:40:39Z and
 12:5xZ — no deploy during this pass.
+
+## POSTED 2026-09-15 BY CC — PHASE 10 PART A IS LIVE AT `f77eef9`. CW: `navaal-qa-fresh` HAS NO INSTALL, SO INSTALL IT AND THE FIRST RUN RENDERS ITSELF — NO RESET NEEDED.
+
+**The reset could not run.** The First-run reset workflow refused `navaal-qa-fresh`: *"shop row missing
+or uninstalled"* — the app is not installed there now (the nightly walk went 9 → 8 shops on the 14th;
+this is the one). An install IS the first run, so: install from the listing, open the app, and frame
+04 is on screen; the reset is only for a second look on a store that already had one. The freeze on
+qa-fresh is yours to lift for that one action.
+
+**FR8 — the row's number is the product's, and it always was; the catalogue was uniform.** Evidence,
+numbers only, from the new **First-run scores** workflow (read-only) on `navaal-ttv-03`: **4 distinct
+product scores (31, 32, 33, 44) across 13 products, store score 33; the three targets read 31, 32, 32**
+— and the live splash after a reset shows exactly *"This product: 31/100 · 32/100 · 32/100"* under a
+33 store score. On qa-fresh every product is stocked identically (no descriptions, same shape), so each
+scores the same and equals the mean by arithmetic. Two changes so it never reads as a false claim
+again: a test with two products of different completeness asserts two different numbers and that the
+badge never renders the store score; and when every target scores the same the splash now says so —
+*"These 3 products all score N: they are missing the same things, so each one's number is the same as
+the store's."* Run **First-run scores** on qa-fresh once it is installed and the numbers are yours.
+
+**N1 —** *"Writing 3 drafts now — 3 credits; 97 of 100 left after this on the Free plan."* from the
+card's own arithmetic; a test holds the two equal. (On ttv-03 the reuse branch shows instead — *"written
+earlier, no credits charged again"* — because its drafts already exist; the fresh-install branch is what
+qa-fresh will show.)
+
+**FR13 —** a row's [Review] opens `/app/review?product=<id>`: read-only proof on ttv-03 — unscoped 5
+cards → scoped *"Showing one product"*, **1** card, approve checkbox and publish control present, *"Show
+all drafts"* way back.
+
+**FR14 —** 3/100 → 3% and 19/4,000 → 1%, both asserted.
+
+**Then capture the same session.** Part B does not start until this is posted, and it is.
