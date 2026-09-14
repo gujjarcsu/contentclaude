@@ -344,3 +344,12 @@ A smaller one from the same day, for the record: **`vi.mock` is hoisted above ev
 file**, so a spy declared inside a `describe` and closed over by the mock factory is
 `undefined` when the factory runs. `vi.hoisted(() => ({ spy: vi.fn() }))` at module scope, then
 the mock. Two tests failed with "upsert is not defined" before the reason was obvious.
+
+**13. The wait script said `::CI FAILED::` and exited 1 — and my pipe reported 0.** `bash
+scripts/wait-for-deploy.sh <sha> | tail -3` returns `tail`'s status. The script did exactly what it
+was written to do after false green 1; the invocation threw the answer away, and two proof runs were
+launched against a build that had never deployed. **The rule: never pipe a gate.** Run it bare, or
+`set -o pipefail`, and print `exit: $?` on its own line. The same push had a second slip behind it:
+the last local full-suite run predated the last commit, so a hygiene test CI enforces (every script
+listed in `scripts/README.md`) failed in CI and not on the laptop. **The suite runs after the last
+edit, not after the last big one.**
