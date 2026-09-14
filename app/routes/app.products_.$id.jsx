@@ -2075,7 +2075,7 @@ export default function ProductGeneratePage() {
                                   existingContent.description?.status === "published" ? "success" : "info"
                                 }
                               >
-                                {existingContent.description?.status === "published" ? "Published" : "Draft"}
+                                {existingContent.description?.status === "published" ? (String(product.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "Published" : `Published · product is a Shopify ${String(product.status).toLowerCase()}, not on your storefront`) : "Draft"}
                               </Badge>
                             </InlineStack>
                             <TextField

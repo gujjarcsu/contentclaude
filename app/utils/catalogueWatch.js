@@ -37,6 +37,9 @@ export const THIN_DESCRIPTION_CHARS = 50;
 /** Enough to know thin (<50) and to see a collapse; not 64 KB per product. */
 export const WATCH_DESC_CAP = 600;
 
+/** F3 — how many variants the walk reads for a multi-variant product whose first has no barcode. */
+export const VARIANT_BARCODE_SAMPLE = 50;
+
 /** A handle change is a one-time event; it is shown for this long. */
 export const HANDLE_NOTICE_MS = 7 * 24 * 3600 * 1000;
 
@@ -91,7 +94,7 @@ export function snapshotFromNode(node) {
     handle: String(node?.handle ?? ""),
     descLen: Math.min(desc.length, WATCH_DESC_CAP),
     hasType: String(node?.productType ?? "").trim().length > 0,
-    hasAlt: String(node?.featuredImage?.altText ?? "").trim().length > 0,
+    hasAlt: String(node?.featuredMedia?.preview?.image?.altText ?? node?.featuredImage?.altText ?? "").trim().length > 0,
     createdAtShop: node?.createdAt ? new Date(node.createdAt) : null,
   };
 }
@@ -255,14 +258,17 @@ export const GENERIC_OPTION_NAMES = Object.freeze(new Set(["title", "default tit
  * @param {object} node a Shopify product with title, description, vendor,
  *   status, onlineStoreUrl, productType, hasOnlyDefaultVariant,
  *   featuredImage { url altText }, options [{ name }], variants.nodes [{ barcode }]
- * @param {{storefrontPublic?: boolean, gtinExempt?: boolean}} [ctx]
+ * @param {{storefrontPublic?: boolean, gtinExempt?: boolean, variantBarcodes?: string[]|null}} [ctx]
  *   storefrontPublic false while the storefront is password-protected —
  *   onlineStoreUrl is null for everything then. gtinExempt true once the
- *   merchant said the product has no GTIN by design (P2.6).
+ *   merchant said the product has no GTIN by design (P2.6). variantBarcodes:
+ *   F3 (Phase 9) — the barcodes of every variant the walk could read (up to
+ *   VARIANT_BARCODE_SAMPLE) for a multi-variant product whose first variant
+ *   has none; null means only the first variant was read.
  * @returns {{findings: Array<{surface: string|null, grade: string, field: string, note: string}>,
  *   blocking: number, degrading: number, cosmetic: number, skipped?: string}}
  */
-export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false } = {}) {
+export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false, variantBarcodes = null } = {}) {
   const findings = [];
   const add = (surface, grade, field, note) => findings.push({ surface, grade, field, note });
   const tally = () => {
@@ -277,10 +283,18 @@ export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false
   const desc = String(node?.description ?? "").trim();
   const url = String(node?.onlineStoreUrl ?? "").trim();
   const vendor = String(node?.vendor ?? "").trim();
-  const imageUrl = String(node?.featuredImage?.url ?? "").trim();
-  const alt = String(node?.featuredImage?.altText ?? "").trim();
+  // F5 (Phase 9) — Product.featuredImage is deprecated; featuredMedia is what
+  // the walk asks for now. Both shapes are read so an old fixture or an old
+  // cached node still grades.
+  const image = node?.featuredMedia?.preview?.image ?? node?.featuredImage ?? null;
+  const imageUrl = String(image?.url ?? "").trim();
+  const alt = String(image?.altText ?? "").trim();
   const firstVariant = node?.variants?.nodes?.[0] ?? null;
-  const barcode = firstVariant ? String(firstVariant?.barcode ?? "").trim() : null;
+  // F3 (Phase 9) — a multi-variant product whose barcodes live on variant 2+
+  // was graded "no barcode". The walk now reads every variant it can for such
+  // products and passes them here; "checked" is what was actually looked at.
+  const checked = Array.isArray(variantBarcodes) ? variantBarcodes : firstVariant ? [firstVariant?.barcode] : null;
+  const anyBarcode = (checked ?? []).some((b) => String(b ?? "").trim().length > 0);
   const optionNames = (node?.options ?? []).map((o) => String(o?.name ?? "").trim().toLowerCase()).filter(Boolean);
   const multiVariant = node?.hasOnlyDefaultVariant === false;
 
@@ -313,12 +327,12 @@ export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false
   } else if (!alt) {
     add(SURFACE.OPENAI, GRADE.DEGRADING, "image alt", "The image has no alt text, so nothing describes it to a system that cannot see it. Free to generate.");
   }
-  if (firstVariant && !barcode && !gtinExempt) {
+  if (checked && !anyBarcode && !gtinExempt) {
     add(
       SURFACE.OPENAI,
       GRADE.DEGRADING,
       "gtin",
-      "No barcode on the first variant. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add.",
+      `${checked.length > 1 ? `No barcode on any of the ${checked.length} variants we read` : "No barcode on the first variant"}. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add.`,
     );
   }
   if (multiVariant && optionNames.length > 0 && optionNames.every((n) => GENERIC_OPTION_NAMES.has(n))) {

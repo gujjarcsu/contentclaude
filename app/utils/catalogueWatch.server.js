@@ -44,7 +44,9 @@ import { checkCrawlerAccess, latestCrawlerAccess, storefrontPasswordProtected } 
 import { gscState } from "./gscAiControl.js";
 import { runIndexability, indexabilityRows } from "./indexability.server.js";
 import { indexabilitySummary } from "./indexability.js";
-import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
+import { WATCH_DESC_CAP, VARIANT_BARCODE_SAMPLE, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
+import { getOrCreatePlan } from "./plans.server.js";
+import { pageSampleFor } from "./indexability.js";
 
 export const WATCH_HOUR_SYDNEY = 2; // before the 08:00 digest, after most edits
 // 100, not 250: grading widened the query (options, first variant) and Shopify
@@ -63,12 +65,50 @@ const WATCH_QUERY = `query catalogueWatch($cursor: String, $q: String) {
     nodes {
       id title handle productType vendor status createdAt onlineStoreUrl hasOnlyDefaultVariant
       description(truncateAt: ${WATCH_DESC_CAP})
-      featuredImage { url altText }
+      featuredMedia { preview { image { url altText } } }
       options(first: 3) { name }
       variants(first: 1) { nodes { barcode } }
     }
   }
 }`;
+
+// F3 (Phase 9) — validated against the Admin schema 2026-09-14. Ten products
+// × (node + connection + 50 variants) ≈ 530 points, under the 1,000 cap.
+const VARIANTS_QUERY = `query variantBarcodes($ids: [ID!]!) {
+  nodes(ids: $ids) { ... on Product { id variants(first: ${VARIANT_BARCODE_SAMPLE}) { nodes { barcode } } } }
+}`;
+const VARIANTS_CHUNK = 10;
+
+/**
+ * F3 — every variant's barcode for the products that need the second look:
+ * multi-variant, first variant blank, not a draft, not exempt. Returns a Map
+ * of productId → string[]; a product missing from the map was not read and
+ * grades on its first variant as before. Never throws.
+ */
+export async function fetchVariantBarcodes(graphql, shop, ids) {
+  const out = new Map();
+  for (let i = 0; i < (ids ?? []).length; i += VARIANTS_CHUNK) {
+    const chunk = ids.slice(i, i + VARIANTS_CHUNK);
+    try {
+      const r = await shopifyQuery(graphql, VARIANTS_QUERY, { ids: chunk }, { shop, label: "variant barcodes" });
+      if (!r.ok) continue;
+      for (const n of r.data?.nodes ?? []) {
+        if (n?.id) out.set(n.id, (n.variants?.nodes ?? []).map((v) => String(v?.barcode ?? "")));
+      }
+    } catch (err) {
+      logger.warn({ shop, err: err?.message, event: "variant_barcodes_failed" }, "variant barcodes read failed (non-fatal)");
+    }
+  }
+  return out;
+}
+
+/** F3 — which nodes need the second look. Pure over the page. */
+export function needsBarcodeLook(node, prev) {
+  if (!node || node.hasOnlyDefaultVariant !== false) return false;
+  if (String(node.status ?? "").toUpperCase() === "DRAFT") return false;
+  if (prev?.gtinExempt === true) return false;
+  return String(node.variants?.nodes?.[0]?.barcode ?? "").trim().length === 0;
+}
 
 /**
  * An `admin.graphql`-shaped function backed by a stored offline session, so a
@@ -146,12 +186,22 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
         ]);
         const prevById = new Map(prevRows.map((p) => [p.productId, p]));
         const hasContent = new Set(contentRows.map((c) => c.productId));
+        // F3 — the second, cheap look at every variant of the products that need it.
+        const variantBarcodes = await fetchVariantBarcodes(
+          graphql,
+          shop,
+          nodes.filter((n) => needsBarcodeLook(n, prevById.get(n.id) ?? null)).map((n) => n.id),
+        );
 
         const writes = nodes.map((node) => {
           const next = snapshotFromNode(node);
           const prev = prevById.get(next.productId) ?? null;
           const attention = diffProduct(prev, next, { hasContent: hasContent.has(next.productId), watchStartedAt, now });
-          const g = gradeProduct(node, { storefrontPublic, gtinExempt: prev?.gtinExempt === true });
+          const g = gradeProduct(node, {
+            storefrontPublic,
+            gtinExempt: prev?.gtinExempt === true,
+            variantBarcodes: variantBarcodes.get(node.id) ?? null,
+          });
           const data = {
             title: next.title,
             handle: next.handle,
@@ -193,7 +243,14 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
     } else if (crawler) {
       crawlerResult = await checkCrawlerAccess(graphql, shop, { now, passwordProtected });
       // P2.4 — the daily path only: a sitemap read and a bounded page sample.
-      indexability = await runIndexability(graphql, shop, { now, origin: crawlerResult?.origin ?? null, passwordProtected: !storefrontPublic });
+      // F6 (Phase 9) — the sample is the plan's, and attention comes first.
+      const plan = await getOrCreatePlan(shop).catch(() => null);
+      indexability = await runIndexability(graphql, shop, {
+        now,
+        origin: crawlerResult?.origin ?? null,
+        passwordProtected: !storefrontPublic,
+        sample: pageSampleFor(plan?.planName),
+      });
     }
 
     const [rows, blocking] = await Promise.all([
@@ -246,7 +303,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       everWalked = r.ok;
       partial = r.partial;
     }
-    const [rows, blocking, degrading, graded, crawler, lastRun, growth, idxRows] = await Promise.all([
+    const [rows, blocking, degrading, graded, crawler, lastRun, growth, idxRows, planRow] = await Promise.all([
       prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
       prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
       prisma.productWatch.count({ where: { shop, degrading: { gt: 0 } } }),
@@ -257,6 +314,8 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       prisma.growthState.findUnique({ where: { shop }, select: { gscAiControl: true, gscAiControlAt: true } }),
       // P2.4 — what the sitemap pass and the page sample found so far.
       indexabilityRows(shop),
+      // F6 — the plan's nightly sample, so the screen says what coverage actually is.
+      prisma.plan.findUnique({ where: { shop }, select: { planName: true } }).catch(() => null),
     ]);
     const s = summarise(rows, now, { firstWalkAt: lastRun?._min?.firstSeenAt ?? null });
     return {
@@ -268,7 +327,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       degrading,
       graded,
       crawler,
-      indexability: indexabilitySummary(idxRows),
+      indexability: { ...indexabilitySummary(idxRows), nightly: pageSampleFor(planRow?.planName) },
       gsc: gscState({ answer: growth?.gscAiControl ?? null, answeredAt: growth?.gscAiControlAt ?? null }, now),
       lastRunAt: lastRun?._max?.lastSeenAt?.toISOString() ?? null,
     };

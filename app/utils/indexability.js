@@ -27,8 +27,19 @@
 // imported so the two pure modules do not import each other in a cycle.
 const GRADE = Object.freeze({ BLOCKING: "blocking", DEGRADING: "degrading" });
 
-/** Product pages sampled per shop per daily run. Oldest-checked first. */
+/** Product pages sampled per shop per daily run on the Free plan. Oldest-checked first. */
 export const PAGE_SAMPLE = 20;
+
+/**
+ * F6 (Phase 9) — the nightly sample is the plan's. 20 a night meant a
+ * 5,000-product Growth store took 250 nights; Pro is "unlimited products".
+ * These are what the screen says coverage actually is.
+ */
+export const PAGE_SAMPLE_BY_PLAN = Object.freeze({ free: 20, starter: 50, growth: 100, pro: 200 });
+
+export function pageSampleFor(planName) {
+  return PAGE_SAMPLE_BY_PLAN[String(planName ?? "").toLowerCase()] ?? PAGE_SAMPLE;
+}
 /** Child sitemaps read per shop per run (Shopify: ~5,000 products each). */
 export const SITEMAP_CHILD_CAP = 10;
 /** Redirects followed before the chain is called a chain and stopped. */

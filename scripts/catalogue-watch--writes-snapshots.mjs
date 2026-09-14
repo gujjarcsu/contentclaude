@@ -35,7 +35,17 @@ for (const r of rows) {
   if (!perShop.has(r.shop)) perShop.set(r.shop, []);
   perShop.get(r.shop).push(r);
 }
-out.acrossShops = summarise(rows);
+// F4 (Phase 9) — per shop, with that shop's first-walk grace, then summed:
+// the old single summarise() read "everything is new" on every shop's day one.
+const firstWalks = await prisma.productWatch.groupBy({ by: ["shop"], _min: { firstSeenAt: true } });
+const firstWalkAt = new Map(firstWalks.map((f) => [f.shop, f._min.firstSeenAt]));
+out.acrossShops = { needAttention: 0, sinceYesterday: 0, byKind: {} };
+for (const [shopKey, shopRows] of perShop) {
+  const s = summarise(shopRows, new Date(), { firstWalkAt: firstWalkAt.get(shopKey) ?? null });
+  out.acrossShops.needAttention += s.needAttention;
+  out.acrossShops.sinceYesterday += s.sinceYesterday;
+  for (const [k, n] of Object.entries(s.byKind)) out.acrossShops.byKind[k] = (out.acrossShops.byKind[k] ?? 0) + n;
+}
 out.shopsWithAttention = perShop.size;
 out.productsWatched = await prisma.productWatch.count();
 

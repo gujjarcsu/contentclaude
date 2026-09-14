@@ -108,12 +108,26 @@ export async function checkSitemap(origin, shop) {
 
 /** Page pass over the least-recently-checked sample. */
 export async function checkPages(origin, shop, { now = new Date(), sample = PAGE_SAMPLE } = {}) {
-  const rows = await prisma.productWatch.findMany({
-    where: { shop, NOT: { statusShop: "DRAFT" }, handle: { not: "" } },
-    orderBy: [{ pageCheckedAt: { sort: "asc", nulls: "first" } }],
+  // F6 (Phase 9) — products that need attention are checked first, then the
+  // least-recently-checked of the rest, up to the plan's nightly sample.
+  const base = { shop, NOT: { statusShop: "DRAFT" }, handle: { not: "" } };
+  const order = [{ pageCheckedAt: { sort: "asc", nulls: "first" } }];
+  const first = await prisma.productWatch.findMany({
+    where: { ...base, NOT: [{ statusShop: "DRAFT" }, { attention: "{}" }] },
+    orderBy: order,
     take: sample,
     select: { productId: true, handle: true },
   });
+  const rest =
+    first.length < sample
+      ? await prisma.productWatch.findMany({
+          where: { ...base, productId: { notIn: first.map((r) => r.productId) } },
+          orderBy: order,
+          take: sample - first.length,
+          select: { productId: true, handle: true },
+        })
+      : [];
+  const rows = [...first, ...rest];
   let checked = 0;
   let noindex = 0;
   let missing = 0;
@@ -144,13 +158,13 @@ export async function checkPages(origin, shop, { now = new Date(), sample = PAGE
  * Both passes for one shop. Skipped (and said so) while password-locked.
  * @returns {Promise<{ok: boolean, skipped: string|null, sitemap: object|null, pages: object|null}>}
  */
-export async function runIndexability(graphql, shop, { now = new Date(), origin = null, passwordProtected = false } = {}) {
+export async function runIndexability(graphql, shop, { now = new Date(), origin = null, passwordProtected = false, sample = PAGE_SAMPLE } = {}) {
   try {
     if (passwordProtected) return { ok: true, skipped: "password", sitemap: null, pages: null };
     const base = origin ?? (await storefrontOrigin(graphql, shop));
     if (!base) return { ok: false, skipped: "no origin", sitemap: null, pages: null };
     const sitemap = await checkSitemap(base, shop);
-    const pages = await checkPages(base, shop, { now });
+    const pages = await checkPages(base, shop, { now, sample });
     logger.info({ shop, event: "indexability_ran", sitemap, pages }, "indexability ran");
     return { ok: true, skipped: null, sitemap, pages };
   } catch (err) {

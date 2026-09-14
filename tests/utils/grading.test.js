@@ -213,7 +213,7 @@ describe("wiring — the same walk grades, persists, and shows", () => {
   });
 
   it("grades are persisted by the same upsert as the diff", () => {
-    expect(srv).toMatch(/gradeProduct\(node, \{ storefrontPublic, gtinExempt/);
+    expect(srv).toMatch(/gradeProduct\(node, \{\s*storefrontPublic,\s*gtinExempt/);
     expect(srv).toMatch(/blocking: g\.blocking/);
   });
 

@@ -261,7 +261,8 @@ export default function AttentionPage() {
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Sitemap checked for {idx.sitemapKnown} products; {idx.checked} product pages fetched so far
-              ({PAGE_SAMPLE} more each night). {idx.cannotIndex} cannot be indexed as they stand.
+              ({idx.nightly ?? PAGE_SAMPLE} more each night on your plan, products needing attention first).{" "}
+              {idx.cannotIndex} cannot be indexed as they stand.
             </Text>
             {indexability.map((r) => (
               <Card key={r.productId}>
