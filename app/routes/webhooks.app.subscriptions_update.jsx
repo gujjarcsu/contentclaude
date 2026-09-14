@@ -4,7 +4,7 @@
 // is the same retry-storm trap fixed for app/uninstalled in 08690b9.
 import { verifyShopifyWebhook } from "../utils/webhookAuth.server.js";
 import prisma from "../db.server.js";
-import { FREE_PLAN, getPlanByKey, markTrialUsed, invalidatePlanCaches } from "../utils/plans.server.js";
+import { FREE_PLAN, getPlanByKey, markTrialUsed, invalidatePlanCaches, grantAnnualBoost } from "../utils/plans.server.js";
 import { getActiveSubscriptionsForShop } from "../utils/activeSubscriptions.server.js";
 import logger from "../utils/logger.server.js";
 
@@ -48,6 +48,17 @@ export const action = async ({ request }) => {
     await prisma.plan.upsert({ where: { shop }, update: base, create: { shop, ...base } });
     // The shop has now held a paid subscription — its one trial is spent.
     await markTrialUsed(shop);
+
+    // B5 — an ANNUAL subscriber gets a one-time 2x credit month, so they can do
+    // the whole catalogue at once. getPlanByKey matches BOTH keys, so the only
+    // way to tell which was bought is the name we were sent.
+    //
+    // grantAnnualBoost is first-writer-wins on a null column, which matters
+    // here specifically: Shopify redelivers webhooks, and this one is
+    // idempotent by construction rather than by us remembering to check.
+    if (sub.name === planDef.annualKey) {
+      await grantAnnualBoost(shop);
+    }
     planChanged = true;
   } else if (["CANCELLED", "DECLINED", "EXPIRED"].includes(status)) {
     // Phase 0 item 8a — a Starter → Growth upgrade emits CANCELLED (old sub)

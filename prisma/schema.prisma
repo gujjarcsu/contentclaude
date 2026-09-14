@@ -335,6 +335,11 @@ model Shop {
   // On Shop rather than Plan so it survives a plan change, a cancellation and
   // an uninstall/reinstall — one trial per shop, ever.
   trialCreditsUsed        Int       @default(0)
+  // B5 — the YYYY-MM an annual subscriber's one-time 2x credit month applies
+  // to. Set ONCE by a first-writer-wins updateMany gated on null, so a second
+  // subscription or a replayed webhook cannot grant a second boost. On Shop
+  // because Plan is deleted on uninstall and Shop is not.
+  annualBoostMonth        String?
   usageMonth              String? // "YYYY-MM" that usageCarryover belongs to
   usageCarryover          Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
   // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).

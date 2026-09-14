@@ -1,0 +1,23 @@
+-- B5 — the one-time 2x credit month on an annual subscription.
+--
+-- New file, new name. Nothing here edits an applied migration (L8).
+--
+-- 14-PRICING.md §5 calls this the best-value line in the table: it costs $17.25
+-- on Growth against $287.90 already collected, and it solves the merchant's real
+-- problem — the initial catalogue burst — in exchange for the twelve-month
+-- commitment. Annual prepay also eliminates burn-and-churn outright, because the
+-- twelve months are already paid.
+--
+-- WHY A STAMPED MONTH AND NOT A BOOLEAN FLAG. The brief's requirement is that
+-- "once, ever" is STRUCTURALLY true rather than a flag someone can flip. A
+-- nullable month is set once by a first-writer-wins updateMany gated on
+-- `annualBoostMonth IS NULL` — the same shape as storeScoreAtInstall — so a
+-- second annual subscription cannot grant a second boost, and neither can a
+-- replayed webhook. It also records WHICH month it applied to, so the gate does
+-- not have to guess and a merchant who subscribes on the 28th does not silently
+-- get two boosted months.
+--
+-- It lives on Shop, not Plan, for the same reason trialCreditsUsed does: Plan is
+-- DELETED on uninstall and Shop is not. A merchant who cancels annual,
+-- uninstalls, reinstalls and resubscribes does not get a second 2x month.
+ALTER TABLE "Shop" ADD COLUMN IF NOT EXISTS "annualBoostMonth" TEXT;

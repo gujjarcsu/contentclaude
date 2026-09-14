@@ -171,6 +171,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "Session.shop",
   "Session.state",
   "Session.userId",
+  "Shop.annualBoostMonth",
   "Shop.createdAt",
   "Shop.firstDraftSeenAt",
   "Shop.firstDraftSource",

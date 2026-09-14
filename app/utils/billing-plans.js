@@ -56,7 +56,6 @@ export const BILLING_PLANS = {
     key: "Starter Plan",
     planName: "starter",
     amount: 9.99,
-    // Annual = 10× monthly (2 months free). Same generation limit; billed yearly.
     annualKey: "Starter Annual",
     // Annual is 20% off, not 10x monthly. 10x is 16.7% ("2 months free"), which
     // every competitor already displays; 20% beats all of them and reads as a

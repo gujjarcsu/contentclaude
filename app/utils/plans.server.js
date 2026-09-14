@@ -71,6 +71,37 @@ export async function getOrCreatePlan(shop) {
 }
 
 /**
+ * B5 — grant the one-time 2× credit month that comes with an annual subscription.
+ *
+ * "Once, ever" is STRUCTURAL, not a flag: the updateMany is gated on
+ * `annualBoostMonth: null`, so the first writer wins and every later call — a
+ * second annual subscription, a resubscribe after cancelling, or simply the same
+ * webhook delivered twice, which Shopify does — updates zero rows and returns
+ * false. Same shape as `storeScoreAtInstall`.
+ *
+ * It records WHICH month rather than a boolean, so the gate does not have to
+ * guess: a merchant who subscribes on the 28th gets one boosted month, not two.
+ *
+ * Never throws. A missed boost is a merchant who got the credits they paid for
+ * and not the bonus; a thrown error here would fail the subscription webhook.
+ */
+export async function grantAnnualBoost(shop, month = new Date().toISOString().slice(0, 7)) {
+  try {
+    const r = await prisma.shop.updateMany({
+      where: { shop, annualBoostMonth: null },
+      data: { annualBoostMonth: month },
+    });
+    if (r.count > 0) {
+      logger.info({ shop, month, event: "annual_boost_granted" }, "Annual subscriber granted a one-time 2x credit month");
+    }
+    return r.count > 0;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "annual boost grant failed (non-fatal)");
+    return false;
+  }
+}
+
+/**
  * B2 — how many DISTINCT products this shop has had the app act on, ever.
  *
  * "Products covered" is a catalogue fact, not a monthly one: a merchant on Free
@@ -220,10 +251,27 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // UsageRecord are deleted on uninstall and Shop is not. One trial per
         // shop, ever.
         const inTrial = !!plan.trialEndsAt && new Date(plan.trialEndsAt) > new Date();
-        const shopRow = inTrial
-          ? await tx.shop.findUnique({ where: { shop }, select: { trialCreditsUsed: true } }).catch(() => null)
-          : null;
+        // try/catch and not `.catch()`: if `tx.shop` is absent this throws
+        // SYNCHRONOUSLY and a promise catch never runs. This read is an
+        // ENHANCEMENT — it decides whether a trial allowance or an annual boost
+        // applies — and failing it must degrade to "neither", never fail a
+        // merchant's generation.
+        let shopRow = null;
+        try {
+          shopRow = await tx.shop.findUnique({
+            where: { shop },
+            select: { trialCreditsUsed: true, annualBoostMonth: true },
+          });
+        } catch {
+          shopRow = null;
+        }
         const trialUsed = shopRow?.trialCreditsUsed ?? 0;
+
+        // B5 — the one-time 2× credit month an annual subscriber gets on signup.
+        // It applies to exactly the month it was stamped for, so a merchant who
+        // subscribes on the 28th gets one boosted month and not two.
+        const boosted = !!shopRow?.annualBoostMonth && shopRow.annualBoostMonth === month;
+        const effectiveCredits = boosted ? plan.monthlyCredits * 2 : plan.monthlyCredits;
 
         // B1 — what THIS generation costs. Throws on an unrecognised content
         // type rather than defaulting to 1: a silent default is how the margin
@@ -287,13 +335,13 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           };
         }
 
-        if (cost > 0 && !inTrial && spent + cost > plan.monthlyCredits) {
+        if (cost > 0 && !inTrial && spent + cost > effectiveCredits) {
           return {
             allowed: false,
             reason: "credit_limit",
             planName: plan.planName,
             monthlyCredits: plan.monthlyCredits,
-            remaining: Math.max(0, plan.monthlyCredits - spent),
+            remaining: Math.max(0, effectiveCredits - spent),
             // What it would have cost, so the caller can say "a blog post needs
             // 3 credits and you have 2" instead of a bare refusal.
             required: cost,
@@ -325,7 +373,8 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           monthlyCredits: plan.monthlyCredits,
           remaining: inTrial
             ? Math.max(0, TRIAL_CREDITS - trialUsed - cost)
-            : Math.max(0, plan.monthlyCredits - spent - cost),
+            : Math.max(0, effectiveCredits - spent - cost),
+          boosted,
           inTrial,
           credits: cost,
           usageRecordId: record.id,
