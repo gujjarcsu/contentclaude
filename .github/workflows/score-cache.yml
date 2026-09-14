@@ -7,6 +7,12 @@ name: Score cache check
 # and no merchant row, and prints a shop handle rather than a domain.
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "peek = read only (for the before/after proof). invalidate = clear it, the default."
+        type: choice
+        options: ["peek", "invalidate"]
+        default: "peek"
 
 jobs:
   check:
@@ -20,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           flyctl ssh console --app contentclaude \
-            -C "node /app/scripts/score-cache-diag.mjs" | tee cache.json
+            -C "node /app/scripts/score-cache-diag.mjs ${{ inputs.mode == 'peek' && '--peek' || '' }}" | tee cache.json
           {
             echo '## Store-score cache'
             echo ''

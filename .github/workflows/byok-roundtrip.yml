@@ -1,0 +1,31 @@
+name: BYOK round-trip check
+
+# P6.0 — the installed encryption secret is proved to WORK, not just to be
+# present. A secret corrupted in transit produces a feature that appears to work
+# and cannot decrypt anything afterwards.
+#
+# Writes a synthetic key to one development shop's row and removes it again.
+# Prints nothing derived from any key — not a value, not a prefix, not a length.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Encrypt, store, resolve, compare, clean up
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Round-trip
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/byok-roundtrip--writes-test-shop-only.mjs" | tee byok.json
+          {
+            echo '## BYOK round-trip'
+            echo ''
+            echo '```json'
+            cat byok.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

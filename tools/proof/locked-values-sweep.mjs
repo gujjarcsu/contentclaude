@@ -99,6 +99,37 @@ const weightUsers = appFiles.filter(
 console.log(`${weightHome} → ${weightUsers.map((f) => f.replace("app/", "")).join(", ") || "⚠ NO CONSUMERS"}`);
 
 console.log(
-  `\nRESULT: ${dupes} second copies, ${orphans} exported constants with no non-test importer.\n`,
+  `\nRESULT, WITHIN app/: ${dupes} second copies, ${orphans} exported constants with no non-test importer.`,
 );
+
+// P6.1 — THE BOUNDARY, PRINTED. A locked price has three homes and this sweep
+// can only reach one of them.
+//
+// Two consecutive phases audited the price and called it consistent. Both were
+// true and both were incomplete, because Shopify's REGISTERED PLAN METADATA was
+// never in the inventory — and it is the first thing a merchant reads. The live
+// listing showed "$99.90/year and save 17%" and a "7-day free trial" badge while
+// this sweep reported zero second copies, and both reports were accurate about
+// their own scope.
+//
+// A result that is silent about its boundary invites the reader to supply the
+// widest one, which is false green #11 one layer out: not a constant asserted
+// against itself, but a SEARCH SPACE asserted against itself. So the boundary
+// is printed beside the result, every run, and not in a comment nobody opens.
+console.log(`
+WHAT THIS SWEEP CANNOT SEE, and none of it is checkable from code:
+
+  1. Shopify's REGISTERED PLAN METADATA  — we do not author it; it is what a
+     merchant reads first. Read 2026-09-14: "$99.90/year and save 17%" and a
+     "7-day free trial" badge, both WRONG and both display-only (the app is on
+     the Billing API, so nobody is charged them). Owner-only to change.
+  2. The App Store LISTING FIELDS        — intro, details, bullets, plan cards.
+                                           CW's surface; H12 tracks it.
+  3. The THEME APP EXTENSION             — separate bundle, separate deploy.
+  4. Any EMAIL or external template.
+
+"0 second copies" above means: zero inside app/. It is evidence about one of
+four homes. Before writing "consistent everywhere", enumerate the homes.
+`);
+
 process.exit(dupes === 0 && orphans === 0 ? 0 : 1);

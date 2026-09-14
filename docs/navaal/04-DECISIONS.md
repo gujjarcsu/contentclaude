@@ -35,6 +35,37 @@ Packs: 1,000 / $19 · 2,000 / $39 · 4,000 / $79 (one-time, Billing API).
 Annual carries a **one-time 2× credit allowance in the first month**.
 ~~**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.~~ **CORRECTED 2026-09-14 (B8): that premise is false and was queried rather than believed.** Production holds **one active paid subscription with a subscription id** (`activePaidWithSubscription: 1`, `pro:active 1`, read at `8831444`). Whether it is a real charge or a `(Test)` charge on a dev store is the one thing the query deliberately cannot say — it prints no shop domain and no subscription GID, because that output goes into a CI log — so it is routed to the owner in `OWNER-CHECKLIST.md`. **The change was NOT rolled back**, because every part of it is neutral-or-favourable to a Pro subscriber: credits 1,000 → 4,000, annual $799.90 → $767.90, alt text 1 → 0 credits, Pro already unlimited on products and already had bulk. Rolling back would cut their allowance to a quarter. The one line that moved against them is a blog post at 3 credits where it was 1, which is not a constraint at 4,000.
 
+### CONTENT COUNTS — DECIDED 2026-09-14 (P5.1, recorded properly in P6.0). They are a record of OUR WORK, not a description of the storefront. Do not join them to Shopify.
+
+`getContentMetrics` groups `GeneratedContent` by `shop` and `productId` and **joins to nothing in
+Shopify**. It therefore keeps counting a product after the merchant archives it, and after they
+delete it.
+
+**That is correct, and the arithmetic proves the number is right rather than merely defensible.** On
+`contentpilot-dev2` it reports 30 against 15 products actually on sale — and the 15 missing ones are
+real: **17 archived products were generated for, 15 of them published to**, measured in production
+by `archived-generations-diag.mjs`. 30 − 15 = 15, exactly the live count. Two numbers arrived at
+from different directions and met.
+
+**The tempting "fix" is destructive and will look like a bug fix.** Joining to product status so the
+count "matches the catalogue" would destroy the only record of work this app actually performed and,
+on a paid plan, **charged for**. A merchant asking *"what have I got for my credits"* would be shown
+a smaller number every time they tidied their catalogue. It would also put a Shopify API call inside
+a count that renders on four screens.
+
+**The word beside the number was the defect, and only the word.** *"30 live"* and *"Live on your
+storefront: 30"* were claims this data cannot support. They now read *"30 with content published"*
+and *"AI Content Published — Products we have published content for"*. A test walks every `.jsx` in
+`app/` and fails on any screen that describes these rows as the merchant's storefront.
+
+**If a screen ever needs "how many of my LIVE products have content"** — that is a different number
+with a different name and it needs the join. Add it beside these; do not redefine these.
+
+The reasoning also lives at the top of `metrics.server.js`, because that is the first file a future
+session opens and the change it will be tempted to make is the wrong one.
+
+---
+
 ### ARCHIVED-PRODUCT CREDITS — DECIDED 2026-09-14 (P5.1). NO REFUND IS OWED, because no merchant paid.
 
 The P5.1 brief required this: *"If it is non-zero, the fix is twofold — stop it happening, and

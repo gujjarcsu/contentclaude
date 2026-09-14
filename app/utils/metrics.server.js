@@ -18,11 +18,53 @@
  *
  *   needs_content  no AI content at all
  *   draft          has content waiting for the merchant to review
- *   published      reviewed and live on the storefront
+ *   published      we reviewed it and WE SENT IT TO SHOPIFY
  *   rejected       the merchant said no and has not regenerated
+
+ * `published` used to be described here as "reviewed and live on the
+ * storefront". That is the claim P5.1 had to remove from two screens, and it
+ * was in this file's own vocabulary the whole time — which is how it got onto
+ * the screens in the first place.
  *
  * The four counts always sum to the store's product total. Every screen, tab,
  * subtitle, badge and the Optimize action read them from here.
+ *
+ * ── WHAT THESE COUNTS ARE ABOUT, AND WHAT THEY ARE NOT ─────────────────
+ *
+ * DECIDED 2026-09-14 (P5.1, recorded properly in P6.0). Recorded here rather
+ * than only in two route comments, because this is the first file a future
+ * session opens and the change it will be tempted to make is the wrong one.
+ *
+ * **These counts are a record of what THIS APP HAS DONE. They are not a
+ * description of the merchant's storefront, and they must not be turned into
+ * one.**
+ *
+ * The query below groups `GeneratedContent` by `shop` and `productId` and joins
+ * to NOTHING in Shopify. It therefore keeps counting a product after the
+ * merchant archives it, and after they delete it. On our own development store
+ * that is 30 counted against 15 products actually on sale — and **the 15
+ * missing ones are real**: 17 archived products were generated for, 15 of them
+ * published to (measured in production, `archived-generations-diag.mjs`,
+ * 2026-09-14). 30 − 15 = 15, which is exactly the live count. The number is
+ * right.
+ *
+ * **THE TEMPTING FIX IS WRONG.** Joining this to Shopify product status so the
+ * number "matches the catalogue" would destroy the only record we have of work
+ * we actually performed and, on a paid plan, CHARGED FOR. A merchant asking
+ * "what have I got for my credits" would be told a smaller number every time
+ * they tidied their catalogue. It would also put a Shopify API call inside a
+ * count that renders on four screens.
+ *
+ * **The word beside the number was the defect, and only the word.** "30 live"
+ * and "Live on your storefront: 30" were claims about the storefront that this
+ * data cannot support; they now read "30 with content published" and "AI
+ * Content Published / Products we have published content for". A test walks
+ * every `.jsx` in `app/` and fails on any screen that describes these rows as
+ * the merchant's storefront (`tests/routes/archivedWritePaths.test.js`).
+ *
+ * If a screen ever genuinely needs "how many of my live products have content",
+ * that is a DIFFERENT number with a different name, and it needs the join. Add
+ * it beside these; do not redefine these.
  *
  * ── The precedence rule, and where it departs from the brief ────────────────
  *

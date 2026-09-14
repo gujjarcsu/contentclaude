@@ -23,12 +23,24 @@
  * exactly what publishing does, and touches no store and no row.
  *
  *   fly ssh console -a contentclaude -C "node /app/scripts/score-cache-diag.mjs"
+ *
+ * ── --peek ─────────────────────────────────────────────────────────────────
+ *
+ * P6.0 — with `--peek` it READS and does not clear. That is what makes the
+ * end-to-end proof possible: peek, have a merchant click Publish in the app,
+ * peek again. The default mode clears the key itself, which proves the function
+ * works and cannot prove that a CLICK reaches it — the gap I named at the end of
+ * P5.2 and this closes.
+ *
+ * A peek that finds nothing is reported as UNKNOWN, never as "cleared": an
+ * absent key is equally what a cold cache looks like.
  */
 import { getRedis, cacheKey } from "../app/utils/cache.server.js";
 import { storeScanKey, invalidateStoreScan } from "../app/utils/storeScanCache.server.js";
 import prisma from "../app/db.server.js";
 
-const out = { readAt: new Date().toISOString() };
+const PEEK = process.argv.includes("--peek");
+const out = { readAt: new Date().toISOString(), mode: PEEK ? "peek" : "invalidate" };
 
 // The shop with the most content — the one whose score a merchant would notice.
 const busiest = await prisma.generatedContent.groupBy({
@@ -66,6 +78,16 @@ const before = {
   ttlSeconds: await redis.ttl(key),
 };
 out.beforeInvalidation = before;
+
+if (PEEK) {
+  // READ ONLY, including of the cache. Nothing below this line runs.
+  out.verdict = before.exists
+    ? `CACHED: ${before.ttlSeconds}s left before it would expire on its own.`
+    : "NOT CACHED. That is not proof of anything on its own — an absent key is equally what a cold cache looks like.";
+  console.log(JSON.stringify(out, null, 2));
+  await prisma.$disconnect();
+  process.exit(0);
+}
 
 if (!before.exists) {
   // Nobody has loaded Home for this shop recently. Report that rather than

@@ -248,3 +248,42 @@ const code = (t) =>
 ```
 
 A file is not less correct for naming the thing it refuses to do. It is usually more correct.
+
+---
+
+## A LOCKED VALUE HAS MORE HOMES THAN THIS REPOSITORY. ENUMERATE THEM, OR THE SWEEP IS DECORATIVE.
+
+Found 2026-09-14 by CW, after **two** consecutive phases audited the price and called it consistent.
+
+A locked price has **three** homes:
+
+1. **The code** — `billing-plans.js`, and everything that derives from it.
+2. **The listing fields we author** — intro, details, bullets, plan-card feature lines.
+3. **Shopify's REGISTERED PLAN METADATA** — which we do not author, cannot see from the code, and
+   which is the first thing a merchant reads.
+
+The live listing showed **`$99.90/year and save 17%`** and Shopify's own **`7-day free trial`**
+badge, sitting directly under our true 14-day line. Both are display only — the app is on the
+Billing API, `billing:` is built by `buildBillingConfig()` from the locked table, and the one live
+subscription carries an id created through that path — so nobody pays $99.90 and nobody gets 7 days.
+That is lucky, not by design.
+
+**Why both audits missed it, and this is the part to internalise.** Phase 4 checked (1) and (2) and
+declared the price consistent. Phase 5 checked (1) and (2) *harder* — a value sweep reporting **0
+second copies**, a break test producing **7 failures**, three new non-test importers for a constant
+that had none — and declared it consistent again. **Both audits were true. Both were incomplete.**
+The sweep was exhaustive within its boundary and never said where its boundary was.
+
+**THE RULE. A claim that a value is consistent "everywhere" must first ENUMERATE every system that
+stores it, including systems outside this repository.** The enumeration is the deliverable; the
+sweep is only evidence about the part of it you can reach.
+
+**And the sweep must name what it did not reach.** `tools/proof/locked-values-sweep.mjs` prints
+"0 second copies" — which is true of `app/` and says nothing about Shopify's plan metadata, the
+listing fields, the theme extension, or any email template. A report that is silent about its own
+boundary invites the reader to supply the widest one. That is **false green #11 wearing a different
+layer**: not a constant asserted against itself, but a *search space* asserted against itself.
+
+**Practical form:** before writing "consistent everywhere", write the list of homes. If a home
+cannot be checked from code, say so in the same sentence as the result, and route it to whoever can
+open it.
