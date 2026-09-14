@@ -245,6 +245,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "UpgradePrompt.updatedAt",
   "UsageRecord.contentType",
   "UsageRecord.createdAt",
+  "UsageRecord.credits",
   "UsageRecord.id",
   "UsageRecord.month",
   "UsageRecord.productId",

@@ -35,7 +35,7 @@ const { prisma, activeSubs, invalidated } = vi.hoisted(() => ({
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     shop: { findUnique: vi.fn(async () => null), updateMany: vi.fn(async () => ({ count: 1 })) },
-    usageRecord: { count: vi.fn(async () => 0), createMany: vi.fn(async () => ({ count: 0 })) },
+    usageRecord: { count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })), createMany: vi.fn(async () => ({ count: 0 })) },
   },
   activeSubs: vi.fn(),
   invalidated: [],

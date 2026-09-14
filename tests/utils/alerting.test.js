@@ -145,7 +145,11 @@ describe("item 5 — the digest reports what we can actually count", () => {
       count: vi.fn(async () => 2),
       aggregate: vi.fn(async () => ({ _sum: { quotaSkipped: 11 } })),
     },
-    usageRecord: { count: vi.fn(async () => 42) },
+    // B1 — the gate sums credits rather than counting rows.
+    usageRecord: {
+      count: vi.fn(async () => 42),
+      aggregate: vi.fn(async () => ({ _sum: { credits: 42 } })),
+    },
     plan: { count: vi.fn(async () => 1) },
   };
 

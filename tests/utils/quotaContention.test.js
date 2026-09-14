@@ -36,7 +36,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     plan: { findUnique: vi.fn() },
-    usageRecord: { count: vi.fn(), create: vi.fn() },
+    usageRecord: { count: vi.fn(), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })), create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -77,13 +77,26 @@ function failFirst(n) {
     if (calls <= n) throw writeConflict();
     return fn({
       plan: { findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyLimit: 200, status: "active" }) },
-      usageRecord: { count: async () => 7, create: async () => ({ id: "u1" }) },
+      usageRecord: {
+        count: async () => 7,
+        // B1 — the gate sums credits inside the TRANSACTION, so the tx mock
+        // needs aggregate as well as the outer prisma mock.
+        aggregate: async () => ({ _sum: { credits: 7 } }),
+        create: async () => ({ id: "u1" }),
+      },
     });
   });
   return () => calls;
 }
 
 beforeEach(() => {
+  // B1 — the gate SUMS a credits column instead of counting rows, so the mock's
+  // aggregate mirrors whatever this file's `count` is set to. Every existing
+  // test that says "usage is 20" therefore still means 20 credits spent, and no
+  // test's intent changes.
+  prisma.usageRecord.aggregate.mockImplementation(async (args) => ({
+    _sum: { credits: await prisma.usageRecord.count(args) },
+  }));
   vi.clearAllMocks();
 });
 
@@ -185,6 +198,7 @@ describe("what a retry must not change", () => {
         },
         usageRecord: {
           count: async () => 0,
+          aggregate: async () => ({ _sum: { credits: 0 } }),
           create: async (arg) => {
             seen = arg.data;
             return { id: "u1" };

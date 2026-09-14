@@ -23,7 +23,7 @@ vi.mock("../../app/db.server.js", () => ({
       upsert: vi.fn(),
     },
     usageRecord: {
-      count: vi.fn(),
+      count: vi.fn(), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })),
       create: vi.fn(),
       findFirst: vi.fn(),
     },
@@ -71,7 +71,14 @@ describe("getPlanByKey", () => {
 });
 
 describe("canGenerate", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+  vi.clearAllMocks();
+  // B1 — the gate SUMS credits instead of counting rows. Mirroring count keeps
+  // every existing assertion in this file meaning exactly what it meant.
+  prisma.usageRecord.aggregate.mockImplementation(async (args) => ({
+    _sum: { credits: await prisma.usageRecord.count(args) },
+  }));
+});
 
   it("returns allowed:true when under limit", async () => {
     // getOrCreatePlan is a single upsert (Phase 0 item 16) — no findUnique-then-create race.
@@ -118,7 +125,14 @@ describe("canGenerate", () => {
 });
 
 describe("tryConsumeGeneration (atomic gate)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+  vi.clearAllMocks();
+  // B1 — the gate SUMS credits instead of counting rows. Mirroring count keeps
+  // every existing assertion in this file meaning exactly what it meant.
+  prisma.usageRecord.aggregate.mockImplementation(async (args) => ({
+    _sum: { credits: await prisma.usageRecord.count(args) },
+  }));
+});
 
   it("allows generation and writes usage record when under limit", async () => {
     // recentCount = 0 → first generation, no free re-gen, proceed to transaction
@@ -133,7 +147,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           }),
         },
         usageRecord: {
-          count: vi.fn().mockResolvedValue(10),
+          count: vi.fn().mockResolvedValue(10), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 10 } }),
           create: vi.fn().mockResolvedValue({}),
         },
       }),
@@ -160,7 +174,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           }),
         },
         usageRecord: {
-          count: vi.fn().mockResolvedValue(10),
+          count: vi.fn().mockResolvedValue(10), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 10 } }),
           create: vi.fn(),
         },
       }),
@@ -176,7 +190,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: { findUnique: vi.fn().mockResolvedValue(null) },
-        usageRecord: { count: vi.fn(), create: vi.fn() },
+        usageRecord: { count: vi.fn(), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })), create: vi.fn() },
       }),
     );
 
@@ -208,7 +222,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           }),
         },
         usageRecord: {
-          count: vi.fn().mockResolvedValue(5),
+          count: vi.fn().mockResolvedValue(5), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 5 } }),
           create: vi.fn().mockResolvedValue({}),
         },
       }),
@@ -238,7 +252,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           }),
         },
         usageRecord: {
-          count: vi.fn().mockResolvedValue(10),
+          count: vi.fn().mockResolvedValue(10), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 10 } }),
           create: vi.fn().mockResolvedValue({}),
         },
       }),

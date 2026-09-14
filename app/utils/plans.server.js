@@ -4,6 +4,7 @@ import { BILLING_PLANS, FREE_PLAN, getEntitlements } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 import logger from "./logger.server.js";
 import { withUsageRecord } from "./usageContext.server.js";
+import { creditsFor } from "./credits.js";
 
 export { FREE_PLAN };
 
@@ -69,9 +70,29 @@ export async function getOrCreatePlan(shop) {
   return plan;
 }
 
+/**
+ * B1 — credits spent this month, not ROWS written.
+ *
+ * This counted rows, and counting rows cannot express weighting: alt text costs
+ * $0.000906 and a blog post $0.0300 (08-ECONOMICS.md §2, MEASURED). Selling both
+ * as "one generation" made the plan's true cost depend entirely on the mix.
+ *
+ * `_sum` returns null for a shop with no rows at all — not 0 — so the coalesce
+ * is load-bearing. Without it a brand-new shop's remaining balance would be NaN
+ * and every quota surface would render "NaN of 100 left".
+ */
+export async function sumMonthlyCredits(shop, month = new Date().toISOString().slice(0, 7), tx = prisma) {
+  const agg = await tx.usageRecord.aggregate({ where: { shop, month }, _sum: { credits: true } });
+  return agg?._sum?.credits ?? 0;
+}
+
+/**
+ * Kept under its original name because ~30 call sites read it, but it now
+ * returns CREDITS spent rather than generations counted. The two were the same
+ * number until weighting existed.
+ */
 export async function getMonthlyUsageCount(shop) {
-  const month = new Date().toISOString().slice(0, 7);
-  return prisma.usageRecord.count({ where: { shop, month } });
+  return sumMonthlyCredits(shop);
 }
 
 /**
@@ -158,14 +179,31 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           };
         }
 
-        const usageCount = await tx.usageRecord.count({ where: { shop, month } });
+        const spent = await sumMonthlyCredits(shop, month, tx);
 
-        if (usageCount >= plan.monthlyLimit) {
+        // B1 — what THIS generation costs. Throws on an unrecognised content
+        // type rather than defaulting to 1: a silent default is how the margin
+        // arithmetic in 14-PRICING.md §3 stops being true without anyone
+        // noticing. The throw is caught by the outer try, which denies safely.
+        const cost = creditsFor(contentType);
+
+        // UNMETERED CONTENT IS ALLOWED AT ZERO REMAINING. Alt text costs 0
+        // credits on every plan (14-PRICING.md §4), so a merchant who has spent
+        // their whole allowance can still generate it. That is the promise, and
+        // a gate that refused it would make the plan card a lie.
+        //
+        // It is NOT unbounded: alt text is bounded by the PRODUCT cap (B2), not
+        // by the credit allowance. Without that cap the free tier has no ceiling
+        // at all.
+        if (cost > 0 && spent + cost > plan.monthlyLimit) {
           return {
             allowed: false,
             planName: plan.planName,
             monthlyLimit: plan.monthlyLimit,
-            remaining: 0,
+            remaining: Math.max(0, plan.monthlyLimit - spent),
+            // What it would have cost, so the caller can say "a blog post needs
+            // 3 credits and you have 2" instead of a bare refusal.
+            required: cost,
           };
         }
 
@@ -177,14 +215,15 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // app/utils/usageContext.server.js for how the right record is found
         // when several generations run at once.
         const record = await tx.usageRecord.create({
-          data: { shop, month, contentType, productId, tokensUsed: 0 },
+          data: { shop, month, contentType, productId, tokensUsed: 0, credits: cost },
         });
 
         return {
           allowed: true,
           planName: plan.planName,
           monthlyLimit: plan.monthlyLimit,
-          remaining: plan.monthlyLimit - usageCount - 1,
+          remaining: Math.max(0, plan.monthlyLimit - spent - cost),
+          credits: cost,
           usageRecordId: record.id,
         };
       },
@@ -367,12 +406,12 @@ export function sliceToQuota(ids, remaining) {
  */
 export async function remainingGenerations(shop) {
   const month = new Date().toISOString().slice(0, 7);
-  const [plan, usageCount] = await Promise.all([
+  const [plan, spent] = await Promise.all([
     prisma.plan.findUnique({ where: { shop } }),
-    prisma.usageRecord.count({ where: { shop, month } }),
+    sumMonthlyCredits(shop, month),
   ]);
   if (!plan || plan.status !== "active") return 0;
-  return Math.max(0, plan.monthlyLimit - usageCount);
+  return Math.max(0, plan.monthlyLimit - spent);
 }
 
 /**
@@ -463,6 +502,10 @@ export async function restoreUsageCarryover(shop) {
         contentType: "carryover",
         productId: null,
         tokensUsed: 0,
+        // One credit each: these rows restore credits the shop had ALREADY
+        // spent this month, so an uninstall/reinstall cannot reset the
+        // allowance. Anything else hands free credits back for reinstalling.
+        credits: 1,
       })),
     });
     await invalidateCache(`canGenerate:${shop}:${month}`);

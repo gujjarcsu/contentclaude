@@ -18,7 +18,7 @@ const { prisma } = vi.hoisted(() => ({
   prisma: {
     plan: { findUnique: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
     usageRecord: {
-      count: vi.fn(async () => 0),
+      count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })),
       create: vi.fn(async () => ({})),
       createMany: vi.fn(async () => ({ count: 0 })),
       findFirst: vi.fn(async () => ({ id: "u1" })),
@@ -53,6 +53,13 @@ const SHOP = "s.myshopify.com";
 const ids = (n) => Array.from({ length: n }, (_, i) => `gid://shopify/Product/${i + 1}`);
 
 beforeEach(() => {
+  // B1 — the gate SUMS a credits column instead of counting rows, so the mock's
+  // aggregate mirrors whatever this file's `count` is set to. Every existing
+  // test that says "usage is 20" therefore still means 20 credits spent, and no
+  // test's intent changes.
+  prisma.usageRecord.aggregate.mockImplementation(async (args) => ({
+    _sum: { credits: await prisma.usageRecord.count(args) },
+  }));
   vi.clearAllMocks();
   prisma.usageRecord.count.mockResolvedValue(0);
   prisma.usageRecord.findFirst.mockResolvedValue({ id: "u1" });

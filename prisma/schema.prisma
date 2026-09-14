@@ -147,6 +147,12 @@ model UsageRecord {
   contentType String // "description" | "metaTitle" | etc.
   productId   String?
   tokensUsed  Int      @default(0)
+  // B1 — what this generation cost the merchant, in credits. Alt text is 0,
+  // a blog post is 3, everything else is 1 (app/utils/credits.js). Stored
+  // rather than derived from contentType, because the credits a generation
+  // cost are a fact about the moment it happened: re-deriving them later would
+  // silently re-price a merchant's past month when the weights change.
+  credits     Int      @default(1)
   createdAt   DateTime @default(now())
 
   @@index([shop, month])

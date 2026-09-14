@@ -21,7 +21,7 @@ vi.mock("@prisma/client", () => ({
 vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    usageRecord: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn(), update: vi.fn() },
+    usageRecord: { count: vi.fn(), aggregate: vi.fn(async () => ({ _sum: { credits: 0 } })), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn(), update: vi.fn() },
     session: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -285,7 +285,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
         plan: {
           findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
         },
-        usageRecord: { count: vi.fn().mockResolvedValue(25), create: vi.fn() },
+        usageRecord: { count: vi.fn().mockResolvedValue(25), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 25 } }), create: vi.fn() },
       }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -299,7 +299,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
         plan: {
           findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "active", monthlyLimit: 50 }),
         },
-        usageRecord: { count: vi.fn().mockResolvedValue(50), create: vi.fn() },
+        usageRecord: { count: vi.fn().mockResolvedValue(50), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 50 } }), create: vi.fn() },
       }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -312,7 +312,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
         plan: {
           findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
         },
-        usageRecord: { count: vi.fn().mockResolvedValue(24), create: vi.fn().mockResolvedValue({}) },
+        usageRecord: { count: vi.fn().mockResolvedValue(24), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 24 } }), create: vi.fn().mockResolvedValue({}) },
       }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -326,7 +326,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
         plan: {
           findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "frozen", monthlyLimit: 50 }),
         },
-        usageRecord: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
+        usageRecord: { count: vi.fn().mockResolvedValue(0), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 0 } }), create: vi.fn() },
       }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -337,7 +337,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: { findUnique: vi.fn().mockResolvedValue(null) },
-        usageRecord: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
+        usageRecord: { count: vi.fn().mockResolvedValue(0), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 0 } }), create: vi.fn() },
       }),
     );
     const result = await tryConsumeGeneration("shop.myshopify.com", "description");
@@ -412,6 +412,13 @@ describe("tryConsumeGeneration — P2034 retry", () => {
 
 describe("recordTokensUsed — the column that was written as a literal 0 for its whole life", () => {
   beforeEach(() => {
+  // B1 — the gate SUMS a credits column instead of counting rows, so the mock's
+  // aggregate mirrors whatever this file's `count` is set to. Every existing
+  // test that says "usage is 20" therefore still means 20 credits spent, and no
+  // test's intent changes.
+  prisma.usageRecord.aggregate.mockImplementation(async (args) => ({
+    _sum: { credits: await prisma.usageRecord.count(args) },
+  }));
     prisma.usageRecord.update.mockReset();
     prisma.usageRecord.update.mockResolvedValue({});
   });

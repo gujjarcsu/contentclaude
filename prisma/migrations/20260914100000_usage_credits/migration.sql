@@ -1,0 +1,31 @@
+-- B1 — credit weighting. What a generation costs, stored per usage record.
+--
+-- New file, new name. Nothing here edits an applied migration (L8).
+--
+-- WHY A COLUMN AND NOT A LOOKUP. The gate counted ROWS
+-- (`usageCount >= plan.monthlyLimit`), and counting rows cannot express
+-- weighting: alt text costs $0.000906 and a blog post $0.0300, a 33x spread
+-- (08-ECONOMICS.md §2, MEASURED through the real code path in P0.6). Selling
+-- both as "one generation" makes the plan's true cost depend entirely on the
+-- mix, and the worst case is three times the plan.
+--
+-- Deriving the weight at read time from `contentType` would work until the
+-- weights change, at which point every historical row would silently re-price
+-- itself and a merchant's past month would move under them. The credits a
+-- generation cost are a fact about the moment it happened, so they are stored.
+--
+-- DEFAULT 1 IS DELIBERATE. Every existing row was charged exactly one unit of
+-- the old monthlyLimit, so 1 preserves what each one already meant. Alt-text
+-- rows written before today therefore stay at 1 rather than becoming free
+-- retroactively: they were charged, the merchant's allowance already reflected
+-- it, and rewriting history to hand credits back would make this month's
+-- remaining balance disagree with what the merchant was shown at the time.
+--
+-- Additive only. The old build keeps serving normally while this is applied:
+-- it ignores the column, and its row-counting gate stays correct because every
+-- row is worth 1 to it.
+ALTER TABLE "UsageRecord" ADD COLUMN IF NOT EXISTS "credits" INTEGER NOT NULL DEFAULT 1;
+
+-- The gate sums this column per shop per month, so it is read on every
+-- generation and on every quota surface.
+CREATE INDEX IF NOT EXISTS "UsageRecord_shop_month_credits_idx" ON "UsageRecord"("shop", "month", "credits");

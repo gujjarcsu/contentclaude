@@ -276,7 +276,20 @@ function ScoreRing({ score, scanned }) {
           : "/ 100 — Audit score"}
       </Text>
       <Text as="p" variant="bodySm" tone="subdued">
-        Measured differently from the Store SEO score on Home, which samples a smaller set.
+        {/*
+          A2 — this said "Measured DIFFERENTLY from the Store SEO score on Home",
+          which was true when Home averaged two rubrics and this page reported
+          one. It is now false: both use the same rubric, the same fields and the
+          same scope, and on a store small enough for one page they read the same
+          number. Leaving it would have been a screen explaining a disagreement
+          that no longer exists — and inviting a merchant to distrust two numbers
+          that finally agree.
+
+          The only honest difference left is HOW MANY products each one reads, so
+          that is what it now says.
+        */}
+        Scored the same way as the Store SEO score on Home. Home samples up to 30 products; this
+        page reads as much of your catalogue as it can, so the two can differ on a large store.
       </Text>
       <ProgressBar progress={score} tone={tone} size="medium" />
     </BlockStack>
