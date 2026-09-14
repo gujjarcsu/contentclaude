@@ -1,7 +1,9 @@
 # scripts — operational scripts that run on the machine
 
-Ten scripts. Each one runs **on the Fly machine**, where `DATABASE_URL` and the generated Prisma client
-already exist:
+Thirteen scripts, in two groups.
+
+**Most of them run on the Fly machine**, where `DATABASE_URL`, `ANTHROPIC_API_KEY` and the generated
+Prisma client already exist:
 
 ```bash
 fly ssh console -a contentclaude -C "node /app/scripts/<name>.mjs"
@@ -35,6 +37,17 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `store-products-diag.cjs` | read-only | Product and generated-content counts for a shop. |
 | `shop-settings-diag.mjs` | read-only | One shop's STORED settings straight from the database — the toggle flags, `storeName`, `language`, and character counts rather than the merchant's own copy. Use it when you must compare what is stored against what the app renders; those are two different things. Also reachable without a Fly token via the **Shop settings diagnostic** workflow. |
 | `logs.mjs` | read-only | **INFRA2 — the durable log.** `fly logs` keeps ~100 lines; this queries the 30-day `LogEvent` table (WARN-and-above plus tagged events). `--since 2h` · `--around 2026-09-10T03:45 --window 10m` · `--event autopilot_withheld` · `--shop x.myshopify.com` · `--level warn`. Never writes. |
+| `measure-generation-cost--spends-api-credit.mjs` | **spends API credit** | **P0.6 — the measurement every `ASSUMED` figure in `08-ECONOMICS.md` was waiting for.** Makes real Anthropic calls through the real `app/utils/ai.server.js` functions — not a re-implementation, because a re-implementation would measure a prompt I wrote today rather than the prompt merchants are billed for — and reports mean input/output tokens and USD per content type. Touches **no** Shopify store and **no** database: the product is a fixture in the file and it never opens a Shopify client. `--samples N` · `--image-url <cdn.shopify.com URL>` (without it `altText` reports **NOT MEASURED** rather than a guess) · `--types a,b` · `--json`. Needs the key, so run it on the machine or through the **Measure generation cost** workflow. |
 
 Anything with `--apply`: **run it without the flag first and read the output.** Both backfills print
 exactly what they would change.
+
+## The two that run on a laptop, not on the machine
+
+These need no `DATABASE_URL` and no Fly token. They are here rather than in `tools/proof/` because they
+drive no browser and touch no shop — they read this repository and the public production endpoints.
+
+| Script | Default | What it does |
+|---|---|---|
+| `check-api-versions.mjs` | read-only | **P0.3 — the guard against being delisted for an aged-out API version.** Fails when any pin is within 90 days of sunset (sunset = release + 12 months), when an extension whose type *takes* an `api_version` declares none or one below **2025-10** (the React → Polaris floor), or when a type that takes *no* `api_version` declares one. An extension type it has not met must pin, so a new type fails loudly rather than being waved through, and it fails on finding no pins at all — a check that passes by finding nothing is decoration. Runs in CI before `npm ci`; locally it is `npm run check:api-versions`. Reads files only. |
+| `wait-for-deploy.sh` | read-only | Proves a push actually reached production (L19). Waits for the CI run **for one specific commit sha**, then polls `/api/build-info` until the live sha equals it, then requires deep health with the worker running and the schema check green. Scoped to a sha on purpose: the ad-hoc version of this asked "has the most recent run finished?", matched a *previous* completed run and reported a deploy that had never happened. `scripts/wait-for-deploy.sh [sha]`, defaulting to HEAD. |

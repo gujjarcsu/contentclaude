@@ -1,0 +1,85 @@
+name: Measure generation cost
+
+# P0.6 — measure the REAL cost per generation, per content type.
+#
+# This has to run where ANTHROPIC_API_KEY exists. That is the Fly machine: this
+# repo's .env holds a note saying the key is a Fly secret, not the key, and
+# local `flyctl` has had no token since 2026-09-10. Same route the H13 database
+# read took.
+#
+# IT SPENDS REAL API CREDIT. A default run is a few cents. That is the point —
+# an estimate is what 08-ECONOMICS.md already had, and it is why every figure in
+# it was marked ASSUMED.
+#
+# It touches NO Shopify store and NO database. The product it describes is a
+# fixture inside the script; it never opens a Shopify client, so it cannot write
+# to a merchant's catalogue.
+
+on:
+  workflow_dispatch:
+    inputs:
+      samples:
+        description: "Runs per content type (more = tighter mean, more credit spent)"
+        type: string
+        default: "3"
+        required: true
+      image_url:
+        description: "A https://cdn.shopify.com image URL — required to measure altText; leave blank to skip it"
+        type: string
+        required: false
+      types:
+        description: "Comma-separated content types, or blank for all (product,enhance,blog,collection,social,altText)"
+        type: string
+        required: false
+
+jobs:
+  measure:
+    name: Measure cost per generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run the measurement on the machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SAMPLES: ${{ inputs.samples }}
+          IMAGE_URL: ${{ inputs.image_url }}
+          TYPES: ${{ inputs.types }}
+        run: |
+          set -euo pipefail
+
+          # Inputs reach a shell on a production machine. Constrain them.
+          case "$SAMPLES" in
+            ''|*[!0-9]*) echo "::error::samples must be a number, got '$SAMPLES'"; exit 1 ;;
+          esac
+          if [ "$SAMPLES" -lt 1 ] || [ "$SAMPLES" -gt 20 ]; then
+            echo "::error::samples must be 1-20 (this spends real credit), got $SAMPLES"; exit 1
+          fi
+
+          ARGS="--samples $SAMPLES"
+
+          if [ -n "$IMAGE_URL" ]; then
+            case "$IMAGE_URL" in
+              https://cdn.shopify.com/*) ARGS="$ARGS --image-url $IMAGE_URL" ;;
+              *) echo "::error::image_url must be an https://cdn.shopify.com URL"; exit 1 ;;
+            esac
+          fi
+
+          if [ -n "$TYPES" ]; then
+            case "$TYPES" in
+              *[!a-zA-Z,]*) echo "::error::types must be comma-separated letters only"; exit 1 ;;
+            esac
+            ARGS="$ARGS --types $TYPES"
+          fi
+
+          echo "running: measure-generation-cost--spends-api-credit.mjs $ARGS"
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/measure-generation-cost--spends-api-credit.mjs $ARGS" | tee measured.txt
+
+          {
+            echo "## Measured cost per generation"
+            echo ""
+            echo '```'
+            cat measured.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

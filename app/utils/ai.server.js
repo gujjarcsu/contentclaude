@@ -2,6 +2,56 @@ import sanitizeHtmlLib from "sanitize-html";
 import logger from "./logger.server.js";
 import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
 import { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } from "./text.js";
+import { modelFor, costUsd, costMicroUsd } from "./modelPricing.js";
+
+// ─── P0.6 — real cost accounting ─────────────────────────────────────────────
+//
+// Every cost figure in 08-ECONOMICS.md was `ASSUMED`, and it had to be: the
+// Anthropic response's `usage` block arrived in callClaude and was thrown away,
+// and `UsageRecord.tokensUsed` was written as the literal 0 at both of the only
+// two places it is ever written. There was no measurement to report.
+//
+// Now every call emits its REAL input/output token counts and the money they
+// cost, as a structured `event` (which is what logSink.server.js retains), keyed
+// by content type. That is what turns the economics table from an assumption
+// into a measurement, and keeps it one as prices and prompts change.
+//
+// The observer hook is how scripts/measure-generation-cost.mjs reads the true
+// production path rather than a synthetic re-implementation of it.
+let usageObserver = null;
+
+/** Register a callback receiving every call's usage. Pass null to clear. */
+export function setUsageObserver(fn) {
+  usageObserver = typeof fn === "function" ? fn : null;
+}
+
+function recordUsage({ contentType, model, usage, ms }) {
+  const inputTokens = usage?.input_tokens ?? 0;
+  const outputTokens = usage?.output_tokens ?? 0;
+  // An unpriced model must not be silently billable as free (L3): let it throw
+  // into the catch below and be logged, rather than reporting a $0 generation.
+  let usd = null;
+  let microUsd = null;
+  try {
+    usd = costUsd({ model, inputTokens, outputTokens });
+    microUsd = costMicroUsd({ model, inputTokens, outputTokens });
+  } catch (err) {
+    logger.warn({ model, err: err.message }, "model has no price entry — cost not recorded");
+  }
+
+  const record = { event: "ai.usage", contentType, model, inputTokens, outputTokens, microUsd, ms };
+  logger.info(record, "AI call usage");
+
+  if (usageObserver) {
+    try {
+      usageObserver({ ...record, usd });
+    } catch (err) {
+      // An observer is instrumentation. It must never break a merchant's
+      // generation.
+      logger.warn({ err: err.message }, "usage observer threw — ignored");
+    }
+  }
+}
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -67,12 +117,12 @@ export async function generateProductContent(
       ]
     : prompt;
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-sonnet-4-6",
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("product"),
     max_tokens: 4000,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: messageContent }],
-  }, 0, { interactive: options.interactive !== false });
+  }, 0, { interactive: options.interactive !== false, contentType: "product" });
 
   return parseGeneratedContent(rawText);
 }
@@ -85,8 +135,11 @@ export async function generateAltText(imageUrl, productTitle) {
     throw new Error("Unsupported image URL — only Shopify CDN https images are allowed.");
   }
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-haiku-4-5-20251001",
+  // Alt text is the highest-VOLUME content type we generate — one per image,
+  // and a catalogue has several images per product. It is also a caption under
+  // 125 characters describing a picture. A frontier model is wasted on it.
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("altText"),
     max_tokens: 200,
     messages: [
       {
@@ -100,7 +153,7 @@ export async function generateAltText(imageUrl, productTitle) {
         ],
       },
     ],
-  });
+  }, 0, { contentType: "altText" });
 
   return rawText.trim();
 }
@@ -235,12 +288,12 @@ ${typeInstructions.join("\n\n")}
     ? [...imageUrls.map((url) => ({ type: "image", source: { type: "url", url } })), { type: "text", text: prompt }]
     : prompt;
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-sonnet-4-6",
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("enhance"),
     max_tokens: 3000,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: messageContent }],
-  }, 0, { interactive: options.interactive !== false });
+  }, 0, { interactive: options.interactive !== false, contentType: "enhance" });
 
   return parseGeneratedContent(rawText);
 }
@@ -288,11 +341,11 @@ Write a compelling, SEO-friendly blog post that is genuinely beautiful to read.
 <BLOG_TITLE>The blog post title</BLOG_TITLE>
 <BLOG_CONTENT>Full HTML blog post content here</BLOG_CONTENT>`;
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-sonnet-4-6",
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("blog"),
     max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
-  });
+  }, 0, { contentType: "blog" });
 
   return {
     title: extractTag(rawText, "BLOG_TITLE"),
@@ -328,11 +381,12 @@ Facebook post: 80-120 words, conversational, clear CTA. No hashtags.
 TikTok hook + script: First line = scroll-stopping hook (under 10 words). Then 3-4 short punchy sentences. Total under 60 words.
 </TIKTOK>`;
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-haiku-4-5-20251001",
+  // Short, templated, high volume — same reasoning as alt text.
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("social"),
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
-  });
+  }, 0, { contentType: "social" });
 
   // Social captions are plain text too — they are copied into other platforms.
   return {
@@ -379,11 +433,11 @@ Generate:
 <META_TITLE>SEO meta title (max 60 chars)</META_TITLE>
 <META_DESCRIPTION>SEO meta description (max 155 chars)</META_DESCRIPTION>`;
 
-  const rawText = await callClaude(apiKey, {
-    model: "claude-sonnet-4-6",
+  const { text: rawText } = await callClaude(apiKey, {
+    model: modelFor("collection"),
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
-  });
+  }, 0, { contentType: "collection" });
 
   return {
     description: extractTag(rawText, "DESCRIPTION"),
@@ -493,7 +547,7 @@ export function getCircuitBreakerState() {
 }
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {}) {
+async function callClaude(apiKey, body, attempt = 0, { interactive = false, contentType = "unknown" } = {}) {
   if (!checkCircuit()) {
     throw new Error("AI service temporarily unavailable. The system will retry automatically in about a minute.");
   }
@@ -522,7 +576,7 @@ async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {
     const transient = err.name === "AbortError" || err.name === "TypeError" || err.name === "FetchError";
     if (transient && attempt < 1) {
       logger.warn({ model: body.model, attempt, err: err.message }, "Claude API network error/timeout — retrying once");
-      return callClaude(apiKey, body, attempt + 1, { interactive });
+      return callClaude(apiKey, body, attempt + 1, { interactive, contentType });
     }
     recordFailure();
     if (err.name === "AbortError") {
@@ -554,7 +608,10 @@ async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {
       }
     }
     logger.debug({ model: body.model, attempt, ms: Date.now() - t0 }, "Claude API call succeeded");
-    return data.content[0]?.text ?? "";
+    // P0.6 — the usage block used to be discarded here. It is the only source of
+    // a real cost figure this app has.
+    recordUsage({ contentType, model: body.model, usage: data.usage, ms: Date.now() - t0 });
+    return { text: data.content[0]?.text ?? "", usage: data.usage ?? null };
   }
 
   // 429 — Rate limited: respect Retry-After header before retrying
@@ -571,7 +628,7 @@ async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {
       const delay = Math.min(Math.max(retryAfter * 1000, (attempt + 1) * 2_000), cap);
       logger.warn({ model: body.model, attempt, retryAfterMs: delay, interactive }, "Anthropic 429 — backing off before retry");
       await new Promise((r) => setTimeout(r, delay));
-      return callClaude(apiKey, body, attempt + 1, { interactive });
+      return callClaude(apiKey, body, attempt + 1, { interactive, contentType });
     }
     throw Object.assign(
       new Error("Anthropic rate limit exceeded after max retries. Try again in a minute."),
@@ -596,7 +653,7 @@ async function callClaude(apiKey, body, attempt = 0, { interactive = false } = {
     recordFailure();
     logger.warn({ model: body.model, status: response.status, attempt }, "Claude API 5xx — retrying");
     await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
-    return callClaude(apiKey, body, attempt + 1, { interactive });
+    return callClaude(apiKey, body, attempt + 1, { interactive, contentType });
   }
 
   const errorBody = await response.text();
