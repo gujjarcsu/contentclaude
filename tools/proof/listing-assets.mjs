@@ -97,7 +97,19 @@ const FRAMES = [
     // state on a store with no products — a technically-correct capture that
     // is useless as a listing image, and the guard waved it through. A listing
     // frame of the first run has to show a real score on a real catalogue.
-    must: /scores \d+\/100/i,
+    // FIXED 2026-09-14: was \scores \d+\\/100/i, which never matched.
+    // The screen renders the label "Store SEO score" and puts the number and
+    // "/ 100" on their own lines, so innerText reads:
+    //     Store SEO score
+    //     34
+    //     / 100
+    // The old pattern wanted "scores 34/100" - wrong word, and no newlines
+    // allowed - so it failed every run and 04 was never captured.
+    //
+    // This is STRICTER, not looser: it now requires the literal "Store SEO
+    // score" label, which the old pattern never checked, so the empty state
+    // this guard exists to reject still cannot pass.
+    must: /Store SEO score\s*\d+\s*\/\s*100/i,
     label: "First run — the store is scored and three drafts are written",
   },
   {
@@ -115,7 +127,6 @@ const FRAMES = [
     path: "/app",
     width: 375,
     height: 812,
-    frameOnly: true,
     must: /Monthly Usage|Products optimized|Review/i,
     label: "Home on a phone",
   },
@@ -125,7 +136,6 @@ const FRAMES = [
     path: "/app/review",
     width: 375,
     height: 812,
-    frameOnly: true,
     must: /Review|Approve|Current|Proposed/i,
     label: "Review on a phone",
   },
@@ -135,7 +145,6 @@ const FRAMES = [
     path: "/app/products",
     width: 375,
     height: 812,
-    frameOnly: true,
     must: /Products|Published|Draft|Needs content/i,
     label: "Products on a phone",
   },
@@ -209,7 +218,20 @@ for (const f of SELECTED) {
       throw new Error(`this is not the ${f.label} screen — no match for ${f.must} in: ${seen.slice(0, 120)}`);
     }
 
-    const target = f.frameOnly ? await frame.frameElement() : page;
+    // ALWAYS the app frame, never the whole page.
+    //
+    // This was `f.frameOnly ? frameElement : page`, and frameOnly was set on
+    // the three MOBILE frames only. So every DESKTOP listing image captured
+    // the entire Shopify admin around our app - the left nav, the top bar,
+    // and the Sidekick icon and "Agentic" entry that sit in them. Shopify
+    // names Sidekick-icon and Shopify-purple AI branding as a Built for
+    // Shopify rejection reason, and it applies hardest to an app called
+    // "AI SEO". We were shipping it in the listing images themselves.
+    //
+    // A flag was the wrong shape: it made the safe behaviour opt-in, and
+    // five of eight frames did not opt in. No listing image should ever show
+    // Shopify's chrome instead of our app, so the choice is gone.
+    const target = await frame.frameElement();
     if (!target) throw new Error("could not resolve the frame element to screenshot");
     await target.screenshot({ path: `${OUT}/${f.file}` });
 
