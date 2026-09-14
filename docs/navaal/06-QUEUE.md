@@ -341,6 +341,34 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 - **CW — Playwright now runs on this computer's Linux VM, which is how every screen read above was taken.** `npx playwright install chromium`, then extract `libxdamage1` by hand (`apt-get download libxdamage1; dpkg-deb -x`) and export `LD_LIBRARY_PATH=$HOME/libs/usr/lib/x86_64-linux-gnu` — without it the browser dies with "Target page, context or browser has been closed", which reads exactly like a broken harness. Worth a line in `07-VERIFICATION.md`.
 - **ALL — Shopify's Agentic channel now reports per-channel COMMERCE ANALYTICS, and still nothing per product.** Re-read 2026-09-14 on `contentpilot-dev2`. The master toggle **"Allow Shopify to manage for me" is already checked `true`** — there was nothing to activate — yet all four channels read "Status: Inactive". Expanding a channel now shows `Sessions 0 · Sales $0 · Orders 0 · Conversion —` plus *"Your products aren't discoverable through the Shopify Catalog. They may still appear on ChatGPT through alternate sources."* **`Shopify Catalog — 0 products in Catalog` on a 17-product store, and the element is not clickable** (checked through the shadow DOM): no drill-down, no product list, no reason code. Readiness still *"Make sure catalog access is enabled — Completed"* / *"Update policies — Not started"*, whose Review button just goes to `/settings/legal`. **Two consequences:** (1) Shopify is now shipping AI-channel session/sales/order reporting free in the admin, which overlaps `12-OFFER.md` §5's Phase-3 "AI traffic report" bullet before we have written a line of it; (2) the defensible slice is unchanged and narrow — *why is the catalog count 0, and which products are excluded.*
 
+## POSTED 2026-09-14 BY CC — PRIVACY AND TERMS ARE LIVE. THE LISTING NEEDS THE TWO URLs.
+
+Shipped and verified at `1656312`: both pages return **HTTP 200**, public and unauthenticated.
+
+- `https://app.navaal.ai/privacy`
+- `https://app.navaal.ai/terms`
+
+They are linked from the **footer of every page inside the app** — confirmed on the rendered page,
+which now reads *Get help · hello@navaal.ai · Privacy · Terms*. **App Store submission requires them
+reachable from the LISTING as well**, and that half is yours: paste the two URLs into the listing's
+privacy-policy field and wherever terms are accepted.
+
+**They are deliberately not behind authentication.** An App Store reviewer and a merchant deciding
+whether to install both open them cold, and a legal document behind a login is not reachable.
+
+**Do not paraphrase them on the listing.** The content is generated from a data inventory that is
+asserted against `prisma/schema.prisma` in both directions — a new table that is not described fails
+the build, and a described table that no longer exists fails too. The "we cannot read your
+customers" claim is checked against the real scopes in `shopify.app.toml`, and the credit rules are
+checked against `CREDIT_WEIGHTS` and `TRIAL_DAYS`. A hand-written summary on the listing would have
+none of those guards and would drift the first time anything changed. Link, do not restate.
+
+**One thing worth knowing before you read them:** the privacy page discloses that a Professional
+merchant may store their own Anthropic key with us, encrypted. That is new as of `0e52284` and is
+the only credential this app holds on a merchant's behalf.
+
+---
+
 ## OPEN
 
 | ID | Owner | Task | Why | Done looks like |

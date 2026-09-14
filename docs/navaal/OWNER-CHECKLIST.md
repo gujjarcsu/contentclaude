@@ -11,6 +11,42 @@ many other tasks are waiting on it.
 
 ---
 
+## FYI 2026-09-14 — SUPPORT IS LIVE AND THERE IS ONE TEST ROW IN THE QUEUE. Two minutes.
+
+**A merchant can now ask you a question from inside the app**, and you can see what is waiting.
+
+**The one thing to do:** the support queue currently shows **one open question, and it is mine** —
+reference `cmu0us9zg0003tyi8967iysxi`, subject *"P6.2 end-to-end proof — please ignore"*, from
+`contentpilot-dev2`. I submitted it through the real form to prove the chain works end to end and
+left it rather than reaching into the production database to delete my own test. **Close it when you
+have looked at it**, or leave it — it costs nothing except one line in the weekday report.
+
+You should also have received it by email, at the operator address. **If you did NOT, that is worth
+knowing**, because it means Resend delivered to the API and not to the inbox — and the app would
+have told the merchant it was sent.
+
+**How to see the queue:** the **Support and GDPR check** workflow in GitHub Actions. It also runs
+itself at 08:00 Sydney on weekdays. It reports open questions, how many are past one business day,
+and — the number that matters most — how many were **stored but never emailed**, which is invisible
+unless something looks for it. It prints shop handles and subjects and **never an email address or a
+message body**, because that output goes into a CI log; the actual question is in your inbox and in
+the database.
+
+**Why a database row at all rather than just an email.** The listing has promised *"Questions
+answered within 1 business day"* for weeks, and what was behind it was a `mailto:` link. If a
+merchant's browser has no mail client, or it lands in spam, nobody learns a question was asked —
+including us. The row is written first and the email is an attempt on top of it, so a question
+cannot be lost silently, and the merchant is told which of the two happened rather than a cheerful
+"Sent!" that might be false.
+
+**Also now live and reachable:** `https://app.navaal.ai/privacy` and `https://app.navaal.ai/terms`,
+both public and unauthenticated, linked from the footer of every page in the app. **These are a
+Shopify submission requirement** and they need to go on the listing too — that is a CW/owner step,
+and the URLs above are what to paste.
+
+---
+
+
 ## FYI 2026-09-14 — `BYOK_ENCRYPTION_KEY` IS NOW SET IN PRODUCTION. No action needed; one hazard to know.
 
 **Bring-your-own-AI-key at Pro is live.** A Pro merchant can now paste their own Anthropic key in
@@ -38,6 +74,23 @@ contains no key material anywhere, and deep health is `status: ok` with the work
 machines restarted for the secret.
 
 ---
+
+## 🔴 2026-09-14 — A STOREFRONT SECURITY FIX HAS NOT REACHED SHOPIFY SINCE 9 SEPTEMBER. TWO THINGS MAY NEED YOU TODAY.
+
+**What happened.** `7942c30` (9 Sep, 21:26 AEST) fixed AI FAQ text rendering **unescaped on merchant
+storefronts** (`faq_visible.liquid`). Every deploy since was green — but Shopify serves theme
+extensions from the released **app version**, and the active one (`navaal-seo-geo-content-15`) was
+cut at 14:34 AEST that day, seven hours *before* the fix. Nothing has been released since. CW proved
+it from the Versions page; CC is releasing a new version now.
+
+**1. Only if CC reports the Shopify CLI is not logged in:** run `shopify auth login` once in the
+`contentclaude` folder (or run `shopify app deploy` yourself). CC will not type your credentials.
+Nothing else in the release needs you.
+
+**2. Optional, but it turns "probably safe" into "proved":** enter the storefront password for
+`contentpilot-dev2.myshopify.com` once in the browser CW uses (or switch password protection off on
+that dev store — never on a real store). CW can then read the rendered storefront HTML and confirm
+the escaped block is what merchants get.
 
 ## ⚠ 2026-09-14, B8 — "THERE ARE NO PAYING MERCHANTS" IS NOT TRUE. ONE ACTIVE PAID SUBSCRIPTION EXISTS.
 

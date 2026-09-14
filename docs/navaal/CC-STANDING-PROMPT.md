@@ -116,6 +116,25 @@ One blocked item is never a stop condition.
 
 ### SHIP AT PHASE BOUNDARIES
 
+> **⛔ ADDED 2026-09-14 AFTER A STORED-XSS FIX SAT UNRELEASED FOR FIVE DAYS BEHIND GREEN DEPLOYS.**
+> `fly deploy` ships the container. **It does not ship anything Shopify holds:** `shopify.app.toml`
+> (scopes, webhooks, URLs, billing display) and everything under `extensions/` (the Liquid that
+> renders on merchant storefronts). Those reach Shopify **only** through `shopify app deploy`, which
+> creates and releases a new **app version**. The active version was `navaal-seo-geo-content-15`,
+> created 04:34 UTC 9 Sep; commit `7942c30` escaped `faq_visible.liquid` at 11:26 UTC the same day
+> and every deploy since was green while Shopify kept serving the unescaped block.
+>
+> **So a ship gate has a third step whenever the range being shipped touches `shopify.app.toml` or
+> `extensions/`:** after build-info matches and deep health is ok, run `shopify app deploy` against
+> the **production config** (the one whose handle is `navaal-seo-geo-content` — check which toml
+> `shopify app config use` has selected and its `client_id` first; a deploy against the old
+> `contentclaude` config creates a version on the wrong app), name the version with the sha, and
+> record the **new version number and its created time from the Versions page**.
+> `git diff <last released sha> HEAD -- shopify.app.toml extensions/` is how you know whether the
+> step applies. If the CLI is not authenticated, that is an OWNER item — route it, never type
+> credentials. The extension `uid` must never change: the theme deep link targets it.
+
+
 When a phase's gate is met, ship it, and **prove it shipped** (L19):
 
 1. Tree clean, full suite green, and you have broken at least one new guard and reported the count.
@@ -159,7 +178,7 @@ never substitute one for the other.
 
 The whole constitution applies. These are the ones sessions actually break.
 
-- **L1 — a green test is not evidence.** Break the guard and count the failures. Eleven false
+- **L1 — a green test is not evidence.** Break the guard and count the failures. Twelve false
   greens have shipped here. Assume yours is the eighth until you have broken it.
 - **L15 — a feature is not shipped until a merchant can reach it.** A column, a read path, a write
   path and a green suite prove the machinery works, not that anyone can get to the control.

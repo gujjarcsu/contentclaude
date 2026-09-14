@@ -119,6 +119,7 @@ Before claiming a pass, check you are not repeating one of these:
 9. A read that was fresh while the cached value behind it was not.
 10. Two sections in one file answering to the same name, the dead one first.
 11. An exported constant with a passing test and no consumer, while a hardcoded copy ships.
+12. A verified production deploy, read as proof of what Shopify serves.
 
 ---
 
@@ -287,3 +288,18 @@ layer**: not a constant asserted against itself, but a *search space* asserted a
 **Practical form:** before writing "consistent everywhere", write the list of homes. If a home
 cannot be checked from code, say so in the same sentence as the result, and route it to whoever can
 open it.
+
+**12. A verified production deploy, read as proof of what Shopify serves.** Found by CW
+2026-09-14. `/api/build-info` matched the sha, deep health was ok, and three workers including
+Cowork read that as "live" all week. The active **Shopify app version** was
+`navaal-seo-geo-content-15`, created **04:34 UTC 9 Sep**. Commit `7942c30`, which escaped the AI
+FAQ text in `extensions/geo-schema/blocks/faq_visible.liquid` (stored XSS on the **merchant
+storefront**), landed at **11:26 UTC 9 Sep** — 6 h 52 min after the version was cut — and nothing
+was released after it. Five days of green deploys; Shopify served the unescaped Liquid throughout.
+
+**The rule:** there are **two** deploy surfaces and they are proved separately. The container is
+proved by build-info + deep health. **Everything Shopify holds** — `shopify.app.toml` and
+`extensions/` — is proved **only** by the Versions page showing a new active version whose created
+time is after the commit, plus one side-effect read (the public listing's `save 17%` and `7-day`
+going to 0 was the tell here). A claim that "X is live" for anything in those paths must cite a
+version number, not a sha.
