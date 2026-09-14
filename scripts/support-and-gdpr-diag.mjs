@@ -105,6 +105,21 @@ if (sample) {
   };
 }
 
+// ── 3. Review ask — has the mechanism ever FIRED? ──────────────────────────────────
+// P7 C1. reviewAsk.server.js exists and meets the rules on paper; a mechanism
+// that has never run is indistinguishable from one that does not exist.
+// Counts by outcome code, and how many shops have ever been asked. No shop.
+const asks = await prisma.reviewRequestAttempt.groupBy({
+  by: ["code"],
+  _count: { code: true },
+});
+const askedShops = await prisma.reviewRequestAttempt.findMany({ distinct: ["shop"], select: { shop: true } });
+out.reviewAsk = {
+  attempts: asks.reduce((n, r) => n + r._count.code, 0),
+  shopsEverAsked: askedShops.length,
+  byCode: Object.fromEntries(asks.map((r) => [r.code ?? "pending", r._count.code])),
+};
+
 out.verdict = [
   out.support.storedButNotEmailed > 0
     ? `${out.support.storedButNotEmailed} support question(s) STORED BUT NEVER EMAILED — pick these up.`
@@ -113,6 +128,9 @@ out.verdict = [
     ? `${out.support.olderThanOneDay} open past one business day.`
     : "Nothing open past one business day.",
   `GDPR audit rows: ${out.gdpr.totalRows}. A type showing 0 has never been DELIVERED — that is unproven, not broken.`,
+  out.reviewAsk.attempts > 0
+    ? `Review ask has fired ${out.reviewAsk.attempts} time(s) across ${out.reviewAsk.shopsEverAsked} shop(s).`
+    : "Review ask has NEVER fired in production — the mechanism is unproven.",
 ].join(" ");
 
 console.log(JSON.stringify(out, null, 2));
