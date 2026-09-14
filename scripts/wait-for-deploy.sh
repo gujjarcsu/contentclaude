@@ -91,17 +91,39 @@ done
 # ---- 3. deep health, worker, failed jobs ---------------------------------
 body=$(curl -fsS --max-time 25 "${APP}/api/health?deep=1" || echo "{}")
 
-st=$(echo "$body"       | jsonfield status)
-worker=$(echo "$body"   | jsonfield checks.queue.workerRunning)
+st=$(echo "$body"        | jsonfield status)
+worker=$(echo "$body"    | jsonfield checks.queue.workerRunning)
 schema_ok=$(echo "$body" | jsonfield checks.schema.ok)
-failed10m=$(echo "$body" | jsonfield checks.queue.failedLast10m)
 columns=$(echo "$body"   | jsonfield checks.schema.columns)
-echo "status=${st:-?} worker=${worker:-?} schema.ok=${schema_ok:-absent} columns=${columns:-?} failed10m=${failed10m:-?}"
+# The standing prompt names `jobs.failedLast10Min`, and that is where it lives.
+# The first version of this read checks.queue.failedLast10m, which does not
+# exist — so it came back empty and would have failed a PERFECTLY HEALTHY
+# deploy. A guard that asserts on a field name nobody checked is not a guard.
+failed10m=$(echo "$body" | jsonfield checks.jobs.failedLast10Min)
+stuck=$(echo "$body"     | jsonfield checks.jobs.stuckProcessing)
+echo "status=${st:-?} worker=${worker:-?} schema.ok=${schema_ok:-absent} columns=${columns:-?} failedLast10Min=${failed10m:-?} stuckProcessing=${stuck:-?}"
 
 fail=0
 [ "$st" = "error" ] && { echo "::HEALTH:: status=error"; fail=1; }
 [ "$worker" = "true" ] || { echo "::HEALTH:: worker not running"; fail=1; }
 [ "$schema_ok" = "true" ] || { echo "::HEALTH:: schema check ${schema_ok:-absent}"; fail=1; }
+
+# Zero failed jobs is part of the bar, so it has to be ASSERTED and not merely
+# printed. A number nobody compares is decoration. An UNREADABLE count fails too:
+# "I could not read it" is not "it is zero".
+case "$failed10m" in
+  0) ;;
+  '') echo "::HEALTH:: failed-job count unreadable — not the same as zero"; fail=1 ;;
+  *) echo "::HEALTH:: ${failed10m} job(s) failed in the last 10 minutes"; fail=1 ;;
+esac
+
+# A job stranded in "processing" for ten minutes means the recovery loop is not
+# running either — a quieter failure than a failed job, and a worse one.
+case "$stuck" in
+  0) ;;
+  '') echo "::HEALTH:: stuck-job count unreadable — not the same as zero"; fail=1 ;;
+  *) echo "::HEALTH:: ${stuck} job(s) stuck in processing"; fail=1 ;;
+esac
 
 [ "$fail" -eq 0 ] && echo "LIVE AND HEALTHY: ${SHORT}" || echo "DEPLOYED BUT UNHEALTHY: ${SHORT}"
 exit "$fail"

@@ -38,8 +38,14 @@ function clamp(n, lo, hi) {
 
 /**
  * Compute a GEO Readiness Score (0–100) for a single product from data the store
- * ALREADY has — no external API calls. Grades how citable the content is by AI
- * answer engines across six dimensions.
+ * ALREADY has — no external API calls.
+ *
+ * P1.1 — what this DOES and does not measure. It grades six properties of the
+ * merchant's own content. It cannot observe a citation, and no evidence links
+ * these six inputs to being cited by any named engine. This used to say it
+ * "grades how citable the content is by AI answer engines", which asserted
+ * exactly that link. The score is a content-readiness score; say that and
+ * nothing more (09-DOCTRINE.md §2).
  *
  * input shape (all optional, missing = not credited — never fabricated):
  *   description     – product description (HTML or text)
