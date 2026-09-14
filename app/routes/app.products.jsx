@@ -205,7 +205,11 @@ export const loader = async ({ request }) => {
   const catalogueOk = catalogue.ok;
   const recordPublished = metrics.publishedProducts;
   const publishedProducts = catalogue.ok ? catalogue.published : metrics.publishedProducts;
-  const draftProducts = catalogue.ok ? catalogue.draft : metrics.draftProducts;
+  // A3 (Phase 8), second pass — every product draft, the same count Review
+  // and the page tabs use. Drafts on products outside the Online Store scope
+  // are counted AND named, so the header's sum can be checked by a reader.
+  const draftProducts = metrics.draftProducts;
+  const draftsOutsideScope = Math.max(0, metrics.draftProducts - (catalogue.ok ? catalogue.draft : metrics.draftProducts));
   const archivedProducts = candidateCounts.archived?.count ?? null;
 
   // Group 4.1 — "has no content at all" and "not yet optimized by us" are two
@@ -251,6 +255,7 @@ export const loader = async ({ request }) => {
     totalStoreProducts,
     publishedProducts,
     draftProducts,
+    draftsOutsideScope,
     candidateProducts,
     candidateLabel: candidateCounts.label,
     candidateExact: candidateCounts.candidates?.exact ?? true,
@@ -537,6 +542,7 @@ export default function ProductsPage() {
     countsOk,
     publishedProducts,
     draftProducts,
+    draftsOutsideScope,
     notOptimized,
     archivedProducts,
     recordPublished,
@@ -664,7 +670,7 @@ export default function ProductsPage() {
     const archivedNote = archivedProducts > 0 ? ` · ${archivedProducts} archived not shown` : "";
     return (
       `${total} products in your catalog${scope} · ` +
-      `${publishedProducts} with content published · ${draftProducts} ready to review · ` +
+      `${publishedProducts} with content published · ${draftProducts} ready to review${draftsOutsideScope > 0 ? ` (${draftsOutsideScope} on ${draftsOutsideScope === 1 ? "a product" : "products"} not on your Online Store)` : ""} · ` +
       `${notOptimized} not yet optimized${archivedNote}`
     );
   }, [
@@ -676,6 +682,7 @@ export default function ProductsPage() {
     candidateLabel,
     publishedProducts,
     draftProducts,
+    draftsOutsideScope,
     notOptimized,
     archivedProducts,
   ]);

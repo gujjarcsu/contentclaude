@@ -46,6 +46,8 @@ import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
 import { attentionFor, blockersFor } from "../utils/catalogueWatch.server.js";
 import { recentDraftIds } from "../utils/quickStart.server.js";
+import { proofSummary } from "../utils/proofCard.server.js";
+import { proofCardLines } from "../utils/proofCard.js";
 import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
@@ -188,7 +190,11 @@ export const loader = async ({ request }) => {
   // and shown as secondary text, never redefined (metrics.server.js, top).
   const recordPublished = metrics.publishedProducts;
   const generatedCount = catalogue.ok ? catalogue.published : metrics.publishedProducts;
-  const draftCount = catalogue.ok ? catalogue.draft : metrics.draftProducts;
+  // A3 (Phase 8), second pass — drafts are a CONTENT-state number, not a
+  // Shopify-scope one. Counting only drafts on candidate products put "4" here
+  // and "5" on Review for the same store. Home, the Products header, Review
+  // and the page tabs now all count every product draft.
+  const draftCount = metrics.draftProducts;
   // Group 4.1 — not "needs content". These are candidates WE have not written
   // for, which on a store with its own copy is a completely different set.
   const notOptimizedCount = notOptimizedFrom(
@@ -248,6 +254,9 @@ export const loader = async ({ request }) => {
   // P2.3 — the subscription's one number. Walks inline once for a shop that
   // has never been walked, so the first load has a real number, not a dash.
   const attention = await attentionFor(admin, shop);
+  // P3.1 (Phase 8) — the Proof card: the latest crawl-time batch, if the
+  // merchant turned Bing on. One query; never throws.
+  const proof = await proofSummary(shop);
 
   // P2.7 — the first run names the three specific things holding THIS store
   // back, from the walk that just ran. One query; never throws.
@@ -301,6 +310,7 @@ export const loader = async ({ request }) => {
     storeScore,
     autopilotRecap,
     attention,
+    proof,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
     storeName,
@@ -646,6 +656,7 @@ export default function Dashboard() {
     storeScore,
     autopilotRecap,
     attention,
+    proof,
     plan,
     usageCount,
     storeName,
@@ -919,6 +930,28 @@ export default function Dashboard() {
               </Text>
             </BlockStack>
           </Banner>
+        )}
+        {/* P3.1 (Phase 8) — Proof: the latest crawl-time batch, both arms, the
+            interval — or the one sentence that says why there is none yet.
+            Rendered only when Bing measurement is on. */}
+        {proof?.enabled && (
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center" wrap>
+                <Text as="h2" variant="headingSm">
+                  Proof
+                </Text>
+                <Button size="slim" onClick={() => navigate("/app/proof")}>
+                  See both arms
+                </Button>
+              </InlineStack>
+              {proofCardLines(proof).map((line) => (
+                <Text key={line} as="p" variant="bodySm">
+                  {line}
+                </Text>
+              ))}
+            </BlockStack>
+          </Card>
         )}
         {/* ── Stats Grid ───────────────────────────────────────────────── */}
         <Layout>

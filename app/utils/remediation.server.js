@@ -43,6 +43,16 @@ export function isRemediationLocked(shop) {
   return isLockedShop(shop, LOCKED);
 }
 
+/**
+ * P3 (Phase 8) — is the lock CONFIGURED at all? The brief: nothing is
+ * submitted to Bing "while REMEDIATION_LOCKED_SHOPS is unset". A lock that
+ * does not exist protects nothing, so the holdout refuses to run until the
+ * owner has set it — even to an empty list is not enough; it must be present.
+ */
+export function lockConfigured() {
+  return typeof process.env.REMEDIATION_LOCKED_SHOPS === "string" && process.env.REMEDIATION_LOCKED_SHOPS.trim().length > 0;
+}
+
 const OPTIONS_QUERY = `query optionValues($ids: [ID!]!) {
   nodes(ids: $ids) {
     ... on Product { id title hasOnlyDefaultVariant options { id name values } variants(first: 1) { nodes { id barcode } } }

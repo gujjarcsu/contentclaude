@@ -1,0 +1,29 @@
+name: Crawl holdout (writes experiments)
+
+# P3.1 (Phase 8) — run the crawl-time holdout's daily pass on demand and print
+# what it did. Submits URLs to Bing ONLY for shops whose merchant switched
+# measurement on, never a locked shop, and nothing while
+# REMEDIATION_LOCKED_SHOPS is unset. Counts only.
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    name: Start and check crawl-time batches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/crawl-holdout--writes-experiments.mjs" | tee holdout.json
+          {
+            echo '## Crawl holdout'
+            echo ''
+            echo '```json'
+            cat holdout.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

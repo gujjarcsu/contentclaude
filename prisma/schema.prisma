@@ -435,6 +435,21 @@ model Shop {
   // When the key last passed a real call. Null means "saved but never verified",
   // which the UI must not describe as working.
   aiKeyValidatedAt        DateTime?
+  // P3.2 (Phase 8) — the merchant's Bing Webmaster API key, encrypted exactly
+  // like the AI key: never logged, never returned, not a prefix, not a length.
+  // bingSiteUrl is the site as Bing knows it (chosen from GetUserSites);
+  // bingEnabledAt is the merchant's switch — nothing is submitted while null.
+  bingKeyCiphertext       String?
+  bingKeyIv               String?
+  bingKeyTag              String?
+  bingKeyValidatedAt      DateTime?
+  bingSiteUrl             String?
+  bingEnabledAt           DateTime?
+  // P3.6 — the first crawl-time result with enough pages per arm was reported.
+  // The review ask is gated on this: it fires only after a result like this.
+  provedResultAt          DateTime?
+  // P3.6 — the weekly report was last sent (null = never).
+  lastWeeklyReportAt      DateTime?
   // Set when a job hits an auth failure on the merchant's key, so the next job
   // refuses up front instead of failing halfway through. Cleared on a successful
   // re-validation.
@@ -516,6 +531,49 @@ model ProductWatch {
 
 // P2.1 — crawler access, one row per shop per run. Diffed daily; the interesting
 // row is the one whose `blocked` differs from yesterday's.
+// P3.1 (Phase 8) — the crawl-time holdout. One experiment per shop per batch
+// of changed URLs: a seeded random half submitted through Bing's URL
+// Submission API, the other half withheld, and the time until Bing's
+// LastCrawledDate passes each URL's change recorded for both arms. The seed
+// is stored so the split can be reproduced; the summary is JSON so the screen
+// shows both arms and the interval, never a point estimate alone.
+model CrawlExperiment {
+  id          String   @id @default(cuid())
+  shop        String
+  seed        Int
+  status      String   @default("running") // "running" | "reported"
+  startedAt   DateTime @default(now())
+  submittedAt DateTime?
+  reportedAt  DateTime?
+  summary     String   @default("{}")
+  urls        CrawlExperimentUrl[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shop, status])
+  @@index([shop, startedAt])
+}
+
+model CrawlExperimentUrl {
+  id             String          @id @default(cuid())
+  experimentId   String
+  experiment     CrawlExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  shop           String
+  productId      String
+  url            String
+  arm            String // "submit" | "hold"
+  changedAt      DateTime
+  submittedAt    DateTime?
+  firstCrawledAt DateTime?
+  lastCheckedAt  DateTime?
+  bingStatus     Int?
+  createdAt      DateTime        @default(now())
+
+  @@unique([experimentId, url])
+  @@index([shop, experimentId])
+  @@index([shop, firstCrawledAt])
+}
+
 model CrawlerAccess {
   id         String   @id @default(cuid())
   shop       String

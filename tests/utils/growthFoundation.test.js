@@ -245,7 +245,8 @@ describe("reviewAsk — pure rules", () => {
   });
 
   it("decideReviewAsk ladder", () => {
-    const base = { installedAt: DAYS(3), reviewAskCount: 0 };
+    // P3.6 (Phase 8): a proved result is now a precondition; these rows have one.
+    const base = { installedAt: DAYS(3), reviewAskCount: 0, provedResultAt: DAYS(2) };
     expect(review.decideReviewAsk(null).reason).toBe("no_shop_row");
     expect(review.decideReviewAsk({ ...base, reviewDoneAt: DAYS(1) }).reason).toBe("terminal");
     expect(review.decideReviewAsk({ ...base, reviewNextEligibleAt: DAYS(-10) }).reason).toBe("hold");
@@ -257,7 +258,8 @@ describe("reviewAsk — pure rules", () => {
         .eligible,
     ).toBe(true); // legacy only when never asked under the new code
     expect(review.decideReviewAsk({ ...base, reviewAskCount: 5 }).reason).toBe("call_cap");
-    expect(review.decideReviewAsk({ installedAt: HOURS(1), reviewAskCount: 0 }).eligible).toBe(true); // install age is Shopify's call
+    expect(review.decideReviewAsk({ installedAt: HOURS(1), reviewAskCount: 0, provedResultAt: DAYS(1) }).eligible).toBe(true); // install age is Shopify's call
+    expect(review.decideReviewAsk({ installedAt: DAYS(30), reviewAskCount: 0 }).reason).toBe("no_proved_result"); // P3.6: no result, no ask
   });
 });
 
@@ -267,6 +269,7 @@ describe("reviewAsk — openReviewAsk / recordReviewOutcome", () => {
     installedAt: DAYS(3),
     reviewAskCount: 0,
     reviewDoneAt: null,
+    provedResultAt: DAYS(2),
     reviewNextEligibleAt: null,
     reviewLastAskedAt: null,
   };

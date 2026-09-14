@@ -42,6 +42,8 @@ export const GDPR_SHOP_MODELS = [
   // P2 — the catalogue watch and the crawler-access history are shop-scoped
   // records of what we observed; nothing about them survives an erasure.
   "productWatch",
+  "crawlExperimentUrl",
+  "crawlExperiment",
   "crawlerAccess",
 ];
 

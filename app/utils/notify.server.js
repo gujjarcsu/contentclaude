@@ -63,3 +63,32 @@ export async function sendOperatorEmail({ subject, text }) {
     return { sent: false, reason: err.message };
   }
 }
+
+/**
+ * P3.6 (Phase 8) — one email to one merchant. Same transport, same "never
+ * throws"; the difference is the recipient is the store's own contact address
+ * and the sender reads as the app, not ops. Returns { sent, reason? }.
+ */
+export async function sendEmailTo({ to, subject, text, from = process.env.MERCHANT_EMAIL_FROM || "Navaal <hello@navaal.ai>" }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!to || !subject || !text) return { sent: false, reason: "missing fields" };
+  if (!apiKey) {
+    logger.warn({ event: "merchant_email_unconfigured", subject }, "merchant email not sent: RESEND_API_KEY unset");
+    return { sent: false, reason: "unconfigured" };
+  }
+  try {
+    const r = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject, text }),
+    });
+    if (!r.ok) {
+      logger.warn({ event: "merchant_email_failed", status: r.status, subject }, "merchant email failed");
+      return { sent: false, reason: `resend ${r.status}` };
+    }
+    return { sent: true };
+  } catch (err) {
+    logger.warn({ event: "merchant_email_failed", err: err?.message, subject }, "merchant email threw");
+    return { sent: false, reason: err?.message ?? "failed" };
+  }
+}

@@ -36,7 +36,7 @@ export const DATA_INVENTORY = [
       "Your shop domain and the access token Shopify issues us. If Shopify sends us the details of the staff member who installed the app, that can include their name and email address.",
     personal: true,
   },
-  { model: "Shop", holds: "Your shop domain, when you installed, how you found us, your plan milestones, your store's SEO score over time, and — if you choose to add one — your own AI provider key, encrypted.", personal: false },
+  { model: "Shop", holds: "Your shop domain, when you installed, how you found us, your plan milestones, your store's SEO score over time, and — if you choose to add them — your own AI provider key and your own Bing Webmaster API key, each encrypted.", personal: false },
   { model: "BrandVoice", holds: "The brand voice settings you type in: store name, tone, audience, what makes you different, phrases to avoid.", personal: false },
   { model: "GeneratedContent", holds: "The product descriptions, titles, meta descriptions, FAQ content and image alt text this app generated for your products, and their review status.", personal: false },
   { model: "ContentVersion", holds: "Previous versions of that content, so you can roll back.", personal: false },
@@ -52,6 +52,8 @@ export const DATA_INVENTORY = [
   { model: "ReviewRequestAttempt", holds: "Whether we have asked you to review the app, so we do not ask twice.", personal: false },
   { model: "SupportRequest", holds: "Questions you send us through Get help: the email address you give for a reply, your subject and message.", personal: true },
   { model: "ProductWatch", holds: "A daily snapshot of each product's title, URL handle, status, description length, whether it has a product type and alt text, what we noticed changed, which fields an AI shopping surface asks for that the product lacks, what its public page says about indexing (sitemap membership, robots directives, canonical address, redirects), and whether you told us a product has no barcode by design — so we can tell you the day something in your catalogue needs you.", personal: false },
+  { model: "CrawlExperiment", holds: "When you turn on Bing crawl-time measurement: one record per batch of changed product pages, the random seed used to split them into a submitted half and a withheld half, and the result.", personal: false },
+  { model: "CrawlExperimentUrl", holds: "For each page in such a batch: its address, which half it was in, when it changed, when it was submitted to Bing, and when Bing reported first crawling it.", personal: false },
   { model: "CrawlerAccess", holds: "A daily record of whether search and AI crawlers can reach your storefront, and what your robots.txt allowed.", personal: false },
   { model: "GDPRRequest", holds: "A record that Shopify sent us a privacy request, with identifiers only — never the customer email or phone in the payload.", personal: false },
   { model: "LogEvent", holds: "Operational logs: warnings and errors, with your shop domain. Kept 30 days.", personal: false },
@@ -91,6 +93,14 @@ export const PRIVACY_SECTIONS = [
       "We do not send customer data, order data, or anything Shopify has not given us access to under the two scopes above.",
       "Anthropic processes this to produce the content and, under their commercial terms, does not use it to train their models.",
       "If you add your own Anthropic key on the Professional plan, the same content goes to Anthropic under <b>your</b> account instead of ours. Your key is encrypted with AES-256-GCM before it is stored, is never written to a log, and is never sent back to your browser — not the key, not part of it, not its length.",
+    ],
+  },
+  {
+    h: "If you turn on Bing crawl-time measurement",
+    p: [
+      "You can add your own <b>Bing Webmaster Tools</b> API key. With it, and only after you switch measurement on, we send Bing the addresses of product pages whose content we published — a random half of each batch — and read back when Bing first crawled each page. Nothing else is sent to Bing, and nothing is sent for a store that has not switched it on.",
+      "The key is stored exactly like the Anthropic key: encrypted, never logged, never returned to your browser. Remove it in Settings and measurement stops.",
+      "While measurement is on, we send one email a week to your store's contact address, only in a week that has a result to report, with links to the screens that show it.",
     ],
   },
   {

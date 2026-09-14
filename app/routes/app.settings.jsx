@@ -47,11 +47,17 @@ export const loader = async ({ request }) => {
     ? await keyStatusFor(shop)
     : { configured: false, saved: false, validatedAt: null, failing: false };
 
+  // P3.2 (Phase 8) — booleans, a timestamp and the site URL Bing verified.
+  // Same rule as the AI key: no shape here can carry key material.
+  const { bingKeyStatus } = await import("../utils/bing.server.js");
+  const bing = await bingKeyStatus(shop);
+
   return Response.json({
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
     aiKey,
     aiKeyAvailable,
+    bing,
     brandVoice: brandVoice || {
       storeName: "",
       brandTone: "professional",
@@ -84,6 +90,25 @@ export const action = async ({ request }) => {
   // Content templates are sold as Starter+ on the pricing table — the gate
   // must actually exist server-side (requirement 4.2.1: advertised == enforced).
   // ── C0.7 / P5.5 — the merchant's own AI key ────────────────────────────
+  // P3.2 (Phase 8) — the Bing Webmaster key. The raw value is read here,
+  // handed straight to saveBingKey, and never put anywhere else.
+  if (actionType === "saveBingKey" || actionType === "removeBingKey" || actionType === "setBingEnabled") {
+    const { saveBingKey, removeBingKey, setBingEnabled } = await import("../utils/bing.server.js");
+    if (actionType === "removeBingKey") {
+      await removeBingKey(shop);
+      return Response.json({ ok: true, bingRemoved: true });
+    }
+    if (actionType === "setBingEnabled") {
+      const r = await setBingEnabled(shop, formData.get("enabled") === "true");
+      return Response.json(r.ok ? { ok: true, bingEnabled: formData.get("enabled") === "true" } : { error: r.reason }, { status: r.ok ? 200 : 400 });
+    }
+    const { storefrontOrigin } = await import("../utils/crawlerAccess.server.js");
+    const { admin } = await authenticate.admin(request);
+    const origin = await storefrontOrigin(admin.graphql, shop).catch(() => null);
+    const r = await saveBingKey(shop, String(formData.get("bingKey") ?? ""), { storefrontOrigin: origin });
+    return Response.json(r.ok ? { ok: true, bingSaved: true, bingSites: r.sites.length, bingSiteUrl: r.siteUrl } : { error: r.reason }, { status: r.ok ? 200 : 400 });
+  }
+
   if (actionType === "saveAiKey" || actionType === "removeAiKey") {
     const { getOrCreatePlan } = await import("../utils/plans.server.js");
     const { canUseOwnKey, saveKey, removeKey } = await import("../utils/merchantKey.server.js");
@@ -270,7 +295,7 @@ const lengthOptions = [
 ];
 
 export default function SettingsPage() {
-  const { brandVoice, templates, entitlements, aiKey, aiKeyAvailable } = useLoaderData();
+  const { brandVoice, templates, entitlements, aiKey, aiKeyAvailable, bing } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -279,6 +304,7 @@ export default function SettingsPage() {
   // C0.7 — the spinner stays on the button that was pressed. The form data is
   // read for the actionType only; the key field itself is never touched here.
   const isSavingAiKey = navigation.formData?.get("actionType") === "saveAiKey";
+  const isSavingBing = navigation.formData?.get("actionType") === "saveBingKey";
 
   const [storeName, setStoreName] = useState(brandVoice.storeName);
   const [brandTone, setBrandTone] = useState(brandVoice.brandTone);
@@ -742,6 +768,73 @@ export default function SettingsPage() {
             </BlockStack>
           </Card>
         )}
+
+        {/* P3.2 (Phase 8) — the merchant's Bing Webmaster key, for the crawl-time
+            holdout. Stored like the AI key; the card only ever sees booleans. */}
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+              <Text as="h2" variant="headingLg">
+                Measure crawl time with Bing
+              </Text>
+              {bing?.saved && bing?.siteUrl && <Badge tone={bing?.enabled ? "success" : "info"}>{bing?.enabled ? "Measuring" : "Key saved, switched off"}</Badge>}
+              {bing?.saved && !bing?.siteUrl && <Badge tone="critical">Key cannot see this store</Badge>}
+            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Add your Bing Webmaster Tools API key (Bing Webmaster Tools, Settings, API access) and switch measurement on. Each
+              batch of product pages we publish is then split at random: half submitted to Bing through your key, half withheld,
+              and the time to Bing&apos;s first crawl recorded for both — a causal result about your own store, usually inside 72
+              hours. Nothing is sent to Bing until you switch it on. Stored encrypted; never shown again, not even in part.
+            </Text>
+            {actionData?.error && (isSavingBing || navigation.formData?.get("actionType") === "setBingEnabled") && (
+              <Banner tone="critical" title={actionData.error} />
+            )}
+            {actionData?.bingSaved && (
+              <Banner tone={actionData.bingSiteUrl ? "success" : "warning"} title={actionData.bingSiteUrl ? `Key saved — Bing knows this store as ${actionData.bingSiteUrl}` : `Key saved, but none of its ${actionData.bingSites} site(s) is this storefront`}>
+                {!actionData.bingSiteUrl && (
+                  <Text as="p" variant="bodySm">
+                    Add and verify your storefront domain in Bing Webmaster Tools, then save the key again.
+                  </Text>
+                )}
+              </Banner>
+            )}
+            <Form method="post">
+              <input type="hidden" name="actionType" value="saveBingKey" />
+              <BlockStack gap="300">
+                <TextField
+                  label="Bing Webmaster API key"
+                  name="bingKey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={bing?.saved ? "A key is saved — paste a new one to replace it" : "Paste your key"}
+                  helpText="Checked against Bing when you save. Stored encrypted; never logged, never shown again."
+                />
+                <InlineStack gap="200">
+                  <Button submit loading={isSaving && isSavingBing}>
+                    {bing?.saved ? "Replace key" : "Save key"}
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Form>
+            {bing?.saved && bing?.siteUrl && (
+              <Form method="post">
+                <input type="hidden" name="actionType" value="setBingEnabled" />
+                <input type="hidden" name="enabled" value={bing?.enabled ? "false" : "true"} />
+                <Button submit>
+                  {bing?.enabled ? "Switch measurement off" : "Switch measurement on"}
+                </Button>
+              </Form>
+            )}
+            {bing?.saved && (
+              <Form method="post">
+                <input type="hidden" name="actionType" value="removeBingKey" />
+                <Button submit variant="plain" tone="critical">
+                  Remove my Bing key
+                </Button>
+              </Form>
+            )}
+          </BlockStack>
+        </Card>
 
         {/* P6.2 — support, where a confused merchant actually looks.
             It is NOT in the sidebar: that is five items by an earlier decision

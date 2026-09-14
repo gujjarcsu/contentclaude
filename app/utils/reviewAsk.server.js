@@ -118,6 +118,11 @@ export function decideReviewAsk(shopRow, growthState, now = new Date()) {
     };
   }
   if (shopRow.reviewAskCount >= REVIEW_ASK_MAX_CALLS) return { eligible: false, reason: "call_cap" };
+  // P3.6 (Phase 8) — the ask fires only after a result like the crawl-time
+  // holdout: a reported experiment with enough pages per arm stamps
+  // Shop.provedResultAt. Three approves is still required; this is a second
+  // precondition, and a shop without a proved result is never asked.
+  if (!shopRow.provedResultAt) return { eligible: false, reason: "no_proved_result" };
   return { eligible: true, reason: "eligible" };
 }
 

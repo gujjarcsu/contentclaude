@@ -384,6 +384,14 @@ export function startScheduler() {
     import("./catalogueWatch.server.js")
       .then((m) => m.maybeRunCatalogueWatch())
       .catch((err) => logger.error({ err }, "catalogue watch threw"));
+    // P3.1 — the crawl-time holdout (03:00 Sydney) and P3.6 — the weekly
+    // report (Monday 09:00 Sydney). Same dynamic-import reason, same day-claim.
+    import("./crawlHoldout.server.js")
+      .then((m) => m.maybeRunCrawlHoldout())
+      .catch((err) => logger.error({ err }, "crawl holdout threw"));
+    import("./weeklyReport.server.js")
+      .then((m) => m.maybeSendWeeklyReports())
+      .catch((err) => logger.error({ err }, "weekly report threw"));
   }, 60_000);
   _digestTimer.unref?.();
 
