@@ -8,8 +8,39 @@ import { Banner, BlockStack, Text, InlineStack, Button, List } from "@shopify/po
 const EMBED_EXTENSION_UID = "6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4";
 const EMBED_BLOCK_HANDLE = "faq_schema";
 
+/**
+ * C1 — the app's client_id, which is what the APP BLOCK deep link wants.
+ *
+ * The two deep links take DIFFERENT identifiers, which is the whole reason this
+ * sat unresolved:
+ *
+ *   app EMBED (faq_schema, target "head")   -> activateAppId=<extension UID>
+ *   app BLOCK (faq_visible, target "section") -> addAppBlockId=<app client_id>
+ *
+ * Shopify's own documentation writes the second as `{api_key}` while the embed
+ * link we already had working uses the extension UID, and they are different
+ * values. I would not guess between them, so it was routed — and CW opened both
+ * in a real theme editor and photographed the result:
+ * `docs/history/screen-reads/deeplink-app-client_id.png` works,
+ * `deeplink-extension-UID.png` does not.
+ *
+ * This is the string that was PROVED. Do not re-derive it and do not "tidy" it.
+ */
+const APP_CLIENT_ID = "1279a14cca41d4a6f8e6e3c485870b77";
+const VISIBLE_BLOCK_HANDLE = "faq_visible";
+
 export function embedDeepLink(shopDomain) {
   return `https://${shopDomain}/admin/themes/current/editor?context=apps&activateAppId=${EMBED_EXTENSION_UID}/${EMBED_BLOCK_HANDLE}`;
+}
+
+/**
+ * Opens the theme editor on the product template with the visible FAQ block
+ * ready to add. This is the half that does the work (09-DOCTRINE.md §3: the
+ * visible FAQ is the real value; the JSON-LD is inert since Google retired FAQ
+ * rich results on 7 May 2026).
+ */
+export function visibleBlockDeepLink(shopDomain) {
+  return `https://${shopDomain}/admin/themes/current/editor?template=product&addAppBlockId=${APP_CLIENT_ID}/${VISIBLE_BLOCK_HANDLE}&target=mainSection`;
 }
 
 /**
@@ -41,20 +72,26 @@ export function embedDeepLink(shopDomain) {
  * answer engines like ChatGPT and Perplexity can read" — an unevidenced benefit
  * claim for inert markup, which is precisely what §3 bans.
  *
- * WHY THE VISIBLE BLOCK HAS NO DEEP-LINK BUTTON YET. `faq_visible` is an app
- * BLOCK (`"target": "section"`), not an app embed (`faq_schema` is
- * `"target": "head"`), so it needs the other deep-link form:
- * `?template=product&addAppBlockId=<id>/<handle>&target=mainSection`. Shopify's
- * documentation writes that first segment as `{api_key}`, while the embed link
- * we know works uses the extension UID — and those are different values. A
- * merchant-facing button that dead-ends is worse than a written instruction, so
- * the exact click path is spelled out below and verifying the deep link is
- * routed to CW, who has a browser and a dev store. Do not guess it into place.
+ * THE VISIBLE BLOCK NOW HAS A BUTTON (C1). It did not, and the reason is worth
+ * keeping: `faq_visible` is an app BLOCK (`"target": "section"`) while
+ * `faq_schema` is an app EMBED (`"target": "head"`), and the two deep links take
+ * DIFFERENT identifiers — `addAppBlockId=<app client_id>` against
+ * `activateAppId=<extension UID>`. Shopify's documentation writes the first as
+ * `{api_key}`, which is neither obviously one nor the other. Rather than guess
+ * between them and ship a button that dead-ends, it was routed; CW opened both
+ * in a real theme editor and photographed the outcome. See
+ * `visibleBlockDeepLink` above for which one won.
  */
 export function EmbedSetupCard({ shopDomain, confirmed }) {
   const fetcher = useFetcher();
   // Optimistic: hide as soon as the confirm post is in flight
   if (confirmed || fetcher.formData?.get("actionType") === "confirm") return null;
+
+  const openVisibleBlock = () => {
+    // Same reason as below: the theme editor must open in the top-level admin
+    // window, not inside our iframe.
+    window.open(visibleBlockDeepLink(shopDomain), "_top");
+  };
 
   const openEditor = () => {
     // Embedded apps live in an iframe — the theme editor must open in the
@@ -71,11 +108,10 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
         </Text>
 
         <Text as="p" variant="bodyMd">
-          <strong>1. Show the FAQ to shoppers</strong> — this is the part that does the work. In your theme
-          editor open your <strong>product</strong> template, click <strong>Add block</strong> in the main
-          product section, choose <strong>Apps</strong>, add <strong>FAQ (Navaal)</strong>, then{" "}
-          <strong>Save</strong>. Your questions and answers become real page content that shoppers, and
-          anything else reading the page, can see.
+          <strong>1. Show the FAQ to shoppers</strong> — this is the part that does the work. The button
+          below opens your theme editor with the <strong>FAQ (Navaal)</strong> block ready to add to your
+          product template; click <strong>Save</strong> there. Your questions and answers become real page
+          content that shoppers, and anything else reading the page, can see.
         </Text>
 
         <Text as="p" variant="bodyMd">
@@ -87,15 +123,27 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
         </Text>
 
         <List type="number">
-          <List.Item>Click the button below — it opens your theme editor with the embed pre-selected.</List.Item>
+          <List.Item>
+            Press a button below — each one opens your theme editor with that piece ready to add.
+          </List.Item>
           <List.Item>
             Click <strong>Save</strong> in the theme editor.
           </List.Item>
           <List.Item>Come back here and click &quot;I&apos;ve enabled it&quot;.</List.Item>
         </List>
         <InlineStack gap="300">
+          {/*
+            NOT variant="primary": this card sits inside a page that already has
+            one, and tests/routes/primaryActions.test.js exists because six
+            primaries once appeared at once for the merchant least able to tell
+            them apart. Order carries the emphasis instead — the visible FAQ
+            comes first because it is the half that does the work.
+          */}
+          <Button onClick={openVisibleBlock}>
+            Add the FAQ to my product pages
+          </Button>
           <Button onClick={openEditor}>
-            Open theme editor
+            Turn on the FAQ schema
           </Button>
           <fetcher.Form method="post" action="/app/embed-status">
             <input type="hidden" name="actionType" value="confirm" />
