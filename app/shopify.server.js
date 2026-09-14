@@ -7,7 +7,8 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server.js";
-import { BILLING_PLANS as BILLING_PLAN_BASE } from "./utils/billing-plans.js";
+import { BILLING_PLANS as BILLING_PLAN_BASE, TRIAL_DAYS } from "./utils/billing-plans.js";
+import { buildBillingConfig } from "./utils/billing-config.js";
 import { refreshOfflineToken } from "./utils/offlineToken.server.js";
 import { noteAfterAuth, trackShopAuth } from "./utils/installTracking.server.js";
 
@@ -34,20 +35,11 @@ if (
 export const BILLING_PLANS = Object.fromEntries(
   Object.entries(BILLING_PLAN_BASE).map(([k, v]) => [
     k,
-    { ...v, currencyCode: "USD", interval: BillingInterval.Every30Days, trialDays: 7 },
+    { ...v, currencyCode: "USD", interval: BillingInterval.Every30Days, trialDays: TRIAL_DAYS },
   ])
 );
 
 export { BILLING_TEST };
-
-// Build a subscription billing entry in the lineItems format the Shopify billing
-// library now requires (one recurring line item per plan).
-function recurringPlan(amount, currencyCode, interval, trialDays) {
-  return {
-    trialDays,
-    lineItems: [{ amount, currencyCode, interval }],
-  };
-}
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -75,17 +67,17 @@ const shopify = shopifyApp({
     // surfaces a "session expired" error during normal use.
     expiringOfflineAccessTokens: true,
   },
-  // The installed @shopify/shopify-api requires each subscription plan to use the
-  // lineItems format ({ trialDays, lineItems: [{ amount, currencyCode, interval }] }).
-  // The older flat shape ({ amount, currencyCode, interval }) is no longer accepted
-  // and throws "Must be either a one-time plan or a subscription plan with line items"
-  // from appSubscriptionCreate. Build monthly + annual (2 months free) for each tier.
-  billing: Object.fromEntries(
-    Object.values(BILLING_PLANS).flatMap((p) => [
-      [p.key, recurringPlan(p.amount, p.currencyCode, p.interval, p.trialDays)],
-      [p.annualKey, recurringPlan(p.annualAmount, p.currencyCode, BillingInterval.Annual, p.trialDays)],
-    ])
-  ),
+  // P5.0 — every subscription this app can create, built from the locked table
+  // by ONE pure function. Nothing here restates a price, a plan name or a trial
+  // length: this object IS what reaches Shopify, and it is what the test in
+  // tests/utils/billingConfig.test.js asserts on.
+  //
+  // Annual is 20% OFF, not "2 months free" — that phrase is 16.7% and this
+  // comment used to say it (14-PRICING.md §4 bans the claim by name).
+  billing: buildBillingConfig({
+    every30Days: BillingInterval.Every30Days,
+    annual: BillingInterval.Annual,
+  }),
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),

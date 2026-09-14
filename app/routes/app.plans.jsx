@@ -40,7 +40,19 @@ import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePromp
 import { recordArrivedFrom } from "../utils/quotaSurfaces.server.js";
 import { resolveBillingTest } from "../utils/billingTest.server.js";
 import { getActiveSubscriptions } from "../utils/activeSubscriptions.server.js";
-import { BILLING_PLANS, FREE_PLAN, ALL_BILLING_PLAN_KEYS } from "../utils/billing-plans.js";
+import {
+  BILLING_PLANS,
+  FREE_PLAN,
+  ALL_BILLING_PLAN_KEYS,
+  TRIAL_DAYS,
+  TRIAL_CREDITS,
+} from "../utils/billing-plans.js";
+import { formatPrice, annualSavingPct } from "../utils/billing-config.js";
+// The credit weights are the third locked axis and `credits.js` already says
+// "the plans page and the quota surfaces show these numbers". It did not: the
+// page was written before B1 and still described a flat one-per-generation
+// model. Derived now, so the cost a merchant reads is the cost the gate charges.
+import { CREDIT_WEIGHTS } from "../utils/credits.js";
 import {
   getOrCreatePlan,
   getMonthlyUsageCount,
@@ -126,8 +138,8 @@ export const action = async ({ request }) => {
     if (promptId) await markSubscribeRequested(session.shop, String(promptId), planKey);
 
     const isTest = await resolveBillingTest(admin, session.shop);
-    // Phase 0 item 10 — the 7-day trial is once per shop, for the life of the
-    // shop. trialDays: 7 is baked into every plan in the billing config, so
+    // Phase 0 item 10 — the trial is once per shop, for the life of the
+    // shop. TRIAL_DAYS is baked into every plan in the billing config, so
     // subscribe then cancel then resubscribe granted an unlimited series of free
     // trials, and uninstall then reinstall did the same. The flag lives on the Shop
     // row (Plan is deleted on uninstall); passing 0 overrides the config for
@@ -228,12 +240,39 @@ export const action = async ({ request }) => {
   return Response.json({ error: "Unknown action." });
 };
 
+/**
+ * P5.0 — the plan cards, DERIVED from the locked table.
+ *
+ * Every number on this page used to be a hardcoded string, and by the time it
+ * was read they had drifted from the table the app actually bills on in four
+ * separate ways at once: the annual prices were the pre-20% figures
+ * ($99.90/$299.90/$799.90 against $95.90/$287.90/$767.90), the comparison table
+ * still listed the pre-B2 allowances (25/50/200/1,000 against 100/500/1,500/
+ * 4,000), bulk was shown as Growth-and-up when B3 moved it to Starter, and the
+ * trial said 7 days. None of that was caught, because every pricing test
+ * asserted `billing-plans.js` against itself and nothing asserted the screen.
+ *
+ * So: no literal prices, no literal allowances, no literal trial length below.
+ * `plansSurfaces.test.js` fails if one comes back.
+ */
+const trialLine = `${TRIAL_DAYS}-day free trial · ${TRIAL_CREDITS} credits`;
+
+/** "1,000 products" / "Unlimited products" — productLimit is a LOCKED axis and it appeared nowhere on this page. */
+function productLine(limit) {
+  return limit === null ? "Unlimited products" : `Up to ${limit.toLocaleString()} products`;
+}
+
+/** Credits, not "generations": a blog post costs 3 and alt text costs 0 (B1). */
+function creditLine(credits) {
+  return `${credits.toLocaleString()} credits / month`;
+}
+
 const PLAN_DISPLAY = [
   {
     planName: "free",
     label: "Free",
     tagline: "Get started, no card needed",
-    price: "$0",
+    price: formatPrice(FREE_PLAN.amount),
     period: "forever",
     monthlyCredits: FREE_PLAN.monthlyCredits,
     icon: PlanIcon,
@@ -241,7 +280,8 @@ const PLAN_DISPLAY = [
     highlight: false,
     planKey: null,
     features: [
-      `${FREE_PLAN.monthlyCredits} generations / month`,
+      creditLine(FREE_PLAN.monthlyCredits),
+      productLine(FREE_PLAN.productLimit),
       "Product descriptions",
       "Meta titles & descriptions",
       "FAQ content",
@@ -253,7 +293,7 @@ const PLAN_DISPLAY = [
     planName: "starter",
     label: "Starter",
     tagline: "Perfect for small stores",
-    price: "$9.99",
+    price: formatPrice(BILLING_PLANS.starter.amount),
     period: "/ month",
     monthlyCredits: BILLING_PLANS.starter.monthlyCredits,
     icon: StarFilledIcon,
@@ -261,11 +301,17 @@ const PLAN_DISPLAY = [
     highlight: false,
     planKey: BILLING_PLANS.starter.key,
     annualPlanKey: BILLING_PLANS.starter.annualKey,
-    annualPrice: "$99.90",
+    annualPrice: formatPrice(BILLING_PLANS.starter.annualAmount),
     features: [
-      `${BILLING_PLANS.starter.monthlyCredits} generations / month`,
+      creditLine(BILLING_PLANS.starter.monthlyCredits),
+      productLine(BILLING_PLANS.starter.productLimit),
       "Everything in Free",
-      "7-day free trial",
+      trialLine,
+      // B3 — bulk starts HERE, at $9.99, and this card did not say so. The
+      // comparison table showed it as Growth-and-up while the code granted it,
+      // so a Starter subscriber had no way to learn they were already paying
+      // for the feature that saves them the time.
+      "Bulk generation jobs",
       "Content templates",
       "Version history",
       // 12-OFFER.md 5.5 - "Priority support" is the same undefined-promise
@@ -278,7 +324,7 @@ const PLAN_DISPLAY = [
     planName: "growth",
     label: "Growth",
     tagline: "Most popular · scales with you",
-    price: "$29.99",
+    price: formatPrice(BILLING_PLANS.growth.amount),
     period: "/ month",
     monthlyCredits: BILLING_PLANS.growth.monthlyCredits,
     icon: ChartHistogramGrowthIcon,
@@ -286,12 +332,13 @@ const PLAN_DISPLAY = [
     highlight: true,
     planKey: BILLING_PLANS.growth.key,
     annualPlanKey: BILLING_PLANS.growth.annualKey,
-    annualPrice: "$299.90",
+    annualPrice: formatPrice(BILLING_PLANS.growth.annualAmount),
     features: [
-      `${BILLING_PLANS.growth.monthlyCredits} generations / month`,
+      creditLine(BILLING_PLANS.growth.monthlyCredits),
+      productLine(BILLING_PLANS.growth.productLimit),
       "Everything in Starter",
-      "7-day free trial",
-      "Bulk generation jobs",
+      trialLine,
+      `Blog posts (${CREDIT_WEIGHTS.blog} credits each)`,
       "Autopilot mode",
       // 12-OFFER.md 5.5 - the feature generates two candidate texts for the
       // merchant to choose between. There is no traffic split and no winner
@@ -305,7 +352,7 @@ const PLAN_DISPLAY = [
     planName: "pro",
     label: "Professional",
     tagline: "For high-volume merchants",
-    price: "$79.99",
+    price: formatPrice(BILLING_PLANS.pro.amount),
     period: "/ month",
     monthlyCredits: BILLING_PLANS.pro.monthlyCredits,
     icon: OrganizationIcon,
@@ -313,11 +360,12 @@ const PLAN_DISPLAY = [
     highlight: false,
     planKey: BILLING_PLANS.pro.key,
     annualPlanKey: BILLING_PLANS.pro.annualKey,
-    annualPrice: "$799.90",
+    annualPrice: formatPrice(BILLING_PLANS.pro.annualAmount),
     features: [
-      `${BILLING_PLANS.pro.monthlyCredits} generations / month`,
+      creditLine(BILLING_PLANS.pro.monthlyCredits),
+      productLine(BILLING_PLANS.pro.productLimit),
       "Everything in Growth",
-      "7-day free trial",
+      trialLine,
       // P0.8 / 08-ECONOMICS.md guardrail 6 — the SERVICE stays, the two
       // undefined words go. "SLA" means a contractual guarantee with remedies;
       // saying it without one written is a promise we cannot keep, and at low
@@ -332,36 +380,101 @@ const PLAN_DISPLAY = [
 
 const PLAN_ORDER = ["free", "starter", "growth", "pro"];
 
+/** Read an entitlement off the locked table so a gate change cannot leave this row behind. */
+const ent = (name, feature) =>
+  (name === "free" ? FREE_PLAN : BILLING_PLANS[name]).entitlements[feature] === true;
+
 const FEATURE_TABLE = [
-  { feature: "AI generations / month", free: "25", starter: "50", growth: "200", pro: "1,000" },
+  {
+    // Was hardcoded "25 / 50 / 200 / 1,000" — the pre-B2 allowances, still on
+    // the screen after the locked table multiplied every one of them by 4-7.5x.
+    feature: "Credits / month",
+    free: FREE_PLAN.monthlyCredits.toLocaleString(),
+    starter: BILLING_PLANS.starter.monthlyCredits.toLocaleString(),
+    growth: BILLING_PLANS.growth.monthlyCredits.toLocaleString(),
+    pro: BILLING_PLANS.pro.monthlyCredits.toLocaleString(),
+  },
+  {
+    feature: "Products covered",
+    free: FREE_PLAN.productLimit.toLocaleString(),
+    starter: BILLING_PLANS.starter.productLimit.toLocaleString(),
+    growth: BILLING_PLANS.growth.productLimit.toLocaleString(),
+    pro: "Unlimited",
+  },
+  {
+    feature: "Free trial",
+    free: "—",
+    starter: trialLine,
+    growth: trialLine,
+    pro: trialLine,
+  },
   { feature: "Product descriptions", free: true, starter: true, growth: true, pro: true },
   { feature: "Meta titles & descriptions", free: true, starter: true, growth: true, pro: true },
   { feature: "FAQ content", free: true, starter: true, growth: true, pro: true },
-  { feature: "Image alt text", free: true, starter: true, growth: true, pro: true },
-  { feature: "Content templates", free: false, starter: true, growth: true, pro: true },
-  { feature: "Version history & rollback", free: false, starter: true, growth: true, pro: true },
-  { feature: "Bulk generation jobs", free: false, starter: false, growth: true, pro: true },
-  { feature: "Autopilot mode", free: false, starter: false, growth: true, pro: true },
-  { feature: "Two description options to compare", free: false, starter: false, growth: true, pro: true },
+  {
+    feature: `Image alt text (${CREDIT_WEIGHTS.altText} credits)`,
+    free: true, starter: true, growth: true, pro: true,
+  },
+  {
+    feature: "Full catalogue audit",
+    // Never capped, on any plan including Free — a locked decision, and it is
+    // the hook (14-PRICING.md §4).
+    free: true, starter: true, growth: true, pro: true,
+  },
+  {
+    feature: "Content templates",
+    free: ent("free", "contentTemplates"), starter: ent("starter", "contentTemplates"),
+    growth: ent("growth", "contentTemplates"), pro: ent("pro", "contentTemplates"),
+  },
+  {
+    feature: "Version history & rollback",
+    free: ent("free", "versionHistory"), starter: ent("starter", "versionHistory"),
+    growth: ent("growth", "versionHistory"), pro: ent("pro", "versionHistory"),
+  },
+  {
+    // This row said Starter: NO while the code granted it. Derived now.
+    feature: "Bulk generation jobs",
+    free: ent("free", "bulkJobs"), starter: ent("starter", "bulkJobs"),
+    growth: ent("growth", "bulkJobs"), pro: ent("pro", "bulkJobs"),
+  },
+  {
+    feature: "Autopilot mode",
+    free: ent("free", "autopilot"), starter: ent("starter", "autopilot"),
+    growth: ent("growth", "autopilot"), pro: ent("pro", "autopilot"),
+  },
+  {
+    feature: "Two description options to compare",
+    free: ent("free", "abVariants"), starter: ent("starter", "abVariants"),
+    growth: ent("growth", "abVariants"), pro: ent("pro", "abVariants"),
+  },
   { feature: "Dedicated support", free: false, starter: false, growth: false, pro: true },
 ];
 
 const FAQ_ITEMS = [
   {
-    q: "When does my monthly generation count reset?",
-    a: "Counts reset on the 1st of each calendar month. Unused generations don't roll over.",
+    q: "When do my credits reset?",
+    a: "Credits reset on the 1st of each calendar month. Unused credits don't roll over.",
   },
   {
     q: "Can I upgrade or downgrade at any time?",
     a: "Yes. Approving a new plan replaces your current one — there is no cancellation step. Upgrades take effect immediately; a change to a cheaper plan is prorated by Shopify.",
   },
   {
-    q: "What counts as one 'generation'?",
-    a: "Each time you generate content for a product — description, meta title and description, FAQ content, or image alt text — counts as one generation, regardless of how many content types are selected in that run. Alt text for all of a product's images counts as one generation, not one per image.",
+    // B1 — credit weighting shipped at 7d23792 and this answer still described
+    // the flat "one generation" model it replaced. Alt text costs nothing now
+    // and a blog post costs three, so the old answer understated one and
+    // overstated the other.
+    q: "What does a generation cost in credits?",
+    a:
+      `Most generations cost ${CREDIT_WEIGHTS.description} credit: a product description, a meta title and ` +
+      `description, or FAQ content. Image alt text is free — ${CREDIT_WEIGHTS.altText} credits, however many ` +
+      `images the product has. A blog post costs ${CREDIT_WEIGHTS.blog} credits, because it is several times ` +
+      `the work. When you select more than one content type in a single run, you are charged the most ` +
+      `expensive one, not the sum.`,
   },
   {
     q: "Is there a free trial?",
-    a: "All paid plans include a 7-day free trial. You won't be charged until the trial ends and you can cancel anytime.",
+    a: `All paid plans include a ${TRIAL_DAYS}-day free trial with ${TRIAL_CREDITS} credits to spend in it. You won't be charged until the trial ends and you can cancel anytime. The trial allowance is ${TRIAL_CREDITS} credits rather than the plan's full monthly amount, and it is one trial per store.`,
   },
 ];
 
@@ -432,8 +545,14 @@ function PlanCard({
             </Text>
           </InlineStack>
           {isAnnual && (
+            /* 14-PRICING.md §4 bans "2 months free" BY NAME: it is 16.7%, it is
+               what every competitor displays, and a merchant who checks the
+               arithmetic and finds it wrong will not believe the next number we
+               show them. This card rendered that exact phrase while the real
+               discount was 20%. Computed from the two prices now, so the badge
+               cannot disagree with the charge. */
             <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
-              2 months free vs monthly
+              Save {annualSavingPct(BILLING_PLANS[displayPlan.planName])}% vs monthly
             </Text>
           )}
         </BlockStack>
@@ -504,7 +623,7 @@ function PlanCard({
           )}
           {displayPlan.planKey && !isCurrent && !isDowngrade && (
             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-              7-day free trial · Cancel anytime
+              {trialLine} · Cancel anytime
             </Text>
           )}
         </BlockStack>
@@ -570,7 +689,7 @@ export default function PlansPage() {
   return (
     <Page
       title="Plans & Billing"
-      subtitle="Upgrade anytime · 7-day free trial on all paid plans · Cancel anytime"
+      subtitle={`Upgrade anytime · ${trialLine} on all paid plans · Cancel anytime`}
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
@@ -666,7 +785,7 @@ export default function PlansPage() {
                 Monthly
               </Button>
               <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
-                Annual · 2 months free
+                Annual · save {annualSavingPct(BILLING_PLANS.growth)}%
               </Button>
             </ButtonGroup>
           </InlineStack>

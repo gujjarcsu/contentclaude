@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRIAL_CREDITS, TRIAL_DAYS } from "../../app/utils/billing-plans.js";
+import { buildBillingConfig } from "../../app/utils/billing-config.js";
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
@@ -71,9 +72,22 @@ async function gate({ trialEndsAt = null, trialCreditsUsed = 0, monthlySpent = 0
 describe("B4 — the trial allowance is 250, not the plan's", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("is 250 credits over 14 days", () => {
+  it("is 250 credits over 14 days — each measured where it is USED", () => {
+    // P5.0 — `expect(TRIAL_DAYS).toBe(14)` used to stand here alone, and it was
+    // the most expensive green in the project: TRIAL_DAYS was imported by
+    // nothing, the value that reached Shopify was a literal `trialDays: 7`, and
+    // this assertion was true for the entire time production granted 7-day
+    // trials.
+    //
+    // Each constant is now asserted through a CONSUMER. TRIAL_CREDITS is read
+    // by the quota gate, which every other test in this file exercises.
+    // TRIAL_DAYS is read by the billing config — the object handed to Shopify —
+    // so that is what is checked here.
     expect(TRIAL_CREDITS).toBe(250);
-    expect(TRIAL_DAYS).toBe(14);
+    const config = buildBillingConfig({ every30Days: "EVERY_30_DAYS", annual: "ANNUAL" });
+    const lengths = [...new Set(Object.values(config).map((e) => e.trialDays))];
+    expect(lengths, "plans do not all offer the same trial").toEqual([14]);
+    expect(lengths[0]).toBe(TRIAL_DAYS);
   });
 
   it("a trialling merchant is bounded by 250, NOT by the plan's 1,500", async () => {
