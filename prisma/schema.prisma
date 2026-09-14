@@ -453,6 +453,58 @@ model Shop {
 /// never been scored, and a row with no `scoreAfter` has been seen once —
 /// neither is treated as zero, because "0 -> 84" in front of a merchant would
 /// be a fabricated improvement.
+// P2.3 — one row per product the catalogue watch has seen, holding the last
+// snapshot it took and the set of things that currently need the merchant.
+//
+// This is the subscription. A one-time audit is a lead magnet; what bills
+// forever is being told, the day it happens, that a product's description
+// collapsed after a bulk import, that alt text vanished with a theme change,
+// that a new product arrived with nothing written for it. Every field here is
+// a thing the DIFF needs, not a copy of Shopify.
+//
+// Shop-scoped: deleted on redaction (gdprCoverage.test.js enforces the list).
+model ProductWatch {
+  id            String    @id @default(cuid())
+  shop          String
+  productId     String
+  title         String    @default("")
+  handle        String    @default("")
+  // Capped at WATCH_DESC_CAP characters — enough to know thin (<50) and to see
+  // a collapse, without storing 64 KB per product to detect a 40-character one.
+  descLen       Int       @default(0)
+  hasType       Boolean   @default(false)
+  hasAlt        Boolean   @default(false)
+  // Shopify's createdAt, so "new since the watch began" is decidable.
+  createdAtShop DateTime?
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  // JSON object { kind: ISO-8601 since }. Empty object = nothing needs them.
+  attention     String    @default("{}")
+  // P2.2 — per-surface grading, filled by the same walk. JSON; null until graded.
+  grade         String?
+  blocking      Int       @default(0)
+  degrading     Int       @default(0)
+  cosmetic      Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([shop, productId])
+  @@index([shop, lastSeenAt])
+}
+
+// P2.1 — crawler access, one row per shop per run. Diffed daily; the interesting
+// row is the one whose `blocked` differs from yesterday's.
+model CrawlerAccess {
+  id         String   @id @default(cuid())
+  shop       String
+  checkedAt  DateTime @default(now())
+  // JSON { agent: { status, blocked, note } } for each user agent tested.
+  results    String   @default("{}")
+  blocked    Int      @default(0)
+  robotsSeen Boolean  @default(false)
+
+  @@index([shop, checkedAt])
+}
+
 model ProductScore {
   id           String   @id @default(cuid())
   shop         String

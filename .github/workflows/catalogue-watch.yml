@@ -1,0 +1,27 @@
+name: Catalogue watch
+
+# P2.3 — run the daily catalogue watch on demand and print what it found.
+# Writes ProductWatch rows; touches nothing in Shopify. Counts and kinds only.
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    name: Walk every installed shop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/catalogue-watch--writes-snapshots.mjs" | tee watch.json
+          {
+            echo '## Catalogue watch'
+            echo ''
+            echo '```json'
+            cat watch.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

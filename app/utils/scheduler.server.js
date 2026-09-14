@@ -378,6 +378,12 @@ export function startScheduler() {
   _digestTimer = setInterval(() => {
     maybeSendDigest().catch((err) => logger.error({ err }, "digest threw"));
     maybeRunBackup().catch((err) => logger.error({ err }, "backup threw"));
+    // P2.3 — the catalogue watch. Dynamic import on purpose: that module
+    // imports sydneyParts from here, and a static import both ways is a
+    // load-order cycle. Same Redis day-claim as the digest inside it.
+    import("./catalogueWatch.server.js")
+      .then((m) => m.maybeRunCatalogueWatch())
+      .catch((err) => logger.error({ err }, "catalogue watch threw"));
   }, 60_000);
   _digestTimer.unref?.();
 

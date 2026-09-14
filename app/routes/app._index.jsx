@@ -44,6 +44,8 @@ import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
+import { attentionFor } from "../utils/catalogueWatch.server.js";
+import { attentionSentence } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
@@ -235,6 +237,10 @@ export const loader = async ({ request }) => {
     recentAutopilotWork(shop),
   ]);
 
+  // P2.3 — the subscription's one number. Walks inline once for a shop that
+  // has never been walked, so the first load has a real number, not a dash.
+  const attention = await attentionFor(admin, shop);
+
   const start = isFirstRun
     ? {
         targetCount: START_TARGETS,
@@ -278,6 +284,7 @@ export const loader = async ({ request }) => {
     quotaWarning,
     storeScore,
     autopilotRecap,
+    attention,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
     storeName,
@@ -621,6 +628,7 @@ export default function Dashboard() {
     quotaWarning,
     storeScore,
     autopilotRecap,
+    attention,
     plan,
     usageCount,
     storeName,
@@ -867,6 +875,22 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* P2.3 — told the day it happens. One sentence, and a way in. Rendered
+            only when there is something to say: an empty "nothing needs you"
+            card on every load teaches a merchant to stop reading the card. */}
+        {attention?.available && attention.needAttention > 0 && (
+          <Banner
+            tone="warning"
+            title={attentionSentence(attention)}
+            action={{ content: "See what changed", onAction: () => navigate("/app/attention") }}
+          >
+            <Text as="p" variant="bodySm">
+              {attention.partial
+                ? "From the products we could reach in one check — the daily check covers the rest."
+                : "Checked against yesterday’s snapshot of your catalogue."}
+            </Text>
+          </Banner>
+        )}
         {/* ── Stats Grid ───────────────────────────────────────────────── */}
         <Layout>
           <Layout.Section variant="oneThird">

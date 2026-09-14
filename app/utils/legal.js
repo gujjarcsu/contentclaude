@@ -51,6 +51,8 @@ export const DATA_INVENTORY = [
   { model: "UpgradePrompt", holds: "Which upgrade prompts you were shown, so you are not shown the same one repeatedly.", personal: false },
   { model: "ReviewRequestAttempt", holds: "Whether we have asked you to review the app, so we do not ask twice.", personal: false },
   { model: "SupportRequest", holds: "Questions you send us through Get help: the email address you give for a reply, your subject and message.", personal: true },
+  { model: "ProductWatch", holds: "A daily snapshot of each product's title, URL handle, description length, whether it has a product type and alt text, and what we noticed changed — so we can tell you the day something in your catalogue needs you.", personal: false },
+  { model: "CrawlerAccess", holds: "A daily record of whether search and AI crawlers can reach your storefront, and what your robots.txt allowed.", personal: false },
   { model: "GDPRRequest", holds: "A record that Shopify sent us a privacy request, with identifiers only — never the customer email or phone in the payload.", personal: false },
   { model: "LogEvent", holds: "Operational logs: warnings and errors, with your shop domain. Kept 30 days.", personal: false },
 ];

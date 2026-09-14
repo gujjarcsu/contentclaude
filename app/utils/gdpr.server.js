@@ -39,6 +39,10 @@ export const GDPR_SHOP_MODELS = [
   // exempted with a stated reason.
   "productScore",
   "supportRequest",
+  // P2 — the catalogue watch and the crawler-access history are shop-scoped
+  // records of what we observed; nothing about them survives an erasure.
+  "productWatch",
+  "crawlerAccess",
 ];
 
 /**

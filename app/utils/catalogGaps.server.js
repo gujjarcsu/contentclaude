@@ -23,7 +23,10 @@ import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 
-export const THIN_DESCRIPTION_CHARS = 50;
+// One definition, in the pure module (P2.3) so routes can import it without
+// pulling this server module into the client bundle. Re-exported unchanged.
+import { THIN_DESCRIPTION_CHARS } from "./catalogueWatch.js";
+export { THIN_DESCRIPTION_CHARS };
 export const CATALOG_GAPS_TTL_S = 600;
 const PAGE = 100;
 const PRODUCT_GID_PREFIX = "gid://shopify/Product/";
