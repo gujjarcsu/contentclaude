@@ -300,6 +300,17 @@ was released after it. Five days of green deploys; Shopify served the unescaped 
 **The rule:** there are **two** deploy surfaces and they are proved separately. The container is
 proved by build-info + deep health. **Everything Shopify holds** — `shopify.app.toml` and
 `extensions/` — is proved **only** by the Versions page showing a new active version whose created
-time is after the commit, plus one side-effect read (the public listing's `save 17%` and `7-day`
-going to 0 was the tell here). A claim that "X is live" for anything in those paths must cite a
+time is after the commit. A claim that "X is live" for anything in those paths must cite a
 version number, not a sha.
+
+**Correction, same day, Cowork's error:** this entry originally said the public listing's
+`save 17%` / `7-day` going to 0 would be "the tell" that the version carried the billing config.
+**It does not.** CC released `p0-xss-f505584` at 06:46 UTC; at 06:58 the public page still read
+`save 17%` ×3, `7-day` ×3, `99.90` ×3, `95.90` ×0 (Cowork's own cache-busted read). For a
+**Billing API** app, the listing's plan cards are **typed by hand** in the Partner Dashboard's
+pricing section — Shopify's "updated automatically" sentence means *without resubmission*, not
+*derived from your code*. So the price has three homes and the third is **typed, not derived**: it
+moves only when someone edits it. CW's refusal to edit it stands as correct process; the edit is
+now routed as H12b with the owner informed, because it is display-only and one live subscriber
+exists. The verified fact is: the app version proves the extension; nothing proves the listing
+price except reading the listing.

@@ -9,57 +9,51 @@ of your own queue.**
 
 ---
 
-## PART A — P0: RELEASE A NEW APP VERSION. A STOREFRONT XSS FIX HAS BEEN UNRELEASED SINCE 9 SEPTEMBER.
+## PART A — P0: RELEASED. WHAT REMAINS IS THE COUNT, THE WINDOW, AND THE WRITE-UP.
 
-### What CW proved
-Versions page, verbatim: active **`navaal-seo-geo-content-15`**, *Created September 9, 2026 at
-4:34 am +0000*. Newest entry; nothing released since. Commit **`7942c30`** — item 18, *"stored XSS
-on the MERCHANT storefront … `faq_visible.liquid` rendered the AI FAQ text unescaped — Liquid does
-not auto-escape"* — landed 2026-09-09 21:26:53 +1000 = **11:26:53 UTC**, 6 h 52 min **after** the
-version was cut.
+**A1–A4 are done and verified from outside:** `p0-xss-f505584` active, created 06:46:10 UTC;
+production `f505584`, deep health ok. Reading the Versions *list* rather than the command's own
+output was the right proof. `--allow-updates` over `--force` on CLI 4.8.0 was the right flag for the
+right reason — you wanted it to stop if it intended to delete anything.
 
-**`fly deploy` ships the container. It ships nothing Shopify holds** — `shopify.app.toml` and
-`extensions/`. Those reach Shopify only through `shopify app deploy`, a new app version. Every green
-deploy this week was true about the container and silent about the block on merchant storefronts.
-This is false green **#12**; it is now a mandatory third ship-gate step in `CC-STANDING-PROMPT.md`
-(read that section before running the command).
+**Your two corrections are both accepted, and one of them was my error.**
 
-### A1 — Confirm the delta
-`git diff 7942c30^ HEAD -- extensions/ shopify.app.toml` → expected **13 lines in
-`faq_visible.liquid`, nothing else.** CW confirmed v15's scopes (`write_content,write_products`)
-equal the toml's → no scope change, no re-consent for the one live subscriber. Extension
-`uid = "6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4"` must not change; the theme deep link targets it.
+1. **The window is 69/74 days, not five.** Metafield writes began at `894e34f` (2 July); both locks
+   arrived together in `7942c30`. Server lock live from the 9 Sep fly deploy (**69 days** of
+   unsanitised writes); storefront lock live from today's version (**74 days** of unescaped
+   rendering). The incident write-up says both numbers and why they differ.
+2. **A4's second surface was wrong, and I wrote it.** I read the page myself at 06:58: `save 17%` ×3,
+   `7-day` ×3, `99.90` ×3, `95.90` ×0 — and `14-day` ×3 beside them, so the listing currently says
+   both. For a Billing API app the plan cards are typed in the Partner Dashboard pricing section;
+   "updated automatically" means without resubmission, not derived from code. Corrected in
+   `07-VERIFICATION.md` #12 under my name. **Routed as H12b to CW with the owner informed.** Nothing
+   for you here except: do not let any doc say the listing price is derived from anything.
 
-### A2 — Confirm the lineage (the step that bites)
-Versions show two lineages: `contentclaude-5` (23 June) and `navaal-seo-geo-content-15`. **A deploy
-against the wrong toml creates a version on the wrong app and fixes nothing.** Name which config is
-selected and its `client_id` (never the secret); proceed only on the `navaal-seo-geo-content` lineage.
+### A5 — the exposure count, with the corrected window
+For **every installed shop**, every `contentclaude.faq_schema` metafield written **since 2 July**
+(`894e34f`), not since 9 Sep. Check each question and answer for `<`, `>`, or an entity that decodes
+to one. Read-only via stored offline tokens through the diag workflow. **No shop domains in CI logs**
+— counts per shop, number of shops, name nothing.
 
-### A3 — Release
-```
-shopify app deploy --version "p0-xss-<sha>" --message "faq_visible.liquid escaped (7942c30); billing display 95.90/287.90/767.90, 14-day trial"
-```
-`--force` to skip the prompt on CLI 3.x. **Never `--reset`.** If the CLI is not authenticated,
-**stop and route** — the owner runs `shopify auth login` once; it is the top of `OWNER-CHECKLIST.md`.
-You do not type credentials.
-
-### A4 — Prove it on two surfaces
-1. Post the **new version number and created time** to the queue. A sha is not proof here.
-2. Side effect: `save 17%` and `7-day` go to **0** on the public listing with nobody editing a field
-   (Shopify regenerates the pricing display from the released billing config). CW reads this.
-
-### A5 — Exposure count
-The fix protects content generated after it. For **every installed shop**, read every
-`contentclaude.faq_schema` metafield written before the `7942c30` deploy; check each question and
-answer for `<`, `>`, or an entity decoding to one. Read-only via stored offline tokens, through the
-diag workflow. **No shop domains in CI logs** — counts per shop, number of shops, name nothing.
-- Dev/test store hit → re-normalise through the fixed `toPlainText` path now.
-- **Real merchant shop hit → route to the owner with the count.** EBS included, no exception.
+- Dev/test store hit → re-normalise through `toPlainText` now.
+- **Real merchant shop hit → route to the owner with the count, and the owner decides disclosure.**
+  EBS included, no exception. Do not remediate a merchant's store on your own authority.
 - Zero hits → say so with the number of metafields read. That sentence closes the incident.
-Also: one test answering whether Shopify's `| json` (in `faq_schema.liquid`) escapes `</`. If not,
-the remediation above covers both blocks.
 
-Write the incident into `docs/history/`. Then Part B.
+### A6 — the incident write-up, in `docs/history/`, honest in both directions
+State the realistic attack path, neither dramatised nor minimised: the text that reached the
+storefront was **AI output generated from the merchant's own product data** (`descriptionHtml`, up
+to 64 KB raw before item 19 landed in the same commit). Exploitation required either control of the
+merchant's product content — a compromised staff account, a poisoned supplier import — or a
+prompt injection that made the model emit markup. Say what the app did and did not defend at each
+date: 2 Jul → 9 Sep nothing; 9 Sep → 14 Sep server lock only; 14 Sep both. Say what was read in A5
+and what it means. That document is what the owner sends if a merchant ever asks.
+
+`| json`: your answer is accepted — the defence is upstream where we control it, pinned against
+eight hostile payloads with break tests. Record that reasoning in the same write-up so nobody
+re-litigates it.
+
+**Then Part B.** Post the A5 integer to the queue before you start it.
 
 ---
 
@@ -150,8 +144,8 @@ phase is *live*, not merged.
 
 ## DONE MEANS
 
-- [ ] New app version released — number + created time posted — or routed to the owner for login
-- [ ] `save 17%` / `7-day` at 0 on the public listing (CW's read)
+- [x] New app version released — `p0-xss-f505584`, 06:46:10 UTC
+- [ ] A5 integer posted; A6 incident written with both window numbers and the attack path
 - [ ] Exposure count reported; dev hits remediated; merchant hits routed
 - [ ] Home and Products reconcile with the real product count; frame-04 greeting fixed; sha posted
 - [ ] Review ask live, gated on a real success, once per shop
