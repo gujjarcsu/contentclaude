@@ -34,6 +34,8 @@ import {
   MagicIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
+import { getLiveShopName } from "../utils/shopName.server.js";
+import { greetingName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -225,7 +227,15 @@ export const loader = async ({ request }) => {
       }
     : null;
 
-  const storeName = brandVoice?.storeName || shop.split(".")[0];
+  // The greeting used to read brandVoice.storeName, captured ONCE at install
+  // and never refreshed, so a renamed store was greeted by its old name for
+  // ever and an unnamed one by its raw handle. Shopify's live name is
+  // authoritative for identifying the store; brandVoice.storeName stays the
+  // merchant's editable brand-voice field. greetingName() returns null when
+  // neither is real, and the hero greets without a name rather than with a bad
+  // one. See app/utils/shopName.js.
+  const liveShopName = await getLiveShopName(admin, shop);
+  const storeName = greetingName(liveShopName, brandVoice?.storeName, shop);
 
   const payload = {
     shopDomain: shop,
@@ -725,7 +735,7 @@ export default function Dashboard() {
                   <Icon source={MagicIcon} tone="inherit" />
                 </span>
                 <Text as="h1" variant="headingXl" fontWeight="bold">
-                  <span style={{ color: "#ffffff" }}>Welcome back, {storeName}!</span>
+                  <span style={{ color: "#ffffff" }}>{storeName ? `Welcome back, ${storeName}!` : "Welcome back!"}</span>
                 </Text>
               </InlineStack>
               <Text as="p" variant="bodyMd">

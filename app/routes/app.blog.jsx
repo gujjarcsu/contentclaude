@@ -22,6 +22,8 @@ import {
 import { useState, useEffect, useRef } from "react";
 import { BlogIcon, FileIcon, CheckCircleIcon, LightbulbIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
+import { getLiveShopName } from "../utils/shopName.server.js";
+import { authorName as resolveAuthorName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
 import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { quotaPct } from "../utils/quota.js";
@@ -231,8 +233,15 @@ export const action = async ({ request }) => {
     // ArticleCreateInput requires a non-null author — use the merchant's brand/
     // store name when set, else a name derived from the shop. (Missing author was
     // causing a hard GraphQL error and a 500 on publish.)
+    // The fallback used to be the shop handle, so a store whose name was
+    // unreadable at install published every article authored "navaal-ttv-03" —
+    // on the merchant's own storefront, permanently. Authorship is a branding
+    // decision, so a name the merchant typed into Settings still wins; the live
+    // shop name is the fallback and the handle is the last resort, kept because
+    // ArticleCreateInput.author is non-null and a missing author was a 500.
     const authorVoice = await prisma.brandVoice.findUnique({ where: { shop }, select: { storeName: true } });
-    const authorName = authorVoice?.storeName?.trim() || shop.replace(".myshopify.com", "");
+    const liveShopName = await getLiveShopName(admin, shop);
+    const authorName = resolveAuthorName(liveShopName, authorVoice?.storeName, shop);
 
     // Find or create the default Shopify blog
     const blogsResponse = await admin.graphql(`

@@ -268,7 +268,10 @@ const PLAN_DISPLAY = [
       "7-day free trial",
       "Content templates",
       "Version history",
-      "Priority support",
+      // 12-OFFER.md 5.5 - "Priority support" is the same undefined-promise
+      // class as "SLA support", which 6 bans by name: no defined priority,
+      // no queue, no response commitment behind it.
+      "Email support from the founder",
     ],
   },
   {
@@ -290,7 +293,12 @@ const PLAN_DISPLAY = [
       "7-day free trial",
       "Bulk generation jobs",
       "Autopilot mode",
-      "A/B variant testing",
+      // 12-OFFER.md 5.5 - the feature generates two candidate texts for the
+      // merchant to choose between. There is no traffic split and no winner
+      // is measured, so "A/B testing" names a measurement we do not perform.
+      // The product page already says it honestly ("Generate two options to
+      // compare"); only the plan card overclaimed.
+      "Two description options to compare",
     ],
   },
   {
@@ -334,7 +342,7 @@ const FEATURE_TABLE = [
   { feature: "Version history & rollback", free: false, starter: true, growth: true, pro: true },
   { feature: "Bulk generation jobs", free: false, starter: false, growth: true, pro: true },
   { feature: "Autopilot mode", free: false, starter: false, growth: true, pro: true },
-  { feature: "A/B variant testing", free: false, starter: false, growth: true, pro: true },
+  { feature: "Two description options to compare", free: false, starter: false, growth: true, pro: true },
   { feature: "Dedicated support", free: false, starter: false, growth: false, pro: true },
 ];
 

@@ -938,7 +938,7 @@ export async function action({ request, params }) {
         // consumed so the merchant isn't charged for a generation that won't run.
         await refundGeneration(shop, { productId, contentType: contentTypes[0] });
         return {
-          error: "Only 1 generation remaining — A/B requires 2. Upgrade your plan to continue.",
+          error: "Only 1 generation remaining — comparing two options requires 2. Upgrade your plan to continue.",
           limitReached: true,
         };
       }
