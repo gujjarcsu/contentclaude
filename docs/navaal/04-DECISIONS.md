@@ -33,7 +33,48 @@ Credit weighting: **alt text 0 credits (unmetered), blog post 3, everything else
 Uniform **2.00¢ per credit** across all three paid plans. Full-burn margin ≥ 42% on every plan.
 Packs: 1,000 / $19 · 2,000 / $39 · 4,000 / $79 (one-time, Billing API).
 Annual carries a **one-time 2× credit allowance in the first month**.
-**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.
+~~**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.~~ **CORRECTED 2026-09-14 (B8): that premise is false and was queried rather than believed.** Production holds **one active paid subscription with a subscription id** (`activePaidWithSubscription: 1`, `pro:active 1`, read at `8831444`). Whether it is a real charge or a `(Test)` charge on a dev store is the one thing the query deliberately cannot say — it prints no shop domain and no subscription GID, because that output goes into a CI log — so it is routed to the owner in `OWNER-CHECKLIST.md`. **The change was NOT rolled back**, because every part of it is neutral-or-favourable to a Pro subscriber: credits 1,000 → 4,000, annual $799.90 → $767.90, alt text 1 → 0 credits, Pro already unlimited on products and already had bulk. Rolling back would cut their allowance to a quarter. The one line that moved against them is a blog post at 3 credits where it was 1, which is not a constraint at 4,000.
+
+### BYO KEY — DECIDED 2026-09-14 (P5.5), BEFORE THE CODE WAS WRITTEN
+
+**A generation run on a merchant's own AI key costs them ZERO credits. It is still RECORDED.**
+
+The question the brief required settling first: do generations on a merchant's own key still consume
+credits for accounting?
+
+**Why zero, and it is not close.** If a BYO-key generation still cost a credit, the merchant would be
+paying us $79.99/month AND paying Anthropic directly AND still be capped at 4,000. There is no
+merchant for whom that is a good trade, so the feature would exist and go unused — which is worse
+than not building it, because it is a promise on a plan card that nobody can benefit from.
+
+**What we are actually selling at Pro with a key attached is the software, not the inference.** The
+credit is a unit of MODEL SPEND — `14-PRICING.md` §4.1 prices it at a uniform 2.00¢ and
+`08-ECONOMICS.md` §2 derives that from measured per-generation cost. When the merchant pays for the
+inference, our cost per generation falls to worker time, one database row and one Shopify API call.
+Charging a spend-denominated unit for spend we did not make would be charging for nothing.
+
+**"Zero credits" is not "unrecorded".** Every BYO generation writes a `UsageRecord` with
+`credits: 0`, exactly like alt text does today. That shape already exists and is load-bearing: it is
+how we keep observability, per-shop volume and the `tokensUsed` accounting without metering. A
+feature that makes usage invisible would take out the only instrumentation that tells us what Pro
+merchants actually do.
+
+**What still bounds it.** Not credits — the concurrent-job cap, the autopilot daily cap of 50
+products, and the Pro plan's own scope. Unlimited generations at zero marginal inference cost is an
+acceptable exposure; unbounded CONCURRENCY is not, and those bounds are unchanged.
+
+**The UI must say which, on the Settings card and on the plan card**, not in a help article: *"While
+your own key is in use, generations don't count against your monthly credits."* A merchant
+discovering the billing rule after the fact is the same class of failure as the trial length.
+
+**Not negotiable, and restated here because this is the row someone will be tempted to relax
+(L9):** the key is stored **encrypted**; it is **never logged, never returned to the client, never
+in an error message — not the key, not a prefix, not a length**; it is **validated on save with one
+real cheap call**, because a key that first fails at 2am mid-bulk-job is a support ticket and a
+refund; and if it fails mid-job the job **PAUSES and tells the merchant** rather than silently
+falling back to our key and our money.
+
+---
 
 **What this decision closes:** the first OPEN item below (free-tier model spend) is answered — the
 free ceiling is ≈$1.51/shop/month and it is accepted. The rest of the arithmetic, the competitor

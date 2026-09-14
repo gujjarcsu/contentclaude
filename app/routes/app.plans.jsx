@@ -366,6 +366,11 @@ const PLAN_DISPLAY = [
       productLine(BILLING_PLANS.pro.productLimit),
       "Everything in Growth",
       trialLine,
+      // C0.7 — 04-DECISIONS.md requires the billing rule to be on the plan
+      // card and the Settings card, not in a help article. A merchant
+      // discovering how they are billed after the fact is the same class of
+      // failure as the trial length.
+      "Your own AI key — no credits used",
       // P0.8 / 08-ECONOMICS.md guardrail 6 — the SERVICE stays, the two
       // undefined words go. "SLA" means a contractual guarantee with remedies;
       // saying it without one written is a promise we cannot keep, and at low

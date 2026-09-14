@@ -32,6 +32,42 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export const usageContext = new AsyncLocalStorage();
 
 /**
+ * C0.7 / P5.5 — WHICH API KEY the generation running right now must use.
+ *
+ * A separate store from `usageContext` on purpose. They have different
+ * lifetimes: a generation that takes no credit has no usage record and still
+ * needs the merchant's key, and the validation call at save time needs neither.
+ * Folding them together would make one of those cases carry a null the other
+ * half has to keep checking.
+ *
+ * The reason this is AsyncLocalStorage rather than a parameter is the same
+ * reason `usageContext` is, and it is stronger here: the bulk processor runs
+ * generations CONCURRENTLY, and a module-level "current key" would mean one
+ * shop's job could be billed to another shop's Anthropic account. That is the
+ * worst bug this feature could have, and threading the key through every
+ * function signature in ai.server.js would be the only other way to prevent it.
+ *
+ * @type {AsyncLocalStorage<{key: string, byok: boolean, shop: string}>}
+ */
+export const keyContext = new AsyncLocalStorage();
+
+/**
+ * Run `fn` with the merchant's own API key in scope.
+ *
+ * With no key, `fn` runs unwrapped and `ai.server.js` falls back to ours —
+ * which is right for every shop that has not attached one.
+ */
+export function withMerchantKey({ key, shop }, fn) {
+  if (!key) return fn();
+  return keyContext.run({ key, byok: true, shop }, fn);
+}
+
+/** The merchant key for the generation running now, or null. */
+export function currentMerchantKey() {
+  return keyContext.getStore() ?? null;
+}
+
+/**
  * Run `fn` with the usage record it should charge tokens to.
  *
  * When there is no record id — a path that generates without taking a credit —

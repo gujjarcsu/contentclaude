@@ -29,6 +29,7 @@ export const loader = async ({ request }) => {
 
   const { getOrCreatePlan } = await import("../utils/plans.server.js");
   const { getEntitlements } = await import("../utils/billing-plans.js");
+  const { keyStatusFor, canUseOwnKey} = await import("../utils/merchantKey.server.js");
 
   const [brandVoice, templates, plan] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
@@ -36,9 +37,21 @@ export const loader = async ({ request }) => {
     getOrCreatePlan(shop),
   ]);
 
+  // C0.7 — booleans and one timestamp. `keyStatusFor` is the only shape a
+  // loader may use, and it is the only reader this module exposes: there is no
+  // branch here that could serialise key material into the page, because the
+  // function that would have to return it does not exist. 04-DECISIONS.md:
+  // "never returned to the client — not the key, not a prefix, not a length."
+  const aiKeyAvailable = canUseOwnKey(plan.planName);
+  const aiKey = aiKeyAvailable
+    ? await keyStatusFor(shop)
+    : { configured: false, saved: false, validatedAt: null, failing: false };
+
   return Response.json({
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
+    aiKey,
+    aiKeyAvailable,
     brandVoice: brandVoice || {
       storeName: "",
       brandTone: "professional",
@@ -70,6 +83,50 @@ export const action = async ({ request }) => {
 
   // Content templates are sold as Starter+ on the pricing table — the gate
   // must actually exist server-side (requirement 4.2.1: advertised == enforced).
+  // ── C0.7 / P5.5 — the merchant's own AI key ────────────────────────────
+  if (actionType === "saveAiKey" || actionType === "removeAiKey") {
+    const { getOrCreatePlan } = await import("../utils/plans.server.js");
+    const { canUseOwnKey, saveKey, removeKey } = await import("../utils/merchantKey.server.js");
+    const plan = await getOrCreatePlan(shop);
+    if (!canUseOwnKey(plan.planName)) {
+      return Response.json(
+        { error: "Using your own AI key is available on the Professional plan." },
+        { status: 403 },
+      );
+    }
+
+    if (actionType === "removeAiKey") {
+      await removeKey(shop);
+      return Response.json({ success: true, message: "Your AI key was removed. Generations use ours again." });
+    }
+
+    // The raw value is read here, handed straight to saveKey, and never put in
+    // a variable that outlives this expression. It is not logged, not echoed in
+    // the response, and not in an error message on any branch below.
+    const result = await saveKey(shop, String(formData.get("aiKey") ?? ""));
+    if (result.ok) {
+      return Response.json({
+        success: true,
+        message:
+          "Your key was checked against Anthropic and saved. Generations that use it don't count against your monthly credits.",
+      });
+    }
+
+    // Each reason maps to a fixed sentence chosen HERE. Anthropic's own error
+    // text is never surfaced: an upstream error body can echo the request
+    // headers, and this string goes on a merchant's screen.
+    const REASONS = {
+      empty: "Paste your Anthropic API key first.",
+      rejected: "Anthropic rejected that key. Check you copied all of it and that the key is still active.",
+      rate_limited: "Anthropic rate-limited the check, so nothing was saved. Try again in a minute — the key may be fine.",
+      upstream: "Anthropic could not be reached to check the key. Nothing was saved. Try again shortly.",
+      unreachable: "We could not reach Anthropic to check the key. Nothing was saved.",
+      storage: "The key checked out but could not be saved, so nothing was stored. Please try again.",
+      not_configured: "Using your own AI key is not available on this deployment yet.",
+    };
+    return Response.json({ error: REASONS[result.reason] ?? REASONS.upstream }, { status: 400 });
+  }
+
   if (actionType === "saveTemplate" || actionType === "deleteTemplate") {
     const ent = await checkEntitlement(shop, "contentTemplates");
     if (!ent.allowed) {
@@ -213,12 +270,15 @@ const lengthOptions = [
 ];
 
 export default function SettingsPage() {
-  const { brandVoice, templates, entitlements } = useLoaderData();
+  const { brandVoice, templates, entitlements, aiKey, aiKeyAvailable } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
   const navigate = useNavigate();
   const isSaving = navigation.state === "submitting";
+  // C0.7 — the spinner stays on the button that was pressed. The form data is
+  // read for the actionType only; the key field itself is never touched here.
+  const isSavingAiKey = navigation.formData?.get("actionType") === "saveAiKey";
 
   const [storeName, setStoreName] = useState(brandVoice.storeName);
   const [brandTone, setBrandTone] = useState(brandVoice.brandTone);
@@ -617,6 +677,71 @@ export default function SettingsPage() {
             </Layout.Section>
           </Layout>
         </Form>
+
+        {/* ── C0.7 / P5.5 — your own AI key, Professional only ──────────────
+            The input is deliberately write-only. There is nothing to prefill it
+            WITH: the loader never receives key material, so the field is empty
+            even when a key is saved, and the card says "a key is saved" rather
+            than showing any part of it. 04-DECISIONS.md: not the key, not a
+            prefix, not a length. */}
+        {aiKeyAvailable && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                <Text as="h2" variant="headingLg">
+                  Use your own AI key
+                </Text>
+                {aiKey?.saved && !aiKey?.failing && (
+                  <Badge tone="success">{aiKey?.validatedAt ? "Active" : "Saved, not checked"}</Badge>
+                )}
+                {aiKey?.failing && <Badge tone="critical">Not working</Badge>}
+              </InlineStack>
+
+              <Text as="p" variant="bodySm" tone="subdued">
+                Paste an Anthropic API key and this app will generate on your account instead of
+                ours. <b>Generations that use your key don&apos;t count against your monthly
+                credits</b> — you pay Anthropic for the usage and us for the software.
+              </Text>
+
+              {aiKey?.failing && (
+                <Banner tone="critical" title="Your key stopped working">
+                  <Text as="p" variant="bodySm">
+                    Anthropic rejected it, so jobs are paused rather than quietly running on our key
+                    and your credits. Save a working key below to resume.
+                  </Text>
+                </Banner>
+              )}
+
+              <Form method="post">
+                <input type="hidden" name="actionType" value="saveAiKey" />
+                <BlockStack gap="300">
+                  <TextField
+                    label="Anthropic API key"
+                    name="aiKey"
+                    type="password"
+                    autoComplete="off"
+                    placeholder={aiKey?.saved ? "A key is saved — paste a new one to replace it" : "sk-ant-..."}
+                    helpText="Checked against Anthropic when you save, so you find out now rather than halfway through a bulk job. Stored encrypted; never shown again, not even in part."
+                  />
+                  <InlineStack gap="200">
+                    <Button submit variant="primary" loading={isSaving && isSavingAiKey}>
+                      {aiKey?.saved ? "Replace key" : "Save key"}
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Form>
+
+              {aiKey?.saved && (
+                <Form method="post">
+                  <input type="hidden" name="actionType" value="removeAiKey" />
+                  <Button submit variant="plain" tone="critical">
+                    Remove my key and use yours
+                  </Button>
+                </Form>
+              )}
+            </BlockStack>
+          </Card>
+        )}
 
         {/* Re-run wizard */}
         {/* Content Templates — Starter+ (matches the pricing table) */}

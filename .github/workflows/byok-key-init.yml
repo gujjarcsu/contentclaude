@@ -1,0 +1,69 @@
+name: BYOK encryption key — one-time init
+
+# C0.7 / P5.5 — generate and install BYOK_ENCRYPTION_KEY without any human, or
+# any log, ever seeing it.
+#
+# WHY A WORKFLOW AND NOT A PERSON AT A TERMINAL. The standing rule is: never
+# print a secret, and always `fly secrets import` from a file, never
+# `fly secrets set` — on Windows `cmd.exe` strips `%xx` and corrupts the value
+# silently. A generated key is base64 and WILL eventually contain characters
+# that a shell mangles. Generating it inside the job and piping it straight to
+# `import` means it exists only in a file on an ephemeral runner, is never an
+# argument, never an environment variable in a log line, and is never seen by
+# anyone including the owner.
+#
+# WHY IT REFUSES TO RUN TWICE. Replacing this key makes every stored merchant
+# key undecryptable — `resolveKeyFor` treats that as a failure and pauses their
+# jobs, which is safe but means every Pro merchant has to re-paste. So the job
+# checks first and stops. To deliberately rotate, set `confirm_rotate` to the
+# exact string `ROTATE-AND-BREAK-EXISTING-KEYS`.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_rotate:
+        description: "Leave EMPTY for first-time setup. Rotating invalidates every stored merchant key."
+        required: false
+        default: ""
+
+jobs:
+  init:
+    name: Install the encryption key
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Refuse to clobber an existing key
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `secrets list` prints NAMES and digests, never values.
+          if flyctl secrets list --app contentclaude | grep -q 'BYOK_ENCRYPTION_KEY'; then
+            if [ "${{ inputs.confirm_rotate }}" != "ROTATE-AND-BREAK-EXISTING-KEYS" ]; then
+              echo "BYOK_ENCRYPTION_KEY already exists. Refusing to replace it."
+              echo "Replacing it makes every stored merchant AI key undecryptable."
+              exit 1
+            fi
+            echo "Rotation explicitly confirmed."
+          fi
+
+      - name: Generate and import
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # 32 bytes, base64 — the size secretBox.server.js requires. Written to
+          # a file and never echoed, never exported, never an argument.
+          printf 'BYOK_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" > byok.env
+          flyctl secrets import --app contentclaude < byok.env
+          shred -u byok.env 2>/dev/null || rm -f byok.env
+          echo "Installed. The value was never printed and is not recoverable from this log."
+
+      - name: Confirm it is set, without reading it
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl secrets list --app contentclaude | grep 'BYOK_ENCRYPTION_KEY' \
+            && echo "BYOK_ENCRYPTION_KEY is present (name and digest only)."

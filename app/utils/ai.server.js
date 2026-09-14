@@ -3,7 +3,7 @@ import logger from "./logger.server.js";
 import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
 import { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } from "./text.js";
 import { modelFor, costUsd, costMicroUsd } from "./modelPricing.js";
-import { currentUsageRecord } from "./usageContext.server.js";
+import { currentUsageRecord, currentMerchantKey } from "./usageContext.server.js";
 import { recordTokensUsed } from "./plans.server.js";
 
 // ─── P0.6 — real cost accounting ─────────────────────────────────────────────
@@ -94,8 +94,7 @@ export async function generateProductContent(
   contentTypes = ["description", "metaTitle", "metaDescription"],
   options = {}
 ) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
 
   // Collection-level voice overrides take precedence over shop-level brand voice
   const { collectionVoice, ...promptOptions } = options;
@@ -139,8 +138,7 @@ export async function generateProductContent(
 }
 
 export async function generateAltText(imageUrl, productTitle) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
   // Alt text requires the image itself — refuse non-Shopify-CDN URLs outright.
   if (!isAllowedImageUrl(imageUrl)) {
     throw new Error("Unsupported image URL — only Shopify CDN https images are allowed.");
@@ -211,8 +209,7 @@ The description must satisfy ALL seven points:
 7. HUMAN-FIRST WRITING — easy to read, genuinely persuasive, and useful to a real shopper; write for the human first, algorithms second.`;
 
 export async function enhanceExistingContent(product, brandVoice, contentTypes = ["description"], options = {}) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
 
   const keywords = sanitizePromptInput(options.keywords || brandVoice?.targetKeywords || "", 300);
   const language = brandVoice?.language || "en";
@@ -310,8 +307,7 @@ ${typeInstructions.join("\n\n")}
 }
 
 export async function generateBlogPost(topic, brandVoice, options = {}) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
 
   const { keywords = "", length = "medium", instructions = "", tone = brandVoice?.brandTone || "professional" } = options;
   const wordCounts = { short: "500-700", medium: "900-1100", long: "1800-2200" };
@@ -365,8 +361,7 @@ Write a compelling, SEO-friendly blog post that is genuinely beautiful to read.
 }
 
 export async function generateSocialContent(product, brandVoice) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
 
   const prompt = `Generate social media content for this product.
 
@@ -408,8 +403,7 @@ TikTok hook + script: First line = scroll-stopping hook (under 10 words). Then 3
 }
 
 export async function generateCollectionDescription(collection, brandVoice, options = {}) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  const apiKey = resolveApiKey();
 
   const language = brandVoice?.language || "en";
   const langName = getLanguageName(language);
@@ -557,6 +551,29 @@ export function getCircuitBreakerState() {
   };
 }
 // ─── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * C0.7 / P5.5 — whose key pays for this call.
+ *
+ * `process.env.ANTHROPIC_API_KEY` was read at SIX separate sites in this file,
+ * each with its own copy of the same guard. That is the shape P5.0 was spent
+ * removing one directory over: six places for one value to be read means six
+ * places to forget when the value stops being the only one.
+ *
+ * The merchant's key comes from AsyncLocalStorage rather than a parameter
+ * because the bulk processor runs generations concurrently — a module-level
+ * "current key" could bill one shop's job to another shop's Anthropic account.
+ *
+ * Falls back to ours when the shop has not attached one, which is every shop
+ * below Pro and most shops on it.
+ */
+function resolveApiKey() {
+  const merchant = currentMerchantKey();
+  if (merchant?.key) return merchant.key;
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("ANTHROPIC_API_KEY is not configured.");
+  return key;
+}
 
 async function callClaude(apiKey, body, attempt = 0, { interactive = false, contentType = "unknown" } = {}) {
   if (!checkCircuit()) {

@@ -369,6 +369,32 @@ model Shop {
   // are always produced the same way and the comparison is honest.
   storeScoreAtInstall     Int?
   storeScoreAtInstallAt   DateTime?
+  // ── C0.7 / P5.5: the merchant's OWN Anthropic key, at Pro.
+  //
+  // AES-256-GCM, three parts, all base64 — see app/utils/secretBox.server.js.
+  // The auth tag is stored because GCM is authenticated: a tampered ciphertext
+  // must fail to decrypt rather than decrypt to garbage that then gets sent to
+  // Anthropic as though it were a key.
+  //
+  // There is deliberately NO last4, NO prefix and NO length column. 04-DECISIONS
+  // states the rule and this schema is where it would be easiest to quietly
+  // break it: a "aiKeyLast4" for a nicer Settings card is exactly the kind of
+  // reasonable-sounding column that puts part of a merchant's secret into every
+  // backup, every log of a row, and every support screenshot.
+  //
+  // On Shop rather than Plan because Plan is deleted on uninstall: a merchant
+  // who reinstalls should not have to paste their key again. Anonymised by
+  // shop/redact with everything else.
+  aiKeyCiphertext         String?
+  aiKeyIv                 String?
+  aiKeyTag                String?
+  // When the key last passed a real call. Null means "saved but never verified",
+  // which the UI must not describe as working.
+  aiKeyValidatedAt        DateTime?
+  // Set when a job hits an auth failure on the merchant's key, so the next job
+  // refuses up front instead of failing halfway through. Cleared on a successful
+  // re-validation.
+  aiKeyFailedAt           DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 

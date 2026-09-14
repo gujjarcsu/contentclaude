@@ -3,8 +3,15 @@ import prisma from "../db.server.js";
 import { BILLING_PLANS, FREE_PLAN, getEntitlements, planLimitsFor, TRIAL_CREDITS } from "./billing-plans.js";
 import { getCache, invalidateCache } from "./cache.server.js";
 import logger from "./logger.server.js";
-import { withUsageRecord } from "./usageContext.server.js";
+import { withUsageRecord, withMerchantKey } from "./usageContext.server.js";
 import { creditsFor } from "./credits.js";
+import {
+  BYOK_PLAN,
+  resolveKeyFor,
+  markKeyFailing,
+  isAuthFailure,
+  BYOK_PAUSED_MESSAGE,
+} from "./merchantKey.server.js";
 
 export { FREE_PLAN };
 
@@ -260,7 +267,14 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         try {
           shopRow = await tx.shop.findUnique({
             where: { shop },
-            select: { trialCreditsUsed: true, annualBoostMonth: true },
+            select: {
+              trialCreditsUsed: true,
+              annualBoostMonth: true,
+              // C0.7 — whether this shop pays for its own inference.
+              aiKeyCiphertext: true,
+              aiKeyValidatedAt: true,
+              aiKeyFailedAt: true,
+            },
           });
         } catch {
           shopRow = null;
@@ -277,7 +291,32 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // type rather than defaulting to 1: a silent default is how the margin
         // arithmetic in 14-PRICING.md §3 stops being true without anyone
         // noticing. The throw is caught by the outer try, which denies safely.
-        const cost = creditsFor(contentType);
+        let cost = creditsFor(contentType);
+
+        // C0.7 / P5.5 — A GENERATION ON THE MERCHANT'S OWN KEY COSTS ZERO CREDITS.
+        //
+        // The decision is in 04-DECISIONS.md and was made before the code: a
+        // credit is a unit of MODEL SPEND (14-PRICING.md §4.1 prices it at a
+        // uniform 2.00¢), and when the merchant pays Anthropic directly there is
+        // no spend to charge for. Charging anyway would mean paying us $79.99,
+        // paying Anthropic, and still being capped at 4,000 — which no merchant
+        // would accept, so the feature would exist unused.
+        //
+        // Zero is not "unrecorded": the UsageRecord is still written below with
+        // credits 0, exactly as alt text already is. That shape is load-bearing
+        // — it is how per-shop volume and tokensUsed stay observable without
+        // metering, and a feature that made usage invisible would remove the
+        // only instrument that says what Pro merchants actually do.
+        //
+        // `aiKeyFailedAt` deliberately does NOT zero the cost: a shop whose key
+        // is failing is about to be refused by the generation path anyway, and
+        // giving it free credits in the meantime would be the wrong direction.
+        const byokActive =
+          plan.planName === BYOK_PLAN &&
+          !!shopRow?.aiKeyCiphertext &&
+          !!shopRow?.aiKeyValidatedAt &&
+          !shopRow?.aiKeyFailedAt;
+        if (byokActive) cost = 0;
 
         // B2 — THE SECOND AXIS. A plan is a pair: a credit budget and a number of
         // products the app will act on. Both are enforced, and the refusal says
@@ -375,6 +414,9 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
             ? Math.max(0, TRIAL_CREDITS - trialUsed - cost)
             : Math.max(0, effectiveCredits - spent - cost),
           boosted,
+          // C0.7 — the caller uses this to decide whether to run the generation
+          // inside the merchant's key context, and the UI uses it to say so.
+          byok: byokActive,
           inTrial,
           credits: cost,
           usageRecordId: record.id,
@@ -501,13 +543,45 @@ export async function withGenerationCredit(shop, { contentType, productId = null
       return false;
     });
 
+  // C0.7 / P5.5 — whose key pays for this generation.
+  //
+  // Resolved OUTSIDE the try so a blocked key refuses before any work starts
+  // and before a credit is spent. `blocked` means the shop has a key that we
+  // know does not authenticate: a previous job hit 401/403, or the stored
+  // ciphertext will not decrypt. Either way the merchant must act, and the one
+  // thing we must not do is quietly continue on OUR key — that spends our money
+  // on work they believe they are paying for themselves, invisibly.
+  let merchantKey = { key: null, byok: false, blocked: false };
+  if (gate.byok) {
+    merchantKey = await resolveKeyFor(shop, BYOK_PLAN).catch(() => ({
+      key: null,
+      byok: false,
+      blocked: false,
+    }));
+    if (merchantKey.blocked) {
+      await refundGeneration(shop, { productId, contentType }).catch(() => {});
+      return { allowed: false, gate: { ...gate, allowed: false, reason: "byok_paused", message: BYOK_PAUSED_MESSAGE } };
+    }
+  }
+
   let result;
   try {
-    // The generation runs inside a context naming the record it belongs to, so
-    // ai.server.js can charge its real token counts to the right row even when
-    // the bulk processor has several generations in flight at once.
-    result = await withUsageRecord({ usageRecordId: gate.usageRecordId, shop }, () => work(gate));
+    // Two contexts, both AsyncLocalStorage, both for the same reason: the bulk
+    // processor runs generations CONCURRENTLY. One names the usage record the
+    // tokens belong to; the other names the key that pays for them. A
+    // module-level "current key" could bill one shop's job to another shop's
+    // Anthropic account, which is the worst bug this feature could have.
+    result = await withMerchantKey({ key: merchantKey.key, shop }, () =>
+      withUsageRecord({ usageRecordId: gate.usageRecordId, shop }, () => work(gate)),
+    );
   } catch (err) {
+    // The merchant's key was rejected mid-generation. Stamp it so the NEXT job
+    // refuses up front instead of discovering it halfway through a bulk run.
+    // Only 401/403 counts — a 429 or a 500 is Anthropic having a moment, and
+    // turning that into a re-paste is a support ticket we created ourselves.
+    if (merchantKey.byok && isAuthFailure(err)) {
+      await markKeyFailing(shop).catch(() => {});
+    }
     await refundGeneration(shop, { productId, contentType }).catch(() => {});
     logger.info(
       { shop, productId, contentType, err: err?.message, event: "generation_credit_refunded" },
