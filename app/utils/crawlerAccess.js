@@ -128,14 +128,29 @@ function wildcardMatch(pattern, path) {
 }
 
 /**
- * One result per agent, from a robots verdict and a live fetch status.
- * Blocked at the edge (403/429/503 with a challenge) is a block whatever
- * robots.txt says — a WAF rule is the case W1 found nobody audits.
+ * The non-agent entry in a results map: what the storefront itself is.
+ * A password-protected storefront (every dev store, every pre-launch
+ * merchant) answers 200 on /password to everyone — that is not "reached".
  */
-export function classifyAccess({ robotsBlocked, status }) {
+export const STOREFRONT_KEY = "_storefront";
+
+/** Is the storefront behind Shopify's password page, per a results map? */
+export function passwordProtectedFrom(results) {
+  return results?.[STOREFRONT_KEY]?.passwordProtected === true;
+}
+
+/**
+ * One result per agent, from a robots verdict, a live fetch status and where
+ * the fetch ended up. Blocked at the edge (403/429) is a block whatever
+ * robots.txt says — a WAF rule is the case W1 found nobody audits. Landing on
+ * /password is neither blocked nor reached: it is the password page, and the
+ * card says so instead of claiming the crawler saw products.
+ */
+export function classifyAccess({ robotsBlocked, status, finalPath = null }) {
   if (robotsBlocked) return { blocked: true, reason: "robots.txt" };
   if (status === 403 || status === 429) return { blocked: true, reason: `edge ${status}` };
   if (status === null || status === undefined) return { blocked: false, reason: "unreachable" };
+  if (typeof finalPath === "string" && /^\/password\/?$/.test(finalPath)) return { blocked: false, reason: "password page" };
   return { blocked: false, reason: "ok" };
 }
 

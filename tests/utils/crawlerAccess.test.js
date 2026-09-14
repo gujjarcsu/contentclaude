@@ -9,12 +9,14 @@ import { code } from "../helpers/code.js";
 import {
   CRAWLERS,
   CRAWLER_NOTE,
+  STOREFRONT_KEY,
   parseRobots,
   groupFor,
   robotsBlocks,
   classifyAccess,
   diffAccess,
   blockedAgents,
+  passwordProtectedFrom,
 } from "../../app/utils/crawlerAccess.js";
 
 describe("the six agents, each explained", () => {
@@ -103,6 +105,21 @@ describe("classifying a live fetch", () => {
     expect(r.blocked).toBe(false);
     expect(r.reason).toBe("unreachable");
   });
+
+  it("landing on /password is neither blocked nor 'ok' — it is the password page", () => {
+    const r = classifyAccess({ robotsBlocked: false, status: 200, finalPath: "/password" });
+    expect(r).toEqual({ blocked: false, reason: "password page" });
+    expect(classifyAccess({ robotsBlocked: false, status: 200, finalPath: "/" }).reason).toBe("ok");
+    expect(classifyAccess({ robotsBlocked: false, status: 200, finalPath: "/products/x" }).reason).toBe("ok");
+  });
+
+  it("the storefront entry in a results map is read, and never counted as an agent", () => {
+    const results = { [STOREFRONT_KEY]: { passwordProtected: true }, "OAI-SearchBot": { blocked: false } };
+    expect(passwordProtectedFrom(results)).toBe(true);
+    expect(passwordProtectedFrom({})).toBe(false);
+    expect(blockedAgents(results)).toEqual([]);
+    expect(diffAccess({}, results)).toEqual({ newlyBlocked: [], newlyAllowed: [] });
+  });
 });
 
 describe("the diff is the product", () => {
@@ -134,6 +151,14 @@ describe("wiring — a component of the daily walk, against the PRIMARY domain",
 
   it("runs inside the daily catalogue walk, once per shop", () => {
     expect(watch).toMatch(/checkCrawlerAccess\(/);
+  });
+
+  it("asks Shopify whether the storefront is password-protected, once, and the page says so", () => {
+    expect(srv).toMatch(/passwordProtection \{ enabled \}/);
+    expect(watch).toMatch(/storefrontPasswordProtected\(/);
+    const page = code(readFileSync("app/routes/app.attention.jsx", "utf8"));
+    expect(page).toMatch(/password-protected/);
+    expect(page).toMatch(/crawler\.passwordProtected/);
   });
 
   it("Home surfaces a blocked AI crawler", () => {

@@ -15,10 +15,34 @@
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { shopifyQuery } from "./shopifyQuery.server.js";
-import { CRAWLERS, robotsBlocks, classifyAccess, diffAccess, blockedAgents } from "./crawlerAccess.js";
+import {
+  CRAWLERS,
+  STOREFRONT_KEY,
+  robotsBlocks,
+  classifyAccess,
+  diffAccess,
+  blockedAgents,
+  passwordProtectedFrom,
+} from "./crawlerAccess.js";
 
 export const FETCH_TIMEOUT_MS = 6_000;
 const DOMAIN_QUERY = `query primaryDomain { shop { primaryDomain { url } myshopifyDomain } }`;
+// Validated against the Admin schema 2026-09-14. Every dev store and every
+// pre-launch merchant has this on; while it is on, Shopify returns null for
+// every product's onlineStoreUrl and 200 on /password to every crawler, so
+// both the grading and the crawler card must know about it or they lie.
+const PASSWORD_QUERY = `query storefrontPassword { onlineStore { passwordProtection { enabled } } }`;
+
+/** true / false, or null if Shopify would not say (grade as public then). */
+export async function storefrontPasswordProtected(graphql, shop) {
+  try {
+    const r = await shopifyQuery(graphql, PASSWORD_QUERY, {}, { shop, label: "storefront password" });
+    const enabled = r.ok ? r.data?.onlineStore?.passwordProtection?.enabled : null;
+    return typeof enabled === "boolean" ? enabled : null;
+  } catch {
+    return null;
+  }
+}
 
 async function fetchWithTimeout(url, init = {}) {
   const ctl = new AbortController();
@@ -42,14 +66,27 @@ export async function storefrontOrigin(graphql, shop) {
 /**
  * Check every agent, persist the row, and say what changed since last time.
  *
- * @returns {Promise<{ok: boolean, origin: string|null, robotsSeen: boolean,
+ * @param {{now?: Date, passwordProtected?: boolean|null}} [opts] pass the
+ *   password state if the caller already asked Shopify; otherwise asked here.
+ * @returns {Promise<{ok: boolean, origin: string|null, robotsSeen: boolean, passwordProtected: boolean,
  *   results: object, blocked: string[], newlyBlocked: string[], newlyAllowed: string[]}>}
  */
-export async function checkCrawlerAccess(graphql, shop, { now = new Date() } = {}) {
-  const empty = { ok: false, origin: null, robotsSeen: false, results: {}, blocked: [], newlyBlocked: [], newlyAllowed: [] };
+export async function checkCrawlerAccess(graphql, shop, { now = new Date(), passwordProtected } = {}) {
+  const empty = {
+    ok: false,
+    origin: null,
+    robotsSeen: false,
+    passwordProtected: false,
+    results: {},
+    blocked: [],
+    newlyBlocked: [],
+    newlyAllowed: [],
+  };
   try {
     const origin = await storefrontOrigin(graphql, shop);
     if (!origin) return empty;
+    const locked =
+      typeof passwordProtected === "boolean" ? passwordProtected : (await storefrontPasswordProtected(graphql, shop)) === true;
 
     let robotsText = "";
     let robotsSeen = false;
@@ -63,17 +100,23 @@ export async function checkCrawlerAccess(graphql, shop, { now = new Date() } = {
       robotsSeen = false;
     }
 
-    const results = {};
+    const results = { [STOREFRONT_KEY]: { passwordProtected: locked } };
     for (const agent of CRAWLERS) {
       const robotsBlocked = robotsSeen ? robotsBlocks(robotsText, agent, "/") : false;
       let status = null;
+      let finalPath = null;
       try {
         const r = await fetchWithTimeout(`${origin}/`, { method: "GET", headers: { "user-agent": `Mozilla/5.0 (compatible; ${agent}; +https://navaal.ai)` } });
         status = r.status;
+        try {
+          finalPath = new URL(r.url).pathname;
+        } catch {
+          finalPath = null;
+        }
       } catch {
         status = null;
       }
-      results[agent] = { status, ...classifyAccess({ robotsBlocked, status }) };
+      results[agent] = { status, ...classifyAccess({ robotsBlocked, status, finalPath }) };
     }
 
     const previous = await prisma.crawlerAccess.findFirst({
@@ -97,7 +140,7 @@ export async function checkCrawlerAccess(graphql, shop, { now = new Date() } = {
     if (newlyBlocked.length || newlyAllowed.length) {
       logger.info({ shop, event: "crawler_access_changed", newlyBlocked, newlyAllowed }, "crawler access changed");
     }
-    return { ok: true, origin, robotsSeen, results, blocked, newlyBlocked, newlyAllowed };
+    return { ok: true, origin, robotsSeen, passwordProtected: locked, results, blocked, newlyBlocked, newlyAllowed };
   } catch (err) {
     logger.warn({ shop, err: err?.message, event: "crawler_access_failed" }, "crawler access check failed (non-fatal)");
     return empty;
@@ -113,7 +156,7 @@ export async function latestCrawlerAccess(shop, { now = new Date() } = {}) {
       take: 2,
       select: { results: true, checkedAt: true, robotsSeen: true },
     });
-    if (rows.length === 0) return { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
+    if (rows.length === 0) return { available: false, passwordProtected: false, blocked: [], newlyBlocked: [], checkedAt: null };
     const parse = (r) => {
       try {
         return JSON.parse(r.results);
@@ -126,11 +169,12 @@ export async function latestCrawlerAccess(shop, { now = new Date() } = {}) {
     const recent = now.getTime() - new Date(rows[0].checkedAt).getTime() < 36 * 3600 * 1000;
     return {
       available: true,
+      passwordProtected: passwordProtectedFrom(latest),
       blocked: blockedAgents(latest),
       newlyBlocked: recent ? diffAccess(prev, latest).newlyBlocked : [],
       checkedAt: rows[0].checkedAt.toISOString(),
     };
   } catch {
-    return { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
+    return { available: false, passwordProtected: false, blocked: [], newlyBlocked: [], checkedAt: null };
   }
 }

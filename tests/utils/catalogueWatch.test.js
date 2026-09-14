@@ -192,3 +192,25 @@ describe("wiring — the number is told, daily and on Home", () => {
     expect(GDPR_SHOP_MODELS).toContain("crawlerAccess");
   });
 });
+
+describe("the first walk is not 'since yesterday'", () => {
+  const first = new Date("2026-09-14T08:04:00Z");
+  const later = new Date("2026-09-14T14:00:00Z");
+  const stamp = (d) => JSON.stringify({ [KIND.PRODUCT_TYPE_MISSING]: d.toISOString() });
+
+  it("everything stamped in the first walk counts as needing attention but not as new", () => {
+    const rows = [{ attention: stamp(first) }, { attention: stamp(first) }];
+    const s = summarise(rows, later, { firstWalkAt: first });
+    expect(s.needAttention).toBe(2);
+    expect(s.sinceYesterday).toBe(0);
+  });
+
+  it("a kind stamped after the first-walk grace IS new", () => {
+    const rows = [{ attention: stamp(first) }, { attention: stamp(new Date(first.getTime() + 2 * 3600 * 1000)) }];
+    expect(summarise(rows, later, { firstWalkAt: first }).sinceYesterday).toBe(1);
+  });
+
+  it("without a first-walk date the old rule holds", () => {
+    expect(summarise([{ attention: stamp(first) }], later).sinceYesterday).toBe(1);
+  });
+});

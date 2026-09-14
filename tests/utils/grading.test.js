@@ -80,6 +80,15 @@ describe("blocking: what a surface cannot list without", () => {
   it("no title blocks the feed", () => {
     expect(fields(gradeProduct(complete({ title: "  " })), GRADE.BLOCKING, SURFACE.OPENAI)).toEqual(["title"]);
   });
+
+  it("a password-protected storefront nulls every URL — that is one shop-level fact, not a finding per product", () => {
+    const g = gradeProduct(complete({ onlineStoreUrl: null }), { storefrontPublic: false });
+    expect(g.findings).toEqual([]);
+    expect(g.blocking).toBe(0);
+    // and everything else is still graded while locked
+    const h = gradeProduct(complete({ onlineStoreUrl: null, vendor: "" }), { storefrontPublic: false });
+    expect(fields(h, GRADE.BLOCKING, SURFACE.OPENAI)).toEqual(["brand"]);
+  });
 });
 
 describe("degrading: listed, but worse", () => {
@@ -204,7 +213,7 @@ describe("wiring — the same walk grades, persists, and shows", () => {
   });
 
   it("grades are persisted by the same upsert as the diff", () => {
-    expect(srv).toMatch(/gradeProduct\(node\)/);
+    expect(srv).toMatch(/gradeProduct\(node, \{ storefrontPublic \}\)/);
     expect(srv).toMatch(/blocking: g\.blocking/);
   });
 

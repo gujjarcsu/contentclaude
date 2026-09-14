@@ -157,14 +157,23 @@ export function diffProduct(prev, next, { hasContent, watchStartedAt, now = new 
 }
 
 /**
+ * Everything the first walk stamps is stamped "now" — a standing gap seen for
+ * the first time is not "since yesterday", it is since forever. Kinds stamped
+ * within this long of the first walk do not count as new.
+ */
+export const FIRST_WALK_GRACE_MS = 60 * 60 * 1000;
+
+/**
  * The one merchant-facing number, and its "since yesterday" companion.
  *
  * @param {Array<{attention: string|object}>} rows
  * @param {Date} [now]
+ * @param {{firstWalkAt?: Date|null}} [ctx] when this shop was first walked
  * @returns {{needAttention: number, sinceYesterday: number, byKind: Record<string, number>}}
  */
-export function summarise(rows, now = new Date()) {
+export function summarise(rows, now = new Date(), { firstWalkAt = null } = {}) {
   const dayAgo = now.getTime() - 24 * 3600 * 1000;
+  const firstWalkEnd = firstWalkAt instanceof Date && Number.isFinite(firstWalkAt.getTime()) ? firstWalkAt.getTime() + FIRST_WALK_GRACE_MS : -Infinity;
   let needAttention = 0;
   let sinceYesterday = 0;
   const byKind = {};
@@ -175,7 +184,7 @@ export function summarise(rows, now = new Date()) {
     needAttention++;
     for (const k of kinds) byKind[k] = (byKind[k] ?? 0) + 1;
     const earliest = Math.min(...kinds.map((k) => new Date(att[k]).getTime()).filter(Number.isFinite));
-    if (Number.isFinite(earliest) && earliest > dayAgo) sinceYesterday++;
+    if (Number.isFinite(earliest) && earliest > dayAgo && earliest > firstWalkEnd) sinceYesterday++;
   }
   return { needAttention, sinceYesterday, byKind };
 }
@@ -217,6 +226,13 @@ export function attentionSentence({ needAttention, sinceYesterday }) {
  *
  * Draft products are not graded. A draft is not for sale, and "your 40 drafts
  * are missing something" is a number nobody asked for.
+ *
+ * A password-protected storefront (every dev store, every pre-launch
+ * merchant) makes Shopify return null for every product's onlineStoreUrl —
+ * confirmed live 2026-09-14 on two dev stores and in Shopify's own forums. The
+ * URL findings are therefore skipped when `storefrontPublic` is false: "not on
+ * the Online Store channel" would be untrue, and the page says the true thing
+ * once, at shop level, instead.
  * ────────────────────────────────────────────────────────────────────────── */
 
 export const SURFACE = Object.freeze({ OPENAI: "openai", GOOGLE: "google" });
@@ -238,10 +254,12 @@ export const GENERIC_OPTION_NAMES = Object.freeze(new Set(["title", "default tit
  * @param {object} node a Shopify product with title, description, vendor,
  *   status, onlineStoreUrl, productType, hasOnlyDefaultVariant,
  *   featuredImage { url altText }, options [{ name }], variants.nodes [{ barcode }]
+ * @param {{storefrontPublic?: boolean}} [ctx] false while the storefront is
+ *   password-protected — onlineStoreUrl is null for everything then.
  * @returns {{findings: Array<{surface: string|null, grade: string, field: string, note: string}>,
  *   blocking: number, degrading: number, cosmetic: number, skipped?: string}}
  */
-export function gradeProduct(node) {
+export function gradeProduct(node, { storefrontPublic = true } = {}) {
   const findings = [];
   const add = (surface, grade, field, note) => findings.push({ surface, grade, field, note });
   const tally = () => {
@@ -275,7 +293,10 @@ export function gradeProduct(node) {
       `Under ${EVIDENCE_MIN_CHARS} characters — a label, not something an answer can quote. Listed, but with little to say.`,
     );
   }
-  if (!url) {
+  // A locked storefront nulls every URL; that is one shop-level fact, not a
+  // finding on each product.
+  const noUrl = storefrontPublic && !url;
+  if (noUrl) {
     add(
       SURFACE.OPENAI,
       GRADE.BLOCKING,
@@ -307,7 +328,7 @@ export function gradeProduct(node) {
   }
 
   // ── Google Search ────────────────────────────────────────────────────────
-  if (!url) {
+  if (noUrl) {
     add(SURFACE.GOOGLE, GRADE.BLOCKING, "url", "Not on the Online Store channel, so there is no page for Google to crawl.");
   }
   if (desc && desc.length < EVIDENCE_MIN_CHARS) {

@@ -17,7 +17,7 @@
  */
 import prisma from "../app/db.server.js";
 import { runCatalogueWatchForAllShops } from "../app/utils/catalogueWatch.server.js";
-import { summarise } from "../app/utils/catalogueWatch.js";
+import { summarise, parseFindings } from "../app/utils/catalogueWatch.js";
 
 const t0 = Date.now();
 const out = { readAt: new Date().toISOString() };
@@ -46,14 +46,34 @@ out.eligibility = {
   productsWithDegrading: await prisma.productWatch.count({ where: { degrading: { gt: 0 } } }),
   cosmeticOnly: await prisma.productWatch.count({ where: { blocking: 0, degrading: 0, cosmetic: { gt: 0 } } }),
 };
+// Which field, on which surface, across every graded product — the first read
+// on what real catalogues actually lack. Aggregated; no shop, no product.
+const graded = await prisma.productWatch.findMany({ where: { grade: { not: null } }, select: { grade: true } });
+const byField = {};
+for (const g of graded) {
+  for (const f of parseFindings(g.grade)) {
+    const key = `${f.surface ?? "shopify"}·${f.field}·${f.grade}`;
+    byField[key] = (byField[key] ?? 0) + 1;
+  }
+}
+out.eligibility.byField = Object.fromEntries(Object.entries(byField).sort((a, b) => b[1] - a[1]));
+
 const crawlerRows = await prisma.crawlerAccess.findMany({
   where: { checkedAt: { gte: new Date(t0 - 60_000) } },
-  select: { blocked: true, robotsSeen: true },
+  select: { blocked: true, robotsSeen: true, results: true },
 });
+const locked = (r) => {
+  try {
+    return JSON.parse(r.results)?._storefront?.passwordProtected === true;
+  } catch {
+    return false;
+  }
+};
 out.crawler = {
   shopsChecked: crawlerRows.length,
   shopsWithABlockedAgent: crawlerRows.filter((r) => r.blocked > 0).length,
   shopsWithRobotsTxt: crawlerRows.filter((r) => r.robotsSeen).length,
+  shopsPasswordProtected: crawlerRows.filter(locked).length,
 };
 out.ms = Date.now() - t0;
 
@@ -63,7 +83,8 @@ out.verdict =
     : `Walked ${out.run.walked} shop(s) (${out.run.partial} partial, ${out.run.skipped} skipped, ${out.run.failed} failed). ` +
       `${out.productsWatched} products under watch; ${out.acrossShops.needAttention} need attention across ${out.shopsWithAttention} shop(s). ` +
       `${out.eligibility.graded} graded: ${out.eligibility.productsWithBlocking} with a blocking gap, ${out.eligibility.productsWithDegrading} degrading. ` +
-      `Crawlers checked on ${out.crawler.shopsChecked} shop(s); ${out.crawler.shopsWithABlockedAgent} block at least one.`;
+      `Crawlers checked on ${out.crawler.shopsChecked} shop(s); ${out.crawler.shopsWithABlockedAgent} block at least one; ` +
+      `${out.crawler.shopsPasswordProtected} password-protected.`;
 
 console.log(JSON.stringify(out, null, 2));
 await prisma.$disconnect();

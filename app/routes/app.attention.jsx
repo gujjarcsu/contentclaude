@@ -189,6 +189,12 @@ export default function AttentionPage() {
                 Checked every night against your storefront. The first result appears after tonight's
                 check.
               </Text>
+            ) : crawler.passwordProtected ? (
+              <Text as="p" variant="bodySm">
+                Your storefront is password-protected, so every crawler — and every shopper — gets the
+                password page instead of your products. That is expected before launch. Remove the
+                password when you open and we check again the same night.
+              </Text>
             ) : crawler.blocked.length === 0 ? (
               <Text as="p" variant="bodySm">
                 All six search and AI crawlers reached your storefront when we last checked
@@ -240,6 +246,9 @@ export default function AttentionPage() {
             <Text as="p" variant="bodySm" tone="subdued">
               {summary.blocking} of {summary.graded} products cannot be listed by at least one surface
               as they stand; {summary.degrading} would be listed but shown worse.
+              {crawler.passwordProtected
+                ? " Your storefront is password-protected, so nothing is listed anywhere yet — this is what each surface will ask for the day it opens."
+                : ""}
             </Text>
             {gaps.map((r) => (
               <Card key={r.productId}>

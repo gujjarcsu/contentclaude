@@ -40,7 +40,7 @@ import { shopifyQuery } from "./shopifyQuery.server.js";
 import { getFreshOfflineSession } from "./offlineToken.server.js";
 import { scopeForShop, scopeQueryFor } from "./candidates.server.js";
 import { sydneyParts } from "./scheduler.server.js";
-import { checkCrawlerAccess, latestCrawlerAccess } from "./crawlerAccess.server.js";
+import { checkCrawlerAccess, latestCrawlerAccess, storefrontPasswordProtected } from "./crawlerAccess.server.js";
 import { gscState } from "./gscAiControl.js";
 import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
 
@@ -111,8 +111,14 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
 
     // "After the watch began" — first sighting of the whole store must not flag
     // every product as new. With no rows yet this is `now`, so nothing is.
-    const agg = await prisma.productWatch.aggregate({ where: { shop }, _min: { firstSeenAt: true } });
+    const [agg, passwordProtected] = await Promise.all([
+      prisma.productWatch.aggregate({ where: { shop }, _min: { firstSeenAt: true } }),
+      // One shop-level fact the grading and the crawler check both need: a
+      // locked storefront nulls every onlineStoreUrl and answers /password.
+      storefrontPasswordProtected(graphql, shop),
+    ]);
     const watchStartedAt = agg?._min?.firstSeenAt ?? now;
+    const storefrontPublic = passwordProtected !== true;
 
     for (;;) {
       if (pages >= WATCH_MAX_PAGES || (pages > 0 && Date.now() - t0 >= budgetMs)) {
@@ -143,7 +149,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
           const next = snapshotFromNode(node);
           const prev = prevById.get(next.productId) ?? null;
           const attention = diffProduct(prev, next, { hasContent: hasContent.has(next.productId), watchStartedAt, now });
-          const g = gradeProduct(node);
+          const g = gradeProduct(node, { storefrontPublic });
           const data = {
             title: next.title,
             handle: next.handle,
@@ -179,16 +185,16 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
     // read and six GETs, diffed against yesterday's row. Never throws.
     let crawlerResult = null;
     if (crawler === "background") {
-      void checkCrawlerAccess(graphql, shop, { now });
+      void checkCrawlerAccess(graphql, shop, { now, passwordProtected });
     } else if (crawler) {
-      crawlerResult = await checkCrawlerAccess(graphql, shop, { now });
+      crawlerResult = await checkCrawlerAccess(graphql, shop, { now, passwordProtected });
     }
 
     const [rows, blocking] = await Promise.all([
       prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
       prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
     ]);
-    const s = summarise(rows, now);
+    const s = summarise(rows, now, { firstWalkAt: watchStartedAt });
     const crawlerBlocked = crawlerResult?.ok ? crawlerResult.blocked.length : null;
     logger.info(
       { shop, event: "catalogue_watch_ran", scanned, updated, partial, ...s, blocking, crawlerBlocked, ms: Date.now() - t0 },
@@ -239,11 +245,11 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       prisma.productWatch.count({ where: { shop, degrading: { gt: 0 } } }),
       prisma.productWatch.count({ where: { shop, grade: { not: null } } }),
       latestCrawlerAccess(shop, { now }),
-      prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true } }),
+      prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true }, _min: { firstSeenAt: true } }),
       // P2.5 — the merchant's own answer to the one check no app can make.
       prisma.growthState.findUnique({ where: { shop }, select: { gscAiControl: true, gscAiControlAt: true } }),
     ]);
-    const s = summarise(rows, now);
+    const s = summarise(rows, now, { firstWalkAt: lastRun?._min?.firstSeenAt ?? null });
     return {
       available: everWalked,
       everWalked,
