@@ -21,7 +21,7 @@ vi.mock("@prisma/client", () => ({
 vi.mock("../../app/db.server.js", () => ({
   default: {
     plan: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    usageRecord: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
+    usageRecord: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn(), update: vi.fn() },
     session: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -407,5 +407,40 @@ describe("tryConsumeGeneration — P2034 retry", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.isContention).toBe(true);
+  });
+});
+
+describe("recordTokensUsed — the column that was written as a literal 0 for its whole life", () => {
+  beforeEach(() => {
+    prisma.usageRecord.update.mockReset();
+    prisma.usageRecord.update.mockResolvedValue({});
+  });
+
+  it("charges a real token count to the record", async () => {
+    const { recordTokensUsed } = await import("../../app/utils/plans.server.js");
+    await expect(recordTokensUsed("ur_9", 1860)).resolves.toBe(true);
+    expect(prisma.usageRecord.update).toHaveBeenCalledWith({
+      where: { id: "ur_9" },
+      // INCREMENT, not set: one logical generation can be several API calls —
+      // a retry, or the two behind a two-option comparison — and each reports
+      // its own usage.
+      data: { tokensUsed: { increment: 1860 } },
+    });
+  });
+
+  it("writes nothing when there is no record or no tokens", async () => {
+    const { recordTokensUsed } = await import("../../app/utils/plans.server.js");
+    expect(await recordTokensUsed(null, 100)).toBe(false);
+    expect(await recordTokensUsed("ur_9", 0)).toBe(false);
+    expect(await recordTokensUsed("ur_9", NaN)).toBe(false);
+    expect(prisma.usageRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("NEVER throws — the content is already produced and the credit already spent", async () => {
+    // A failure here is a lost statistic, not a lost generation. If this ever
+    // rejects, a merchant loses content they have already been charged for.
+    prisma.usageRecord.update.mockRejectedValue(new Error("db down"));
+    const { recordTokensUsed } = await import("../../app/utils/plans.server.js");
+    await expect(recordTokensUsed("ur_9", 500)).resolves.toBe(false);
   });
 });
