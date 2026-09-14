@@ -5046,3 +5046,34 @@ tested; the query waits on P0.10 (Level 2) — routed (F9). P3.5: scoped, not st
 **Read → change → read, every time:** 978bcb8 ttv-03 first run (headline labelled, credits sentence,
 product badge), Home 75 s later (*"Welcome, Navaal TTV 03!"*, drafts counted immediately), then
 the 4/5 disagreement, then 5/5 at `a3fa978`. Tests 3,787 → 3,946.
+
+## Phase 9 — the contract says what the code does, the grading debt, BFS (2026-09-14)
+
+**Part A (`dd12c8f`).** One `CREDIT_RESET_SENTENCE` rendered on `/terms` and the plans page; a test
+that a retyped copy fails, that the rendered page carries it, that `sumMonthlyCredits` is keyed on
+`UsageRecord.month` and no usage query in `app/` is windowed on the billing period. Every
+subprocessor carries its transfer basis and DPA link (all seven answered 200); an *International
+transfers* section is generated from that list and the build fails if a processor is added without
+a basis.
+
+**Part B (`d7ff839`).** F3: the walk takes a second look — `nodes(ids) × variants(first: 50)`, ten
+products a call, validated — at exactly the products that need it, and the grader takes what was
+read; the fixture with a barcode on variant 2 fails the old grader and passes now. F5:
+`featuredMedia`, readers accept both shapes. F6: nightly sample 20/50/100/200 by plan, attention
+first, said on the screen. F4: per-shop first-walk grace in the script. The product page's badge
+carries the product's own status like the list does. Tests 3,963 → 3,976.
+
+**Part C (`ae731f3` red — README hygiene; `6d7f556`).** `docs/navaal/BFS-AUDIT.md`: six criteria,
+evidence and a test each (`tests/docs/bfsAudit.test.js`); App Bridge pinned first-in-head on
+`root.jsx`; a client bundle budget in CI after the build (64 KB / 256 KB / 1 MB; today 50.2 / 196.6
+/ 850.7 KB); both extension blocks proved pure Liquid; Asset API and `write_themes` grepped absent;
+nav / primary / no-incentive tests cited; uninstall tests cited. **The storefront Lighthouse number
+is not measured** — every dev store is password-protected; the harness refuses a password page and
+waits on F10 (backlog F13). **26 of 100 calls** on the performance criterion.
+
+**Mine, again:** the suite ran red before the Part C push and `;` let the push through — false
+green 15, sibling of 13. `6d7f556` fixed it and the push is now chained on the suite's exit.
+
+**Routed, unchanged:** P3.1 on a real batch (F10), P3.4 (P0.10), P3.5 (F11), Phase 5 (ten merchants).
+**CW:** the Part A second count is still theirs; `/terms` and `/privacy` to re-read at `dd12c8f`; F3 to
+verify on a dev store with a multi-variant product at `6d7f556`.

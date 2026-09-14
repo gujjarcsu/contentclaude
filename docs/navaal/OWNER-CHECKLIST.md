@@ -457,3 +457,23 @@ scheduler, stated on the screen.
 
 **Two decisions filed as backlog rows:** F9 — P3.4 (AI sessions from ShopifyQL) is blocked on the
 Level 2 approval you were already asked to start (P0.10); F10 is the Bing step above.
+
+---
+
+## FYI 2026-09-14 (Phase 9) — READ `BFS-AUDIT.md` BEFORE PRESSING APPLY. Two things, then the button is yours.
+
+`docs/navaal/BFS-AUDIT.md` is the code-side audit: six criteria, one paragraph of evidence and one
+regression test each. Four hold today and are pinned by tests; two are not this file's to decide:
+
+1. **The 100 calls.** The performance criterion needs p75 over ≥100 admin sessions; CW read **26 of
+   100** on 14 Sep. It moves only when real merchants use the app. Nothing to do but wait — and not
+   press Apply before it reads 100, because failing the same criterion three times suspends
+   applications for three months.
+2. **The storefront number** (criterion 3) needs one dev storefront public for two Lighthouse runs —
+   the same F10 step as the Bing key. Twenty minutes, once, unblocks both.
+
+**Also today:** `/terms` and the plans page now say *"Credits reset on the first of each calendar
+month, whatever your billing date. Your first, partial month carries a full allowance."* from one
+constant; `/privacy` carries an *International transfers* section generated from the processor
+list with each processor's DPA linked. Counsel reads both before the tenth merchant — that was
+already yours.

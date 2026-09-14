@@ -378,3 +378,10 @@ that is linked from the listing is the one that counts.
   sanity: searching `navaal` returns slot 1.
 - App history in the Partner Dashboard renders in **local AEST**; the Versions page renders in
   **+0000**. Convert before comparing either to a commit time.
+
+**15. The suite ran, showed red, and a `;` let the push through.** Phase 9 Part C: `npx vitest run
+… | head; git add …; git commit …; git push`. The suite printed one failure (a hygiene test) and the
+next command ran anyway because `;` does not care. Same family as 13 (a pipe returned the wrong
+exit) — a gate that is *displayed* is not a gate that is *enforced*. **The rule: capture the exit
+code and branch on it** — `npx vitest run > log; rc=$?; if [ $rc -eq 0 ]; then … push …; fi` — and
+never `;` between a check and a push. `6d7f556` is the fix; `ae731f3` never deployed.
