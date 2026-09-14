@@ -118,6 +118,7 @@ Before claiming a pass, check you are not repeating one of these:
 8. A page-wide scan that counted content belonging to someone else's app.
 9. A read that was fresh while the cached value behind it was not.
 10. Two sections in one file answering to the same name, the dead one first.
+11. An exported constant with a passing test and no consumer, while a hardcoded copy ships.
 
 ---
 
@@ -152,3 +153,25 @@ introduced by appending a new section instead of replacing the old one.
 *"Target page, context or browser has been closed"* unless `libxdamage1` is extracted by hand
 (`apt-get download libxdamage1; dpkg-deb -x`) and `LD_LIBRARY_PATH` points at it. That error reads
 exactly like a broken harness and is not one.
+
+**11. An exported constant, a green test, and no consumer — while a hardcoded copy ships.**
+Found 2026-09-14, after Phase 4 reported three verified ship gates:
+
+```
+app/utils/billing-plans.js:32        export const TRIAL_DAYS = 14;
+tests/utils/trialCredits.test.js:76  expect(TRIAL_DAYS).toBe(14);
+app/shopify.server.js:37             ... trialDays: 7 ...      <-- what Shopify actually receives
+```
+
+`TRIAL_DAYS` was imported by **nothing but its own test**. Production granted a **7-day** trial
+while the locked table, the constant and a passing assertion all said 14 — unchanged across four
+shas. And H12 had already been posted telling CW the app billed the locked numbers, so the next
+move was to publish "14 days" onto a live Shopify listing the app does not honour.
+
+**The rule, and it is two rules.** First: `expect(CONST).toBe(literal)` proves a constant equals
+itself and executes no path a merchant can reach — assert on **the object actually handed to the
+external service**, every key, and verify by breaking it. Second: **a locked value must have exactly
+one definition and at least one non-test consumer.** Grep for the value, not the name — a second
+hardcoded copy on the path to Shopify or to a screen is what makes the first one decorative. An
+exported constant whose only consumer is a test asserting its own value is dead code that greps as
+shipped.

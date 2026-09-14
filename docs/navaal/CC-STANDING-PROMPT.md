@@ -159,7 +159,7 @@ never substitute one for the other.
 
 The whole constitution applies. These are the ones sessions actually break.
 
-- **L1 — a green test is not evidence.** Break the guard and count the failures. Ten false
+- **L1 — a green test is not evidence.** Break the guard and count the failures. Eleven false
   greens have shipped here. Assume yours is the eighth until you have broken it.
 - **L15 — a feature is not shipped until a merchant can reach it.** A column, a read path, a write
   path and a green suite prove the machinery works, not that anyone can get to the control.
