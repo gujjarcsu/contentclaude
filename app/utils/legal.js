@@ -16,6 +16,8 @@
  * app by one who has. App Store submission requires both.
  */
 
+import { CREDIT_RESET_SENTENCE } from "./credits.js";
+
 export const COMPANY = "Navaal";
 export const APP_NAME = "Navaal: AI SEO, AEO & GEO";
 export const CONTACT_EMAIL = "hello@navaal.ai";
@@ -61,14 +63,33 @@ export const DATA_INVENTORY = [
 
 /** Companies that process data on our behalf. Naming them is the point. */
 export const SUBPROCESSORS = [
-  { name: "Anthropic", role: "Generates the content. Receives your product text, images for alt text, and your brand voice settings.", region: "United States" },
-  { name: "Fly.io", role: "Runs the application.", region: "Sydney, Australia" },
-  { name: "Neon", role: "Hosts the database.", region: "United States" },
-  { name: "Upstash", role: "Queues background jobs.", region: "United States" },
-  { name: "Cloudflare R2", role: "Stores encrypted nightly database backups.", region: "Global" },
-  { name: "Resend", role: "Delivers operational email, including your support questions.", region: "United States" },
-  { name: "Sentry", role: "Receives error reports, which can include a shop domain.", region: "United States" },
+  // A2 (Phase 9) — each carries the transfer basis we rely on and the link to
+  // it, so the "International transfers" section below is GENERATED from this
+  // list and cannot drift when a processor changes. Every URL answered 200 on
+  // 2026-09-14. Not legal advice; counsel reads both pages before the tenth
+  // merchant (OWNER-CHECKLIST.md).
+  { name: "Anthropic", role: "Generates the content. Receives your product text, images for alt text, and your brand voice settings.", region: "United States", basis: "Anthropic's Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://www.anthropic.com/legal/data-processing-addendum" },
+  { name: "Fly.io", role: "Runs the application.", region: "Sydney, Australia", basis: "a United States company whose machines for this app run in Sydney; its Data Privacy Framework certification and privacy terms", dpaUrl: "https://fly.io/legal/data-privacy-framework/" },
+  { name: "Neon", role: "Hosts the database.", region: "United States", basis: "Neon's Data Processing Agreement, which incorporates standard contractual clauses", dpaUrl: "https://neon.com/dpa" },
+  { name: "Upstash", role: "Queues background jobs.", region: "United States", basis: "Upstash's Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://upstash.com/static/trust/dpa.pdf" },
+  { name: "Cloudflare R2", role: "Stores encrypted nightly database backups.", region: "Global", basis: "Cloudflare's Customer Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://www.cloudflare.com/cloudflare-customer-dpa/" },
+  { name: "Resend", role: "Delivers operational email, including your support questions.", region: "United States", basis: "Resend's Data Processing Addendum and its EU-US Data Privacy Framework certification", dpaUrl: "https://resend.com/legal/dpa" },
+  { name: "Sentry", role: "Receives error reports, which can include a shop domain.", region: "United States", basis: "Sentry's Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://sentry.io/legal/dpa/" },
 ];
+
+/**
+ * A2 (Phase 9) — the international-transfers section, generated from the
+ * processor list above. Add a processor there and it appears here with its
+ * basis and link; forget the basis and the legal test fails the build.
+ */
+export const TRANSFER_SECTION = {
+  h: "International transfers",
+  p: [
+    `${COMPANY} operates from Australia. Some of the companies above are outside Australia, so data we send them leaves the country. For each one we rely on the transfer basis it publishes, linked here:`,
+    ...SUBPROCESSORS.map((s) => `<b>${s.name}</b> (${s.region}) — ${s.basis}: <a href="${s.dpaUrl}" rel="noopener">${s.dpaUrl.replace(/^https?:\/\//, "")}</a>.`),
+    "If a processor changes, this list and this section change with it and the date at the top changes too. This page describes what we do; it is not legal advice.",
+  ],
+};
 
 export const PRIVACY_SECTIONS = [
   {
@@ -108,6 +129,7 @@ export const PRIVACY_SECTIONS = [
     p: ["These companies process data on our behalf. Each does one job."],
     subprocessors: true,
   },
+  TRANSFER_SECTION,
   {
     h: "How long we keep it",
     p: [
@@ -153,7 +175,7 @@ export const TERMS_SECTIONS = [
     p: [
       "Billing runs through Shopify. We never see your card.",
       "A <b>credit</b> is one generation. A product description, a meta title and description, or FAQ content each cost 1 credit. Image alt text costs nothing. A blog post costs 3. If you select several content types in one run, you are charged the most expensive one, not the sum.",
-      "Credits reset on the first of each calendar month and do not roll over.",
+      `${CREDIT_RESET_SENTENCE} Unused credits do not roll over.`,
       "Paid plans include a 14-day free trial with 250 credits, once per store.",
       "On the Professional plan you may use your own AI key. Generations that use it do not consume credits, because you are paying your provider directly.",
       "Cancel any time from the Plans page. Shopify prorates.",

@@ -32,6 +32,15 @@
  * simply free. It is free *per credit*; it is capped *per product*.
  */
 
+/**
+ * A1 (Phase 9) — the one sentence about when credits reset, said on /terms and
+ * on the plans page from THIS constant, so the two cannot disagree. Decided in
+ * 04-DECISIONS.md: the code resets by calendar month whatever the billing
+ * date (merchant-favourable), and the copy states the consequence.
+ */
+export const CREDIT_RESET_SENTENCE =
+  "Credits reset on the first of each calendar month, whatever your billing date. Your first, partial month carries a full allowance.";
+
 /** Charged nothing. Costs $0.000906 — a thirteenth of a product generation. */
 export const FREE_CONTENT_TYPES = Object.freeze(["altText"]);
 
