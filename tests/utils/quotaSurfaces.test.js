@@ -46,7 +46,7 @@ const {
 } = await import("../../app/utils/quotaSurfaces.server.js");
 
 const SHOP = "a-store.myshopify.com";
-const freePlan = { planName: "free", monthlyLimit: 25, status: "active" };
+const freePlan = { planName: "free", monthlyCredits: 25, status: "active" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -117,7 +117,7 @@ describe("the warning banner appears once, and only where it should", () => {
   });
 
   it("says nothing to a shop already on the top plan — there is nothing honest to sell", async () => {
-    const pro = { planName: "pro", monthlyLimit: 1000, status: "active" };
+    const pro = { planName: "pro", monthlyCredits: 1000, status: "active" };
     expect(
       await getQuotaWarning({ shop: SHOP, plan: pro, usageCount: 900, surface: "dashboard" }),
     ).toBeNull();
@@ -173,13 +173,13 @@ describe("the banner tells the whole truth", () => {
   it("names the plan that covers this rate, and when the free quota resets", async () => {
     const w = await getQuotaWarning({ shop: SHOP, plan: freePlan, usageCount: 22, surface: "dashboard" });
     expect(w.fit).toBeTruthy();
-    expect(w.fit.monthlyLimit).toBeGreaterThan(freePlan.monthlyLimit);
+    expect(w.fit.monthlyCredits).toBeGreaterThan(freePlan.monthlyCredits);
     // Without the reset date the only way out of the banner is to pay, which
     // is untrue: waiting works.
     expect(w.resetDate).toBeTruthy();
     expect(w.planLabel).toBe("Free");
     expect(w.usageCount).toBe(22);
-    expect(w.monthlyLimit).toBe(25);
+    expect(w.monthlyCredits).toBe(25);
   });
 
   it("recommends the plan that actually covers them, not the biggest one", async () => {

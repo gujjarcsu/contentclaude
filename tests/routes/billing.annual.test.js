@@ -33,7 +33,7 @@ vi.mock("../../app/shopify.server", () => ({
 
 const syncBillingToPlan = vi.fn(() => Promise.resolve());
 vi.mock("../../app/utils/plans.server", () => ({
-  getOrCreatePlan: vi.fn(() => Promise.resolve({ planName: "starter", monthlyLimit: 50 })),
+  getOrCreatePlan: vi.fn(() => Promise.resolve({ planName: "starter", monthlyCredits: 50 })),
   getMonthlyUsageCount: vi.fn(() => Promise.resolve(0)),
   syncBillingToPlan: (...a) => syncBillingToPlan(...a),
 }));

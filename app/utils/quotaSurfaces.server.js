@@ -65,14 +65,14 @@ export async function getQuotaWarning({ shop, plan, usageCount, surface, now = n
   try {
     if (!WARN_SURFACES.includes(surface)) return null;
     if (plan?.status && plan.status !== "active") return null;
-    const monthlyLimit = plan?.monthlyLimit ?? 0;
-    if (quotaLevel(usageCount, monthlyLimit) !== "warn") return null;
+    const monthlyCredits = plan?.monthlyCredits ?? 0;
+    if (quotaLevel(usageCount, monthlyCredits) !== "warn") return null;
 
-    const remaining = Math.max(0, monthlyLimit - (usageCount ?? 0));
+    const remaining = Math.max(0, monthlyCredits - (usageCount ?? 0));
     const planName = plan?.planName ?? "free";
     // The fit plan for "keep going at this rate": the merchant is not out yet,
     // so what they need is headroom, not a count of unfinished products.
-    const fit = fitPlanFor({ n: monthlyLimit, currentPlan: planName });
+    const fit = fitPlanFor({ n: monthlyCredits, currentPlan: planName });
     if (!fit) return null; // already on the top plan — nothing honest to sell
 
     const row = await recordPromptCondition({
@@ -83,7 +83,7 @@ export async function getQuotaWarning({ shop, plan, usageCount, surface, now = n
       n: usageCount ?? 0,
       nDefinition: "generations_used",
       remaining,
-      monthlyLimit,
+      monthlyCredits,
       currentPlan: planName,
       fitPlanName: fit.planName,
       monthsToCover: fit.monthsToCover,
@@ -97,9 +97,9 @@ export async function getQuotaWarning({ shop, plan, usageCount, surface, now = n
       promptId: row?.id ?? null,
       from: FROM_WARN,
       usageCount: usageCount ?? 0,
-      monthlyLimit,
+      monthlyCredits,
       remaining,
-      pct: quotaPct(usageCount, monthlyLimit),
+      pct: quotaPct(usageCount, monthlyCredits),
       planName,
       planLabel: PLAN_LABELS[planName] ?? planName,
       monthName: fmtMonth(now),

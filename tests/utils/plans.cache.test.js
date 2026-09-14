@@ -28,7 +28,7 @@ vi.mock("../../app/db.server.js", () => ({
         shop: "warm-cache.myshopify.com",
         planName: "growth",
         status: "active",
-        monthlyLimit: 200,
+        monthlyCredits: 200,
         shopifyChargeId: "gid://shopify/AppSubscription/1",
         currentPeriodEnd: new Date(PERIOD_END),
         createdAt: new Date("2026-05-01T00:00:00.000Z"),
@@ -62,7 +62,7 @@ describe("getOrCreatePlan date rehydration (Redis JSON round-trip)", () => {
       shop: "free.myshopify.com",
       planName: "free",
       status: "active",
-      monthlyLimit: 25,
+      monthlyCredits: 25,
       shopifyChargeId: null,
       currentPeriodEnd: null,
     });

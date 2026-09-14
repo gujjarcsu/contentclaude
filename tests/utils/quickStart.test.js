@@ -26,7 +26,7 @@ const { prisma, tryConsumeGeneration, refundGeneration } = vi.hoisted(() => ({
     generatedContent: { findUnique: vi.fn(), findMany: vi.fn(async () => []), upsert: vi.fn() },
     usageRecord: { findFirst: vi.fn(async () => null), count: vi.fn(async () => 0) },
     brandVoice: { findUnique: vi.fn(async () => null) },
-    plan: { findUnique: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })) },
+    plan: { findUnique: vi.fn(async () => ({ planName: "free", monthlyCredits: 25 })) },
   },
   tryConsumeGeneration: vi.fn(async () => ({ allowed: true, remaining: 24 })),
   refundGeneration: vi.fn(async () => true),
@@ -39,7 +39,7 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 vi.mock("../../app/utils/plans.server.js", () => ({
   tryConsumeGeneration,
   refundGeneration,
-  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })),
+  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyCredits: 25 })),
   getMonthlyUsageCount: vi.fn(async () => 1),
 }));
 vi.mock("../../app/utils/cache.server.js", () => ({ getCache: vi.fn(async (_k, fn) => fn()) }));

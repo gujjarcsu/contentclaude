@@ -33,11 +33,11 @@ vi.mock("../../app/db.server.js", () => ({
 
 vi.mock("../../app/utils/billing-plans.js", () => ({
   BILLING_PLANS: {
-    starter: { key: "Starter Plan", planName: "starter", amount: 9.99, monthlyLimit: 50 },
-    growth: { key: "Growth Plan", planName: "growth", amount: 29.99, monthlyLimit: 200 },
-    pro: { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyLimit: 1000 },
+    starter: { key: "Starter Plan", planName: "starter", amount: 9.99, monthlyCredits: 50 },
+    growth: { key: "Growth Plan", planName: "growth", amount: 29.99, monthlyCredits: 200 },
+    pro: { key: "Professional Plan", planName: "pro", amount: 79.99, monthlyCredits: 1000 },
   },
-  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyLimit: 25 },
+  FREE_PLAN: { key: null, planName: "free", amount: 0, monthlyCredits: 25 },
 }));
 
 vi.mock("../../app/utils/cache.server.js", () => ({
@@ -62,7 +62,7 @@ describe("getPlanByKey", () => {
   it("returns the matching plan definition", () => {
     const plan = getPlanByKey("Starter Plan");
     expect(plan.planName).toBe("starter");
-    expect(plan.monthlyLimit).toBe(50);
+    expect(plan.monthlyCredits).toBe(50);
   });
 
   it("returns null for unknown keys", () => {
@@ -85,7 +85,7 @@ describe("canGenerate", () => {
     prisma.plan.upsert.mockResolvedValue({
       planName: "free",
       status: "active",
-      monthlyLimit: 10,
+      monthlyCredits: 10,
     });
     prisma.usageRecord.count.mockResolvedValue(3);
 
@@ -100,7 +100,7 @@ describe("canGenerate", () => {
     prisma.plan.upsert.mockResolvedValue({
       planName: "free",
       status: "active",
-      monthlyLimit: 10,
+      monthlyCredits: 10,
     });
     prisma.usageRecord.count.mockResolvedValue(10);
 
@@ -114,7 +114,7 @@ describe("canGenerate", () => {
     prisma.plan.upsert.mockResolvedValue({
       planName: "starter",
       status: "frozen",
-      monthlyLimit: 50,
+      monthlyCredits: 50,
     });
     prisma.usageRecord.count.mockResolvedValue(0);
 
@@ -143,7 +143,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           findUnique: vi.fn().mockResolvedValue({
             planName: "starter",
             status: "active",
-            monthlyLimit: 50,
+            monthlyCredits: 50,
           }),
         },
         usageRecord: {
@@ -170,7 +170,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           findUnique: vi.fn().mockResolvedValue({
             planName: "free",
             status: "active",
-            monthlyLimit: 10,
+            monthlyCredits: 10,
           }),
         },
         usageRecord: {
@@ -218,7 +218,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           findUnique: vi.fn().mockResolvedValue({
             planName: "free",
             status: "active",
-            monthlyLimit: 25,
+            monthlyCredits: 25,
           }),
         },
         usageRecord: {
@@ -248,7 +248,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
           findUnique: vi.fn().mockResolvedValue({
             planName: "free",
             status: "active",
-            monthlyLimit: 25,
+            monthlyCredits: 25,
           }),
         },
         usageRecord: {
@@ -273,7 +273,7 @@ describe("tryConsumeGeneration (atomic gate)", () => {
 describe("FREE_PLAN constant", () => {
   it("has correct default values", () => {
     expect(FREE_PLAN.planName).toBe("free");
-    expect(FREE_PLAN.monthlyLimit).toBe(25);
+    expect(FREE_PLAN.monthlyCredits).toBe(25);
     expect(FREE_PLAN.amount).toBe(0);
     expect(FREE_PLAN.key).toBeNull();
   });

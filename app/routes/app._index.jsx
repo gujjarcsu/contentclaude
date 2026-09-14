@@ -219,8 +219,8 @@ export const loader = async ({ request }) => {
   const start = isFirstRun
     ? {
         targetCount: START_TARGETS,
-        remaining: Math.max(0, plan.monthlyLimit - usageCount),
-        monthlyLimit: plan.monthlyLimit,
+        remaining: Math.max(0, plan.monthlyCredits - usageCount),
+        monthlyCredits: plan.monthlyCredits,
         // The Start copy says "free generations" only on the free plan; a
         // merchant paying for Pro must not be told their allowance is free.
         planName: plan.planName,
@@ -256,7 +256,7 @@ export const loader = async ({ request }) => {
     quotaWarning,
     storeScore,
     autopilotRecap,
-    plan: { planName: plan.planName, monthlyLimit: plan.monthlyLimit },
+    plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
     storeName,
     recentlyCompletedJob: recentlyCompletedJob
@@ -631,8 +631,8 @@ export default function Dashboard() {
     return <StartState start={start} navigate={navigate} onRetry={() => revalidator.revalidate()} />;
   }
 
-  const usagePct = quotaPct(usageCount, plan.monthlyLimit);
-  const remaining = Math.max(0, plan.monthlyLimit - usageCount);
+  const usagePct = quotaPct(usageCount, plan.monthlyCredits);
+  const remaining = Math.max(0, plan.monthlyCredits - usageCount);
   const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
 
   // Reaching the monthly quota is "complete", not an error — so the high-usage
@@ -908,7 +908,7 @@ export default function Dashboard() {
                   proportion; this shows the count; the line under the bar is
                   the one that carries the reset date. */}
               <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
-                {usageCount} / {plan.monthlyLimit} used
+                {usageCount} / {plan.monthlyCredits} used
               </Text>
             </InlineStack>
 
@@ -921,8 +921,8 @@ export default function Dashboard() {
                 dismissed for a week. */}
             <Text as="p" variant="bodySm" tone="subdued">
               {remaining === 0
-                ? `You've used all ${plan.monthlyLimit} generations for this month. They reset on the 1st.`
-                : `${remaining} of ${plan.monthlyLimit} left this month.`}
+                ? `You've used all ${plan.monthlyCredits} generations for this month. They reset on the 1st.`
+                : `${remaining} of ${plan.monthlyCredits} left this month.`}
             </Text>
           </BlockStack>
         </Box>

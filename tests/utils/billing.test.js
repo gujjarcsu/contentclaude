@@ -43,21 +43,21 @@ vi.mock("../../app/utils/billing-plans.js", () => ({
       key: "Starter Plan",
       planName: "starter",
       amount: 9.99,
-      monthlyLimit: 50,
+      monthlyCredits: 50,
       entitlements: { bulkJobs: false, abVariants: false, autopilot: false },
     },
     growth: {
       key: "Growth Plan",
       planName: "growth",
       amount: 29.99,
-      monthlyLimit: 200,
+      monthlyCredits: 200,
       entitlements: { bulkJobs: true, abVariants: true, autopilot: true },
     },
     pro: {
       key: "Professional Plan",
       planName: "pro",
       amount: 79.99,
-      monthlyLimit: 1000,
+      monthlyCredits: 1000,
       entitlements: { bulkJobs: true, abVariants: true, autopilot: true },
     },
   },
@@ -65,7 +65,7 @@ vi.mock("../../app/utils/billing-plans.js", () => ({
     key: null,
     planName: "free",
     amount: 0,
-    monthlyLimit: 25,
+    monthlyCredits: 25,
     entitlements: { bulkJobs: false, abVariants: false, autopilot: false },
   },
   getEntitlements: vi.fn((planName) => {
@@ -279,11 +279,11 @@ describe("refundGeneration — rollback of a consumed credit", () => {
 describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("blocks generation when usageCount equals monthlyLimit (free plan, 25/25)", async () => {
+  it("blocks generation when usageCount equals monthlyCredits (free plan, 25/25)", async () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
-          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
+          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyCredits: 25 }),
         },
         usageRecord: { count: vi.fn().mockResolvedValue(25), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 25 } }), create: vi.fn() },
       }),
@@ -297,7 +297,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
-          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "active", monthlyLimit: 50 }),
+          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "active", monthlyCredits: 50 }),
         },
         usageRecord: { count: vi.fn().mockResolvedValue(50), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 50 } }), create: vi.fn() },
       }),
@@ -310,7 +310,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
-          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyLimit: 25 }),
+          findUnique: vi.fn().mockResolvedValue({ planName: "free", status: "active", monthlyCredits: 25 }),
         },
         usageRecord: { count: vi.fn().mockResolvedValue(24), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 24 } }), create: vi.fn().mockResolvedValue({}) },
       }),
@@ -324,7 +324,7 @@ describe("tryConsumeGeneration — hard block at plan limit (F4)", () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       fn({
         plan: {
-          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "frozen", monthlyLimit: 50 }),
+          findUnique: vi.fn().mockResolvedValue({ planName: "starter", status: "frozen", monthlyCredits: 50 }),
         },
         usageRecord: { count: vi.fn().mockResolvedValue(0), aggregate: vi.fn().mockResolvedValue({ _sum: { credits: 0 } }), create: vi.fn() },
       }),
@@ -357,7 +357,7 @@ describe("syncBillingToPlan — state machine (F1 + F4)", () => {
     ]);
     expect(prisma.plan.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ planName: "growth", monthlyLimit: 200 }),
+        update: expect.objectContaining({ planName: "growth", monthlyCredits: 200 }),
       }),
     );
   });
@@ -367,7 +367,7 @@ describe("syncBillingToPlan — state machine (F1 + F4)", () => {
     await syncBillingToPlan("shop.myshopify.com", []);
     expect(prisma.plan.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ planName: "free", monthlyLimit: 25 }),
+        update: expect.objectContaining({ planName: "free", monthlyCredits: 25 }),
       }),
     );
   });
@@ -387,7 +387,7 @@ describe("tryConsumeGeneration — P2034 retry", () => {
     const p2034 = Object.assign(new Error("Write conflict"), { code: "P2034" });
     prisma.$transaction
       .mockRejectedValueOnce(p2034)
-      .mockResolvedValueOnce({ allowed: true, planName: "free", monthlyLimit: 25, remaining: 10 });
+      .mockResolvedValueOnce({ allowed: true, planName: "free", monthlyCredits: 25, remaining: 10 });
 
     const result = await tryConsumeGeneration("shop.com", "description", null);
 

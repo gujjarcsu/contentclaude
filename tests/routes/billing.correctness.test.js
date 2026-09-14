@@ -105,7 +105,7 @@ describe("item 8b — the webhook reads the fields the payload actually has", ()
     expect(res.status).toBe(200);
     expect(planWrite()).toMatchObject({
       planName: "growth",
-      monthlyLimit: 200,
+      monthlyCredits: 1500,
       shopifyChargeId: GROWTH_GID,
     });
   });
@@ -154,7 +154,7 @@ describe("item 8a — a cancellation never downgrades a merchant who is still pa
 
     await deliver({ admin_graphql_api_id: STARTER_GID, name: "Starter Plan", status: "CANCELLED" });
 
-    expect(planWrite()).toMatchObject({ planName: "growth", monthlyLimit: 200, shopifyChargeId: GROWTH_GID });
+    expect(planWrite()).toMatchObject({ planName: "growth", monthlyCredits: 1500, shopifyChargeId: GROWTH_GID });
   });
 
   it("downgrades to Free only when Shopify authoritatively reports nothing active", async () => {
@@ -163,7 +163,7 @@ describe("item 8a — a cancellation never downgrades a merchant who is still pa
 
     await deliver({ admin_graphql_api_id: STARTER_GID, name: "Starter Plan", status: "CANCELLED" });
 
-    expect(planWrite()).toMatchObject({ planName: "free", monthlyLimit: 25, shopifyChargeId: null });
+    expect(planWrite()).toMatchObject({ planName: "free", monthlyCredits: 100, shopifyChargeId: null });
   });
 
   it("holds the plan when Shopify cannot be reached — ambiguity never costs the merchant their plan", async () => {

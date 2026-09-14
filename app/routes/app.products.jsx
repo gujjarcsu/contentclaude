@@ -211,7 +211,7 @@ export const loader = async ({ request }) => {
   // already knew this before the click and still promised the whole catalogue.
   const { now: willProcessNow, waiting: waitingForQuota } = splitByQuota(notOptimized, remaining);
 
-  const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
+  const usageRemaining = Math.max(0, plan.monthlyCredits - usageCount);
 
   // Phase 3 item 3.4 — the two surviving conversion surfaces, both computed on
   // the server so the count and the fit plan are measured rather than guessed.
@@ -252,7 +252,7 @@ export const loader = async ({ request }) => {
     upsell,
     productScores,
     catalogError,
-    monthlyLimit: plan.monthlyLimit,
+    monthlyCredits: plan.monthlyCredits,
     planName: plan.planName,
     entitlements: getEntitlements(plan.planName),
     publishWithoutReview,
@@ -506,7 +506,7 @@ export default function ProductsPage() {
     upsell,
     productScores,
     catalogError,
-    monthlyLimit,
+    monthlyCredits,
     planName,
     entitlements,
     publishWithoutReview,
@@ -542,7 +542,7 @@ export default function ProductsPage() {
 
   // Store-wide coverage counts come from the loader (aggregated, accurate across
   // all pages). contentMap below is scoped to the visible page for per-row pills.
-  const usagePct = quotaPct(usageCount, monthlyLimit);
+  const usagePct = quotaPct(usageCount, monthlyCredits);
   const isOutOfUsage = usageRemaining === 0;
 
   // The SHARED rule — the same one the stat cards above are counted with.
@@ -941,7 +941,7 @@ export default function ProductsPage() {
                 </Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {usageCount} / {monthlyLimit} used
+                    {usageCount} / {monthlyCredits} used
                   </Text>
                 </InlineStack>
               </InlineStack>

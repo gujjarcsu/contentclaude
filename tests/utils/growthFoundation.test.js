@@ -446,18 +446,23 @@ describe("planFit", () => {
       monthsToCover: 1,
       priceLabel: "$9.99/mo",
     });
-    expect(planFit.fitPlanFor({ n: 50, currentPlan: "free" }).planName).toBe("starter");
-    expect(planFit.fitPlanFor({ n: 51, currentPlan: "free" }).planName).toBe("growth");
-    expect(planFit.fitPlanFor({ n: 200, currentPlan: "free" }).planName).toBe("growth");
-    expect(planFit.fitPlanFor({ n: 201, currentPlan: "free" }).planName).toBe("pro");
-    expect(planFit.fitPlanFor({ n: 1500, currentPlan: "free" })).toMatchObject({
+    // B2 — the boundaries moved because the LOCKED allowances multiplied 4-7.5x
+    // (14-PRICING.md, approved 2026-09-14). Starter went 50 -> 500, Growth
+    // 200 -> 1,500, Pro 1,000 -> 4,000. A merchant who needed Growth for 51
+    // products is now covered by Starter, which is the entire point of the
+    // change: same price, far more of the job done.
+    expect(planFit.fitPlanFor({ n: 500, currentPlan: "free" }).planName).toBe("starter");
+    expect(planFit.fitPlanFor({ n: 501, currentPlan: "free" }).planName).toBe("growth");
+    expect(planFit.fitPlanFor({ n: 1500, currentPlan: "free" }).planName).toBe("growth");
+    expect(planFit.fitPlanFor({ n: 1501, currentPlan: "free" }).planName).toBe("pro");
+    expect(planFit.fitPlanFor({ n: 6000, currentPlan: "free" })).toMatchObject({
       planName: "pro",
       covers: false,
       monthsToCover: 2,
     });
-    expect(planFit.fitPlanFor({ n: 10, currentPlan: "starter" }).planName).toBe("growth");
+    expect(planFit.fitPlanFor({ n: 600, currentPlan: "starter" }).planName).toBe("growth");
     expect(planFit.fitPlanFor({ n: 10, currentPlan: "free", needsBulk: true }).planName).toBe("growth");
-    expect(planFit.fitPlanFor({ n: 250, currentPlan: "growth" }).planName).toBe("pro");
+    expect(planFit.fitPlanFor({ n: 1600, currentPlan: "growth" }).planName).toBe("pro");
     expect(planFit.fitPlanFor({ n: 5, currentPlan: "pro" })).toBeNull();
     expect(planFit.fitPlanFor({ n: 0, currentPlan: "free" })).toBeNull();
   });
@@ -473,10 +478,10 @@ describe("planFit", () => {
   it("quotaGapTitle is the exact line from the brief", () => {
     const starter = planFit.fitPlanFor({ n: 12, currentPlan: "free" });
     expect(planFit.quotaGapTitle({ n: 12, fit: starter })).toBe(
-      "12 products still need content · Starter covers 50/month",
+      "12 products still need content · Starter covers 500/month",
     );
     expect(planFit.quotaGapTitle({ n: 1, fit: starter })).toBe(
-      "1 product still needs content · Starter covers 50/month",
+      "1 product still needs content · Starter covers 500/month",
     );
     expect(
       planFit.quotaGapTitle({
@@ -484,12 +489,12 @@ describe("planFit", () => {
         truncated: true,
         fit: planFit.fitPlanFor({ n: 300, currentPlan: "free" }),
       }),
-    ).toBe("At least 300 products still need content · Professional covers 1000/month");
+    ).toBe("At least 300 products still need content · Starter covers 500/month");
   });
 });
 
 describe("upgradePrompts", () => {
-  const PLAN = { planName: "free", monthlyLimit: 25, status: "active" };
+  const PLAN = { planName: "free", monthlyCredits: 100, status: "active" };
 
   it("getUpsell: null while quota remains or plan not active; neutral when N = 0 or no fit; condition row upserted (not a show)", async () => {
     expect(
@@ -499,7 +504,7 @@ describe("upgradePrompts", () => {
       await prompts.getUpsell({
         shop: SHOP,
         plan: { ...PLAN, status: "frozen" },
-        usageCount: 25,
+        usageCount: 100,
         surface: "dashboard",
         n: 5,
       }),
@@ -507,7 +512,7 @@ describe("upgradePrompts", () => {
     const neutral = await prompts.getUpsell({
       shop: SHOP,
       plan: PLAN,
-      usageCount: 25,
+      usageCount: 100,
       surface: "dashboard",
       n: 0,
     });
@@ -523,7 +528,7 @@ describe("upgradePrompts", () => {
     const u = await prompts.getUpsell({
       shop: SHOP,
       plan: PLAN,
-      usageCount: 25,
+      usageCount: 100,
       surface: "dashboard",
       n: 12,
       truncated: true,
@@ -547,7 +552,7 @@ describe("upgradePrompts", () => {
       truncated: true,
       fitPlanName: "starter",
       currentPlan: "free",
-      monthlyLimit: 25,
+      monthlyCredits: 100,
     });
     expect("shownCount" in call.update).toBe(false);
   });
@@ -559,7 +564,7 @@ describe("upgradePrompts", () => {
         admin: { graphql: vi.fn() },
         shop: SHOP,
         plan: PLAN,
-        usageCount: 25,
+        usageCount: 100,
         surface: "products",
       }),
     ).toBeNull();
@@ -569,7 +574,7 @@ describe("upgradePrompts", () => {
       admin: { graphql: vi.fn() },
       shop: SHOP,
       plan: PLAN,
-      usageCount: 25,
+      usageCount: 100,
       surface: "products",
     });
     expect(u).toMatchObject({ n: 7, scanned: 40, fit: { planName: "starter" }, promptId: "up_2" });

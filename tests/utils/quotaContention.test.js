@@ -76,7 +76,7 @@ function failFirst(n) {
     calls += 1;
     if (calls <= n) throw writeConflict();
     return fn({
-      plan: { findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyLimit: 200, status: "active" }) },
+      plan: { findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyCredits: 200, status: "active" }) },
       usageRecord: {
         count: async () => 7,
         // B1 — the gate sums credits inside the TRANSACTION, so the tx mock
@@ -194,7 +194,7 @@ describe("what a retry must not change", () => {
       if (calls <= 2) throw writeConflict();
       return fn({
         plan: {
-          findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyLimit: 200, status: "active" }),
+          findUnique: async () => ({ shop: SHOP, planName: "growth", monthlyCredits: 200, status: "active" }),
         },
         usageRecord: {
           count: async () => 0,

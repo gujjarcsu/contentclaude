@@ -96,7 +96,7 @@ export const loader = async ({ request }) => {
     plan: {
       planName: plan.planName,
       status: plan.status,
-      monthlyLimit: plan.monthlyLimit,
+      monthlyCredits: plan.monthlyCredits,
       shopifyChargeId: plan.shopifyChargeId,
       currentPeriodEnd: plan.currentPeriodEnd?.toISOString() ?? null,
     },
@@ -235,13 +235,13 @@ const PLAN_DISPLAY = [
     tagline: "Get started, no card needed",
     price: "$0",
     period: "forever",
-    monthlyLimit: FREE_PLAN.monthlyLimit,
+    monthlyCredits: FREE_PLAN.monthlyCredits,
     icon: PlanIcon,
     iconTone: "subdued",
     highlight: false,
     planKey: null,
     features: [
-      `${FREE_PLAN.monthlyLimit} generations / month`,
+      `${FREE_PLAN.monthlyCredits} generations / month`,
       "Product descriptions",
       "Meta titles & descriptions",
       "FAQ content",
@@ -255,7 +255,7 @@ const PLAN_DISPLAY = [
     tagline: "Perfect for small stores",
     price: "$9.99",
     period: "/ month",
-    monthlyLimit: BILLING_PLANS.starter.monthlyLimit,
+    monthlyCredits: BILLING_PLANS.starter.monthlyCredits,
     icon: StarFilledIcon,
     iconTone: "info",
     highlight: false,
@@ -263,7 +263,7 @@ const PLAN_DISPLAY = [
     annualPlanKey: BILLING_PLANS.starter.annualKey,
     annualPrice: "$99.90",
     features: [
-      `${BILLING_PLANS.starter.monthlyLimit} generations / month`,
+      `${BILLING_PLANS.starter.monthlyCredits} generations / month`,
       "Everything in Free",
       "7-day free trial",
       "Content templates",
@@ -280,7 +280,7 @@ const PLAN_DISPLAY = [
     tagline: "Most popular · scales with you",
     price: "$29.99",
     period: "/ month",
-    monthlyLimit: BILLING_PLANS.growth.monthlyLimit,
+    monthlyCredits: BILLING_PLANS.growth.monthlyCredits,
     icon: ChartHistogramGrowthIcon,
     iconTone: "info",
     highlight: true,
@@ -288,7 +288,7 @@ const PLAN_DISPLAY = [
     annualPlanKey: BILLING_PLANS.growth.annualKey,
     annualPrice: "$299.90",
     features: [
-      `${BILLING_PLANS.growth.monthlyLimit} generations / month`,
+      `${BILLING_PLANS.growth.monthlyCredits} generations / month`,
       "Everything in Starter",
       "7-day free trial",
       "Bulk generation jobs",
@@ -307,7 +307,7 @@ const PLAN_DISPLAY = [
     tagline: "For high-volume merchants",
     price: "$79.99",
     period: "/ month",
-    monthlyLimit: BILLING_PLANS.pro.monthlyLimit,
+    monthlyCredits: BILLING_PLANS.pro.monthlyCredits,
     icon: OrganizationIcon,
     iconTone: "info",
     highlight: false,
@@ -315,7 +315,7 @@ const PLAN_DISPLAY = [
     annualPlanKey: BILLING_PLANS.pro.annualKey,
     annualPrice: "$799.90",
     features: [
-      `${BILLING_PLANS.pro.monthlyLimit} generations / month`,
+      `${BILLING_PLANS.pro.monthlyCredits} generations / month`,
       "Everything in Growth",
       "7-day free trial",
       // P0.8 / 08-ECONOMICS.md guardrail 6 — the SERVICE stays, the two
@@ -562,8 +562,8 @@ export default function PlansPage() {
   const submittingPlan = navigation.formData?.get("planKey");
   const isCancelling = navigation.formData?.get("actionType") === "cancel";
 
-  const usagePct = quotaPct(usageCount, plan.monthlyLimit);
-  const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
+  const usagePct = quotaPct(usageCount, plan.monthlyCredits);
+  const usageRemaining = Math.max(0, plan.monthlyCredits - usageCount);
   const currentPlanIndex = PLAN_ORDER.indexOf(plan.planName);
   const currentDisplay = PLAN_DISPLAY.find((p) => p.planName === plan.planName);
 
@@ -643,7 +643,7 @@ export default function PlansPage() {
                   fontWeight="semibold"
                   tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? undefined : "success"}
                 >
-                  {usageRemaining} remaining of {plan.monthlyLimit}
+                  {usageRemaining} remaining of {plan.monthlyCredits}
                 </Text>
               </InlineStack>
               <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />

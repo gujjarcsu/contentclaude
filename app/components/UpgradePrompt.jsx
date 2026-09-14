@@ -123,7 +123,7 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <div data-quota-prompt="neutral">
         <Banner tone="warning">
           <Text as="p" variant="bodyMd">
-            You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}. They
+            You&apos;ve used all {upsell.monthlyCredits} {planLabel} generations for {upsell.monthName}. They
             reset on {upsell.resetDate}.
           </Text>
         </Banner>
@@ -167,8 +167,8 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <Banner tone="warning" title={title} onDismiss={dismiss}>
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
-            You&apos;ve used all {upsell.monthlyLimit} {planLabel} generations for {upsell.monthName}.{" "}
-            {fit.label} covers {fit.monthlyLimit}/month for {fit.priceLabel}
+            You&apos;ve used all {upsell.monthlyCredits} {planLabel} generations for {upsell.monthName}.{" "}
+            {fit.label} covers {fit.monthlyCredits}/month for {fit.priceLabel}
             {clause}.
           </Text>
           <Text as="p" variant="bodyMd">
@@ -228,7 +228,7 @@ export function QuotaWarningBanner({ warning }) {
 
   if (!warning || dismissed) return null;
 
-  const { usageCount, monthlyLimit, planLabel, fit, resetDate, from } = warning;
+  const { usageCount, monthlyCredits, planLabel, fit, resetDate, from } = warning;
 
   const goPlans = () => {
     post("cta_clicked");
@@ -247,12 +247,12 @@ export function QuotaWarningBanner({ warning }) {
     <div data-quota-prompt="warn">
       <Banner
         tone="info"
-        title={`${usageCount} of ${monthlyLimit} ${planLabel} generations used`}
+        title={`${usageCount} of ${monthlyCredits} ${planLabel} generations used`}
         onDismiss={dismiss}
       >
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
-            {fit.label} includes {fit.monthlyLimit}/month for {fit.priceLabel}.
+            {fit.label} includes {fit.monthlyCredits}/month for {fit.priceLabel}.
           </Text>
           <Text as="p" variant="bodyMd">
             Or wait — your {planLabel} generations reset on {resetDate}.
@@ -321,11 +321,11 @@ export function QuotaReachedCard({ upsell, surface = "" }) {
       <Card>
         <BlockStack gap="300">
           <Text as="h3" variant="headingMd">
-            {`You've used all ${upsell.monthlyLimit} ${planLabel} generations for ${upsell.monthName}`}
+            {`You've used all ${upsell.monthlyCredits} ${planLabel} generations for ${upsell.monthName}`}
           </Text>
           {fit && (
             <Text as="p" variant="bodyMd">
-              {fit.label} includes {fit.monthlyLimit}/month for {fit.priceLabel}.
+              {fit.label} includes {fit.monthlyCredits}/month for {fit.priceLabel}.
             </Text>
           )}
           <Text as="p" variant="bodyMd">

@@ -45,7 +45,7 @@ const {
   },
   authenticate: { admin: vi.fn() },
   getContentMetrics: vi.fn(async () => ({ publishedProducts: 0, draftProducts: 0 })),
-  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })),
+  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyCredits: 25 })),
   getMonthlyUsageCount: vi.fn(async () => 0),
   graphql: vi.fn(),
   scanStoreForStart: vi.fn(async () => ({ empty: false, storeScore: 41, targets: [] })),
@@ -110,7 +110,7 @@ beforeEach(() => {
   authenticate.admin.mockResolvedValue({ session: { shop: SHOP }, admin: { graphql } });
   graphql.mockResolvedValue({ json: async () => ({ data: { total: { count: 12, precision: "EXACT" }, candidates: { count: 12, precision: "EXACT" }, productsCount: { count: 12 } } }) });
   getContentMetrics.mockResolvedValue({ publishedProducts: 0, draftProducts: 0 });
-  getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyLimit: 25 });
+  getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyCredits: 25 });
   getMonthlyUsageCount.mockResolvedValue(0);
   prisma.brandVoice.findUnique.mockResolvedValue(null);
   prisma.growthState.findUnique.mockResolvedValue(null);
@@ -190,11 +190,11 @@ describe("what decides a first run", () => {
 
 describe("the Start state is honest about what it will spend", () => {
   it("reports what is left of the free quota", async () => {
-    getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyLimit: 25 });
+    getOrCreatePlan.mockResolvedValue({ planName: "free", monthlyCredits: 25 });
     getMonthlyUsageCount.mockResolvedValue(22);
     const r = await land();
     expect(r.data.start.remaining).toBe(3);
-    expect(r.data.start.monthlyLimit).toBe(25);
+    expect(r.data.start.monthlyCredits).toBe(25);
   });
 
   it("never reports a negative balance", async () => {
@@ -265,12 +265,12 @@ describe("what the dashboard is given to render", () => {
   });
 
   it("reports the plan and what is left of it", async () => {
-    getOrCreatePlan.mockResolvedValue({ planName: "growth", monthlyLimit: 500 });
+    getOrCreatePlan.mockResolvedValue({ planName: "growth", monthlyCredits: 500 });
     getMonthlyUsageCount.mockResolvedValue(120);
 
     const r = await land();
 
-    expect(r.data.plan).toEqual({ planName: "growth", monthlyLimit: 500 });
+    expect(r.data.plan).toEqual({ planName: "growth", monthlyCredits: 500 });
     expect(r.data.usageCount).toBe(120);
   });
 

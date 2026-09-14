@@ -31,7 +31,7 @@ vi.mock("../../app/utils/logger.server.js", () => ({
 
 const checkEntitlement = vi.fn();
 vi.mock("../../app/utils/plans.server.js", () => ({
-  getOrCreatePlan: vi.fn(() => Promise.resolve({ planName: "free", monthlyLimit: 25 })),
+  getOrCreatePlan: vi.fn(() => Promise.resolve({ planName: "free", monthlyCredits: 25 })),
   tryConsumeGeneration: vi.fn(() => Promise.resolve({ allowed: true })),
   checkEntitlement: (...a) => checkEntitlement(...a),
   refundGeneration: vi.fn(() => Promise.resolve()),

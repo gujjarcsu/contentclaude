@@ -5,12 +5,12 @@
  * `quotaSurfaces.server.js`, which imports Prisma, so no component could import
  * it — and four components re-derived it by hand:
  *
- *   app/routes/app._index.jsx     Math.min(100, Math.round((usageCount / plan.monthlyLimit) * 100))
+ *   app/routes/app._index.jsx     Math.min(100, Math.round((usageCount / plan.monthlyCredits) * 100))
  *   app/routes/app.plans.jsx      the same, no zero guard
  *   app/routes/app.products.jsx   the same, WITH a zero guard
  *   app/routes/app.blog.jsx       the same, WITH a zero guard
  *
- * Two of the four had no `monthlyLimit > 0` guard, so on a plan with no limit
+ * Two of the four had no `monthlyCredits > 0` guard, so on a plan with no limit
  * the division is `n / 0` → `Infinity` → capped to **100**. Home and Plans told
  * a merchant on an unmetered plan that they had used 100% of their quota, with
  * a red progress bar, while Products and Blog on the same store said 0%.
@@ -35,8 +35,8 @@ const DAY_MS = 86_400_000;
  * A limit of 0 or less means UNMETERED, and returns 0. It does not mean
  * "everything is used up", which is what the un-guarded division produced.
  */
-export function quotaPct(usageCount, monthlyLimit) {
-  const limit = Number(monthlyLimit) || 0;
+export function quotaPct(usageCount, monthlyCredits) {
+  const limit = Number(monthlyCredits) || 0;
   if (limit <= 0) return 0;
   const used = Math.max(0, Number(usageCount) || 0);
   return Math.min(100, Math.round((used / limit) * 100));
@@ -49,8 +49,8 @@ export function quotaPct(usageCount, monthlyLimit) {
  *   warn        at or above WARN_AT_PCT, but not out
  *   exhausted   at or over the limit
  */
-export function quotaLevel(usageCount, monthlyLimit) {
-  const limit = Number(monthlyLimit) || 0;
+export function quotaLevel(usageCount, monthlyCredits) {
+  const limit = Number(monthlyCredits) || 0;
   if (limit <= 0) return "ok";
   const used = Math.max(0, Number(usageCount) || 0);
   if (used >= limit) return "exhausted";
@@ -58,8 +58,8 @@ export function quotaLevel(usageCount, monthlyLimit) {
 }
 
 /** Generations left. Never negative, never NaN. Pure. */
-export function quotaRemaining(usageCount, monthlyLimit) {
-  const limit = Number(monthlyLimit) || 0;
+export function quotaRemaining(usageCount, monthlyCredits) {
+  const limit = Number(monthlyCredits) || 0;
   if (limit <= 0) return 0;
   return Math.max(0, limit - (Number(usageCount) || 0));
 }

@@ -8,7 +8,7 @@
  * Auditing for the same shape found two more, both with live defects:
  *
  * **Quota percent, re-derived in four components.** Two of the four omitted the
- * `monthlyLimit > 0` guard, so on an unmetered plan the division is `n / 0` →
+ * `monthlyCredits > 0` guard, so on an unmetered plan the division is `n / 0` →
  * `Infinity` → capped to **100**. Home and Plans showed a merchant on an
  * unmetered plan a full red bar reading 100% used, while Products and Blog on
  * the same store said 0%.

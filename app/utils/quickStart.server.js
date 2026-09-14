@@ -151,7 +151,7 @@ const qualityOf = (c) =>
 async function remainingFor(shop) {
   try {
     const [plan, usage] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
-    return Math.max(0, (plan?.monthlyLimit ?? 0) - (usage ?? 0));
+    return Math.max(0, (plan?.monthlyCredits ?? 0) - (usage ?? 0));
   } catch {
     return null;
   }

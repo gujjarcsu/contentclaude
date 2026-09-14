@@ -32,7 +32,7 @@ const { authenticate, graphql, prisma } = vi.hoisted(() => ({
 vi.mock("../../app/shopify.server.js", () => ({ authenticate }));
 vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/utils/plans.server.js", () => ({
-  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25, status: "active" })),
+  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyCredits: 25, status: "active" })),
   getMonthlyUsageCount: vi.fn(async () => 0),
   remainingGenerations: vi.fn(async () => 25),
   tryConsumeGeneration: vi.fn(),

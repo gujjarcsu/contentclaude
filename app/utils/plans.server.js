@@ -47,7 +47,7 @@ export async function getOrCreatePlan(shop) {
           shop,
           planName: FREE_PLAN.planName,
           status: "active",
-          monthlyLimit: FREE_PLAN.monthlyLimit,
+          monthlyCredits: FREE_PLAN.monthlyCredits,
         },
       });
     },
@@ -107,13 +107,13 @@ export async function canGenerate(shop) {
     cacheKey,
     async () => {
       const [plan, usageCount] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
-      const allowed = plan.status === "active" && usageCount < plan.monthlyLimit;
+      const allowed = plan.status === "active" && usageCount < plan.monthlyCredits;
       return {
         allowed,
         usageCount,
-        monthlyLimit: plan.monthlyLimit,
+        monthlyCredits: plan.monthlyCredits,
         planName: plan.planName,
-        remaining: Math.max(0, plan.monthlyLimit - usageCount),
+        remaining: Math.max(0, plan.monthlyCredits - usageCount),
       };
     },
     60,
@@ -156,7 +156,7 @@ export function quotaRetryDelayMs(attempt, rand = Math.random) {
  * In SQLite this is a no-op (single writer already serializes everything).
  * In PostgreSQL this prevents phantom reads.
  *
- * Returns { allowed, planName, monthlyLimit, remaining } — if allowed is
+ * Returns { allowed, planName, monthlyCredits, remaining } — if allowed is
  * true, the UsageRecord has already been written inside the transaction.
  * The caller must NOT write another UsageRecord for the same generation.
  */
@@ -174,7 +174,7 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
           return {
             allowed: false,
             planName: plan?.planName ?? "free",
-            monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
+            monthlyCredits: plan?.monthlyCredits ?? FREE_PLAN.monthlyCredits,
             remaining: 0,
           };
         }
@@ -195,12 +195,12 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         // It is NOT unbounded: alt text is bounded by the PRODUCT cap (B2), not
         // by the credit allowance. Without that cap the free tier has no ceiling
         // at all.
-        if (cost > 0 && spent + cost > plan.monthlyLimit) {
+        if (cost > 0 && spent + cost > plan.monthlyCredits) {
           return {
             allowed: false,
             planName: plan.planName,
-            monthlyLimit: plan.monthlyLimit,
-            remaining: Math.max(0, plan.monthlyLimit - spent),
+            monthlyCredits: plan.monthlyCredits,
+            remaining: Math.max(0, plan.monthlyCredits - spent),
             // What it would have cost, so the caller can say "a blog post needs
             // 3 credits and you have 2" instead of a bare refusal.
             required: cost,
@@ -221,8 +221,8 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
         return {
           allowed: true,
           planName: plan.planName,
-          monthlyLimit: plan.monthlyLimit,
-          remaining: Math.max(0, plan.monthlyLimit - spent - cost),
+          monthlyCredits: plan.monthlyCredits,
+          remaining: Math.max(0, plan.monthlyCredits - spent - cost),
           credits: cost,
           usageRecordId: record.id,
         };
@@ -257,7 +257,7 @@ export async function tryConsumeGeneration(shop, contentType, productId = null, 
       return {
         allowed: false,
         planName: "contention",
-        monthlyLimit: 0,
+        monthlyCredits: 0,
         remaining: 0,
         isContention: true,
       };
@@ -411,7 +411,7 @@ export async function remainingGenerations(shop) {
     sumMonthlyCredits(shop, month),
   ]);
   if (!plan || plan.status !== "active") return 0;
-  return Math.max(0, plan.monthlyLimit - spent);
+  return Math.max(0, plan.monthlyCredits - spent);
 }
 
 /**
@@ -548,7 +548,7 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
         update: {
           planName: planDef.planName,
           status: "active",
-          monthlyLimit: planDef.monthlyLimit,
+          monthlyCredits: planDef.monthlyCredits,
           shopifyChargeId: activeSub.id,
           currentPeriodEnd: activeSub.currentPeriodEnd ? new Date(activeSub.currentPeriodEnd) : null,
         },
@@ -556,7 +556,7 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
           shop,
           planName: planDef.planName,
           status: "active",
-          monthlyLimit: planDef.monthlyLimit,
+          monthlyCredits: planDef.monthlyCredits,
           shopifyChargeId: activeSub.id,
           currentPeriodEnd: activeSub.currentPeriodEnd ? new Date(activeSub.currentPeriodEnd) : null,
         },
@@ -614,7 +614,7 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
     update: {
       planName: FREE_PLAN.planName,
       status: "active",
-      monthlyLimit: FREE_PLAN.monthlyLimit,
+      monthlyCredits: FREE_PLAN.monthlyCredits,
       shopifyChargeId: null,
       currentPeriodEnd: null,
     },
@@ -622,7 +622,7 @@ export async function syncBillingToPlan(shop, appSubscriptions) {
       shop,
       planName: FREE_PLAN.planName,
       status: "active",
-      monthlyLimit: FREE_PLAN.monthlyLimit,
+      monthlyCredits: FREE_PLAN.monthlyCredits,
     },
   });
   await invalidatePlanCaches(shop);

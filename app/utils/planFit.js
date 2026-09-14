@@ -17,16 +17,16 @@ export function fitPlanFor({ n, currentPlan = "free", needsBulk = false } = {}) 
     .map((k) => BILLING_PLANS[k])
     .filter((p) => PLAN_RANK[p.planName] > cur && (!needsBulk || p.entitlements.bulkJobs));
   if (cands.length === 0) return null;
-  const fit = cands.find((p) => p.monthlyLimit >= need) ?? cands[cands.length - 1];
+  const fit = cands.find((p) => p.monthlyCredits >= need) ?? cands[cands.length - 1];
   return {
     planName: fit.planName,
     key: fit.key,
     label: PLAN_LABELS[fit.planName],
-    monthlyLimit: fit.monthlyLimit,
+    monthlyCredits: fit.monthlyCredits,
     amount: fit.amount,
     priceLabel: `$${fit.amount.toFixed(2)}/mo`,
-    covers: fit.monthlyLimit >= need,
-    monthsToCover: Math.max(1, Math.ceil(need / fit.monthlyLimit)),
+    covers: fit.monthlyCredits >= need,
+    monthsToCover: Math.max(1, Math.ceil(need / fit.monthlyCredits)),
   };
 }
 
@@ -43,7 +43,7 @@ export function quotaGapTitle({ n, truncated = false, fit }) {
   const count = Math.max(0, Number(n) || 0);
   const noun = `${count} product${count === 1 ? "" : "s"} still need${count === 1 ? "s" : ""} content`;
   const head = `${truncated ? "At least " : ""}${noun}`;
-  return fit ? `${head} · ${fit.label} covers ${fit.monthlyLimit}/month` : head;
+  return fit ? `${head} · ${fit.label} covers ${fit.monthlyCredits}/month` : head;
 }
 
 export const N_DEFINITION_COPY = {

@@ -130,7 +130,12 @@ model Plan {
   shop             String    @unique
   planName         String    @default("free") // "free" | "starter" | "growth" | "pro"
   status           String    @default("active") // "active" | "cancelled" | "frozen"
-  monthlyLimit     Int       @default(25) // max generations per calendar month (free plan)
+  // B2 — renamed in CODE only. The Prisma client now exposes `monthlyCredits`
+  // everywhere, so nothing can silently read a CREDIT budget as a GENERATION
+  // count, while the underlying column keeps its name. A real column rename
+  // would error on every machine still serving the old build during a rolling
+  // deploy, and there are two real merchants on this app.
+  monthlyCredits   Int       @default(100) @map("monthlyLimit") // credits per calendar month
   shopifyChargeId  String? // Shopify AppSubscription GID
   currentPeriodEnd DateTime? // when the current billing period ends
   trialEndsAt      DateTime?

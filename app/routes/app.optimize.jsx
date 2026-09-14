@@ -66,7 +66,7 @@ export const loader = async ({ request }) => {
   // Group 4.1 — candidates we have not written for, not "products with no
   // content". The two are only the same on a store that has written nothing.
   const needsContent = notOptimizedFrom(candidateProducts, metrics.withContent) ?? 0;
-  const remaining = Math.max(0, (plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit) - usageCount);
+  const remaining = Math.max(0, (plan?.monthlyCredits ?? FREE_PLAN.monthlyCredits) - usageCount);
   const canOptimize = Math.min(needsContent, remaining);
 
   // Phase 3 item 3.4 — null unless the quota is exhausted, in which case the
@@ -86,7 +86,7 @@ export const loader = async ({ request }) => {
     upsell,
     publishWithoutReview,
     planName: plan?.planName ?? "free",
-    monthlyLimit: plan?.monthlyLimit ?? FREE_PLAN.monthlyLimit,
+    monthlyCredits: plan?.monthlyCredits ?? FREE_PLAN.monthlyCredits,
   });
 };
 
@@ -233,7 +233,7 @@ export default function OptimizePage() {
     remaining,
     canOptimize,
     planName,
-    monthlyLimit,
+    monthlyCredits,
     publishWithoutReview,
     upsell,
   } = useLoaderData();
@@ -398,7 +398,7 @@ export default function OptimizePage() {
                   Generations left this month
                   <br />
                   <Badge tone={planName === "free" ? "attention" : "success"}>
-                    {planLabels[planName] ?? planName} — {monthlyLimit}/mo
+                    {planLabels[planName] ?? planName} — {monthlyCredits}/mo
                   </Badge>
                 </Text>
               </BlockStack>

@@ -32,7 +32,7 @@ vi.mock("../../app/db.server.js", () => ({ default: prisma }));
 vi.mock("../../app/shopify.server.js", () => ({ authenticate, apiVersion: "2026-04" }));
 vi.mock("../../app/utils/adminGraphql.server.js", () => ({ publishProductWithRetry }));
 vi.mock("../../app/utils/plans.server.js", () => ({
-  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyLimit: 25 })),
+  getOrCreatePlan: vi.fn(async () => ({ planName: "free", monthlyCredits: 25 })),
   getMonthlyUsageCount: vi.fn(async () => 0),
   checkEntitlement,
   remainingGenerations: vi.fn(async () => 25),

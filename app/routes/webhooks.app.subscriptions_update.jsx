@@ -40,7 +40,7 @@ export const action = async ({ request }) => {
     const base = {
       planName: planDef.planName,
       status: "active",
-      monthlyLimit: planDef.monthlyLimit,
+      monthlyCredits: planDef.monthlyCredits,
       shopifyChargeId: chargeId,
       // Only write the period end when the delivery actually carried one.
       ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
@@ -91,7 +91,7 @@ export const action = async ({ request }) => {
       const base = {
         planName: def.planName,
         status: "active",
-        monthlyLimit: def.monthlyLimit,
+        monthlyCredits: def.monthlyCredits,
         shopifyChargeId: stillActive.id,
         ...(stillActive.currentPeriodEnd ? { currentPeriodEnd: new Date(stillActive.currentPeriodEnd) } : {}),
       };
@@ -107,7 +107,7 @@ export const action = async ({ request }) => {
         update: {
           planName: FREE_PLAN.planName,
           status: "active",
-          monthlyLimit: FREE_PLAN.monthlyLimit,
+          monthlyCredits: FREE_PLAN.monthlyCredits,
           shopifyChargeId: null,
           currentPeriodEnd: null,
         },
@@ -115,7 +115,7 @@ export const action = async ({ request }) => {
           shop,
           planName: FREE_PLAN.planName,
           status: "active",
-          monthlyLimit: FREE_PLAN.monthlyLimit,
+          monthlyCredits: FREE_PLAN.monthlyCredits,
         },
       });
       logger.info(

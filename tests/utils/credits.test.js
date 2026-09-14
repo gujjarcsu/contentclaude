@@ -64,7 +64,7 @@ beforeEach(() => {
   prisma.usageRecord.count.mockResolvedValue(0);
   prisma.usageRecord.findFirst.mockResolvedValue({ id: "u1" });
   prisma.shop.findUnique.mockResolvedValue(null);
-  prisma.plan.findUnique.mockResolvedValue({ status: "active", monthlyLimit: 25 });
+  prisma.plan.findUnique.mockResolvedValue({ status: "active", monthlyCredits: 25 });
 });
 
 describe("item 4 — a bulk job is sliced to the quota at creation", () => {
@@ -99,7 +99,7 @@ describe("item 4 — a bulk job is sliced to the quota at creation", () => {
   it("remainingGenerations is 0 for a missing or inactive plan", async () => {
     prisma.plan.findUnique.mockResolvedValueOnce(null);
     expect(await remainingGenerations(SHOP)).toBe(0);
-    prisma.plan.findUnique.mockResolvedValueOnce({ status: "frozen", monthlyLimit: 200 });
+    prisma.plan.findUnique.mockResolvedValueOnce({ status: "frozen", monthlyCredits: 200 });
     expect(await remainingGenerations(SHOP)).toBe(0);
   });
 });
@@ -156,14 +156,14 @@ describe("item 5 — a failed or empty generation is never charged", () => {
     prisma.$transaction.mockResolvedValue({
       allowed: true,
       planName: "free",
-      monthlyLimit: 25,
+      monthlyCredits: 25,
       remaining: 24,
     });
   const deny = () =>
     prisma.$transaction.mockResolvedValue({
       allowed: false,
       planName: "free",
-      monthlyLimit: 25,
+      monthlyCredits: 25,
       remaining: 0,
     });
 

@@ -22,11 +22,11 @@ export const SUBSCRIBE_WINDOW_MS = 24 * 3_600_000;
 export const monthKey = (now = new Date()) => now.toISOString().slice(0, 7);
 
 /** Upsert the condition row for (shop, trigger, surface, month). Never throws. → row | null */
-export async function recordPromptCondition({ shop, trigger, surface, month, n, nDefinition = "catalog_gaps", truncated = false, remaining = 0, monthlyLimit = 0, currentPlan = "free", fitPlanName = null, monthsToCover = 1, now = new Date() }) {
+export async function recordPromptCondition({ shop, trigger, surface, month, n, nDefinition = "catalog_gaps", truncated = false, remaining = 0, monthlyCredits = 0, currentPlan = "free", fitPlanName = null, monthsToCover = 1, now = new Date() }) {
   if (!shop || !prisma.upgradePrompt?.upsert) return null;
   try {
     const m = month || monthKey(now);
-    const data = { n, nDefinition, truncated, remaining, monthlyLimit, currentPlan, fitPlanName, monthsToCover, lastSeenAt: now };
+    const data = { n, nDefinition, truncated, remaining, monthlyCredits, currentPlan, fitPlanName, monthsToCover, lastSeenAt: now };
     return await prisma.upgradePrompt.upsert({
       where: { shop_trigger_surface_month: { shop, trigger, surface, month: m } },
       update: data,
@@ -45,7 +45,7 @@ export async function recordPromptCondition({ shop, trigger, surface, month, n, 
  */
 export async function getUpsell({ admin, shop, plan, usageCount, surface, nDefinition = "catalog_gaps", n: givenN = null, truncated = false, needsBulk = false, now = new Date() }) {
   try {
-    const remaining = Math.max(0, (plan?.monthlyLimit ?? 0) - (usageCount ?? 0));
+    const remaining = Math.max(0, (plan?.monthlyCredits ?? 0) - (usageCount ?? 0));
     if (remaining > 0 || plan?.status !== "active") return null;
     let n = givenN;
     let trunc = truncated;
@@ -61,13 +61,13 @@ export async function getUpsell({ admin, shop, plan, usageCount, surface, nDefin
     const fit = fitPlanFor({ n, currentPlan: plan.planName, needsBulk });
     const base = {
       n, truncated: trunc, scanned, nDefinition, remaining: 0,
-      monthlyLimit: plan.monthlyLimit, planName: plan.planName, planLabel: PLAN_LABELS[plan.planName] ?? plan.planName,
+      monthlyCredits: plan.monthlyCredits, planName: plan.planName, planLabel: PLAN_LABELS[plan.planName] ?? plan.planName,
       monthName: fmtMonth(now), resetDate: fmtDay(quotaResetDate(now)),
     };
     if (n === 0 || !fit) return { ...base, neutral: true, fit: null, promptId: null };
     const row = await recordPromptCondition({
       shop, trigger: "quota_exhausted", surface, month: monthKey(now), n, nDefinition, truncated: trunc, remaining: 0,
-      monthlyLimit: plan.monthlyLimit, currentPlan: plan.planName, fitPlanName: fit.planName, monthsToCover: fit.monthsToCover, now,
+      monthlyCredits: plan.monthlyCredits, currentPlan: plan.planName, fitPlanName: fit.planName, monthsToCover: fit.monthsToCover, now,
     });
     return { ...base, neutral: false, fit, promptId: row?.id ?? null };
   } catch (err) {

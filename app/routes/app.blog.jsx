@@ -62,7 +62,7 @@ export const loader = async ({ request }) => {
     });
   }
 
-  const usageRemaining = Math.max(0, plan.monthlyLimit - usageCount);
+  const usageRemaining = Math.max(0, plan.monthlyCredits - usageCount);
 
   // Phase 3 item 3.4 — null unless the quota is exhausted, in which case the
   // blog generate form is replaced by a card. Never throws.
@@ -76,7 +76,7 @@ export const loader = async ({ request }) => {
     usageRemaining,
     usageCount,
     upsell,
-    monthlyLimit: plan.monthlyLimit,
+    monthlyCredits: plan.monthlyCredits,
     planName: plan.planName,
     recentPosts: recentPosts.map((p) => ({
       ...p,
@@ -323,7 +323,7 @@ const LOADING_MESSAGES = [
 ];
 
 export default function BlogPage() {
-  const { brandVoice, usageRemaining, usageCount, monthlyLimit, planName, recentPosts, resumePost, upsell } =
+  const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell } =
     useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -398,7 +398,7 @@ export default function BlogPage() {
     }
   }, [generated]);
 
-  const usagePct = quotaPct(usageCount, monthlyLimit);
+  const usagePct = quotaPct(usageCount, monthlyCredits);
   const isOutOfUsage = usageRemaining === 0;
 
   const lengthOptions = [
@@ -596,7 +596,7 @@ export default function BlogPage() {
                         Monthly Generations
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        {usageCount}/{monthlyLimit}
+                        {usageCount}/{monthlyCredits}
                       </Text>
                     </InlineStack>
                     <ProgressBar
