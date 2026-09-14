@@ -102,3 +102,42 @@ describe("the first-run guard matches what the screen actually renders", () => {
     expect(CODE).not.toMatch(/scores\s\\d\+/);
   });
 });
+
+describe("A3 — the pre-listing sweep reads form VALUES, not just rendered text", () => {
+  /**
+   * CW found "E2E Test Store" in an <input value=...> on the Settings frame.
+   * Every text check this project runs reads innerText, and innerText does not
+   * include form values — so the `must` guard passed, every residue sweep
+   * passed, and the string went into a listing image anyway.
+   *
+   * That is a class of bug, not one instance: a control holding dev-store
+   * residue is invisible to exactly the checks written to catch dev-store
+   * residue. Fixing the one string would have left the hole open.
+   */
+  it("extracts input, textarea and select values from the frame", () => {
+    expect(CODE).toMatch(/querySelectorAll\(["']input, textarea, select["']\)/);
+    // and the value, not merely the element
+    expect(CODE).toMatch(/el\.value/);
+  });
+
+  it("includes placeholders — a reviewer can read those too", () => {
+    expect(CODE).toMatch(/getAttribute\(["']placeholder["']\)/);
+  });
+
+  it("checks the residue against text AND values together", () => {
+    // Sweeping only `seen` would reintroduce the exact blind spot.
+    expect(CODE).toMatch(/\[seen, \.\.\.values\]/);
+  });
+
+  it("names the residue that must never reach a listing image", () => {
+    for (const term of ["E2E Test Store", "contentpilot-dev", "navaal-ttv", "myshopify"]) {
+      expect(CODE, `residue list is missing ${term}`).toContain(term);
+    }
+  });
+
+  it("fails the capture rather than warning", () => {
+    // A residue warning on a capture nobody re-reads is a residue that ships.
+    const sweep = CODE.slice(CODE.indexOf("const RESIDUE"));
+    expect(sweep.slice(0, 600)).toMatch(/throw new Error/);
+  });
+});

@@ -209,7 +209,39 @@ for (const f of SELECTED) {
     if (!frame) throw new Error("the app frame never appeared");
 
     // 2. + 3. it rendered, and it rendered THIS screen.
-    const seen = await frame.evaluate(() => (document.body.innerText || "").trim());
+    // A3 — innerText DOES NOT INCLUDE FORM VALUES, and that is a whole class of
+    // bug, not one instance.
+    //
+    // CW found "E2E Test Store" sitting in an <input value=...> on the Settings
+    // frame. Every text-based check this project has ever run reads innerText,
+    // so none of them could see it: the `must` guard below passed, the residue
+    // sweeps passed, and the string went into a listing image anyway. A control
+    // holding dev-store residue is invisible to exactly the checks written to
+    // catch dev-store residue.
+    //
+    // So what a merchant can READ is innerText PLUS the current value of every
+    // input, textarea and select, plus placeholders, because a placeholder is
+    // rendered text a reviewer can see too.
+    const { seen, values } = await frame.evaluate(() => {
+      const text = (document.body.innerText || "").trim();
+      const fields = [...document.querySelectorAll("input, textarea, select")]
+        .map((el) => [el.value, el.getAttribute("placeholder")].filter(Boolean).join(" "))
+        .filter((v) => v && v.trim());
+      return { seen: text, values: fields };
+    });
+
+    // Residue that must never reach a listing image. The capture stores ARE dev
+    // stores — that is fine and deliberate, they are stocked to look like real
+    // shops — so this lists the strings that give that away, not the fact of it.
+    const RESIDUE = [/E2E Test Store/i, /\btest store\b/i, /contentpilot-dev\d/i, /navaal-ttv-\d+/i, /myshopify\.com/i];
+    const haystack = [seen, ...values].join("\n");
+    const residue = RESIDUE.filter((re) => re.test(haystack)).map(String);
+    if (residue.length) {
+      throw new Error(
+        `dev-store residue on this frame: ${residue.join(", ")} — it is in the page text or a form value, ` +
+          `and a listing image must not show it`,
+      );
+    }
     if (/^\s*\d{3}\s+(Gone|Forbidden|Unauthorized|Not Found)/i.test(seen)) {
       throw new Error(`app returned an error page: ${seen.slice(0, 60)}`);
     }
