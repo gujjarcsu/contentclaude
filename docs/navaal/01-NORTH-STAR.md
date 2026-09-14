@@ -167,6 +167,45 @@ That is why G is a phase with named owners and not a hope, and why most of its r
 
 ## 10. LOG
 
+**2026-09-14 (Phase 4)** — the three visible defects, then the locked pricing.
+Shipped in `a572d20` (gate 1) and `7d23792` (gate 2).
+
+- **A1 — Products listed and counted ARCHIVED products.** All three `products(...)` reads carried no
+  `query:` at all, and the JS filter had no ARCHIVED case, so archived products fell through
+  `return true`. The scope is now in the query — the only place that can also fix the counts and the
+  cursor. **Read off the live page after shipping: "32 products in your catalog · 15 active and
+  draft", tab "All (15 on page)". 32 − 17 archived = 15, exactly the 17 CW counted.**
+  **I did NOT follow the brief's step 3:** it asked for `statusFilter` to map onto `status:ACTIVE` /
+  `status:DRAFT`. Those tabs are OUR CONTENT states — `PRODUCT_STATE.DRAFT` renders as "Ready to
+  review" — and mapping them would have made that tab return products merely unpublished in Shopify.
+- **A2 — Home said 48 and the SEO Audit said 90. THREE divergences, not one.** Home averaged two
+  rubrics, `(seo + geo) / 2`; the audit reported `calculateSeoScore` alone. The gap was arithmetic,
+  exactly `(seo − geo) / 2`. Underneath sat two more: the audit did not fetch `productType`,
+  `vendor`, `tags` or `variants.price`, which are 20 of 100 points, and the two used different
+  population scopes. **Fixing only the rubric would have left them ~20 points apart.** One field
+  list, one mapper, one rubric, one scope. **Both screens read in the same browser session after
+  shipping: Home 65/100, Audit 65/100. Gap 0.**
+- **Which rubric won, proved not assumed:** `calculateSeoScore` awards 30 of 100 for a description of
+  50 characters, and W1 measured descriptions under 120 characters in 43.9% of 409 stores. A rubric
+  that scores the defect we sell the fix for as a full pass cannot be the headline.
+- **Baselines retired, not re-pointed.** Every `storeScoreAtInstall` was captured on the old averaged
+  scale. Rewriting them onto the new one would manufacture a delta the merchant never earned, so
+  they are nulled and re-stamped honestly on the next scan.
+- **A3 — `innerText` cannot see a form value**, which is a class of bug: a control holding dev-store
+  residue is invisible to exactly the checks written to catch dev-store residue. The listing sweep
+  now reads input/textarea/select values and placeholders too.
+- **B1–B4 — the LOCKED pricing is what the app bills.** Free 100 / Starter 500 / Growth 1,500 /
+  Pro 4,000, annual at exactly 20%, uniform 2.00¢ per credit, every tier inside the cap rule.
+  Credits weighted 0/1/3 with unknown types throwing. Both axes enforced, and the refusal names
+  WHICH limit. Trial credits 250, in their own column on `Shop` so they survive the uninstall that
+  deletes `Plan` and `UsageRecord`.
+- **The code contradicted the locked table on bulk:** it gated bulk at Growth ($29.99) where
+  `14-PRICING.md` §4 grants it from Starter ($9.99). Bulk is the conversion mechanism — §5, "the
+  thing you pay for is the thing that saves the time" — so gating it three tiers up broke the ladder
+  the pricing was designed around.
+- **C1** — the `faq_visible` deep link wired from the string CW photographed working, not re-derived.
+- Suite **2,980 → 3,072**. Two migrations; 239 columns.
+
 **2026-09-14 (second session)** — the two live over-claims, the shop name, H7, P1.3, P0.4 and the
 tokensUsed decision. Shipped in `7dc5f74`, `abedb42`+`e705938`, `f3347f0`, `eab67ae`. Each proved:
 build-info matched the pushed sha, `status: ok`, `schema.ok: true`, **237 columns**,
