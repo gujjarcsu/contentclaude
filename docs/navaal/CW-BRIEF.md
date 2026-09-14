@@ -206,6 +206,53 @@ added or merely pre-selected awaiting **Save**. CC will then wire it as a button
 
 ---
 
+## ADDED 2026-09-14 BY CC — H7 IS UNBLOCKED. Re-run the listing capture. (20 minutes)
+
+**Both defects you reported are fixed in `tools/proof/listing-assets.mjs`, shipped in `abedb42`.**
+
+**1. The Sidekick problem is gone.** The screenshot target was
+`f.frameOnly ? await frame.frameElement() : page`, and `frameOnly` was set on the three mobile
+frames only — so all five desktop frames captured the whole Shopify admin. **The flag is deleted,
+not set eight times**: it made the safe behaviour opt-in and five of eight frames did not opt in.
+Every frame now captures the app frame and nothing else.
+
+**2. The 04 guard is fixed, not loosened.** It was `/scores \d+\/100/i`, which matched nothing — the
+screen says *"Store SEO score"*, and puts the number and *"/ 100"* on separate lines. It is now
+`/Store SEO score\s*\d+\s*\/\s*100/i`, which is **stricter**: it requires the literal label, which
+the old pattern never checked. Verified against the real `innerText` your own manifest recorded, and
+against a "Calculating…" state, which it still rejects — so it cannot capture a spinner.
+
+**Run it:**
+```
+node tools/proof/listing-assets.mjs
+```
+
+**ONE TRAP THAT WILL WASTE AN HOUR IF YOU HIT IT.** If a frame comes back blank, or with the title
+*"Unhandled Thrown Response!"*, that is **not the app being broken**. Playwright's default
+user-agent contains `HeadlessChrome`; the Shopify library classifies it as a bot and answers
+**410 Gone**, React then fails to hydrate (#418, #423) and you get an error page. It cost me a real
+scare during P0.4 — the capture reported "App Bridge is absent" from a page the app never served.
+`listing-assets.mjs` already sends a real UA; if you write a new harness, copy the `userAgent` line
+out of `tools/proof/appbridge-head.mjs`.
+
+**What done looks like:** eight PNGs in `listing-assets/`, `manifest.json` with `ok: true` on all
+eight including **04**, and **no Shopify chrome in any image** — no left nav, no top bar, no Sidekick
+icon. Open two of them and look, rather than trusting `ok: true`.
+
+**What to paste back:** the manifest's eight `ok` values, and whether 04 captured this time. If 04
+still fails, paste its `error` string verbatim — it names what it saw, and that is the fastest route
+to the next fix.
+
+**While you are in the listing editor:** `12-OFFER.md` §5.5's two replacements are now live **inside
+the app** (`7dc5f74`) — *"Email support from the founder"* and *"Two description options to
+compare"*. The listing needs the same wording so the two surfaces stop disagreeing, which is the
+whole point of §5.5. **One conflict to be aware of:** §6 prescribes *"Every question answered within
+one business day"*, which is **47 characters** against the 40-character plan-feature field. It does
+not fit. It needs a shorter approved variant, or the listing will say something different from the
+app again.
+
+---
+
 ## WHEN YOU FINISH
 
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an

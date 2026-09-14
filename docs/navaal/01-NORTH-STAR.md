@@ -167,6 +167,45 @@ That is why G is a phase with named owners and not a hope, and why most of its r
 
 ## 10. LOG
 
+**2026-09-14 (second session)** — the two live over-claims, the shop name, H7, P1.3, P0.4 and the
+tokensUsed decision. Shipped in `7dc5f74`, `abedb42`+`e705938`, `f3347f0`, `eab67ae`. Each proved:
+build-info matched the pushed sha, `status: ok`, `schema.ok: true`, **237 columns**,
+`workerRunning: true`, `failedLast10Min: 0`, `stuckProcessing: 0`.
+
+- **Two over-claims were live in front of people who are not us.** `Priority support` → *"Email
+  support from the founder"*, `A/B variant testing` → *"Two description options to compare"*
+  (`12-OFFER.md` §5.5). **Four surfaces, not the two named** — the comparison table and a quota
+  error also carried it. The product page was **already honest** (*"Generate two options to
+  compare"*), which is how it survived: the honest wording and the overclaim sat in the same app.
+- **The shop name was captured at install and never refreshed**, so `contentpilot-dev2` — renamed
+  to **Northline Supply** — was still greeted *"Welcome back, E2E Test Store!"*, and
+  `navaal-ttv-03` by its raw handle. **The same value authors every published blog post**, so the
+  handle reached a merchant's public storefront, permanently, in content they cannot easily edit.
+  That second surface was not in the brief and is the worse of the two. Shopify's live name now
+  identifies the store; `brandVoice.storeName` stays the merchant's editable field and still wins
+  for authorship.
+- **H7: every DESKTOP listing image was a screenshot of the Shopify admin**, Sidekick icon and all —
+  a named BFS rejection reason for an AI app, shipped inside the listing images. `frameOnly` was set
+  on the three mobile frames only. The flag is **deleted** rather than set eight times: it made the
+  safe behaviour opt-in and five of eight frames did not opt in.
+- **P1.3: the score gave 25 of 100 points for structured data Shopify requires every theme to
+  emit.** Rebuilt on what W1 validated — content density largest at 25, graded attributes at 20,
+  freshness scored only when known. `productType` is **cosmetic** even though it is the most
+  commonly missing field (44.9%), because it is not on OpenAI's required list and grading the common
+  thing as urgent is exactly the overclaim §1 already walked back. **The rubric is published in-app,
+  generated from the same table the score adds up**, on both surfaces the score appears.
+- **P0.4 measured from the rendered document, both sides.** Before: App Bridge present, already the
+  **first script overall**, but in the **body**, with **no scripts in the head at all** (React 18.3.1
+  does not hoist). After: in the head, first, with the api-key meta, `window.shopify` true, **zero
+  duplicate-load warnings** — though there are now genuinely **two copies**, and that is stated
+  rather than hidden.
+- **`UsageRecord.tokensUsed` is filled, not dropped** — dropping is irreversible and there are now
+  real merchants. AsyncLocalStorage, because a module-level observer would mis-attribute tokens
+  across concurrent bulk generations, and wrong numbers are worse than absent ones.
+- **The scoreboard in this file's own family was stale.** `CC-STANDING-PROMPT.md` said 5 merchants
+  and 2 net installs; the Partner Dashboard says **8 merchants, 6 net installs**, and **two installs
+  are not ours and have been kept**.
+
 **2026-09-14** — Phase 0 (CC half) and P1.1. Shipped in `49d91e1`, `e9f5a0b`, `1573dc3`, `fc5bba7`.
 Production proved at each: build-info matched the pushed sha, `status: ok`, `schema.ok: true`,
 **237 columns**, `workerRunning: true`, `failedLast10Min: 0`, `stuckProcessing: 0`.

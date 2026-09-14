@@ -4373,3 +4373,127 @@ AppProvider's copy means `embedded={false}`, which per its own type docs also dr
 redirect-to-admin-when-loaded-outside behaviour tied to **App Store rejection 2.1.1**. That needs a
 rendered-document proof before and after, not a guess, on the one path whose failure takes the whole
 app down.
+
+
+---
+
+# TWO OVER-CLAIMS, THE SHOP NAME, H7, P1.3, P0.4 AND tokensUsed — 2026-09-14 (second session)
+
+`7dc5f74` · `abedb42` + `e705938` · `f3347f0` · `eab67ae`. Each proved at its boundary: build-info
+matched the pushed sha, then `status: ok`, `schema.ok: true`, **237 columns**, `workerRunning: true`,
+`failedLast10Min: 0`, `stuckProcessing: 0`.
+
+## The two the brief called urgent, because people who are not us are looking at them
+
+`Priority support` → **"Email support from the founder"**. `A/B variant testing` → **"Two description
+options to compare"**. Both from `12-OFFER.md` §5.5.
+
+**Four surfaces, not the two named.** The comparison table row and a quota error (*"A/B requires
+2"*) carried it too. And the product page was **already honest** — its own button says *"Generate
+two options to compare"* and its gate says *"Comparing two options requires the Growth plan"*. That
+is how this survived: the honest wording and the overclaim were in the same app, and only the plan
+card was wrong.
+
+## The shop name, and the surface that was not in the brief
+
+The dashboard greeted `brandVoice.storeName`, captured once at install by `ensureInferredBrandVoice`
+whose upsert `update` branch is empty **on purpose** — correct for a settings field the merchant can
+edit, wrong for a greeting. `contentpilot-dev2`, renamed to **Northline Supply**, was still greeted
+*"Welcome back, E2E Test Store!"*. `navaal-ttv-03` was greeted by its raw handle.
+
+**`app/routes/app.blog.jsx` used the same value as the AUTHOR of every published blog post.** So the
+second failure put `navaal-ttv-03` on a merchant's public storefront, written into the article. A
+greeting is on our screen; that is on theirs, permanently.
+
+Two questions were sharing one field. Shopify's live name is authoritative for **identifying** the
+store (cached an hour — the dashboard is the most-loaded page and a shop name changes approximately
+never). `brandVoice.storeName` stays the merchant's editable field and is authoritative for
+**authorship**, so precedence flips on the blog path. Neither can emit the handle as a name:
+`isPlaceholderName()` treats a stored value equal to the handle as seeded rather than chosen,
+compared case- and separator-insensitively. When nothing real is known the greeting is *"Welcome
+back!"*, which is always true.
+
+**An existing test encoded the bug.** `tests/routes/firstRun.test.js` asserted
+`storeName === "brand-new"` under the title *"falls back to the shop handle when no name was ever
+set"*. A test that pins the defect is worse than no test.
+
+## H7 — we were shipping a BFS rejection reason inside the listing images
+
+`frameOnly` was set on the three mobile frames only, so all five DESKTOP frames screenshotted the
+whole Shopify admin — left nav, top bar, and the Sidekick icon that `09-DOCTRINE.md` §2 names as a
+Built for Shopify rejection reason for an AI app.
+
+**The flag is deleted rather than set eight times.** A flag made the safe behaviour opt-in and five
+of eight frames did not opt in. There is no listing image that should show Shopify's chrome.
+
+Frame 04's guard matched nothing — `/scores \d+\/100/i` against a screen that renders *"Store SEO
+score"* with the number on its own line. Fixed **stricter**: it now requires the literal label.
+Verified against the real `innerText` the harness itself had recorded in its manifest.
+
+## P1.3 — a quarter of the score was for something Shopify does for you
+
+Structured data was 25 of 100 points. Shopify REQUIRES every Theme Store theme to emit product
+structured data. W1 measured structured-data problems at 15.9%, mostly duplication rather than
+absence.
+
+Rebuilt on what W1 validated: **content density 25** (43.9% of 409 stores have descriptions under
+120 characters), **graded attributes 20**, answer-first 15, Q&A 15, meta 10, media 10, freshness 5
+and only when known. `productType` is graded **cosmetic** despite being the single most commonly
+missing field (44.9%), because it is Shopify's own taxonomy field and not on OpenAI's required list
+— grading the common thing as urgent is exactly the GTIN overclaim §1 already walked back.
+
+**The rubric is published in-app and generated from the same table the score adds up**, on both
+surfaces the score appears — the dashboard card as well as first-run, because `StartState` only
+renders while `firstDraftSeenAt` is null and publishing it only there would hide it from every
+paying merchant.
+
+## P0.4 — measured from the rendered document, both sides
+
+| | before | after |
+|---|---|---|
+| parent | `body` | **`head`** |
+| first script overall | yes | yes |
+| first in head | — (no scripts in head) | **yes** |
+| `meta[shopify-api-key]` | absent | **present** |
+| `window.shopify` | true | true |
+| copies | 1 | **2** |
+| duplicate-load warnings | 0 | **0** |
+
+Half the rule was already met before the change and half was not. React is 18.3.1, which does not
+hoist scripts into the head — that is a React 19 feature — so `<AppProvider embedded>`'s tag stayed
+in the body and the head held no scripts at all. There are now genuinely **two copies**, with no
+warning from App Bridge; that is stated rather than hidden.
+
+**The harness lied first, and the lie looked exactly like the finding.** Its first run reported *"APP
+BRIDGE: present: false"*, zero scripts, title *"Unhandled Thrown Response!"*. Playwright's default
+user-agent contains `HeadlessChrome`, Shopify's library answered **410 Gone**, React failed to
+hydrate and the frame rendered an error page. Production was checked independently rather than
+assumed — `/app` returned 302 to a browser UA throughout.
+
+## tokensUsed: filled, not dropped
+
+Dropping was defensible — the `ai.usage` event carries strictly more. It was rejected because
+dropping a column is irreversible and **there are now real merchants on this app**.
+
+A module-level observer would have been two lines and **wrong**: the bulk processor runs generations
+concurrently and a shared callback cannot tell which generation a count belongs to. AsyncLocalStorage
+carries the record id down the async chain instead. The test that matters interleaves three
+generations so the first finishes last — the ordering that makes a shared observer report the wrong
+id.
+
+## What I found that nobody asked about
+
+**Every page load throws ~12 uncaught `pageerror`s, and the markup is ours.** From a real
+authenticated `/app` load: *"Unexpected tag <<div slot=\"logo\" ...>"*, 11–12 times per load.
+`app/routes/app.jsx:174` puts a `<div slot="logo">` inside `<s-app-nav>`, a Shopify **web
+component** that rejects an arbitrary `<div>` child. Present in both the before and after captures,
+so P0.4 did not cause it. Logged as `C0.4`.
+
+**`12-OFFER.md` contradicts itself.** §5.5 states plan-feature lines are `maxlength 40`; §6
+prescribes *"Every question answered within one business day"*, which is **47**. Both are approved
+copy and an existing test requires the §6 line to be present, so I have rewritten neither — the
+exception is named in the test with a second assertion that fires if it is ever resolved.
+
+**A claim of mine from yesterday was false.** I wrote in the queue that *"nothing in the folder says
+what 16 Oct is"*. `09-DOCTRINE.md` §4 had it all along — Admin API 2025-10 becomes inaccessible —
+and I had not looked there. It does not bind us, and `check-api-versions.mjs` now enforces it.
