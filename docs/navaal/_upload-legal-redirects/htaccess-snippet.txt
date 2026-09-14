@@ -1,0 +1,9 @@
+# ---- Phase 8 Part B (2026-09-14): the legal pages have ONE home ----
+# Paste these two rules INSIDE the existing <IfModule mod_rewrite.c> block of
+# public_html/.htaccess, directly after "RewriteEngine On" and the HTTPS /
+# non-www rules, and BEFORE the "Redirect any *.html request to its clean URL"
+# rule — otherwise /privacy.html would hop to /privacy first (two hops).
+# They match /privacy, /privacy/, /privacy.html and the same for /terms.
+RewriteRule ^privacy(\.html)?/?$ https://app.navaal.ai/privacy [R=301,L]
+RewriteRule ^terms(\.html)?/?$ https://app.navaal.ai/terms [R=301,L]
+# ---- end Phase 8 Part B ----

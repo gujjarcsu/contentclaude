@@ -88,6 +88,7 @@ export function legalPage(which) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} — ${esc(APP_NAME)}</title>
 <meta name="robots" content="index, follow">
+<link rel="canonical" href="https://app.navaal.ai/${which}">
 <style>${CSS}</style>
 </head>
 <body>
