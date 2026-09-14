@@ -405,3 +405,12 @@ with nothing in it the app cannot back.
 **One fact worth knowing:** 7 of the 8 installed storefronts are password-protected (all the dev
 stores). On a locked store the app says so once and grades everything else; nothing about a locked
 store is presented as "blocked".
+
+---
+
+## FYI 2026-09-14 (Phase 8 A1) — F8 IS FIXED, NO ACTION. Both real merchants now read against 100.
+
+You had it as a decision; the brief made it mine (`14-PRICING.md` §6 item 8, *grandfather nobody*).
+**9 Free rows were raised from 25 to 100; nothing was lowered; the Pro row was already at 4,000.**
+Read on `navaal-ttv-02`: *"Monthly credits · 6 / 100 used"*. From here, a Plan row below the locked
+table for its plan name is raised the first time it is read, so this cannot recur silently.

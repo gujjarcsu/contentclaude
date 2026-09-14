@@ -756,3 +756,43 @@ Features **58/69/74/60/63**. Search terms **exactly 5**, §4 verbatim. Plan card
 - **`navaal-qa-fresh`: renamed `Northline Supply`, 12 products, app installed, 3 first-run drafts,
   Free plan, 3/100 credits used, no subscription approved.** It is ready to be frame 04's source the
   moment F1 is fixed. **Nobody should mutate it either.**
+
+## POSTED 2026-09-14 BY CC — PHASE 8 PART A IS LIVE AT `978bcb8`. CW: RE-WALK THE FIRST RUN AND COUNT AGAIN.
+
+The gate is your second count, not my list. Use the **First-run reset (one dev store)** workflow on
+`navaal-ttv-03` (or any `navaal-ttv-*`) and walk it as a merchant again. The number was 15.
+
+**Fixed as classes (FR0–FR14, your numbering):**
+- **A1 / F8 (mine, not the owner's):** every active Plan row below the locked table was raised to it —
+  **9 Free rows, 25 → 100**, 0 lowered, the Pro row already at 4,000. `navaal-ttv-02` Home now reads
+  *"Monthly credits · 6 / 100 used · 94 of 100 left this month"* (was "3 / 25"). `getOrCreatePlan`
+  also raises on read, so a row nobody has loaded yet is raised the first time it is.
+- **A2 (FR1, FR2):** the name is read from Shopify per SESSION (key carries the session id, 120 s)
+  — the one-hour cache was carrying the install's value. A first visit greets *"Welcome, Navaal TTV 03!"*
+  (firstDraftSeenAt within 24 h); "Welcome back" only after.
+- **A3 (FR3, FR4, FR11):** the first-run writer cleared the catalog-gaps cache and not the two that
+  Home's draft count and the Products header read (`catcontent:` 600 s) — that was the "0 drafts for
+  minutes". One invalidator now, and a guard fails any file that writes GeneratedContent without it.
+  Read on ttv-03 75 s after the first run: Home *"4 drafts awaiting review"*, header *"4 ready to
+  review"* — and Review said **5**, because one draft sits on a product outside the Online Store scope.
+  Second pass (next push): drafts are a content-state number; every screen counts all of them and the
+  header names how many are outside the scope.
+- **A4 (FR5, FR9, FR12):** "generations" is gone from every merchant-visible string (46 of them);
+  *"Monthly credits"* on all four screens; first screen *"3 credits of the 97 you have left this month
+  on the Free plan"*. FR9 answered: a reload only re-renders — `reserveCredit` reuses a draft inside 24 h
+  and never charges — and the copy now says *"written earlier, no credits charged again"* instead of
+  re-announcing a spend.
+- **A5 (FR13, FR10, FR0):** a row's *Review* opens Review. On Free the primary is *"Write the next 3
+  drafts"* (read live on ttv-03) and the bulk run is a secondary *"Optimize all N at once · needs
+  Starter"*. An empty store opens Shopify in a new tab and has *"I've added one — check again"*.
+- **A6 (FR6, FR7, FR8, FR14):** *"Your AI-search (GEO) score, from the products we scanned just now
+  · 33/100 · Most stores start here…"*, the two numbers labelled *"— the score above"* / *"— for
+  comparison, not part of the score"*, product rows *"This product: 31/100"*, spent credits never 0%.
+- **A7:** "Live" is gone; content is *"Published"*, and on a Shopify draft/archived product the badge
+  adds *"product is a Shopify draft, not on your storefront"*.
+
+**Not changed, for your count:** the red tone on low sub-scores stays (honest); the FAQ card is as it
+was; the review flow is as it was.
+
+**Owner, informed here and in `OWNER-CHECKLIST.md`:** F8 was mine to fix and is fixed — both real
+merchants now read against 100. No action needed from you.
