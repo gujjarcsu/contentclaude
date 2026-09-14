@@ -213,3 +213,38 @@ plans page and the quota surfaces show these numbers."* A second hardcoded copy,
 person fixing second hardcoded copies, ten minutes after reading the rule. The guard is mechanical
 now because judgement demonstrably is not enough: `tests/utils/billingConfig.test.js` asserts every
 constant exported from `billing-plans.js` has an importer that is not a test.
+
+---
+
+## A SOURCE-READING GUARD MUST STRIP COMMENTS, OR IT FIRES ON ITS OWN DOCUMENTATION
+
+Recorded 2026-09-14 after it happened **four times in one session**, in four different files, to
+four different rules:
+
+| The guard | What it fired on |
+|---|---|
+| "no file may reference `SHOPIFY_API_SECRET`" | the docstring saying *"its own secret, **not** `SHOPIFY_API_SECRET`"* |
+| "no column may hold part of a key" | the comment naming `aiKeyLast4` as the thing not to add |
+| "no screen may say *Live on your storefront*" | the JSX comment explaining why the label was changed |
+| "nothing may type the cache key by hand" | the docstring for `cacheKey()`, which quotes the key shape |
+
+**Both directions are traps, and they pull opposite ways.** In Phase 4 a PRESENCE check passed on a
+docstring that merely QUOTED the merchant copy, so deleting the copy failed nothing. These four are
+the inverse: an ABSENCE check failing on the comment that explains the absence.
+
+**The tempting fix is the wrong one.** When a guard fires on the comment justifying it, the path of
+least resistance is to delete the explanation — which leaves the rule enforced and its reason
+gone, so the next person removes the rule. Strip the comments instead.
+
+**Strip BLOCK comments, not just line comments.** Three of the four were `/* */` or JSX `{/* */}`,
+and a filter that only knows `^\s*//` misses every one of them:
+
+```js
+const code = (t) =>
+  t.replace(/\/\*[\s\S]*?\*\//g, "")
+   .split("\n")
+   .filter((l) => !/^\s*\/\//.test(l))
+   .join("\n");
+```
+
+A file is not less correct for naming the thing it refuses to do. It is usually more correct.

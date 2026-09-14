@@ -4720,6 +4720,30 @@ number that exists to prove the app worked is the one from before they pressed t
 read, but dev2 has auto-publish on, so nothing ever sits in Review. It reported the lag **UNMEASURED,
 not zero**, which is the only honest output available to it.
 
+**Measured one layer down instead, in production at `6d832c1`:**
+
+| | |
+|---|---|
+| Key | `cc:startscan:<shop>` |
+| Cached, TTL remaining | **210 s** — it would have sat stale for another three and a half minutes |
+| Cleared by `invalidateStoreScan` | **2 ms** |
+| After | gone (`exists: false`) |
+
+**So the lag after a publish is ONE PAGE LOAD, against up to 600 s before this shipped.** What that
+does not prove is that a click on Review reaches the function; that is asserted at the source,
+break-tested, with a guard that finds a fourth publish site before it ships.
+
+**And the diagnostic built to prove this contained the defect P5.0 was spent removing.** It queried
+`startscan:<shop>` and reported a live cache as absent — twice — because `getCache` namespaces every
+key with `cc:` and the script had **guessed the format instead of asking for it**. It is only
+visible because the script refuses to conclude anything from a miss: *"The key is NOT currently
+cached, so an invalidation cannot be observed."* Had it treated an absent key as a cleared key it
+would have printed a confident pass over a lookup that never matched anything.
+
+**The first thing I checked was not my script but `invalidateCache`** — because if that had not
+prefixed, P5.2's entire fix would have been a no-op that every mocked test still called green. It
+prefixes. `cacheKey()` is exported now, so nothing outside `cache.server.js` builds a key by hand.
+
 ## P5.4 — determined in under an hour: the Billing API, so packs are small
 
 Six pieces of evidence. The two that settle it: the app **receives**
