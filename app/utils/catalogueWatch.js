@@ -27,6 +27,8 @@
  *
  * PURE. No I/O.
  */
+import { gscLine } from "./gscAiControl.js";
+
 // The one definition. catalogGaps.server.js re-exports it; it lives here
 // because this module must stay free of server imports for the routes.
 export const THIN_DESCRIPTION_CHARS = 50;
@@ -337,7 +339,7 @@ export function parseFindings(json) {
  * The Home banner's lines, most important first. Empty array = no banner.
  *
  * @param {{needAttention?: number, sinceYesterday?: number, blocking?: number,
- *   crawler?: {blocked?: string[]}}} s
+ *   crawler?: {blocked?: string[]}, gsc?: {excluded?: boolean}}} s
  */
 export function homeAttentionLines(s) {
   const lines = [];
@@ -345,6 +347,9 @@ export function homeAttentionLines(s) {
   if (blocked.length) {
     lines.push(`${blocked.join(", ")} ${blocked.length === 1 ? "is" : "are"} blocked from your storefront.`);
   }
+  // P2.5 — the merchant's own answer, and the line says so.
+  const gsc = gscLine(s?.gsc);
+  if (gsc) lines.push(gsc);
   const blocking = Number(s?.blocking ?? 0);
   if (blocking > 0) {
     lines.push(`${blocking} ${blocking === 1 ? "product is" : "products are"} missing something an AI shopping surface requires.`);

@@ -47,7 +47,7 @@ export const DATA_INVENTORY = [
   { model: "Plan", holds: "Your plan name, status, and the Shopify subscription id. We never see or store card details.", personal: false },
   { model: "UsageRecord", holds: "One row per generation: what was generated, how many credits it cost, and the token counts it used.", personal: false },
   { model: "ProductScore", holds: "Each product's SEO score before and after we worked on it.", personal: false },
-  { model: "GrowthState", holds: "Whether you have completed setup steps such as enabling the theme embed.", personal: false },
+  { model: "GrowthState", holds: "Whether you have completed setup steps such as enabling the theme embed, and your answer to the one check we ask you to make yourself in Search Console — whether Google's AI features are switched off for your site — with its date.", personal: false },
   { model: "UpgradePrompt", holds: "Which upgrade prompts you were shown, so you are not shown the same one repeatedly.", personal: false },
   { model: "ReviewRequestAttempt", holds: "Whether we have asked you to review the app, so we do not ask twice.", personal: false },
   { model: "SupportRequest", holds: "Questions you send us through Get help: the email address you give for a reply, your subject and message.", personal: true },

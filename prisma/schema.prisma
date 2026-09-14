@@ -306,6 +306,12 @@ model GrowthState {
   // per shop rather than in the browser, so it stays dismissed on the
   // merchant's other devices and does not come back when they clear site data.
   geoNoteDismissedAt DateTime?
+  // P2.5 — Search Console's "Search generative AI control" has no API (verified
+  // 2026-09-14 against the v1 reference index: searchanalytics, sitemaps, sites,
+  // urlInspection and nothing else), so the merchant answers one question and
+  // we keep the answer — "default" | "excluded" | "no_gsc" — and when.
+  gscAiControl       String?
+  gscAiControlAt     DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

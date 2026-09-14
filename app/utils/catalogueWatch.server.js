@@ -41,6 +41,7 @@ import { getFreshOfflineSession } from "./offlineToken.server.js";
 import { scopeForShop, scopeQueryFor } from "./candidates.server.js";
 import { sydneyParts } from "./scheduler.server.js";
 import { checkCrawlerAccess, latestCrawlerAccess } from "./crawlerAccess.server.js";
+import { gscState } from "./gscAiControl.js";
 import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
 
 export const WATCH_HOUR_SYDNEY = 2; // before the 08:00 digest, after most edits
@@ -232,13 +233,15 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       everWalked = r.ok;
       partial = r.partial;
     }
-    const [rows, blocking, degrading, graded, crawler, lastRun] = await Promise.all([
+    const [rows, blocking, degrading, graded, crawler, lastRun, growth] = await Promise.all([
       prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
       prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
       prisma.productWatch.count({ where: { shop, degrading: { gt: 0 } } }),
       prisma.productWatch.count({ where: { shop, grade: { not: null } } }),
       latestCrawlerAccess(shop, { now }),
       prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true } }),
+      // P2.5 — the merchant's own answer to the one check no app can make.
+      prisma.growthState.findUnique({ where: { shop }, select: { gscAiControl: true, gscAiControlAt: true } }),
     ]);
     const s = summarise(rows, now);
     return {
@@ -250,6 +253,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       degrading,
       graded,
       crawler,
+      gsc: gscState({ answer: growth?.gscAiControl ?? null, answeredAt: growth?.gscAiControlAt ?? null }, now),
       lastRunAt: lastRun?._max?.lastSeenAt?.toISOString() ?? null,
     };
   } catch (err) {
@@ -265,6 +269,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       degrading: 0,
       graded: 0,
       crawler: noCrawler,
+      gsc: gscState({}, now),
       lastRunAt: null,
     };
   }

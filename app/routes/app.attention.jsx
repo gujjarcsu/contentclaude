@@ -12,11 +12,12 @@
  * Not in the sidebar: that is five items by an earlier decision. Reached from
  * the Home banner, which is where the number is.
  */
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { Page, Card, Text, BlockStack, InlineStack, Badge, Button, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import { KIND_LABEL, SURFACE_LABEL, parseAttention, parseFindings, homeAttentionLines } from "../utils/catalogueWatch.js";
 import { CRAWLERS, CRAWLER_NOTE } from "../utils/crawlerAccess.js";
+import { GSC_ANSWER, GSC_LABEL, GSC_TONE, GSC_SETTINGS_URL, GSC_RECHECK_DAYS } from "../utils/gscAiControl.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 
@@ -70,6 +71,80 @@ function ProductHeader({ r, storeHandle, navigate }) {
   );
 }
 
+/**
+ * P2.5 — the one check no app can make. Verified 2026-09-14: the Search
+ * Console API lists searchanalytics, sitemaps, sites and urlInspection and
+ * nothing else, so the switch cannot be read. No gate on an unverified API:
+ * the merchant answers, the answer is shown as theirs, and it is asked again
+ * after GSC_RECHECK_DAYS.
+ */
+function GscCard({ gsc }) {
+  const fetcher = useFetcher();
+  const busy = fetcher.state !== "idle";
+  const answerForm = (value, label) => (
+    <fetcher.Form method="post" action="/app/gsc-ai-control">
+      <input type="hidden" name="answer" value={value} />
+      <Button submit size="slim" loading={busy}>
+        {label}
+      </Button>
+    </fetcher.Form>
+  );
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <Text as="h2" variant="headingSm">
+          Google's AI features — the one check we ask you to make
+        </Text>
+        <Text as="p" variant="bodySm">
+          Google lets a site owner exclude a site from AI Overviews, AI Mode and AI in Discover: in
+          Search Console, under Settings, the switch is called Search generative AI. No app can read
+          it — Google offers no API for it — so this is the one check we ask you to make yourself. It
+          takes thirty seconds, and an agency or a previous developer may have set it without saying so.
+        </Text>
+        {gsc?.answer ? (
+          <BlockStack gap="200">
+            <InlineStack gap="200" blockAlign="center" wrap>
+              <Badge tone={GSC_TONE[gsc.answer] ?? "info"}>{GSC_LABEL[gsc.answer] ?? gsc.answer}</Badge>
+              <Text as="span" variant="bodySm" tone="subdued">
+                your answer{gsc.answeredAt ? `, ${new Date(gsc.answeredAt).toLocaleDateString()}` : ""}
+              </Text>
+              {gsc.stale && <Badge tone="attention">worth a re-check</Badge>}
+            </InlineStack>
+            {gsc.excluded && (
+              <Text as="p" variant="bodySm">
+                While the switch is on, your pages do not appear in AI Overviews or AI Mode. Regular
+                Google results are unaffected. If that was not your decision, switch it off in Search
+                Console; it can take days to take effect.
+              </Text>
+            )}
+            <InlineStack gap="200" wrap>
+              <Link url={GSC_SETTINGS_URL} target="_blank">
+                Open Search Console settings
+              </Link>
+              {answerForm("reset", "Check again")}
+            </InlineStack>
+          </BlockStack>
+        ) : (
+          <BlockStack gap="200">
+            <Link url={GSC_SETTINGS_URL} target="_blank">
+              Open Search Console settings
+            </Link>
+            <InlineStack gap="200" wrap>
+              {answerForm(GSC_ANSWER.DEFAULT, "It's off — my store is included")}
+              {answerForm(GSC_ANSWER.EXCLUDED, "It's on — my store is excluded")}
+              {answerForm(GSC_ANSWER.NO_GSC, "I don't use Search Console")}
+            </InlineStack>
+          </BlockStack>
+        )}
+        <Text as="p" variant="bodySm" tone="subdued">
+          Method: your answer, kept with its date and asked again after {GSC_RECHECK_DAYS} days. Nothing
+          here is read from Google — there is no API that would let us.
+        </Text>
+      </BlockStack>
+    </Card>
+  );
+}
+
 export default function AttentionPage() {
   const { shopDomain, summary, rows, gaps } = useLoaderData();
   const navigate = useNavigate();
@@ -79,7 +154,7 @@ export default function AttentionPage() {
   const storeHandle = String(shopDomain).split(".")[0];
   const crawler = summary.crawler ?? { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
   const lines = homeAttentionLines(summary);
-  const nothing = rows.length === 0 && gaps.length === 0 && crawler.blocked.length === 0;
+  const nothing = rows.length === 0 && gaps.length === 0 && crawler.blocked.length === 0 && !summary.gsc?.excluded;
 
   return (
     <Page
@@ -139,6 +214,8 @@ export default function AttentionPage() {
             </Text>
           </BlockStack>
         </Card>
+
+        <GscCard gsc={summary.gsc} />
 
         {nothing && (
           <Card>
