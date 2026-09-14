@@ -199,6 +199,15 @@ export default function App() {
           <s-link href="/app/review">Review</s-link>
           <s-link href="/app/blog">Blog</s-link>
           <s-link href="/app/settings">Settings</s-link>
+          {/* NO "Get help" here, deliberately. The sidebar is five items and
+              every label is one plain word — a decision from an earlier phase
+              that cut it from thirteen, and navigation.test.js enforces both.
+              I added a sixth item, two tests went red, and loosening them to fit
+              my change is exactly how false green #3 is manufactured.
+
+              Support is reachable from the FOOTER, which renders on every page
+              of the app, and from the Settings page. That is the conventional
+              place for it in a Shopify app and it costs the sidebar nothing. */}
         </s-app-nav>
         {/* Live job progress ticker. Phase 1 item 6: it polls only while a job
             is actually running, stops after two empty responses, and stays
@@ -210,10 +219,31 @@ export default function App() {
         />
         <AppRenderBoundary>
           <Outlet />
-          {/* Support & bug reporting — visible on every page of the app */}
+          {/* Support & legal — visible on every page of the app.
+              P6.2: this used to be a `mailto:` and nothing else, under a live
+              listing that promises "Questions answered within 1 business day".
+              A mailto: fails silently in every direction that matters — no mail
+              client configured, a spam folder, a typo — and in each case NOBODY
+              learns a question was asked, including us. /app/support records the
+              question before anything else happens to it.
+
+              The mailto stays beside it, because some merchants prefer their own
+              client and it reaches the same inbox. The legal links are here
+              because App Store submission requires them reachable from inside
+              the app, not only from the listing. */}
           <FooterHelp>
-            Questions, bugs, or suggestions?{""}
-            <Link url="mailto:hello@navaal.ai">Contact us at hello@navaal.ai</Link>
+            Questions, bugs, or suggestions?{" "}
+            <Link url="/app/support">Get help</Link>
+            {" · "}
+            <Link url="mailto:hello@navaal.ai">hello@navaal.ai</Link>
+            {" · "}
+            <Link url="/privacy" target="_blank">
+              Privacy
+            </Link>
+            {" · "}
+            <Link url="/terms" target="_blank">
+              Terms
+            </Link>
           </FooterHelp>
         </AppRenderBoundary>
       </PolarisProvider>

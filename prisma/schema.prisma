@@ -178,6 +178,44 @@ model GDPRRequest {
   @@index([processedAt])
 }
 
+// P6.2 — a merchant's question, recorded BEFORE it is emailed.
+//
+// The listing already promises "Email support from the founder" and "Questions
+// answered within 1 business day". Those promises are live now, and a mailto:
+// link is not a mechanism behind them: if the merchant's mail client is not
+// configured, or Resend is down, or the message lands in spam, nobody knows a
+// question was ever asked — including us. At 0 reviews one unmet promise halves
+// the rating.
+//
+// So the row is written FIRST and the email is an attempt on top of it. If the
+// email fails, the question still exists, `emailedAt` is null, and the owner can
+// find it. The merchant is told which of those happened rather than a cheerful
+// "sent".
+model SupportRequest {
+  id        String   @id @default(cuid())
+  shop      String
+  // Where the merchant wants the reply. Their own address, typed by them —
+  // deliberately NOT taken from the Shopify session, because the person asking
+  // is not always the account owner.
+  replyTo   String
+  subject   String
+  message   String
+  // Context worth having and cheap to capture, so the first reply does not have
+  // to be a question back.
+  planName  String?
+  appSha    String?
+  // Null means the email attempt has not succeeded. THE ROW IS THE RECORD; the
+  // email is a convenience on top of it.
+  emailedAt DateTime?
+  // "open" | "answered" — set by the owner, not by the app.
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+  @@index([status, createdAt])
+  @@index([emailedAt])
+}
+
 // Saved content versions — written before each overwrite so merchants can roll back
 model ContentVersion {
   id          String   @id @default(cuid())

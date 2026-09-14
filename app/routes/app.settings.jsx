@@ -743,6 +743,25 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {/* P6.2 — support, where a confused merchant actually looks.
+            It is NOT in the sidebar: that is five items by an earlier decision
+            and navigation.test.js enforces it. The footer carries it on every
+            page; this is the second place, because Settings is where someone
+            goes when something is not behaving. */}
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingMd">
+              Something not working?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Ask us and a real person replies, within one business day.
+            </Text>
+            <InlineStack>
+              <Button onClick={() => navigate("/app/support")}>Get help</Button>
+            </InlineStack>
+          </BlockStack>
+        </Card>
+
         {/* Re-run wizard */}
         {/* Content Templates — Starter+ (matches the pricing table) */}
         {!entitlements?.contentTemplates ? (

@@ -1,0 +1,36 @@
+name: Support and GDPR check
+
+# P6.2 — two questions the owner must be able to ask of production:
+#   is anybody waiting on a reply, and do the GDPR webhooks actually DO
+#   something (a handler that returns 200 and writes nothing looks identical
+#   to a working one from Shopify's side).
+#
+# Read-only. Prints counts, shop handles and subjects — never a merchant email
+# address and never a message body.
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:00 Sydney, every weekday. The listing promises one business day, and a
+    # promise nobody looks at is not one.
+    - cron: "0 22 * * 0-4"
+
+jobs:
+  check:
+    name: Open support questions and GDPR audit rows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Query
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/support-and-gdpr-diag.mjs" | tee sg.json
+          {
+            echo '## Support queue and GDPR'
+            echo ''
+            echo '```json'
+            cat sg.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
