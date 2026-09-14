@@ -199,11 +199,134 @@ export const COMPLIANCE_CLAIMS = catalogue(6, (i) => ({
     "Complies with AS/NZS 3718. Installation by a licensed plumber is required by law.",
 }));
 
+
+// ── Phase 10 Part C — the cells the first matrix never built ──────────────
+//
+// F1 asked for every axis in 05-EVIDENCE.md §4. The shapes above cover status,
+// channel, content and locale. These add the rest: the empty store (FR0), the
+// variant families whose barcodes live on a later variant (F3's exact shape),
+// one product with a hundred variants, multipacks, a catalogue above the Free
+// cap, and the plan and API axes as CONTEXTS a phase runs under rather than
+// catalogues. Two adapters map a fixture product to the node shape each real
+// function reads, so the matrix drives the real code, not a copy of it.
+
+/** FR0 — a store with nothing in it. Untested by CW; the worst screen the self-audit found. */
+export const EMPTY_STORE = Object.freeze([]);
+
+/**
+ * F3's shape: a multi-variant product whose FIRST variant has no barcode and
+ * whose later ones do. Before Phase 9 the walk read variant 1 only and graded
+ * every such product "no barcode". `barcodeAt` says which variant carries it.
+ */
+export function variantProduct(i, { variants = 7, barcodeAt = 3, option = "Size" } = {}) {
+  return product(i, {
+    id: `gid://shopify/Product/${6000 + i}`,
+    title: `Trade Work Boot ${i}`,
+    productType: "Footwear",
+    hasOnlyDefaultVariant: false,
+    options: [{ name: option }],
+    variants: Array.from({ length: variants }, (_, v) => ({
+      id: `gid://shopify/ProductVariant/${(6000 + i) * 1000 + v}`,
+      title: `${option} ${v + 1}`,
+      price: "129.00",
+      barcode: v >= barcodeAt ? `93${String((6000 + i) * 1000 + v).padStart(11, "0")}` : "",
+    })),
+  });
+}
+
+export const VARIANT_HEAVY_BARCODES = Array.from({ length: 6 }, (_, i) => variantProduct(i, { barcodeAt: 2 + (i % 3) }));
+
+/** One product, 100 sizes, the only barcode on variant 60 — past the walk's sample. */
+export const ONE_PRODUCT_100_VARIANTS = [variantProduct(99, { variants: 100, barcodeAt: 59 })]; // its own id and title, so a CSV that carries both families has no handle collision
+
+/** Multipacks: the same SKU sold as x1, x3, x6 — near-identical copy, legitimately. */
+export const MULTIPACKS = [1, 3, 6, 12].map((n, i) =>
+  product(i, {
+    id: `gid://shopify/Product/${7000 + i}`,
+    title: `Cable Tie 300mm Black — pack of ${n}`,
+    productType: "Fixings",
+    tags: [`pack:${n}`],
+    description: `Pack of ${n} nylon cable ties, 300mm x 4.8mm, black, UV stabilised. Tensile strength 22kg.`,
+  }),
+);
+
+/** A catalogue larger than the Free plan will act on (FREE_PLAN.productLimit is 100). */
+export const ABOVE_PLAN_CAP = catalogue(150);
+
+/** Products carrying Shopify Translations — the app reads the primary locale only. */
+export const MULTI_LOCALE = catalogue(4, (i) => ({
+  title: `Kitchen Mixer ${i}`,
+  translations: [
+    { locale: "fr", key: "title", value: `Mitigeur de cuisine ${i}` },
+    { locale: "de", key: "title", value: `Küchenarmatur ${i}` },
+  ],
+}));
+
+/** The plan axis: the same catalogue under each plan state a merchant can be in. */
+export const PLAN_CONTEXTS = Object.freeze({
+  FREE_WITH_QUOTA: { planName: "free", monthlyCredits: 100, used: 0 },
+  FREE_EXHAUSTED: { planName: "free", monthlyCredits: 100, used: 100 },
+  MID_TIER: { planName: "starter", monthlyCredits: 500, used: 120 },
+  ABOVE_ANY_PLAN: { planName: "growth", monthlyCredits: 1500, used: 0, catalogue: 20_000 },
+  BYO_KEY: { planName: "pro", monthlyCredits: 4000, used: 0, byok: true },
+});
+
+/** Shopify's Count payloads at each catalogue size — AT_LEAST past the precision ceiling. */
+export const COUNT_PAYLOADS = Object.freeze({
+  EMPTY: { count: 0, precision: "EXACT" },
+  SINGLE: { count: 1, precision: "EXACT" },
+  TINY: { count: 5, precision: "EXACT" },
+  ONE_PAGE: { count: 250, precision: "EXACT" },
+  MULTI_PAGE: { count: 3_000, precision: "EXACT" },
+  LARGE: { count: 10_000, precision: "AT_LEAST" },
+  HUGE: { count: 10_000, precision: "AT_LEAST" },
+});
+
+/** What the first-run scan selects (SCORED_PRODUCT_FIELDS), from a fixture product. */
+export function toScanNode(p) {
+  return {
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    productType: p.productType,
+    vendor: p.vendor,
+    tags: p.tags,
+    seo: { title: p.seoTitle ?? "", description: p.seoDescription ?? "" },
+    featuredMedia: p.imageUrl === "" ? null : { preview: { image: { url: p.imageUrl ?? `https://cdn.example/${p.handle}.jpg` } } },
+    media: { edges: [] },
+    variants: { edges: (p.variants ?? [{ price: "10.00" }]).slice(0, 3).map((v) => ({ node: { price: v.price } })) },
+  };
+}
+
+/** What the catalogue walk selects (WATCH_FIELDS), from a fixture product. */
+export function toWalkNode(p) {
+  const variants = p.variants ?? [{ barcode: "" }];
+  return {
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    vendor: p.vendor,
+    status: p.status,
+    productType: p.productType,
+    onlineStoreUrl: p.publishedOnOnlineStore ? `https://example.myshopify.com/products/${p.handle}` : null,
+    hasOnlyDefaultVariant: p.hasOnlyDefaultVariant ?? true,
+    options: p.options ?? [],
+    featuredMedia: p.imageUrl === "" ? null : { preview: { image: { url: p.imageUrl ?? `https://cdn.example/${p.handle}.jpg`, altText: p.imageAlt ?? "" } } },
+    variants: { nodes: [{ barcode: variants[0]?.barcode ?? "" }] },
+  };
+}
+
+/** F3's second look: every barcode up to the walk's sample, as fetchVariantBarcodes returns them. */
+export function variantBarcodesOf(p, sample = 50) {
+  return (p.variants ?? []).slice(0, sample).map((v) => v.barcode ?? "");
+}
+
 /**
  * Every shape above, named, so a test can iterate the matrix and a report can
  * say which cells were proved and which were not.
  */
 export const SHAPES = Object.freeze({
+  EMPTY_STORE,
   ALL_ACTIVE,
   ALL_DRAFT,
   MAJORITY_ARCHIVED,
@@ -219,4 +342,9 @@ export const SHAPES = Object.freeze({
   FASTENER_SIZES,
   NON_ENGLISH,
   COMPLIANCE_CLAIMS,
+  VARIANT_HEAVY_BARCODES,
+  ONE_PRODUCT_100_VARIANTS,
+  MULTIPACKS,
+  ABOVE_PLAN_CAP,
+  MULTI_LOCALE,
 });

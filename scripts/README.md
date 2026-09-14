@@ -33,6 +33,7 @@ A script name that does not say whether it writes is a trap at 2am. These say it
 | `generate-schema-columns.mjs` | read-only | Regenerates the expected-column list the schema-drift guard compares against. Run it after ANY change to `prisma/schema.prisma`; a test fails if the committed list is stale. `--check` exits 1 instead of writing. Touches no database. |
 | `ttv-report.mjs` | read-only | Time-to-first-value, review-ask outcomes, upgrade funnel. No writes. |
 | `funnel-digest.mjs` | read-only | **Phase 10 Part B — the funnel** (installed → first screen → first draft → first approve → first publish → returned on a later day, plus uninstalled) as counts and medians over non-test shops. No shop name is read or printed. Same arithmetic as the weekly owner digest the scheduler sends. Reachable via the **Funnel (read-only)** workflow. |
+| `shape-csv.mjs` | local only, writes files under tools/proof/fixtures/shapes/ | **Phase 10 Part C (F2) — the navaal-shape-* catalogues as Shopify product-import CSVs**, generated from the same fixtures the shape matrix runs (tests/fixtures/storeShapes.js). Touches no store, no database, no API; `--check` exits 1 if a committed file is stale (tests/utils/shapeCsv.test.js holds the same). Imported by hand: Products → Import. |
 | `diag-shop.cjs` | read-only | One shop's install, plan and session state. |
 | `shop-install-diag.cjs` | read-only | Install and reinstall history. |
 | `store-products-diag.cjs` | read-only | Product and generated-content counts for a shop. |

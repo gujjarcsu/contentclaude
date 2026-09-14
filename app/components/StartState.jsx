@@ -219,6 +219,35 @@ function StartBody({ scan, start, navigate, onRetry }) {
 
   // Phase 2 item 2.10 — a store with no products is told the truth and given
   // the one action that helps, rather than a score of zero.
+  if (scan?.empty && Number(start?.totalProducts) > 0) {
+    // Phase 10 Part C — the ALL_DRAFT and B2B_ONLY shapes. The scan reads
+    // Active products on the Online Store; this store has products and none
+    // is there. "Add a product" would be false. Say what is true and name
+    // the one thing that changes it.
+    const n = Number(start.totalProducts);
+    return (
+      <Card>
+        <EmptyState
+          heading="Your products aren't on your Online Store yet"
+          image="/empty-products.svg"
+          action={{
+            content: "Open products in Shopify",
+            url: "shopify://admin/products",
+            target: "_blank",
+          }}
+          secondaryAction={{ content: "I've published one — check again", onAction: onRetry }}
+        >
+          <p>
+            Navaal scores and writes for products that are Active and available on the Online Store sales channel —
+            that is where AI search reads them. Your store has {n} product{n === 1 ? "" : "s"} and none is there
+            yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it
+            available to the Online Store, and check again.
+          </p>
+        </EmptyState>
+      </Card>
+    );
+  }
+
   if (scan?.empty) {
     return (
       <Card>

@@ -278,6 +278,14 @@ export const loader = async ({ request }) => {
         planName: plan.planName,
         blockers,
         draftedIds,
+        // Phase 10 Part C (F1, the ALL_DRAFT / B2B_ONLY cells) — the scan is
+        // scoped to Active products on the Online Store, so a store being
+        // built (every product a draft) or a trade-only store (nothing on the
+        // channel) scans as EMPTY. The empty screen then said "add a product"
+        // to a merchant who has forty. These two counts let it say the true
+        // thing: the products exist; none is where AI search can read it.
+        totalProducts,
+        candidateProducts,
         scan: scanStoreForStart(admin, shop),
       }
     : null;
