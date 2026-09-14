@@ -331,7 +331,9 @@ describe("the Start screen itself — structural guarantees", () => {
     // read "1000 remaining free generations" to a merchant who is paying for
     // them. A4 (Phase 8) then retired the word "generations" from every screen:
     // credits are weighted (alt text 0, blog 3) and the two units must never mix.
-    expect(code).toMatch(/start\.planName === "free" \? " on the Free plan" : ""/);
+    // Phase 10 N1: the sentence moved to startCopy.js, pure, so it can be held against the card's arithmetic.
+    const copy = readFileSync("app/utils/startCopy.js", "utf8");
+    expect(copy).toMatch(/planName === "free" \? " on the Free plan" : ""/);
     expect(code).not.toMatch(/free generations/);
     expect(code).not.toMatch(/generations/);
   });
@@ -339,9 +341,11 @@ describe("the Start screen itself — structural guarantees", () => {
   it("says what it will spend, in credits, in the same breath as what is left — and never re-announces a charge for a draft that exists", () => {
     // Auto-spending credits without saying so would be indefensible. This is
     // the sentence that makes it defensible, so it is pinned.
-    expect(code).toMatch(/credit\$\{canStart === 1 \? "" : "s"\} of the \$\{start\.remaining\} you have left this month/);
-    expect(code).toMatch(/Nothing is published until you approve it/);
-    expect(code).toMatch(/no credits charged again/);
+    const copy = readFileSync("app/utils/startCopy.js", "utf8");
+    expect(code).toMatch(/costSentence\(\{/);
+    expect(copy).toMatch(/left after this/);
+    expect(copy).toMatch(/Nothing is published until you approve it/);
+    expect(copy).toMatch(/no credits charged again/);
     expect(code).toMatch(/draftedIds/);
   });
 

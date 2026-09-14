@@ -96,7 +96,7 @@ describe("A4 — one unit: credits", () => {
 
   it("the first screen says credits, and never re-announces a charge for a draft that already exists", () => {
     const s = src("app/components/StartState.jsx");
-    expect(s).toMatch(/no credits charged again/);
+    expect(src("app/utils/startCopy.js")).toMatch(/no credits charged again/);
     expect(s).toMatch(/draftedIds/);
     expect(s).not.toMatch(/allowanceWord/);
     expect(src("app/utils/quickStart.server.js")).toMatch(/export async function recentDraftIds/);
@@ -107,7 +107,7 @@ describe("A5 — buttons do what they say", () => {
   const p = src("app/routes/app.products.jsx");
 
   it("a row's Review button opens Review", () => {
-    expect(p).toMatch(/rowActionLabel\(id, description\) === "Review" \? navigate\("\/app\/review"\)/);
+    expect(p).toMatch(/rowActionLabel\(id, description\) === "Review" \? navigate\(`\/app\/review\?product=\$\{numericId\}`\)/);
   });
 
   it("on Free the primary writes drafts through the per-product path; the bulk run is a secondary that names what it needs", () => {

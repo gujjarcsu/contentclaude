@@ -1,0 +1,35 @@
+name: First-run scores (read-only, one dev store)
+
+# FR8 (Phase 10) — print each product's score on ONE of our dev stores, the
+# way the first run scores them, as numbers only. Reads one Admin GraphQL
+# query through the stored offline token; writes nothing. Refuses any shop
+# that is not a dev store by name pattern.
+on:
+  workflow_dispatch:
+    inputs:
+      shop:
+        description: "Dev store domain, e.g. navaal-qa-fresh.myshopify.com"
+        required: true
+        type: string
+
+jobs:
+  run:
+    name: Score every product on one dev store
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SHOP: ${{ inputs.shop }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "sh -c 'SHOP=${SHOP} node /app/scripts/first-run-scores-diag.mjs'" | tee scores.json
+          {
+            echo '## First-run scores'
+            echo ''
+            echo '```json'
+            cat scores.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

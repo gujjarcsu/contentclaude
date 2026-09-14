@@ -1267,7 +1267,7 @@ export default function ProductsPage() {
                         <Button
                           size="slim"
                           onClick={() =>
-                            rowActionLabel(id, description) === "Review" ? navigate("/app/review") : navigate(`/app/products/${numericId}`)
+                            rowActionLabel(id, description) === "Review" ? navigate(`/app/review?product=${numericId}`) : navigate(`/app/products/${numericId}`)
                           }
                         >
                           {rowActionLabel(id, description)}

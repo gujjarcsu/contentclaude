@@ -49,6 +49,7 @@ import {
 } from "@shopify/polaris";
 import { GeoRubric } from "./GeoRubric.jsx";
 import { WATCH_FROM_HERE } from "../utils/firstRun.js";
+import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
@@ -261,15 +262,20 @@ function StartBody({ scan, start, navigate, onRetry }) {
     }
     return false;
   };
-  const planNote = start.planName === "free" ? " on the Free plan" : "";
-  const costSentence =
-    targets.length === 0
-      ? ""
-      : fresh === 0
-        ? `Your ${targets.length} draft${targets.length === 1 ? " is" : "s are"} below — written earlier, no credits charged again. Nothing is published until you approve it.`
-        : canStart > 0
-          ? `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — ${canStart} credit${canStart === 1 ? "" : "s"} of the ${start.remaining} you have left this month${planNote}. Nothing is published until you approve it.${alreadyDrafted > 0 ? ` ${alreadyDrafted} ${alreadyDrafted === 1 ? "is" : "are"} already written and shown at no charge.` : ""}`
-          : `You have no credits left this month. Your drafts are still here to review and publish.`;
+  // N1 (Phase 10) — the number stated is what the usage card will show AFTER
+  // these drafts are written, from the card's own arithmetic (startCopy.js).
+  const sentence = costSentence({
+    targets: targets.length,
+    fresh,
+    canStart,
+    remaining: start.remaining,
+    monthlyCredits: start.monthlyCredits,
+    planName: start.planName,
+    alreadyDrafted,
+  });
+  // FR8 (Phase 10) — on a uniform catalogue every product scores the same and
+  // every row equals the store score by arithmetic; say so.
+  const uniformNote = uniformScoreNote(targets, scan.totalScanned);
   const done = drafted.size;
   // P2.7 — the specific things holding this store back, from the first walk.
   const blockers = Array.isArray(start.blockers) ? start.blockers : [];
@@ -366,7 +372,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
       <Box paddingInlineStart="200" paddingInlineEnd="200">
         <BlockStack gap="200">
           <Text as="p" variant="bodySm" tone="subdued">
-            {costSentence}
+            {sentence}
           </Text>
           {done > 0 && (
             <ProgressBar
@@ -381,6 +387,13 @@ function StartBody({ scan, start, navigate, onRetry }) {
       {targets.map((t) => (
         <TargetCard key={t.productId} target={t} autoStart={autoStartFor(t)} onDraft={onDraft} />
       ))}
+      {uniformNote && (
+        <Box paddingInlineStart="200" paddingInlineEnd="200">
+          <Text as="p" variant="bodySm" tone="subdued">
+            {uniformNote}
+          </Text>
+        </Box>
+      )}
 
       {done > 0 && (
         <Card>

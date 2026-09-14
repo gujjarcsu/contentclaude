@@ -116,7 +116,14 @@ export const loader = async ({ request }) => {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const skip = (page - 1) * PAGE_SIZE;
 
-  const draftWhere = { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
+  // FR13 (Phase 10) — a row's Review opens Review scoped to that product,
+  // with approve and publish on it. `?product=<numeric id>`; anything else
+  // is ignored and the page shows every draft.
+  const productParam = String(url.searchParams.get("product") ?? "").trim();
+  const scopedTo = /^\d+$/.test(productParam) ? `${PRODUCT_GID_PREFIX}${productParam}` : null;
+  const draftWhere = scopedTo
+    ? { shop, status: "draft", productId: scopedTo }
+    : { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
 
   // Page by DISTINCT product: order rows by recency, derive the ordered
   // distinct product list, slice the page, then fetch that page's full rows.
@@ -235,6 +242,7 @@ export const loader = async ({ request }) => {
     needsCheck,
     embedConfirmed,
     shopDomain: shop,
+    scopedTo,
   });
 };
 
@@ -645,7 +653,7 @@ function NeedsCheckBanner({ items, navigate }) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain } = useLoaderData();
+  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain, scopedTo } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -830,6 +838,13 @@ export default function ReviewPage() {
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
+        {scopedTo && (
+          <Banner tone="info" title="Showing one product" action={{ content: "Show all drafts", onAction: () => navigate("/app/review") }}>
+            <Text as="p" variant="bodySm">
+              Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.
+            </Text>
+          </Banner>
+        )}
         <NeedsCheckBanner items={needsCheck} navigate={navigate} />
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
