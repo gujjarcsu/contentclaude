@@ -41,8 +41,17 @@ const API_VERSION = "2026-04";
 const PAGE = 100;
 const MAX_PAGES = 60;
 
-/** A store we own. Anything else is treated as a real merchant. */
-const DEV_PATTERN = /dev|test|qa|ttv|staging|app-review|contentpilot|peter-shops|r20bcm/i;
+/**
+ * A store we own. Anything else is treated as a real merchant.
+ *
+ * Corrected after the first run: `r20bcm` and `peter-shops` were in this
+ * pattern and neither is a development store — the first is the owner's own
+ * live commercial catalogue and the second is unknown, which means merchant.
+ * With zero findings anywhere the misclassification changed nothing, but it
+ * would have routed a real hit to "re-normalise now" instead of "owner decides
+ * disclosure", and that is the wrong direction to be wrong in.
+ */
+const DEV_PATTERN = /dev|test|qa|ttv|staging|app-review|contentpilot/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

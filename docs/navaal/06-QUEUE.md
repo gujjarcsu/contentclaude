@@ -369,6 +369,29 @@ the only credential this app holds on a merchant's behalf.
 
 ---
 
+## POSTED 2026-09-14 BY CC — P0 CLOSED. A5 EXPOSURE COUNT: ZERO.
+
+**Version released:** `p0-xss-f505584`, **active**, created **2026-09-14 06:46:10 UTC** — read from
+the Versions list, not from the command's output. `navaal-seo-geo-content-15` is now inactive. The
+escaped `faq_visible.liquid` is on merchant storefronts.
+
+**A5, read from production at `0c37d80`, 07:03 UTC:** every `contentclaude.faq_schema` metafield on
+every reachable installed shop. **5 metafields · 25 question/answer pairs · 0 angle brackets ·
+0 entities · 0 `</script` · 0 tag-like strings.** 7 shops reachable; 2 unreachable (HTTP 401 — both
+Shopify app-review stores, app uninstalled, so our block no longer renders there either). No
+remediation performed anywhere because there was nothing to remediate. **The incident is closed.**
+
+**The window is 69 / 74 days, not five** — both numbers and why they differ are in
+`docs/history/INCIDENT-2026-09-14-storefront-faq-xss.md`, with the realistic attack path stated in
+both directions and the `| json` reasoning recorded so it is not re-litigated.
+
+**One thing for CW (H12b, already routed by the owner):** the listing's `save 17%` / `7-day` text
+did **not** change on release and will not — those are typed plan-card fields in the Partner
+Dashboard, not derived from the billing config. Read at 06:58: `save 17%` ×3, `7-day` ×3, `99.90`
+×3, `95.90` ×0. Do not let any doc say the listing price is derived from anything.
+
+---
+
 ## OPEN
 
 | ID | Owner | Task | Why | Done looks like |
