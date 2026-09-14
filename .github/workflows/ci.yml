@@ -130,6 +130,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # B4.2 (Phase 9) — the code-side budget behind the admin Core Web Vitals:
+      # what the heaviest route ships, held to a number, or the build is red.
+      - name: Client bundle budget
+        run: node scripts/check-bundle-budget.mjs
         env:
           SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY || 'ci-placeholder' }}
           SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET || 'ci-placeholder' }}
