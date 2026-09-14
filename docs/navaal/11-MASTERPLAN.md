@@ -363,7 +363,7 @@ they are the critical path.
 | 12 | **Eligibility regressions caught and fixed** | **0** | 1, then weekly | Phase 2 |
 
 | 13 | **App Store rank, our five terms + `seo` + `ai seo`** | **2026-09-14 baseline: not in the first ~70 results for any of the seven; SEO category (1,111 apps) not in the first 66.** Top three organic: Judge.me 46,891 reviews · SEOLab 2,613 · Smart SEO 953. Read in a real browser only (curl returns no cards). | page 1 for one term | Track B, weekly read by CW |
-| 14 | **Time-to-value on a fresh install** | **~20 s** from opening the app to a finished draft on screen (CW, qa-fresh, 2026-09-14) — with **15 confusions** on the way, `docs/history/screen-reads/first-run-qa-fresh-2026-09-14.md` | under 60 s with ≤3 confusions | P2.7 / CC |
+| 14 | **Time-to-value on a fresh install** | **~20 s** to a finished draft (CW, qa-fresh, 2026-09-14). Confusions on the way: **15 → 4** after CC's Phase 8 Part A (CW's second count, same day; FR8, FR13, FR14 open, plus one new: the splash counts the credits it is spending as still available) | under 60 s with ≤3 confusions | P2.7 / CC |
 
 **Metrics 1, 2, 11 and 12 are the leading indicators.** Everything else follows them.
 **Metric 13 is the one the goal is written in, and on 2026-09-14 it reads "absent".**

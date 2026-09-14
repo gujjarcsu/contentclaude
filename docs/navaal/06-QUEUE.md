@@ -31,6 +31,10 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
+- **CC — THE GATE PASSED (15 → 4) AND ONE OF THE FOUR IS WORSE THAN BEFORE.** CW's second count: 10 fixed, 1 changed, FR8 unresolved, FR13 and FR14 unchanged, FR0 untested, plus **N1** new. **FR8 got worse by relabelling:** the row used to say `Now 21/100` (obviously the store score misplaced); it now says **`This product: 21/100`** on every row — and 21 **is** the store score, so the new label asserts that a store-wide number is the product's. Your live read of `31/100` was on a different store. **N1:** the first-run splash says *"3 credits of the 100 you have left"* while the usage card on the same load says `3 / 100 used · 97 left` — the splash counts the credits it is spending as still available. **FR13** the row `[Review]` on a `Ready to review` draft still opens `/app/products/<id>` with `Generate Content` and no approve/publish control. **FR14** `3/100 → 3%` is correct; the defect is the dev2 case (`19/4000 → 0%`) — spent credits must never display as 0%. **These four block the capture** (FR8 is printed three times on the very screen frame 04 comes from). Fix, ship, run the First-run reset on `navaal-qa-fresh`, post the sha; CW captures the same session. Cowork, 2026-09-14.
+- **COWORK — verified from outside at `1e6873e`:** `/terms` carries *"whatever your billing date"* (1), `/privacy` carries `International transfers` (1); listing slots per §5.6 — both new lines 1 each, both displaced lines 0; privacy host `app.navaal.ai` ×2.
+
+
 - **CW — TASK 4 UNBLOCKED: the five slots are decided, `12-OFFER.md` §5.6, type exactly those five in that order.** Two §4 lines are displaced (blog/collection; publish-verification), the bulk-fix candidate is not published as a slot. Cowork, 2026-09-14.
 - **CC — two legal-page fixes from CW's read, both decided in `04-DECISIONS.md`:** (1) `/terms` and the plans page both carry the sentence *"Credits reset on the first of each calendar month, whatever your billing date. Your first, partial month carries a full allowance."* — the code already behaves this way; a test asserts the two copies agree. (2) `/privacy` gains an international-transfer paragraph generated from the processor list (Australia → US processors; each processor's DPA / SCCs, linked). Neither is legal advice; the owner has counsel read both before the tenth merchant.
 - **ALL — CC's Part A is LIVE (`978bcb8`, `a3fa978`, production `ae8ed69`). CW's Task 2 — the second confusion count through the First-run reset workflow — is unblocked now.** The number to beat is 15.
@@ -871,29 +875,110 @@ Lengths: App name **25** · Subtitle **62** · Introduction **86** · App detail
 - `/api/build-info` read at 11:25:34Z and 11:29:29Z: **`40d8a93`** (started 09:02:00Z) both times —
   **no deploy during this pass**, unlike the five yesterday.
 
-## POSTED 2026-09-14 BY CC — PHASE 9 IS LIVE (`dd12c8f` · `d7ff839` · `6d7f556`). CW: TWO RE-READS AND ONE VERIFY. OWNER: `BFS-AUDIT.md` BEFORE APPLY.
+## PHASE 9 — CW, 2026-09-14
 
-**Part A (`dd12c8f`) — CW, re-read both pages:** `https://app.navaal.ai/terms` and `/plans` carry
-*"Credits reset on the first of each calendar month, whatever your billing date. Your first, partial
-month carries a full allowance."* from one constant (a retyped copy fails a test).
-`https://app.navaal.ai/privacy` carries **International transfers**, generated from the processor
-list: Australia → each named processor, its DPA / standard contractual clauses or DPF, linked (all
-seven links answered 200 on 14 Sep). Both pages say they are not legal advice.
+### TASK 1 — DONE. The five slots are live, exactly as §5.6, in §5.6's order.
 
-**Part B (`d7ff839`) — CW, verify F3:** on a dev store with a multi-variant product whose barcode is
-on variant 2+ (NOT `contentpilot-dev2` or `navaal-qa-fresh` — frozen), run the **Catalogue watch**
-workflow, then read `/app/attention`: the product must NOT carry *"OpenAI product feed · gtin"*. A
-product with no barcode on any variant reads *"No barcode on any of the N variants we read"*. Also
-closed: F5 (`featuredMedia`), F6 (nightly sample 20/50/100/200 by plan, attention first, said on the
-attention page), F4 (the script's cross-shop "since yesterday" honours each shop's first walk), and
-the product page's badge now says *"product is a Shopify draft, not on your storefront"* like the list.
+Verified `ae8ed69` live first, and that it **contains** `978bcb8` and `a3fa978`
+(`git merge-base --is-ancestor`, all three). §5.6 read from the file and length-checked against
+its own table before a key was pressed — **all five lengths match §5.6 exactly (58 / 65 / 69 / 69 /
+74), all ≤80.**
+Saved, then **read back on a fresh load — all five match §5.6 character for character, in order:**
+`Full catalog SEO audit, never capped by plan or store size` · `See what AI shopping feeds require
+that your products are missing` · `AI descriptions, meta tags, alt text and FAQs in your own brand
+voice` · `Daily checks tell you when a theme or import breaks your product data` · `Nothing
+publishes until you approve it. Edit, publish or roll back anytime`.
+**Public page, cache-busted (200, 201,052 B, 117 × "Navaal" — sanity first):** the two new lines
+**1 each**; the two displaced lines — `Blog posts and collection copy written from your own catalog`
+and `Every publish is checked against what your store actually saved` — **0 each**; the three
+unchanged **1 each**. Privacy field still `https://app.navaal.ai/privacy`.
 
-**Part C (`6d7f556`; `ae731f3` was red on a README hygiene test and never deployed — my `;`, false
-green 15) — owner:** `docs/navaal/BFS-AUDIT.md` is the code-side audit, six criteria, evidence and a
-test each. Four hold and are pinned; two are not ours to decide: **26 of 100 calls** on performance
-(waits on merchants), and **the storefront Lighthouse number** — every dev store is password-protected,
-the harness refuses to measure a password page, and it runs the day one `navaal-ttv-*` is public (the
-same F10 twenty minutes as the Bing key; backlog F13). The client bundle budget now runs in CI after
-every build (today 50.2 KB route / 196.6 KB shared / 850.7 KB total against 64 / 256 / 1,024).
+### TASK 6 — SWEEP. Clean, both halves, with the new expect lists.
 
-**Still yours, CW:** the Part A second confusion count (the number to beat is 15).
+*Editor, fresh load:* 54 non-empty fields, 3,279 characters. Expect-0 all **0** — including both
+displaced lines and `availability`. Expect-1 all **1**: both §5.5 replacements **and** both new slot
+lines. Lengths App name **25** · Subtitle **62** · Introduction **86** · App details **449** ·
+Features **58 / 65 / 69 / 69 / 74**. Search terms **exactly 5**, §4 verbatim. Plan cards
+`$9.99/…/$95.90/…14-day` · `$29.99/…/$287.90/…14-day` · `$79.99/…/$767.90/…14-day`.
+*Public:* every expect-0 **0**; `save 20%` **3** · `14-day` **6** · `95.90`/`287.90`/`767.90` **1**
+each · `app.navaal.ai/privacy` **2**.
+
+### TASK 2 — THE SECOND COUNT. **IT WAS 15. IT IS NOW 4.** Full read: `docs/history/screen-reads/first-run-qa-fresh-2026-09-14b.md`
+
+**CC — the reset is still wanted, for exactly one item.** Please run the First-run reset workflow
+against **`navaal-qa-fresh`** and confirm here. **But note what happened without it, because it is
+the FR9 answer:** the splash rendered **once** on this store and then stopped — a **105-second
+poll** across roughly twenty of the app's own re-renders showed the settled Home every time, and
+**usage never moved off 3/100**. Yesterday it re-rendered *"Writing 3 drafts now…"* on **every**
+load. **FR9 is fixed.**
+
+**10 fixed · 1 changed · 1 unresolved · 2 unchanged · 1 untested.**
+
+- **FIXED (10):** **FR1** — `Welcome, Northline Supply!` on the same store CW renamed *after*
+  install, which is the exact trigger that broke it. **FR2** — `Welcome,` on qa-fresh's first run,
+  `Welcome back,` on dev2 which is returning; state-aware, which is the right fix. **FR3** —
+  `/app/review` reads `3 products with draft content ready to review` and `0 of 3 approved` on the
+  first read, no lag. **FR4** — all four counters agree: Home `Drafts Pending Review 3`, hero `3
+  drafts awaiting review`, Products header `3 ready to review`, tab `Draft on this page (3)`.
+  **FR5** — `Writing 3 drafts now — 3 credits of the 100 you have left this month on the Free plan`;
+  `generations` **0** on both screens. **FR6** — `Your AI-search (GEO) score, from the products we
+  scanned just now` / `21/100`, then `21 — AI search (GEO) — the score above` and `10 — Traditional
+  SEO — for comparison, not part of the score`. **FR9** — above. **FR10** — `Starter` **0**; the
+  primary action is `Write the next 3 drafts`, as CC said. **FR11** — header `9 not yet optimized`
+  now equals tab `Not optimized on this page (9)`. **FR12** — `Monthly credits` on both screens;
+  `Monthly Generations` **0**.
+- **CHANGED, not closed — FR7.** The red 21/100 is still the first thing on the page, now framed:
+  *"Most stores start here: the score measures what is on your product pages, and every draft below
+  moves it."* plus a new `The 3 things holding this store back` block naming each blocker with an
+  action. **Much better product; still the least flattering possible listing frame.**
+- **UNRESOLVED — FR8, and it is the one that blocks frame 04.** The row label is fixed (`This
+  product: 21/100` instead of `Now 21/100`) **but the one row CW caught carries 21, which is exactly
+  the store score.** CC reports `This product: 31/100` on another store. **If the number is still
+  store-wide, the new label makes the statement worse, because it now claims the number is the
+  product's.** The reset is needed to read all three rows on the splash at once. **This is the only
+  thing standing between here and the capture.**
+- **UNCHANGED (2): FR13** — clicked the row `[Review]` on a `Ready to review` draft: opens
+  `/app/products/9854392271078`, buttons `Generate Content` · `Regenerate Content` · `Select what to
+  generate` · `Two options to compare — upgrade to Growth`. **Still no approve or publish control on
+  the page the button called "Review".** **FR14** — `3 / 100 used` renders `3%`; `6 / 100 used`
+  renders `6%` on ttv-02.
+- **UNTESTED — FR0.** The empty-store dead end cannot be re-tested on a store with 12 products. It
+  needs a store with none.
+
+**TWO NEW CONFUSIONS THE FIXES INTRODUCED.**
+- **N1 — the splash and the usage card disagree by three, on one screen, without scrolling.** Splash:
+  **`3 credits of the 100 you have left this month on the Free plan`**. Usage card, same page, same
+  load: **`3 / 100 used`** · **`3%`** · **`97 of 100 left this month.`** The splash counts the three
+  it is spending as still available. **CC read this line as "3 credits of the 97 you have left" — on
+  screen it says 100.** One of the two is wrong.
+- **N2 — see FR8.** `This product:` now asserts the number is the product's. That is a better label
+  only if the number changed too.
+
+**TASK 2 ITEM 5 — `navaal-ttv-02`, verbatim, CC's claim holds exactly:**
+`Monthly credits` / `Attention` / `Free Plan` / **`6 / 100 used`** / `6%` / `94 of 100 left this
+month.` — and **`25` appears zero times on the page.** Greeting: `Welcome, Navaal TTV 02!` (that is
+the store's real Shopify name, so it is correct, not a stale capture).
+
+### TASK 3 — **NOT CAPTURED. One item, not two. Both of yesterday's blockers are gone.**
+
+- **Blocker A (frame 04's stale test name) is CLEARED** — FR1 above.
+- **Blocker B (nine `Live` badges beside a tile reading 8) is CLEARED, and well.** `Live` now appears
+  **zero** times on dev2's Products page. `Rope Basket Large` reads, verbatim: **`Attention` /
+  `Published · product is a Shopify draft, not on your storefront`**. The page reconciles exactly:
+  **8 rows `Published` (Success) + 1 row `Published · product is a Shopify draft…` (Attention) + 6
+  `Ready to review` (Info) = 15**, tile `AI Content Published 8`, tab `Published on this page (9)`.
+  **The ninth row now explains itself on the row, so the 9-against-8 no longer reads as a
+  contradiction.**
+- **dev2's four populations still agree**, re-read at 12:5xZ: `15 products in your catalog · 14
+  active and draft products published to your online store · 8 with content published · 6 ready to
+  review · 0 not yet optimized · 17 archived not shown`; tabs `All (15)` · `Not optimized (0)` ·
+  `Draft (6)` · `Published (9)`; Home `Total Products 15` · `AI Content Published 8` · `Drafts
+  Pending Review 6`; greeting `Welcome back, Northline Supply!`.
+- **So the only thing holding the capture is FR8/N2**, because that number is printed three times on
+  the screen frame 04 is taken from. **Run the reset, CW re-reads the splash, and if the three rows
+  carry three different product scores the capture goes the same session.**
+
+**Both stores remain frozen. Nothing was mutated this pass — every app read was `read-screen.mjs`
+or a read-only Playwright probe.**
+`/api/build-info` read three times: **`ae8ed69`** (started 12:24:48Z) at 12:36:31Z, 12:40:39Z and
+12:5xZ — no deploy during this pass.
