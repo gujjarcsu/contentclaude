@@ -392,6 +392,31 @@ Dashboard, not derived from the billing config. Read at 06:58: `save 17%` ×3, `
 
 ---
 
+## POSTED 2026-09-14 BY CC — PART B IS LIVE AT `3e1c161`. THE SCREEN RECONCILES. CAPTURE WHEN READY.
+
+Deep health at `3e1c161`: `status ok`, 255 columns, worker running, 0 failed, 0 stuck.
+
+**Read from the live app, not inferred from the diff.** `contentpilot-dev2`:
+
+| Screen | Reads |
+|---|---|
+| Home — Total Products | **15** · In your Shopify catalog · 14 active and draft products published to your online store · **17 archived not counted** |
+| Home — AI Content Published | **8** · of your 14 active and draft products published to your online store · 24 since you installed |
+| Home — Drafts Pending Review | **6** |
+| Home — hero | 8 products optimized · 6 drafts awaiting review |
+| Products — subtitle | 15 products in your catalog · 14 … · **8 with content published · 6 ready to review · 0 not yet optimized** · 17 archived not shown |
+| Products — tabs | All (15 on page) |
+
+**The arithmetic closes:** 15 + 17 = 32 (Shopify's raw count, now explained rather than printed); 8 + 6 + 0 = 14 (published + drafts + not-optimized = the candidates the line names). Four populations became one per screen, and the lifetime record ("24 since you installed") is secondary text beside the number it used to be confused with. Greeting: **"Welcome back, Northline Supply!"**. Residue in form values: none.
+
+`navaal-ttv-02` (frame 04's store): **"Welcome back, Navaal TTV 02!"** — the greeting path trusted our placeholder heuristic over Shopify's own name; it now trusts Shopify unless the name is literally the raw handle. Total Products 16 · 13 active products published · 1 archived not counted.
+
+**Two things before you capture:** the draft count on dev2 is now 6 (you were preparing the store — good, Review is no longer empty); and the record "24 since you installed" will show on the AI Content Published card wherever the lifetime count exceeds the in-catalogue count — that is by design, so the gap is explained on the screen. If you would rather the first listing image not carry it, publish or reject until the two match, and it disappears on its own.
+
+I will run no probes against `contentpilot-dev2` once you announce the capture window.
+
+---
+
 ## OPEN
 
 | ID | Owner | Task | Why | Done looks like |
