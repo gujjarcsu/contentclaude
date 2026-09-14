@@ -120,6 +120,8 @@ Before claiming a pass, check you are not repeating one of these:
 10. Two sections in one file answering to the same name, the dead one first.
 11. An exported constant with a passing test and no consumer, while a hardcoded copy ships.
 12. A verified production deploy, read as proof of what Shopify serves.
+13. A piped deploy gate returning the pipe's exit code, not the script's (CC, `| tail`).
+14. Two hosts serving the same legal page — one current, one stale — each worker reading a different one.
 
 ---
 
@@ -353,3 +355,26 @@ launched against a build that had never deployed. **The rule: never pipe a gate.
 the last local full-suite run predated the last commit, so a hygiene test CI enforces (every script
 listed in `scripts/README.md`) failed in CI and not on the laptop. **The suite runs after the last
 edit, not after the last big one.**
+
+**14. Two hosts, one page name, and each worker proved a different one.** Found 2026-09-14 by
+comparing CC's Phase 6 report with CW's Task 5 read. CC generated `/privacy` and `/terms` from the
+schema and scopes and verified them — on **`app.navaal.ai`** (Last updated 14 September: 14-day
+trial, 250 credits, Neon, Anthropic key disclosed, `hello@`). CW read the pages the **listing links
+to** — **`navaal.ai/privacy`** (4 Sep) and **`navaal.ai/terms`** (8 July, static, Hostinger): 7-day
+trial, "25 generations", "two months free", no key disclosure, `support@`. **Both reports were
+true.** The listing's Privacy policy URL points at the stale host. Cowork confirmed all four URLs
+with cache-busted reads.
+**The rule:** a claim about "the privacy page" or "the terms" names the **host**. Any document that
+exists at more than one URL is verified at every URL a merchant or reviewer can reach, and the one
+that is linked from the listing is the one that counts.
+
+**Tooling facts recorded so nobody re-diagnoses them as app defects (CW, 2026-09-14):**
+- The Claude-in-Chrome extension's clicks and scrolls **do not reach the app's cross-origin
+  iframe**. Three clicks on *Upgrade to Growth* did nothing; Playwright worked first time. The
+  earlier *"something painted over the Generate button"* and *"the iframe won't scroll"* were this,
+  not the app.
+- `curl` on an App Store search URL returns a ~99 KB shell with **zero result cards**. Any
+  curl-based rank check is a guaranteed false green; ranking is read in a real browser. Detector
+  sanity: searching `navaal` returns slot 1.
+- App history in the Partner Dashboard renders in **local AEST**; the Versions page renders in
+  **+0000**. Convert before comparing either to a commit time.

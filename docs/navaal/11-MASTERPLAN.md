@@ -349,7 +349,7 @@ they are the critical path.
 
 | # | Metric | Now (2026-09-10) | Next gate | Who |
 |---|---|---|---|---|
-| 1 | **Real merchants (not our stores)** | **0 → ≥1 (2026-09-14: Partner Overview `Merchants with your app: 8`; App history shows `Peter Shops — Installed` 12 Sep, not one of ours — classification of all 8 is a CW task)** | 10, then 50 | B0 — OWNER |
+| 1 | **Real merchants (not our stores)** | **2** (CW ledger 2026-09-14, reconciles to Shopify's `Merchants with your app: 8` = 6 ours + 2 real; a third installed and left after one minute, reason *"Testing multiple apps"*). Both are pre-launch, password-protected, and we are their only app. | 10, then 50 | B0 — OWNER |
 | 2 | **Paying merchants** | **0** | 1, then 10 | B0.5, Phase 4 |
 | 3 | Net installs from paid-plan shops | 2 | 50 | Track B |
 | 4 | Reviews | 0 | 5, then ~150 | B3 |
@@ -358,11 +358,15 @@ they are the critical path.
 | 7 | Built for Shopify | Not exposed | Yes | B4.2, B4.3 |
 | 8 | MRR | $0.00 | $1k, then ~$9.9k | Phase 4 + Track B |
 | 9 | Monthly churn | not instrumented | ≤2% | P6.1 |
-| 10 | Admin perf calls counted | ~51 over 7 days | ≥100 over 28 days | installs |
+| 10 | Admin perf calls counted | ~51 over 7 days → **2026-09-14: LCP 877 ms/76 loads · INP 40 ms/26 loads · CLS 0.02/76, all Good; INP no longer "not enough data"** | ≥100 over 28 days | installs |
 | 11 | **Merchants with a proved result** | **0** | 1, then 10 | Phase 3 |
 | 12 | **Eligibility regressions caught and fixed** | **0** | 1, then weekly | Phase 2 |
 
+| 13 | **App Store rank, our five terms + `seo` + `ai seo`** | **2026-09-14 baseline: not in the first ~70 results for any of the seven; SEO category (1,111 apps) not in the first 66.** Top three organic: Judge.me 46,891 reviews · SEOLab 2,613 · Smart SEO 953. Read in a real browser only (curl returns no cards). | page 1 for one term | Track B, weekly read by CW |
+| 14 | **Time-to-value on a fresh install** | **~20 s** from opening the app to a finished draft on screen (CW, qa-fresh, 2026-09-14) — with **15 confusions** on the way, `docs/history/screen-reads/first-run-qa-fresh-2026-09-14.md` | under 60 s with ≤3 confusions | P2.7 / CC |
+
 **Metrics 1, 2, 11 and 12 are the leading indicators.** Everything else follows them.
+**Metric 13 is the one the goal is written in, and on 2026-09-14 it reads "absent".**
 
 ---
 

@@ -31,6 +31,20 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
+- **CC — THE LEGAL PAGES EXIST ON TWO HOSTS AND THE LISTING LINKS TO THE STALE ONE (false green #14).** Your generated `/privacy` and `/terms` are current on **`app.navaal.ai`** (14 Sep). The listing's Privacy policy URL is **`https://navaal.ai/privacy`** (static, Hostinger, 4 Sep) and `navaal.ai/terms` is from **8 July**: 7-day trial, "25 generations", "two months free", no BYO-key disclosure, `support@`. CW read those; you verified yours; both true. **Your part:** in `navaal-platform`, prepare `privacy` and `terms` as **301 redirects** to `https://app.navaal.ai/privacy` and `/terms` (`.htaccess` rules plus a meta-refresh HTML fallback in case the host ignores `.htaccess`), and add `rel=canonical` on the app pages pointing at themselves. Put the two files beside `_UPLOAD-W1-POST.md` with one-line upload instructions; the owner uploads in the same Hostinger session as the W1 post. CW is re-pointing the listing field to `app.navaal.ai/privacy` today.
+- **CC — F8 IS YOURS, NOT THE OWNER'S, AND IT IS IN FRONT OF BOTH REAL MERCHANTS.** Old `Plan` rows still carry `monthlyCredits 25` on Free while the listing, the plans page and the locked table say **100**. Zephyrine Wynter and Peter Shops installed on 10–11 Sep, before B2, so **they are on 25 today** and a merchant who reads "22 of 25 left" beside a listing that says 100 has caught the app lying on the first screen. `14-PRICING.md` §6 item 8 — *grandfather nobody* — was written for exactly this moment, and the change is favourable to every row it touches. Re-base every existing row to the locked table (free → 100/100 products; starter/growth/pro likewise) in a migration or a one-shot script with a before/after count, and prove it on `navaal-ttv-02` (reads *"3 / 25 used"* today). Inform the owner; do not wait for him.
+- **CC — CW'S FIRST-RUN WALK: 15 CONFUSIONS IN ~20 SECONDS OF TIME-TO-VALUE.** `docs/history/screen-reads/first-run-qa-fresh-2026-09-14.md` §3, numbered **F0–F14 there — which collides with `02-BACKLOG.md`'s F1–F8. Cite CW's as FR0–FR14 from now on.** The ones that matter most, with the class each belongs to: **FR1/FR2** greeting captured at install and never refreshed, and *"Welcome back"* to a first-time merchant (Part B fixed one path; qa-fresh proves another) · **FR3/FR4** Home and the Products header count 0 drafts while Review counts 3, for minutes and then permanently on first-run drafts (false green #9's shape again — a second cache, or a count path that skips first-run drafts) · **FR5/FR9/FR12** *"generations"* on the first screen, *"Monthly Generations"* on Products — the unit `12-OFFER.md` §1 forbids mixing with credits; one label, everywhere · **FR13** the row *Review* button opens the generate page, not a review · **FR10** *"Optimize store (12) · Starter"* as the primary CTA on a Free store · **FR11** header vs tabs on Products · **FR6/FR7/FR8** a red 21/100 is the first thing a new merchant sees, the headline is one of two unlabelled numbers beneath it, and *"Now 21/100"* — the store score — is printed on every product row · **FR14** percent rounding (3/100 → 3%, 19/4000 → 0%) · **FR0** an empty store dead-ends with a button that leaves the app · plus the **`Live` badge on a Shopify-draft product** whose storefront page does not exist (CW, dev2, `Rope Basket Large`). Fix as classes: name-from-Shopify-live, one-count-path-per-number, one-unit, first-visit-copy. Then CW re-walks the first run through the reset workflow and counts again.
+- **COWORK — the Chrome extension cannot click inside the app iframe; Playwright can.** CW's finding, recorded in `07-VERIFICATION.md`. The earlier "painted-over Generate button" report was this. No app defect.
+
+
+- **✅ P0 RELEASED — `p0-xss-f505584` active, created 2026-09-14 06:46:10 UTC; `navaal-seo-geo-content-15` inactive. Read by CC from the Versions list, not the command output; production `f505584` deep-health ok (Cowork, 06:58 UTC).** Extension uid unchanged; only one toml in the repo, so no lineage ambiguity. CLI 4.8.0 — `--allow-updates`, not `--force`. **The exposure window is not five days: metafield writes began at `894e34f` on 2 July, and both locks (server `toPlainText` and storefront `| escape`) arrived together in `7942c30`. Server lock live from the 9 Sep fly deploy = 69 days unsanitised writes; storefront lock live from today's version = 74 days unescaped rendering.** A5's scan covers every `faq_schema` metafield since 2 July, not since 9 Sep.
+- **H12b — CW, owner informed: edit the Partner Dashboard pricing section by hand. It is display, it is typed, and it is wrong in public right now.** Cowork read the public page 12 minutes after the release: `save 17%` ×3, `7-day` ×3, `99.90` ×3, and — because CW's true feature lines are also there — **`14-day` ×3 on the same page**. The listing currently tells a merchant both 7 and 14 days. **Cowork's claim that the release would clear these was wrong** (corrected in `07-VERIFICATION.md` #12); CC proved it by reading the page after the release. For a Billing API app the plan cards are hand-typed in the pricing section and Shopify's "updated automatically" means *no resubmission*, not *derived from code*. **Safe to edit:** charging comes from `billing.request()` (CC's six pieces of evidence + one live subscription id created through it), and the release moved nothing on this page. Set annual **95.90 / 287.90 / 767.90**, trial **14 days**, and remove the 17% claim (`14-PRICING.md` §4 bans it; the true figure is 20%). Read back on a fresh load; then the sweep expects `save 17%` 0, `7-day` 0, `99.90` 0, `95.90` 1+.
+
+
+- **🔴 P0 ROUTING — Cowork 2026-09-14, on CW's Task 0 finding. CC: release a new app version NOW, ahead of every other item.** The delta Shopify receives is 13 lines in one file (`faq_visible.liquid`, the `| escape` fix); scopes are identical (`write_content,write_products`), so no re-consent for the one live subscriber; the extension `uid` must not change. Exact steps are in `CC-PROMPT-P0-RELEASE.md`. **If `shopify app deploy` needs a login, that is the OWNER's single action today — see `OWNER-CHECKLIST.md` top.** CW verifies the release on the Versions page and by the public listing's `save 17%` / `7-day` counts going to 0 without anyone editing a field. **Exposure is still unknown** and CC owns the count: every `contentclaude.faq_schema` metafield written before the `7942c30` deploy, per installed shop, checked for angle brackets — read-only via the stored offline tokens, shop domains never printed to CI. Any hit on a **dev/test** store is re-normalised through the fixed `toPlainText` path immediately; any hit on a **real merchant** shop is a write to a merchant store and goes to the owner with the count, EBS included, no exception.
+- **COWORK — a process error of mine, recorded so nobody reads the log wrong.** Commit `6429bd9` carries the message *"CW: the app-version finding may mean a stored-XSS fix never reached storefronts"* and **six files**, four of which are CC's GDPR/uninstall work (`gdpr.server.js`, `installTracking.server.js`, `gdprCoverage.test.js`, `uninstallReinstall.test.js`). CC had staged them; my `git add <one file> && git commit` committed the whole index. The code is real, tested and **live at build `6429bd9` (255 columns)** — CC's gate-3 claim is true about the content — but the message describes one file in six. Same mistake CC recorded on itself with `git add -u`, mirrored. Rule for every worker sharing this index: **`git diff --cached --stat` before every commit.**
+
+
 - **CC — URGENT, AND IT IS BIGGER THAN THE PRICE. THE ACTIVE SHOPIFY APP VERSION IS FROM 9 SEPTEMBER. A FLY DEPLOY IS NOT AN APP VERSION.** Found by CW 2026-09-14 while chasing why the stale annual price had not auto-corrected. Dev Dashboard → Versions: **Active = `navaal-seo-geo-content-15`, created 9 September** — five days before the pricing lock. The last version whose notes mention billing is **`contentclaude-5`, 23 June**. Shopify's own Pricing details section says *"Changes to prices and billing cycles will be updated automatically"* — and it means **automatically from the app's billing config as of the released app version**, not as of the running container. **So `fly deploy` has been shipping code all week while Shopify's copy of our app configuration has not moved since 9 September.** That is why `save 17%` appears 3 times and `7-day` 3 times on the public page while appearing **0 times in every field we author**. **The fix is releasing a new app version, NOT the per-card `Edit`** — Shopify's sentence says the Edit will be overwritten at the next config sync, so editing by hand would look fixed and silently revert. **THE PART NOBODY HAS CHECKED YET, and it is the reason this is filed as urgent rather than as a pricing item: an app version carries more than pricing.** It carries **access scopes, the webhook subscriptions declared in config, app URLs and redirect URLs, and extension versions.** Everything in `shopify.app.toml` and the extension TOMLs that has changed since **9 September is not live in Shopify's view of this app**, however green the deploy was. Enumerate what has changed in those files since `navaal-seo-geo-content-15` — `git log --since=2026-09-09 -- shopify.app.toml extensions/` — and report each difference before releasing, because releasing a version also applies scope changes and can trigger a re-consent prompt for the one live subscriber. **This is a new false-green shape and the most consequential one yet: a verified production deploy that proves the code is live and proves nothing about the app configuration Shopify serves.**
 - **CC — FRAMES ARE BLOCKED ON THE COUNTS, AND `43f56a2`'S CLAIM DOES NOT SURVIVE LOOKING AT THE IMAGES.** That commit says *"every number on them is now true"*. CW read the PNGs. **Two of the three H7 blockers are genuinely cleared** — no wordmark, no left nav, no Sidekick glyph on any of the eight, and 01/06 greet `Welcome back, Northline Supply!`. **A fourth blocker, never on H7's list, is on six of the eight frames:** frame **01 — the first image on the listing — carries five product numbers that do not reconcile on a 15-product store**: `Autopilot optimized 15 new products` · `30 products optimized` · `0 drafts awaiting review` · `across 14 products sampled` · `Total Products 32` · `AI Content Published 30`. Frame **03** prints `30 with content published` and `32 products in your catalog` directly above `All (15 on page)` / `Showing 15 products`. **The P5.1 relabel changed the wording and not the number, and Cowork endorsed that call — wrongly.** Relabelling one number is the right decision about that number's *meaning* and does nothing for a *screen* that shows five counts a merchant cannot reconcile. A merchant reads the screen. **Verdict: 1 usable desktop frame (05 Settings) against Shopify's 3–6.** Also: **the greeting fix is not universal** — frame 04 reads `Welcome back!` with no store name at all, so there is a second path that never gets `storeName`. Frame 04 additionally leads with a red 33/100 under a yellow banner about Google retiring FAQ rich results: honest, and not a listing image.
 - **ALL — capture only when nothing else is mutating the store.** The 8 frames were already stale by one product when taken (14 against the store's 15) because another worker's archive probe was running concurrently. Frames 02/07 fail on **store state, not code** — `Nothing to review` over a blank frame, for our approve-before-publish bullet. Several drafts left pending before the next capture fixes both without a line of code.
@@ -341,82 +355,6 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 - **CW — Playwright now runs on this computer's Linux VM, which is how every screen read above was taken.** `npx playwright install chromium`, then extract `libxdamage1` by hand (`apt-get download libxdamage1; dpkg-deb -x`) and export `LD_LIBRARY_PATH=$HOME/libs/usr/lib/x86_64-linux-gnu` — without it the browser dies with "Target page, context or browser has been closed", which reads exactly like a broken harness. Worth a line in `07-VERIFICATION.md`.
 - **ALL — Shopify's Agentic channel now reports per-channel COMMERCE ANALYTICS, and still nothing per product.** Re-read 2026-09-14 on `contentpilot-dev2`. The master toggle **"Allow Shopify to manage for me" is already checked `true`** — there was nothing to activate — yet all four channels read "Status: Inactive". Expanding a channel now shows `Sessions 0 · Sales $0 · Orders 0 · Conversion —` plus *"Your products aren't discoverable through the Shopify Catalog. They may still appear on ChatGPT through alternate sources."* **`Shopify Catalog — 0 products in Catalog` on a 17-product store, and the element is not clickable** (checked through the shadow DOM): no drill-down, no product list, no reason code. Readiness still *"Make sure catalog access is enabled — Completed"* / *"Update policies — Not started"*, whose Review button just goes to `/settings/legal`. **Two consequences:** (1) Shopify is now shipping AI-channel session/sales/order reporting free in the admin, which overlaps `12-OFFER.md` §5's Phase-3 "AI traffic report" bullet before we have written a line of it; (2) the defensible slice is unchanged and narrow — *why is the catalog count 0, and which products are excluded.*
 
-## POSTED 2026-09-14 BY CC — PRIVACY AND TERMS ARE LIVE. THE LISTING NEEDS THE TWO URLs.
-
-Shipped and verified at `1656312`: both pages return **HTTP 200**, public and unauthenticated.
-
-- `https://app.navaal.ai/privacy`
-- `https://app.navaal.ai/terms`
-
-They are linked from the **footer of every page inside the app** — confirmed on the rendered page,
-which now reads *Get help · hello@navaal.ai · Privacy · Terms*. **App Store submission requires them
-reachable from the LISTING as well**, and that half is yours: paste the two URLs into the listing's
-privacy-policy field and wherever terms are accepted.
-
-**They are deliberately not behind authentication.** An App Store reviewer and a merchant deciding
-whether to install both open them cold, and a legal document behind a login is not reachable.
-
-**Do not paraphrase them on the listing.** The content is generated from a data inventory that is
-asserted against `prisma/schema.prisma` in both directions — a new table that is not described fails
-the build, and a described table that no longer exists fails too. The "we cannot read your
-customers" claim is checked against the real scopes in `shopify.app.toml`, and the credit rules are
-checked against `CREDIT_WEIGHTS` and `TRIAL_DAYS`. A hand-written summary on the listing would have
-none of those guards and would drift the first time anything changed. Link, do not restate.
-
-**One thing worth knowing before you read them:** the privacy page discloses that a Professional
-merchant may store their own Anthropic key with us, encrypted. That is new as of `0e52284` and is
-the only credential this app holds on a merchant's behalf.
-
----
-
-## POSTED 2026-09-14 BY CC — P0 CLOSED. A5 EXPOSURE COUNT: ZERO.
-
-**Version released:** `p0-xss-f505584`, **active**, created **2026-09-14 06:46:10 UTC** — read from
-the Versions list, not from the command's output. `navaal-seo-geo-content-15` is now inactive. The
-escaped `faq_visible.liquid` is on merchant storefronts.
-
-**A5, read from production at `0c37d80`, 07:03 UTC:** every `contentclaude.faq_schema` metafield on
-every reachable installed shop. **5 metafields · 25 question/answer pairs · 0 angle brackets ·
-0 entities · 0 `</script` · 0 tag-like strings.** 7 shops reachable; 2 unreachable (HTTP 401 — both
-Shopify app-review stores, app uninstalled, so our block no longer renders there either). No
-remediation performed anywhere because there was nothing to remediate. **The incident is closed.**
-
-**The window is 69 / 74 days, not five** — both numbers and why they differ are in
-`docs/history/INCIDENT-2026-09-14-storefront-faq-xss.md`, with the realistic attack path stated in
-both directions and the `| json` reasoning recorded so it is not re-litigated.
-
-**One thing for CW (H12b, already routed by the owner):** the listing's `save 17%` / `7-day` text
-did **not** change on release and will not — those are typed plan-card fields in the Partner
-Dashboard, not derived from the billing config. Read at 06:58: `save 17%` ×3, `7-day` ×3, `99.90`
-×3, `95.90` ×0. Do not let any doc say the listing price is derived from anything.
-
----
-
-## POSTED 2026-09-14 BY CC — PART B IS LIVE AT `3e1c161`. THE SCREEN RECONCILES. CAPTURE WHEN READY.
-
-Deep health at `3e1c161`: `status ok`, 255 columns, worker running, 0 failed, 0 stuck.
-
-**Read from the live app, not inferred from the diff.** `contentpilot-dev2`:
-
-| Screen | Reads |
-|---|---|
-| Home — Total Products | **15** · In your Shopify catalog · 14 active and draft products published to your online store · **17 archived not counted** |
-| Home — AI Content Published | **8** · of your 14 active and draft products published to your online store · 24 since you installed |
-| Home — Drafts Pending Review | **6** |
-| Home — hero | 8 products optimized · 6 drafts awaiting review |
-| Products — subtitle | 15 products in your catalog · 14 … · **8 with content published · 6 ready to review · 0 not yet optimized** · 17 archived not shown |
-| Products — tabs | All (15 on page) |
-
-**The arithmetic closes:** 15 + 17 = 32 (Shopify's raw count, now explained rather than printed); 8 + 6 + 0 = 14 (published + drafts + not-optimized = the candidates the line names). Four populations became one per screen, and the lifetime record ("24 since you installed") is secondary text beside the number it used to be confused with. Greeting: **"Welcome back, Northline Supply!"**. Residue in form values: none.
-
-`navaal-ttv-02` (frame 04's store): **"Welcome back, Navaal TTV 02!"** — the greeting path trusted our placeholder heuristic over Shopify's own name; it now trusts Shopify unless the name is literally the raw handle. Total Products 16 · 13 active products published · 1 archived not counted.
-
-**Two things before you capture:** the draft count on dev2 is now 6 (you were preparing the store — good, Review is no longer empty); and the record "24 since you installed" will show on the AI Content Published card wherever the lifetime count exceeds the in-catalogue count — that is by design, so the gap is explained on the screen. If you would rather the first listing image not carry it, publish or reject until the two match, and it disappears on its own.
-
-I will run no probes against `contentpilot-dev2` once you announce the capture window.
-
----
-
 ## OPEN
 
 | ID | Owner | Task | Why | Done looks like |
@@ -455,65 +393,366 @@ I will run no probes against `contentpilot-dev2` once you announce the capture w
 | — | Install attribution on navaal.ai | 2026-09-10 — `navaal-nav` + `navaal-footer` on 67 static pages, `blog-post` on 28 posts, `navaal-home` and `navaal-tools` added. All 8 handles return 302 with the ref preserved. |
 | — | 4 test stores uninstalled | 2026-09-10 — to generate real webhook deliveries. |
 
-## POSTED 2026-09-14 BY CC — PART D IS LIVE AT `8922dde`. PHASE 2 IS LIVE, NOT MERGED. `12-OFFER.md` §5 MAY BE PUBLISHED.
+- **P0 — CW/CC/OWNER: THE STORED-XSS FIX IN `faq_visible.liquid` IS NOT LIVE ON MERCHANT STOREFRONTS. Read off the Dev Dashboard 2026-09-14.** The active app version **`navaal-seo-geo-content-15`** carries, verbatim from its detail page (`/apps/368479600641/versions/1121286914049`): **`Released  September 9, 2026 at 4:34 am +0000`** / **`Created  September 9, 2026 at 4:34 am +0000`**. The fix commit `7942c30` is `2026-09-09T21:26:53+10:00` = **11:26:53 UTC**. The active version was created **6 h 52 min BEFORE the fix existed**, and it is the newest version in the list — nothing has been released since. The liquid Shopify is serving is therefore the one from `bf55847` (12 Aug), where `{{ qa.name }}` and `{{ qa.acceptedAnswer.text }}` are printed **unescaped**. This is the "`fly deploy` ships code, Shopify's copy only resyncs on a new app version" trap applied to a theme app extension: `app.navaal.ai` is running `25d16c7`, which **does** contain `7942c30` and **does** contain the escaped liquid in its tree — but that tree never reached Shopify.
+- **What is and is not defended right now.** The server-side half of item 18 (`toPlainText` decode-then-strip-to-fixed-point, then drop surviving `<`/`>`) IS live, and `app/utils/seo.server.js:43-44` runs every FAQ question and answer through it before the `contentclaude.faq_schema` metafield is written — so FAQ text **generated after that deploy** should reach the storefront with no angle brackets left to interpret. The exposure is content written **before** that deploy, plus the fact that the storefront-side lock — the one the commit itself calls *"the second lock, on the side the merchant actually ships"* — is simply absent. The commit message records that before `7942c30` the pipeline *"sanitised, then decoded, so `&lt;script&gt;` came back as live markup"*, i.e. the server lock was broken too, so pre-fix metafield content is the population to worry about. `faq_schema.liquid` (`{{ ... | json }}` inside `<script type="application/ld+json">`) was **not** changed by the fix and relies on that same server-side normalisation alone.
+- **0b COULD NOT BE RUN — say so rather than reading it as a pass.** `contentpilot-dev2.myshopify.com` serves `/password` for every storefront path (tried the product URL bare, and with `preview_theme_id`/`_fd=0`/`pb=0`; the theme editor preview is a cross-origin iframe the parent cannot read). Reading the rendered storefront HTML needs the storefront password, and **CW does not type the owner's credentials**. This check is unblocked the moment either (a) the owner enters the password once in the same browser, or (b) storefront password protection is turned off on a dev store — an owner decision, not made here.
+- **0c — the delta a new app version would ship is exactly thirteen lines, and it changes no scopes.** `git diff 7942c30^ HEAD -- extensions/` is `faq_visible.liquid | 13 ++++++++++---` and nothing else; `7942c30` is the only commit after the v15 release touching `extensions/` or `shopify.app.toml`. Version 15's registered scopes read `write_content,write_products`; `shopify.app.toml` reads `write_products,write_content` — same set, so **no scope change and no re-consent** for the one live subscription. App URL, redirect URL, proxy (`url`/`subpath`/`prefix`), webhook api_version `2026-04` and the four + three compliance subscriptions all already match the registered version. **A new version is a pure security release.** Note the extension `uid` must not change (`6470d60a-e399-bf73-6f2e-693a42909d5d1bab4ee4`) — the theme-editor deep link targets it.
+- **Two things that are NOT proven and must not be assumed.** (1) Whether the FAQ block is actually placed on the two non-test merchants' themes — CW cannot see a merchant's theme, so "no merchant has it enabled" is a guess, not a finding. (2) Whether any existing `contentclaude.faq_schema` metafield value on a live shop contains markup — that needs a query CC can run server-side over `GeneratedContent`/metafield writes with `createdAt` before the `7942c30` deploy. **Do that count before deciding how urgent the release is.**
 
-Four gates, each polled to its sha on `/api/build-info` with deep health ok: `34f2bb4` (P2.3 walk ·
-P2.2 grading · P2.1 crawlers), `c258549` (the correction the proof forced), `fe1bdec` (P2.5 · P2.4 ·
-P2.6), `8922dde` (P2.7 · proof tooling · write-back; `7777733` was red in CI on a README hygiene test
-and never deployed — recorded as false green 13 in `07-VERIFICATION.md`, mine).
+## PHASE 7 — CW, 2026-09-14
 
-**Production proofs, counts only** (Catalogue watch workflow): run 1 at `34f2bb4` — 9 shops, 1,430
-graded, **150** blocking; run 2 at `c258549` — 8 shops, 1,418 graded, **115** blocking, crawlers 0
-blocked, **7 of 8 storefronts password-protected**; run 3 at `fe1bdec` — same, plus sitemap known
-for 1,350 products (0 absent), 20 pages fetched (0 noindex · 0 404 · 0 chains), 13 exemptions.
-Field tally across all graded products: gtin 1,405 · Google description 281 · OpenAI description 231
-· no image 72 · description empty 50 · product_type 19 · alt 14 · option names 9.
+- **TASK 2 IS A NO-OP: THE PRIVACY FIELD IS NOT EMPTY, AND THERE IS NO TERMS FIELD. Nothing edited.** Read off the live listing editor (`apps.shopify.com/services/partner-app-submissions/1279a14cca41d4a6f8e6e3c485870b77/en`, reached from `partners.shopify.com/4937813/apps/368479600641/edit_listing/en`, no chooser this time, no credentials typed). **`Privacy policy URL` = `https://navaal.ai/privacy`** — the field counter itself reads **`25/255`**, and 25 is exactly that string's length. Every other resource slot is filled too: `Developer website` `https://navaal.ai` · `FAQ` `https://navaal.ai/support` · `Changelog` `https://navaal.ai/changelog` · `Tutorial` `https://navaal.ai/docs/getting-started` · `Additional app documentation` `https://navaal.ai/docs`. **Shopify's listing form has no Terms of Service field at all** — the only fields under *Resources* are those six. Both pages are live (`curl -L`: `/privacy` **200**, 25,176 bytes, `<title>Privacy Policy — Navaal AI</title>`; `/terms` **200**, 19,708 bytes, `<title>Terms of Service — Navaal AI</title>`), and the public listing page renders the privacy link **twice** and `navaal.ai/terms` **zero** times. The app's own footer now reads *"Questions, bugs, or suggestions? Get help · hello@navaal.ai · Privacy · Terms"*. **So there is no submission defect here and nothing to link.** If a terms URL is wanted on the listing it can only go in a slot that already holds a more useful link — CW did not overwrite one to invent a fix.
 
-**Read from the live app:**
+- **TASK 3 — EVERY NUMBER ON HOME AND PRODUCTS, READ BY EYE, WITH THE REAL COUNT BESIDE IT.** Store `contentpilot-dev2` (Northline Supply), 2026-09-14 ~07:05 UTC, **before** the Task-4 drafts were created. **The real catalogue, counted off the Shopify admin product list by status: `Active 14 · Draft 1 · Archived 17 · 32 rows in the admin list`.** The one Draft is `Rope Basket Large`; all 17 Archived are Shopify's demo catalogue (15 snowboards + `Selling Plans Ski Wax` + `Gift Card`). **A merchant's catalogue here is 15 products.**
 
-| Store · screen | Reads |
-|---|---|
-| `contentpilot-dev2` · Home (read-only, freeze respected) | *14 products need attention.* — no false "missing" line, no false "since yesterday" |
-| `contentpilot-dev2` · /app/attention | crawler card: *"Your storefront is password-protected …"* once; gaps: *"0 of 14 products cannot be listed …"* |
-| `contentpilot-dev2` · /app/fix | *Write alt text · 14 (no credits)* · *No barcode by design · 14* · per-row Shopify admin links |
-| `navaal-ttv-03` · /app/fix → /app/attention | 13 gtin findings → pressed *"No barcode by design for 13"* → *"13 applied."* → **0** gtin findings |
-| `navaal-ttv-02` · /app (first run, via the new **First-run reset** workflow) | *Your store scores 39/100* · **The 3 things holding this store back**: *10 products have no description — the OpenAI product feed cannot list them* → Write the rest in bulk · *13 products have no barcode. Own brand or handmade? Say so once and it stops.* → Tell us · *1 description is too short …* · three drafts writing · **"We'll watch it from here."** Screenshot `docs/history/screen-reads/navaal-ttv-02-app.png` |
+| # | Screen | Label, verbatim | Shows | Real |
+|---|---|---|---|---|
+| 1 | Home | `Store SEO score` … `/ 100` `across 14 products sampled` | **65** | sampled 14 of 15 non-archived |
+| 2 | Home | `Your starting score, across the 14 products we sampled.` | **14** | 15 |
+| 3 | Home | `Autopilot optimized 15 new products in the last 24 hours` | **15** | 15 created, but they were created ~24-36 h ago |
+| 4 | Home | hero `30 products optimized · 0 drafts awaiting review` | **30** / **0** | **30 > the 15 that exist** |
+| 5 | Home | card `Total Products` | **32** | 32 only if the 17 archived are counted |
+| 6 | Home | `In your Shopify catalog · 14 active and draft products published to your online store` | **14** | active **+** draft = **15**; the label says "active and draft", the number is Active only — and "published to your online store" is a third, different population again |
+| 7 | Home | card `AI Content Published` | **30** | **> the whole non-archived catalogue** |
+| 8 | Home | `Products we have published content for` | — | |
+| 9 | Home | card `Drafts Pending Review` / `Nothing waiting` | **0** | true at the time |
+| 10 | Home | `Professional Plan` `19 / 4000 used` | **19 / 4000** | |
+| 11 | Home | usage percent | **0%** | 19/4000 = 0.475% — shown as `0%` while 19 credits are spent |
+| 12 | Home | `3981 of 4000 left this month.` | **3981 / 4000** | consistent with 11 |
+| 13 | Home | Recent Activity ×5, each `3 content types · 4h ago` | **3** | |
+| 14 | Home | Blog `0 published` · `6 draft` · `View all (6)` | **0 / 6 / 6** | consistent |
+| 15 | Products | `32 products in your catalog` | **32** | see 5 |
+| 16 | Products | `· 14 active and draft products published to your online store` | **14** | see 6 |
+| 17 | Products | `· 30 with content published` | **30** | see 7 |
+| 18 | Products | `· 0 ready to review` | **0** | |
+| 19 | Products | `· 0 not yet optimized` | **0** | |
+| 20 | Products | Activity tile `AI Content Published` | **30** | |
+| 21 | Products | Activity tile `Drafts to Review` | **0** | |
+| 22 | Products | Activity tile `Not yet optimized` | **0** | |
+| 23 | Products | tab `All (15 on page)` | **15** | **correct** |
+| 24 | Products | tab `Not optimized on this page (0)` | **0** | correct |
+| 25 | Products | tab `Draft on this page (0)` | **0** | **wrong: `Rope Basket Large` IS a Shopify Draft and is on the page** — unless "Draft" here means *our* content draft, in which case the word collides with Shopify's own product status on the same row |
+| 26 | Products | tab `Published on this page (15)` | **15** | correct |
+| 27 | Products | `Select all 15 products` | **15** | correct |
+| 28 | Products | `Showing 15 products` | **15** | correct |
 
-**The correction (`c258549`):** run 1's 150 blocking were mostly *"not on the Online Store
-channel"* on the two dev stores — untrue: both 302 `/` → `/password`, and Shopify nulls
-`onlineStoreUrl` while the password is on. One shop-level fact now threads grading and the crawler
-card. 150 → 115.
+- **The one-sentence version of that table: on the Products screen, inside a single viewport, the app states four different populations — `32 products in your catalog`, `14 active and draft`, `30 with content published`, and `All (15 on page)` — and the largest of them is bigger than the catalogue a merchant can see.** The list itself is right (979b25b); every count printed above it is not. `metrics.server.js` still has no product-status join, and that one query is the fix for rows 4, 5, 6, 7, 15, 16, 17, 20.
+- **A second meaning-bug, found by changing the state: `AI Content Published` counts "published AND not superseded".** Generating six fresh drafts moved it **30 → 27 → 24** while nothing was unpublished — the live content on those six products is still live on the storefront. So the label is wrong in both directions: it over-counts archived products and under-counts products whose live content simply has a newer draft beside it.
+- **CC — the row `Generate` control on `/app/products` has something painted over its centre point.** `document.elementFromPoint(x+w/2, y+h/2)` on the first Generate button returns a `DIV.Polaris-BlockStack`, **not** the button (`disabled:false, pointer-events:auto, visibility:visible, opacity:1`), and Playwright's actionability check times out on all 15 of them at 15 s each. A programmatic `.click()` works. Reported as observed, not diagnosed — but a control a real pointer may not be able to hit is worth ten minutes.
+- **Also learned: `Generate` on a product row is a NAVIGATION, not an action.** It opens `/app/products/<id>`; the button that actually generates is `Generate Content` there. Harness written for it: `tools/proof/make-drafts-pending.mjs` (dev-store only, refuses `askebs`/`elitepeps`/`genful` by name).
 
-**P2.5 verified before building:** the Search Console API lists searchanalytics, sitemaps, sites,
-urlInspection and nothing else — the generative-AI control is unreadable, so it is a one-question
-guided check, the answer stored as the merchant's.
+- **TASK 4 — `contentpilot-dev2` IS NOW CAPTURE-READY. STATE FROZEN AS OF 2026-09-14 07:2x UTC.** Read back on fresh loads after the change:
+  - **Review is no longer empty:** `/app/review` reads *"Review & Publish"*, *"6 products with draft content ready to review"*, *"0 of 6 approved"*, with `Approve all on this page` / `Clear selection` / `Reject 6 not approved` and per-product `Content quality: 90/100` + Description / Page title / Search description rows.
+  - **Home reads** `Review 6 drafts` · hero *"Welcome back, Northline Supply!"* · *"24 products optimized · 6 drafts awaiting review"* · `Drafts Pending Review 6 — Ready to publish` · `Monthly Usage 25 / 4000 used · 1% · 3975 of 4000 left this month`.
+  - **Products reads** `… · 24 with content published · 6 ready to review · 0 not yet optimized` with a `Review 6 drafts` action.
+  - **The six with drafts pending:** Bamboo Chopping Board · Beeswax Food Wrap Set · Brass Watering Can 1.5L · Cast Iron Skillet 26cm · Ceramic Pour-Over Coffee Dripper · Cotton Waffle Bath Towel. Nine products remain fully published. Nothing was approved, rejected or published; the catalogue itself was not touched.
+  - **Greeting:** correct on every path read on this store — Home hero, and the admin badge, both say **Northline Supply**. The nameless *"Welcome back!"* is **frame 04's problem, on a different store** (`navaal-ttv-02` / `navaal-qa-fresh`), and cannot be fixed from dev2. That frame is still an owner decision.
+  - **CAPTURE WINDOW — NOBODY MUTATES `contentpilot-dev2` UNTIL CW POSTS `CAPTURE COMPLETE`.** No probes, no harness runs that click, no generate, no approve, no publish, no settings edits, no installs or uninstalls, by any worker. The last set was stale by one product because another worker's probe ran mid-capture. Read-only harnesses (`read-screen.mjs`, `screen-numbers.mjs`) are fine. CW will capture inside this freeze as soon as CC posts the Part B sha, and will post `CAPTURE COMPLETE` to release it.
 
-**For CW:** §5 of `12-OFFER.md` may go to the listing now (no statistic leaves the app). Frame 04
-is capturable: the **First-run reset (one dev store)** workflow puts `navaal-ttv-02` (or any
-`navaal-ttv-*`) back on the first-run screen — it refuses anything else by name pattern. `ttv-02`
-is on that screen right now with the Shopify demo catalogue, as before.
+- **TASK 6 — SWEEP, 2026-09-14. Editor CLEAN; the public page still carries Shopify's stale billing badge, unchanged.** Fetch-sanity first, both halves. *Editor:* 54 non-empty fields, 3,318 characters read. Expect-0: `save 17%` **0** · `7-day` **0** · `7 day` **0** · `A/B variant testing` **0** · `Priority support` **0** · `ai content generations` **0** · `Dedicated account manager` **0** · `SLA support` **0**. Expect-1: `Two description options to compare` **1** · `Email support from the founder` **1**. The only superlative-list hit was `first` ×2, both benign and quoted here so nobody re-flags them: Subtitle *"…you approve it first"* (sequence) and one inside the reviewer `Instruction notes`. Lengths: App name **25** (≤30) · Introduction **86** (≤100) · App details **449** (≤500) · Features **58 / 69 / 74 / 60 / 63** (all ≤80). Search terms: **exactly 5**, `product descriptions`, `meta tags`, `seo audit`, `alt text`, `ai visibility` — §4 verbatim. *Public page* (`apps.shopify.com/navaal-ai-seo-geo-content`, cache-busted, **200**, 200,670 bytes, 117 × "Navaal"): `save 17%` **3** · `7-day` **3** · `299.90` **1** · `799.90` **1** · `95.90` **0** · `287.90` **0** · `14-day` **3**. **Identical to the last reading. This is the Task-1 side-effect baseline: after a real app-version release these must go to 0 / 0 with nobody editing a field, and 95.90 / 287.90 / 767.90 must appear.** One new item: the editor flags the **Subtitle** field with *"Review the updated guidance for this field and refresh your content."* and it sits at **62/62**, at the cap.
 
-**For the owner** (`OWNER-CHECKLIST.md`, FYI 2026-09-14 Part D): set `REMEDIATION_LOCKED_SHOPS`
-from a file; three scope yes/nos (`write_publications`, `write_online_store_navigation`,
-`read_legal_policies` — none added, stated on `/app/fix`); B8; H12b. New backlog rows F3–F8 —
-F8 is live and visible: `navaal-ttv-02` Home reads *"3 / 25 used"* on Free while the locked table
-says 100; old Plan rows were never re-based when B2 changed the tiers.
+- **TASK 7 — THE ACHIEVEMENT IS REAL, BUT THE PARTNER DASHBOARD DOES NOT EXPOSE IT. There is no criteria page to read; only the BFS checklist exists.** Checked `partners.shopify.com/4937813/apps/368479600641/distribution` and `/overview`: the strings `achievement`, `visibility` and `merchant surfaces` appear **zero** times on either, and the app's whole left nav is `Overview · API access requests · Distribution · App history`. The criteria below therefore come from **shopify.dev's own Built for Shopify page** (fetched 200, 373,677 bytes, 105 × "Built for Shopify"), under *Other achievements*, and the state beside each is what CW could read elsewhere — **not** a dashboard status, and it must not be recorded as one.
 
-`contentpilot-dev2` was not mutated by anything in this pass. Read-only harnesses only.
+  Verbatim, the achievement: *"Shopify surfaces apps to merchants in many ways. Increased visibility makes your app more visible, and more likely to be installed by merchants. When you earn this achievement, you'll get a search ranking boost, and become eligible for promotion on key merchant surfaces, including: The first collection in the App Store homepage · The Shopify admin `Picked for you` modal · App recommendations in Sidekick"* — followed by *"These surfaces are personalized for each merchant, so your app isn't guaranteed to appear."*
 
-## CORRECTION 2026-09-14 BY CC TO THE POST ABOVE — §5 IS GATED PER LINE, AND ONE PHASE 2 BULLET WAS FALSE
+  | Criterion (all listed **Mandatory**) | State CW can read | Where from |
+  |---|---|---|
+  | Good Partner standing | **Not exposed anywhere CW can see.** No infraction notice on Distribution or Overview | — |
+  | Meets App Store requirements | **Not exposed.** Our own sweep is the only proxy, and it is clean today | Task 6 above |
+  | (Storefront apps only) Uninstalls cleanly: uses theme app extensions | **✅ met** — BFS checklist row `Uses theme extensions to add storefront functionality` carries a green tick | Distribution |
+  | Minimizes impact on checkout speed | **Not exposed.** The BFS checklist has no checkout row at all; its nearest row is `Minimizes impact on storefront loading speed`, which carries the **clipboard** (manual-review) glyph | Distribution |
+  | Minimum number of installs | **6** cumulative net installs. The doc does not publish this achievement's threshold; BFS's own is **50** | Partner Overview, last 30 days |
+  | Minimum number of reviews | **0** — `Latest merchant feedback: -`. BFS's own threshold is **5** | Partner Overview |
+  | Minimum app rating | **none — no rating exists yet.** BFS's own threshold is **4+ stars** | Partner Overview |
 
-`12-OFFER.md` §5 says *"Each line names the phase that must be live first."* Phase 2 is live, so
-**the intro, the three Phase 2 bullets and the details paragraph are publishable; the two Phase 3
-bullets are not.** I wrote "§5 may go to the listing now" above; read it as the Phase 2 lines only.
+  **The honest read for the owner: this rung is NOT a way around the manual design review — it is gated on the same three merchant-utility numbers that gate BFS, and we are at 6 installs, 0 reviews and no rating.** Two of its seven criteria (`Good Partner standing`, `Minimizes impact on checkout speed`) have no surface in the dashboard at all, so we cannot know our state on them without applying. The doc's own words: *"Most criteria … are automatically evaluated, while others require you to apply for evaluation."*
 
-**One Phase 2 bullet has been corrected in the file** before anyone could publish it: it read *"Fix
-missing barcodes, options and availability across your catalog in bulk"*. The app does not fix
-availability and says so on `/app/fix` — Shopify supplies availability to every feed from
-inventory. It now reads *"Fix missing barcodes, option names and alt text across your catalog in
-bulk"*, which is exactly what `/app/fix` does. **CW: publish the corrected line, not the old one.**
+- **BFS checklist, re-read 2026-09-14 with the glyphs, since it is the only page that reports state.** *Performance:* ⭘ `Meets benchmarks for 2025 Core Web Vitals` — ✅ `Largest Contentful Paint (LCP) < 2.5 seconds`, ✅ `Cumulative Layout Shift (CLS) < 0.1`, ⭘ `Interaction to Next Paint (INP) < 200 milliseconds: Not enough data`; 📋 `Minimizes impact on storefront loading speed`. *Design and functionality:* ✅ `Is embedded in the Shopify admin`, ✅ `Uses theme extensions to add storefront functionality`, 📋 `Is a well integrated app`, 📋 `Uses Shopify design guidelines`, 📋 `Doesn't use Asset API`. *Category-specific:* **"Shopify hasn't assigned your app to a specific category."** *Merchant utility:* ⭘ `Minimum 50 net installs from active shops on paid plans`, ⭘ `Minimum 5 reviews since launch`, ⭘ `Rating of 4+ stars in the Shopify App Store`. Footer verbatim: **`All automated criteria based on data from last 28 days, unless noted. Checked daily around 17:00 UTC`**.
 
-**One more for the owner's eye, not changed:** *"See which of your products AI shopping assistants
-can and cannot read"* claims more than the app shows. The app shows what a surface's published
-field list requires and a product lacks. Proposed: *"See what AI shopping feeds require that your
-products are missing."* Owner's call; it is approved copy.
+- **P0 BLAST RADIUS JUST GREW — read off Partner Overview, same session. `Merchants with your app: 8`, up from 5 on 2026-09-10.** Latest app history: **`September 12, 2026 at 3:43 am — Peter Shops — Installed`**, plus `September 11 1:56 am Harbourline Goods`, `September 11 1:44 am Zephyrine Wynter`, `September 10 4:07 pm EBS Bathroom and Plumbing Supplies`, and `September 10 9:00 pm REDACTED — Subscription charge expired — Starter Plan - $9.99 USD (Test)`. **`Peter Shops` is not one of ours** — not a `navaal-ttv-*`, not `navaal-qa-fresh`, not `contentpilot-dev2`, not EBS. Treat the unescaped-FAQ population as **at least three** non-test shops, not two, until somebody counts it properly. 30-day totals: **26 installs · 20 uninstalls · 6 cumulative net installs**, with **16 of the 20 uninstalls same-day**, `$0.00` across every charge type.
+
+- **TASK 1 — THE RELEASE IS REAL AND THE P0 IS CLOSED ON ROUTE 0a. THE BILLING HALF OF IT IS NOT. Read 2026-09-14 ~07:05 UTC, unprompted by any queue post — the Versions page was re-read mid-session and the new version was already there.** Active version is now **`p0-xss-f505584`**, description *"faq_visible.liquid escaped (7942c30); billing display 95.90/287.90/767.90, 14-day trial"*. Verbatim from its detail page (`/versions/1127530758145`): **`Released  September 14, 2026 at 6:46 am +0000`** / **`Created  September 14, 2026 at 6:46 am +0000`**. That is **newer than `navaal-seo-geo-content-15`** (which is now second in the list and no longer Active) and **4 days 19 h 19 m after the 11:26:53 UTC 9 Sep fix commit**. `git merge-base --is-ancestor 7942c30 f505584` → **YES**, and `git show f505584:extensions/geo-schema/blocks/faq_visible.liquid` carries `| escape` on the heading, `qa.name` and `qa.acceptedAnswer.text`. **Scopes still `write_content,write_products` and the extension UID is still `6470d60a-…1bab4ee4`, so no re-consent and no deep-link breakage.** The escaped liquid is now the one Shopify serves.
+- **TASK 1.2 — SIDE-EFFECT READ: FAILED. The release did NOT carry the billing config. This is a finding, not a wait.** Public listing re-fetched cache-busted 19 minutes after the release (**200**, 201,030 bytes, 117 × "Navaal" — sanity first): `save 17%` **3** · `7-day` **3** · `299.90` **1** · `799.90` **1** · `95.90` **0** · `287.90` **0** · `767.90` **0**. Identical to the pre-release baseline on every one.
+- **TASK 1.3 — PRICING DETAILS, and it is the editor that settles it, not the CDN.** On a **fresh load** of the listing editor, the three read-only plan rows still say, verbatim: **`$9.99/month or $99.90/year, 7-day trial`** · **`$29.99/month or $299.90/year, 7-day trial`** · **`$79.99/month or $799.90/year, 7-day trial`**. In the whole editor page: `95.90` **0**, `287.90` **0**, `767.90` **0**, `14-day` **0**, `7-day` **3**. So this is not App Store page caching — **Shopify's registered billing metadata is unchanged**, and `$99.90` on $9.99/month is a 16.7% discount, which is exactly where the public page's `save 17%` comes from. **Whatever CC changed, it did not reach the place these three lines are read from. Releasing another version will not fix it by itself — the next step is to find out what actually writes them, because the app-version theory has now been tested once and did not hold.**
+- **TASK 1.4 — 0b STILL BLOCKED, unchanged.** `https://contentpilot-dev2.myshopify.com/products/bamboo-chopping-board` still 302s to `/password` (**200**, 11,747 bytes, 4 × "password", 0 × `navaal-faq`). The storefront-side read is one owner action away: enter the storefront password once in the Chrome CW drives, or turn password protection off on a dev store. **Until then the escape is proved by provenance (0a), not by a rendered page — and that distinction stays in writing.**
+
+## PHASE 7 — CW, second pass, 2026-09-14
+
+- **TASK 1 / H12b — DONE. THE THREE PRICE CARDS ARE EDITED, SAVED, AND LIVE. The public page cleared inside 20 seconds, which also settles what the price's "third home" actually is.** The cards live at `apps.shopify.com/services/pricing/<client_id>/<plan-handle>` — reached from the listing editor's `Edit` link on each plan, one page per plan (`/starter`, `/growth`, `/professional`). Each page has exactly **six** fields: `Internal plan handle` (disabled — *"Used in code to identify merchant plans. Can't be changed later."*), a `This plan has additional charges, such as usage fees or commissions` checkbox (unchecked, left alone), `Billing` (`Monthly recurring, with yearly discount`), `Monthly charge`, `Yearly charge`, `Free trial duration`. **Two fields changed per plan; nothing else touched. Monthly charges, the Free plan, and every credits/feature line left exactly as H12 set them.** Read back on a fresh load of the listing editor, verbatim:
+  - **`$9.99/month or $95.90/year, 14-day trial`**
+  - **`$29.99/month or $287.90/year, 14-day trial`**
+  - **`$79.99/month or $767.90/year, 14-day trial`**
+  Editor counts on that fresh load: `99.90` **0** · `299.90` **0** · `799.90` **0** · `7-day` **0** · `95.90` **1** · `287.90` **1** · `767.90` **1** · `14-day` **3**. Public page, cache-busted ~20 s after the last save (**200**, 201,033 bytes, 117 × "Navaal" — sanity first): `save 17%` **0** · `7-day` **0** · `99.90` / `299.90` / `799.90` **0** · `95.90` **1** · `287.90` **1** · `767.90` **1** · `14-day` **6**.
+- **ONE THING I COULD NOT DO, AND IT IS NOT A FAILURE — THE DISCOUNT BADGE IS DERIVED, NOT TYPED.** There is **no 17% field** anywhere on those three pages; the badge is computed by Shopify from `Monthly charge` × 12 against `Yearly charge`. `$9.99 × 12 = $119.88` against the old `$99.90` is 16.7%, which is where `save 17%` came from. With the correct annual prices in place the same computation now prints **`save 20%` ×3** on the public page. It cannot be suppressed, only made true — and 20% is exactly what `14-PRICING.md` §4 states (*"Annual — 20% off"*). **`save 17%` is gone for good; if a future sweep sees `save 20%`, that is correct output, not a regression.** Add `save 20%` to the sweep as an **expect-3-on-the-public-page**, and keep `save 17%` at expect-0.
+- **And the app-version theory is now conclusively dead.** Version `p0-xss-f505584` (released 06:46 UTC) moved these numbers by zero, over 19 minutes. Typing them moved them in seconds. **The price's third home is the Partner pricing card, full stop** — not `shopify.app.toml`, not the app version, not a deploy. `07-VERIFICATION.md` #12 should say so plainly.
+
+- **TASK 3 / B8 — CLOSED. THERE IS NO REAL CHARGE, AND THE ACTIVE PROFESSIONAL SUBSCRIPTION IS OUR OWN DEV STORE ON A TEST CHARGE.** The subscription in our database is, verbatim from App history: **`August 27, 2026 at 5:19 pm — contentpilot-dev2 — Success Subscription charge activated — Professional Plan - $79.99 USD (Test). Subscription ID: 26009600103`**, with **no cancel and no expire event after it** — which is exactly why it is still active in our DB, and it is why Home on dev2 reads `Professional Plan · 4000` credits. Corroboration, all three read today: **`Total earnings to date $0.00 USD`** and `$0.00` across one-time / recurring / usage / application credits on Partner Overview; the **Payouts page (`/4937813/payments`) renders only the promotional splash — no transaction list at all**; and every charge event in the whole App history for any store that is not ours carries **`(Test)`**.
+- **The one nuance worth writing down, because a future reader will hit it and panic.** 16 charge rows in App history do **not** carry the `(Test)` marker — `Growth Annual - $299.90 USD`, `Professional Annual - $799.90 USD`, `Professional Plan - $79.99 USD`, `Growth Plan - $29.99 USD` and so on. **Every one of the 16 is on `contentpilot-dev2` (9) or `contentpilot-test` (7)** — both our own development stores — and all are June–August `Subscription charge expired` events predating the per-shop test-mode work that shipped in `navaal-seo-geo-content-13`. **Zero unflagged charges on any other store, and zero charge events of any kind for the real merchants.** Shopify does not bill a development store, and earnings are $0.00, so no money has ever moved. **B8 closes; the OWNER-CHECKLIST item goes away.**
+
+- **TASK 2 — THE MERCHANT LEDGER. 21 stores in the whole life of the app. Two real merchants have it installed today.** Read from App history, all pages back to `contentpilot-dev2 — June 1, 2026 — Installed`, i.e. the beginning. **TIMEZONE WARNING, and it caught me: this page renders in LOCAL time (AEST, +10), unlike the Versions page which prints `+0000`.** Proof: the queue records `navaal-ttv-01` (renamed **Harbourline Goods**) installing at **15:56:34 UTC on 10 Sep**; this page shows it as **`September 11, 2026 at 1:56 am`**. Every time below is AEST. **Do not mix these two pages' timestamps without converting.**
+
+  **OURS (6 installed today):** `contentpilot-dev2` (Northline Supply) · **Harbourline Goods** (= `navaal-ttv-01`) · `Navaal TTV 02` · `Navaal TTV 03` · `Navaal TTV 05` · **EBS Bathroom and Plumbing Supplies** (the owner's own commercial store, installed 10 Sep 4:07 pm).
+  **OURS, uninstalled:** `Navaal TTV 04` (installed 10 Sep 1:52 pm, uninstalled 2:39 pm) · `Navaal QA Fresh` (four install/uninstall cycles, last uninstalled 10 Sep 2:21 pm) · `Navaal test 2` · `contentpilot-test`.
+  **SHOPIFY'S, NOT MERCHANTS:** `app-review-85870b77-r92361-a0` and `app-review-85870b77-r78944-a0` (the App Store reviewers' stores — both end in `Store closed`) · `Mars Canada Store` · `Mars Japan Store` · `Mars US Store` · `Ace Test Store UK` · `appstoretest4` (installed and uninstalled inside one minute, 13 Aug, pre-launch).
+  **REAL:**
+  | Store | Installed (AEST) | Installed (UTC) | Still installed? |
+  |---|---|---|---|
+  | **Zephyrine Wynter** | 11 Sep 1:44 am | **10 Sep 15:44** | **YES** — no uninstall event |
+  | **Peter Shops** | 12 Sep 3:43 am | **11 Sep 17:43** | **YES** — no uninstall event |
+  | **Hoodify** | 9 Sep 5:42 am | **8 Sep 19:42** | **NO** — uninstalled 9 Sep **5:43 am**, reason *"Testing multiple apps"* |
+  | `REDACTED` | install not in history | — | **NO** — uninstalled 8 Sep 4:06 pm; its `Starter Plan - $9.99 USD (Test)` sub (ID 30195777692) expired 10 Sep 9:00 pm. Shopify scrubs the name when a store closes, and the charge is flagged Test, so this is most likely a reviewer or test store, **not a merchant — but it cannot be proved either way from this page.** |
+
+  **THE THREE INTEGERS:**
+  1. **Real merchants currently installed: 2** — Zephyrine Wynter, Peter Shops.
+  2. **Real merchants who ever installed: 3** — those two plus Hoodify. (4 if `REDACTED` was real; unprovable.)
+  3. **Real merchants who uninstalled: 1** — Hoodify, **one minute** after installing.
+  **THE LEDGER RECONCILES TO SHOPIFY'S OWN COUNTER, which is the check that makes it trustworthy: 6 ours + 2 real = 8, and Partner Overview reads `Merchants with your app: 8`.** So the scoreboard's "real merchants" metric is **2**, not 8 and not 0.
+- **P0 EXPOSURE POPULATION, stated precisely.** The unescaped `faq_visible.liquid` was what Shopify served from **9 Sep 04:34 UTC** (v15 released) to **14 Sep 06:46 UTC** (`p0-xss-f505584` released). Real merchants installed **inside that window**: **Zephyrine Wynter** (10 Sep 15:44 UTC) and **Peter Shops** (11 Sep 17:43 UTC). **Hoodify installed and uninstalled on 8 Sep, before v15 was even released, and had the app for one minute.** Plus EBS, which is ours. **So the honest exposure number is two real merchants plus EBS — and it is still unknown whether any of them ever placed the FAQ app block on a theme, which CW cannot see.** A5's count of pre-fix `contentclaude.faq_schema` values containing markup is still the number that decides disclosure.
+
+- **TASK 4 — THE SUBTITLE FLAG IS A GUIDANCE-CHANGED PROMPT, NOT A VIOLATION NOTICE. Subtitle NOT rewritten.** The link behind *"Follow the app card subtitle guidelines"* is `https://shopify.dev/apps/store/requirements#1-app-card-subtitle`, and the rule it lands on is now numbered **4.4.1**. Verbatim, whole rule: *"**Write effective app card subtitles.** The app card subtitle helps merchants to quickly understand what your app does, and what sets it apart from others. Summarize your app in a concise phrase, and explain the value of your app. Don't add keywords to your subtitle with the intent of improving search performance. Don't use personal merchant information without consent from the merchant. **Don't include any data or statistics.** Share this information on your website and landing pages instead."* Fetched 200, 557,624 bytes, 3 × "app card subtitle" — sanity first. **No character limit is stated anywhere in the requirements document**; the editor's own `62/62` counter is the only limit visible, and our subtitle sits exactly on it.
+  Our live subtitle, verbatim: **`Content Google ranks and ChatGPT quotes — you approve it first`** (62). Against 4.4.1 it carries **no statistic, no merchant data, and no keyword padding**, so CW found nothing to route. **One judgement call left for Cowork, not decided here:** it names two third-party products (Google, ChatGPT). The requirements document's brand rule (4.4.3) covers *Shopify's* trademarks in graphics and the naming rule covers the **app name**, not the subtitle — so there is no rule against it that CW can find. Flagging it only so the decision is deliberate. **Approved copy comes from `12-OFFER.md`, so if it changes, it changes there first.**
+
+- **TASK 6 — SWEEP, post-edit. Editor CLEAN, public page now CLEAN for the first time.** Fetch-sanity first on both. *Editor, fresh load:* 54 non-empty fields, 3,264 characters. `save 17%` **0** · `7-day` **0** · `99.90` / `299.90` / `799.90` **0** · `A/B variant testing` **0** · `Priority support` **0** · `ai content generations` **0** · `Dedicated account manager` **0** · `SLA support` **0** · superlatives **0**. Expect-1: `Two description options to compare` **1**, `Email support from the founder` **1**. (`first` ×2, flagged and cleared as benign in the first pass — *"you approve it first"* and the reviewer notes — is unchanged.) Lengths: App name **25** (≤30) · Subtitle **62** (62 cap) · Introduction **86** (≤100) · App details **449** (≤500) · Features **58 / 69 / 74 / 60 / 63** (≤80). Search terms **exactly 5**, §4 verbatim. *Public page:* the numbers in the H12b row above. **New standing expectation: `save 20%` = 3 on the public page is CORRECT.**
+- **Mid-session re-reads, as required.** `/api/build-info` moved three times while CW worked: `e67bf22` (06:41:38Z) → `0c37d80` (07:01:35Z) → **`3e1c161` (07:28:30Z)**. Versions page re-read at 07:29Z: still **`p0-xss-f505584` Active, "43 minutes ago"**, no newer version. **CC is deploying code fast; no second app version has been cut, and none is needed for the pricing — that is now proved.**
+- **`contentpilot-dev2` REMAINS FROZEN. Nothing in this pass touched it.** 6 drafts still pending, capture state unchanged, capture window still open until CW posts `CAPTURE COMPLETE`.
+
+## PHASE 7 — CW, third pass, 2026-09-14
+
+**Claim vs screen, before anything else.** (1) **CC's Part B readings are NOT in the queue.** The
+brief said they were at the end of it; `grep` for `Part B`, `3e1c161`, `cad2f10`, `e40aee6` returns
+only CW's own rows. CW verified Part B by reading the screens instead. (2) **Part B's greeting fix
+is NOT universal** — see **F1**. (3) Production moved five times while CW worked: `e40aee6`
+(07:34:18Z) → `34f2bb4` (08:02:29Z) at 08:12Z.
+
+### TASK 2 — **CAPTURE NOT RUN. Two blockers, one of them the same one that killed the last set.**
+
+`contentpilot-dev2` **passes the gate on every condition the brief named**, read at 08:0xZ on `e40aee6`:
+`15 products in your catalog · 14 active and draft products published to your online store · 8 with
+content published · 6 ready to review · 0 not yet optimized · **17 archived not shown**`; tiles
+`8 / 6 / 0`; tabs `All (15 on page) · Not optimized (0) · Draft (6) · Published (9)`; Home
+`Total Products 15 — In your Shopify catalog · 14 active and draft … · 17 archived not counted`,
+`AI Content Published 8 — of your 14 active and draft products … · 24 since you installed`,
+`Drafts Pending Review 6 — Ready to publish`, hero `8 products optimized · 6 drafts awaiting review`,
+greeting **`Welcome back, Northline Supply!`**. **No count exceeds the catalogue. Part B is real
+here and the 28-row table's "Real" column is satisfied.** CW did not capture anyway, because:
+
+- **BLOCKER A — frame 04 would carry a test store name in the app hero.** See F1: the app greets
+  `Navaal QA Fresh` on a store Shopify itself now calls `Northline Supply`. Capturing it reproduces
+  exactly the H7 defect (admin badge and app hero disagreeing, test word in frame).
+- **BLOCKER B — the Products frames would show nine `Live` badges beside a tile reading `8`.**
+  Counted off the rows: 6 are `Ready to review`, **9 are badged `Live`**, and `AI Content Published`
+  reads **8**. Both are internally defensible — the tile's label says *"of your 14 active and draft
+  products **published to your online store**"* and **`Rope Basket Large` is a Shopify DRAFT**, so
+  it is excluded from 8 — **but the app badges that product `Live` when its storefront page does not
+  exist.** A listing image showing nine `Live` badges and an `8` is a listing image that lies.
+  **One row badge is the whole fix.**
+
+### TASK 1 — THE FIRST RUN, WALKED. Full write-up: `docs/history/screen-reads/first-run-qa-fresh-2026-09-14.md`
+
+**Two changes were made to `navaal-qa-fresh` and are declared here**: it had **zero products**, so
+it was **renamed** `Navaal QA Fresh` → **`Northline Supply`** and **stocked with 12 products**
+(`stock-northline.mjs`, no descriptions — the honest input state). **The rename happened AFTER the
+install, which is what exposed F1.**
+
+**Times.** Install click **07:38:48.7Z** → first app screen **~07:39:5xZ** = **~65 s**, and that is
+inflated by this agent's round-trips between clicks; the page transitions were a few seconds each.
+**App opened with products **07:52:14.9Z** → first finished draft on screen **~07:52:35Z** = **~20
+seconds**.** That is the time-to-value number for the scoreboard, and it is good.
+
+**THE CONFUSION LIST — CC, this is the P2.7 input.**
+
+- **F1 — THE GREETING IS CAPTURED AT INSTALL AND NEVER REFRESHED. Still true at `e40aee6`.** The
+  store was renamed **after** install. Twenty minutes and five page loads later the app still says
+  **`Welcome back, Navaal QA Fresh!`** while Shopify's own admin badge directly above says
+  **Northline Supply**. Part B was reported as taking the name from Shopify; on the rename-after-
+  install path it does not. **This is the frame-04 blocker, now reproduced from a clean install with
+  the trigger isolated.**
+- **F2 — `Welcome back` on a first visit.** First run, never been here, greeted as returning.
+- **F3 — THE FIRST SCREEN SAYS THREE DRAFTS ARE READY AND THE REVIEW SCREEN SAYS THERE ARE NONE, FOR
+  MINUTES.** Drafts finished ~07:52:35. `/app/review` at ~07:55 **and again** at ~07:56:
+  *"Nothing to review — you're all caught up. Generate content from the Products page, then come
+  back here to review and publish."* Same URL at **07:59: "3 products with draft content ready to
+  review."** The screen the app sends you to is empty right after it tells you to go there, **and its
+  empty state tells you to generate content you already have.**
+- **F4 — EVEN AFTER REVIEW CATCHES UP, TWO OF FOUR COUNTERS STILL READ ZERO.** Same minute,
+  `e40aee6`, `navaal-qa-fresh`: `/app/review` **"3 products with draft content ready to review"** ·
+  `/app` **`Drafts Pending Review` 0 · "Nothing waiting"** and hero **"0 products optimized · 0
+  drafts awaiting review"** · `/app/products` header **"0 ready to review · 12 not yet optimized"** ·
+  `/app/products` tabs **`Draft on this page (3)`**. **On `contentpilot-dev2`, whose drafts were made
+  from the Products page, all four agree — so this is specific to the drafts the FIRST RUN writes.**
+- **F5 — `generations` on the first screen, `credits` everywhere else.** First screen: *"3 of your
+  **100 remaining free generations** this month."* Plans page, Home, listing and `14-PRICING.md` §4
+  all say **credits**, and §1 bans mixing the two because credits are weighted. **The first sentence
+  a merchant ever reads about cost uses the banned unit.**
+- **F6 — the headline score is silently one of the two numbers under it.** `Your store scores
+  **21**/100`, then `**21** AI search (GEO)` and `**10** Traditional SEO`. Traditional SEO is
+  excluded from the headline with no label saying so.
+- **F7 — a large red failing score is the first thing anyone sees**, above any explanation. Honest,
+  and the least usable possible listing frame.
+- **F8 — `Now 21/100` is printed on every product row.** It is the store score. It reads as the
+  product's.
+- **F9 — reloading re-announces `Writing 3 drafts now — that uses 3 of your 100 remaining free
+  generations`.** Usage stayed at 3/100 so nothing was re-billed, **but the merchant cannot know
+  that.** CC: confirm whether reload re-generates or only re-renders.
+- **F10 — `Optimize store (12) · Starter` on a Free-plan store** whose Home says `Free Plan`.
+- **F11 — Products header vs its own tabs:** `12 not yet optimized` against `Not optimized on this
+  page (9)` + `Draft on this page (3)`, one viewport.
+- **F12 — `Monthly Usage` on Home, `Monthly Generations` on Products.** Same number, two labels, one
+  banned unit.
+- **F13 — the row `Review` button does not open a review screen.** A draft row badged
+  **`Ready to review`** with a **[Review]** button opens `/app/products/<id>` — the *generate* page
+  (`Generate Content` / `Regenerate Content` / `Select what to generate`). **No approve or publish
+  control exists on it.**
+- **F14 — `3 / 100 used` renders as `3%`; `19 / 4000` on dev2 renders as `0%`.** Integer rounding
+  makes real spend read as none.
+- **F0 — an empty store dead-ends.** With zero products the whole first screen is *"Add a product
+  and we'll get started"* + **[Add a product in Shopify]**, which leaves the app. Nothing brings the
+  merchant back. Verbatim, 377 characters, no greeting at all on that path.
+
+**What was NOT wrong, and should be said:** the generated copy is specific and good; the scope
+screen is plain; the Plans page matches `14-PRICING.md` §4 exactly and uses **credits** correctly;
+the FAQ setup card is unusually honest (it states publishing alone does not make the FAQ live, and
+that Google retired FAQ rich results in May 2026).
+
+**THE FOURTH HOME OF THE PRICE — READ, AND IT IS CORRECT.** Shopify's own approval page, reached by
+`Upgrade to Growth`, title `Northline Supply · Approve subscription · Shopify`, verbatim:
+*"**Your next bill** — **You have a 14-day free trial ending on Sep 28.** — Subtotal *plus any
+applicable taxes* **$29.99** — Total *Due Sep 28* **$29.99** — [Approve] … **Growth Plan** —
+Subscription details **$29.99 USD every 30 days** — You don't have any payment methods on file."*
+**`billing.request()` is correct; `TRIAL_DAYS = 14` reaches Shopify. NOTHING WAS APPROVED** —
+harness `tools/proof/read-charge-page.mjs` stops at that page by design.
+**And a tooling note that matters for every future session: the Chrome extension's clicks and
+scrolls DO NOT REACH the app's cross-origin iframe.** Three clicks on `Upgrade to Growth` did
+nothing; the same click driven by Playwright worked first time. The earlier "Generate button has
+something painted over it" and "the iframe will not scroll" findings are the same cause. **Drive the
+app frame with Playwright, not the extension.**
+
+### TASK 3 — BOTH REAL MERCHANTS ARE PRE-LAUNCH. NEITHER STOREFRONT IS PUBLIC.
+
+Domains from each store's Partner page (no admin, no login, no contact; the owner emails on those
+pages are deliberately NOT copied here).
+- **Zephyrine Wynter — `zephyrin-wynter-a01g3uy4.myshopify.com` — United Kingdom.** `/` returns
+  **200 but redirects to `/password`** (11,747 bytes, *"This store is password protected"*).
+  `products.json` returns the same password page. FAQ block: **could not read.** Product content:
+  **could not read.** Only app installed: ours.
+- **Peter Shops — `peter-shops-2.myshopify.com` — China.** `/` **200 → `/password`** (11,737
+  bytes). Same on `products.json`. FAQ block: **could not read.** Only app installed: ours.
+
+**Both real merchants are brand-new, unlaunched stores with our app as their ONLY installed app.**
+Three consequences: (1) the P0 could not have reached a shopper even had markup existed — no public
+page; (2) **whether any real merchant uses the theme extension is unanswerable from outside, so
+Phase 2 must not lean on it**; (3) the install cohort is pre-launch store builders, not established
+merchants — which is who P2.7's 60-second first run is actually for.
+
+### TASK 4 — RANKING BASELINE, 2026-09-14 ~08:05Z. **NOT ON PAGE 1 FOR ANY TERM.**
+
+Read in a rendered browser — **`curl` returns a 99 KB shell with zero app cards on every query, so a
+curl-based rank check is a guaranteed false green.** Detector sanity: searching **`navaal`** puts us
+at **slot 1 of 66** — the detector works, so every "not found" below is real.
+
+| Query | Apps matching | Cards on page 1 | Navaal |
+|---|---|---|---|
+| `seo audit` | 3,126 | 70 | **not in first 70** |
+| `product descriptions` | 7,122 | 72 | **not in first 72** |
+| `meta tags` | 5,464 | 66 | **not in first 66** |
+| `alt text` | 4,635 | 68 | **not in first 68** |
+| `ai visibility` | 4,574 | 70 | **not in first 70** |
+| `seo` | 6,925 | 67 | **not in first 67** |
+| `ai seo` | 6,990 | 70 | **not in first 70** |
+
+**SEO category — `apps.shopify.com/categories/store-design-site-optimization-seo/all`, "Best SEO
+Apps For 2026", 1,111 apps: not in the first 66 cards.** The first three slots are **Ads**
+(`AltTextLab – AI Alt Text & SEO`, `StoreSEO AI SEO Optimizer` 747 reviews, `SEO Buddy: AI Rich
+Results` 18 reviews). First three **organic**: **`Judge.me Product Reviews App` 46,891 reviews** ·
+**`SEOLab: All in #1 SEO — AI SEO` 2,613** · **`Smart SEO AI & Image Optimizer` 953`**. We have
+**0**. That is the gap in one line.
+**Worth knowing:** the public listing DOES show `Categories: SEO`, while the BFS checklist says
+*"Shopify hasn't assigned your app to a specific category."* Those are two different things — a
+displayed category versus a BFS category-criteria assignment — not a contradiction, but easy to
+mistake for one. Listing also shows `Launched September 8, 2026 · Greenacre, NSW, AU`.
+
+### TASK 5 — `/terms` IS OUT OF DATE AND CONTRADICTS THE LISTING, THE PLANS PAGE AND SHOPIFY'S OWN CHARGE SCREEN. Nothing edited.
+
+Both pages 200 (privacy 25,176 B, terms 19,708 B; sanity counts taken first). Terms
+`Last updated: 8 July 2026` — **before the pricing lock**. Privacy `4 September 2026`.
+**TO CC (facts, and the pages are generated so a hand edit would drift):**
+- **T1 — §4: *"Paid plans include a `7-day free trial`."*** Everything else says **14 days**,
+  including Shopify's own charge page. **The contract is the last place still saying 7.**
+- **T2 — §3 table: *"Free — $0 — `25 generations per month`"*, and the closing CTA: *"`25
+  generations a month`, no card required."*** Live Free allowance is **100 credits / month**.
+  **Wrong by 4×, in the contract, twice.**
+- **T3 — §3 gives no numbers for the paid tiers**: *"Higher monthly limit for growing stores"*,
+  *"For active catalogues optimising regularly"*, *"For large catalogues and Autopilot at scale"*.
+  A merchant cannot learn their limit (500 / 1,500 / 4,000) from the Terms at all.
+- **T4 — §3: *"Annual billing … is charged at a rate equivalent to `ten months for twelve (two
+  months free)`."*** Ten-for-twelve is **16.67% — the old `save 17%` maths**. The locked table and
+  the live listing are **20%**. **The Terms enshrine the discount we removed this morning.**
+- **T5 — §5 uses `generations`** and describes an allowance *"framed around producing complete,
+  optimised products per month"* — a model we do not use.
+- **T6 — §1 presents Autopilot as a general capability**; it is Growth-and-above.
+- **T7 — THE BYO ANTHROPIC KEY IS DISCLOSED NOWHERE.** Professional's live feature line is *"Your
+  own AI key — no credits used"*. Neither Terms §8/§9 nor the Privacy Policy's *"How we use AI"*
+  section mentions a merchant-supplied key: who holds it, whether it is encrypted, whose terms
+  govern those calls, what happens to it on uninstall. **The brief asked me to confirm it was there.
+  It is not, in either document.**
+- **T9 — the Privacy Policy names the wrong database host.** *"Data … is stored in PostgreSQL
+  databases hosted on `Fly.io`, with Redis used for background job queues."* Our own queue records
+  the production database as **Neon** (*"Neon history retention → 7 days"*, 2026-09-10). **If it is
+  Neon, the subprocessor list is both wrong and incomplete** — Neon is unnamed, and Redis is named
+  with no host. CC: confirm which, then fix the generator.
+- **T10 — Privacy *"What data we store"* says `how many generations you have used`.** Same unit
+  collision as F5/F12.
+- **T11 — Privacy asserts the customer-data claim at two different strengths**: *"The App stores no
+  customer personal data of any kind"* and, later, *"We do not store your customers' personal data
+  `as part of the App's normal operation`."* The absolute version is the risky one.
+**TO COWORK/OWNER (decisions, not facts):**
+- **T8 — two support addresses.** Both legal pages say **`support@navaal.ai`**; the app footer, the
+  listing's contact field and the plans page say **`hello@navaal.ai`**. A reviewer comparing them
+  sees a mismatch. **Pick one.**
+- **T12 — Bilby scan reports have no retention limit:** *"Reports are the product — they are not
+  deleted on a schedule."* Honest, but a reviewer looking for a retention period finds "none".
+  A stated maximum would cost nothing.
+**What is good and should not be touched:** company identity, ABN, postal address, governing law
+(NSW), the two-scope explanation, the Anthropic no-training statement, the three GDPR webhooks with
+the 48-hour `shop/redact` deletion, the named subprocessor list, the beacon's 13-month retention,
+and §7's explicit **"No results guarantee"** — which is exactly the doctrine, written into the
+contract.
+
+### TASK 6a — ADMIN PERFORMANCE, window **Sep 7 – Sep 14**. INP is no longer "Not enough data".
+
+| | p75 | Grade | Loads, day by day (Sep 7→14) | Total |
+|---|---|---|---|---|
+| **Largest Contentful Paint** | **877 ms** | Good | 0 · 11 · 31 · 14 · 0 · 0 · 2 · 18 | **76** |
+| **Interaction to Next Paint** | **40 ms** | Good | 0 · 5 · 0 · 8 · 0 · 0 · 2 · 11 | **26** |
+| **Cumulative Layout Shift** | **0.02** | Good | 0 · 11 · 31 · 14 · 0 · 0 · 2 · 18 | **76** |
+
+Against the 2026-09-10 read (LCP 1,130 ms / 51 · INP 24 ms / 12 · CLS 0.02 / 51): **LCP improved
+1,130 → 877 ms and INP now reports a p75 instead of "Not enough data".** **The number that decides
+BFS is 26 of the 100 required calls** — and it only moves when real merchants use the app, not when
+we do.
+
+### TASK 6b — SKIPPED, AS INSTRUCTED, AND HERE IS WHY.
+
+The gate was "only if the 7-day window starts on or after 8 Sep 20:00 UTC". **The window on screen
+is `Sep 7 – Sep 14` — it still contains Sep 8 and Sep 9.** The launch-day failures have not aged
+out. Earliest the window clears them is ~16 Sep.
+
+### TASK 7 — SWEEP. Both halves clean.
+
+*Editor, fresh load:* 54 non-empty fields, 3,264 characters. Every expect-0 at **0**
+(`save 17%`, `7-day`, `99.90`, `299.90`, `799.90`, `A/B variant testing`, `Priority support`,
+`ai content generations`, `Dedicated account manager`, `SLA support`, superlatives). Expect-1 both
+**1**. Lengths App name **25** · Subtitle **62** · Introduction **86** · App details **449** ·
+Features **58/69/74/60/63**. Search terms **exactly 5**, §4 verbatim. Plan cards read back
+`$9.99/month or $95.90/year, 14-day trial` · `$29.99 … $287.90 … 14-day` · `$79.99 … $767.90 …
+14-day`. *Public page, cache-busted* (200, 201,033 B, 117 × "Navaal"): expect-0 all **0**;
+**`save 20%` 3** · `14-day` **6** · `95.90` / `287.90` / `767.90` **1** each · both replacements
+**1**. **`save 20% = 3` confirmed as the correct standing value.**
+
+### STORE STATE AFTER THIS PASS
+
+- **`contentpilot-dev2`: untouched, still frozen, 6 drafts pending.** The freeze holds until CW
+  posts `CAPTURE COMPLETE`, which is now waiting on BLOCKER A and BLOCKER B above, not on a sha.
+- **`navaal-qa-fresh`: renamed `Northline Supply`, 12 products, app installed, 3 first-run drafts,
+  Free plan, 3/100 credits used, no subscription approved.** It is ready to be frame 04's source the
+  moment F1 is fixed. **Nobody should mutate it either.**

@@ -1,5 +1,31 @@
 # OWNER CHECKLIST — things only Waqas can do
 
+## 🔴 TODAY — FIVE THINGS, IN THIS ORDER (2026-09-14, Cowork)
+
+1. **Set `REMEDIATION_LOCKED_SHOPS` — the EBS guardrail.** Phase 2's `/app/fix` can now write to a
+   store. Until this secret exists, **nothing is locked.** Put `askebs.myshopify.com` (and any other
+   real store you never want touched) in a file, then `fly secrets import < file`. Never
+   `fly secrets set`. Two minutes, and it is the only thing standing between the constitution's
+   "never write to EBS" and a button.
+2. **Hostinger, once, three uploads** — everything is prepared and waiting for the password:
+   the W1 post (`_UPLOAD-W1-POST.md`), and **two redirect files CC is preparing** so that
+   `navaal.ai/privacy` and `navaal.ai/terms` — the **stale** copies the listing currently links to
+   (7-day trial, "25 generations", "two months free", no key disclosure) — send readers to the
+   current pages on `app.navaal.ai`. CW is re-pointing the listing today; the marketing site's own
+   links still hit the stale pages until you upload.
+3. **Three scope decisions — Cowork recommends NO to all three for now.** `write_publications`,
+   `write_online_store_navigation`, `read_legal_policies`. Adding any scope prompts **every**
+   installed merchant to re-approve, and both real merchants are pre-launch and fragile. `/app/fix`
+   already says these three are not fixable from here, with the reason. Revisit at ten merchants.
+4. **`12-OFFER.md` §5 second bullet — decided by Cowork**, CC's wording adopted: *"See what AI
+   shopping feeds require that your products are missing."* Nothing for you unless you object.
+5. **B0.1 — thirty named prospects, due Thursday 17 Sep.** Both real merchants are password-
+   protected pre-launch stores. The product is live, honest and monitored; the scoreboard's rank
+   metric reads "absent" and nothing an agent does changes it.
+
+---
+
+
 **Regenerated from the pending `OWNER` rows of `06-QUEUE.md` and from `11-MASTERPLAN.md`.**
 Last regenerated: 2026-09-10 (revision 2). **Appended 2026-09-14 (P0.6): the pricing decision below,
 and the one cost figure still unmeasured.** Appended rather than regenerated on purpose — a parallel CW

@@ -15,7 +15,7 @@ Better still, and now the standard: **verify a guard by breaking it.** Disable t
 watches and show the test count that fails. CC did this for the claim check (2 tests) and the
 family skip (4 tests). That is the bar.
 
-*Twelve false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
+*Fourteen false-green shapes so far: the ESLint `--cache`, twelve identical 410 screenshots, a CI guard
 comparing an empty commit range, a passing test suite over a GraphQL query with a `//` syntax
 error, a harness measuring `admin.shopify.com` instead of our own iframe, a setting with a column,
 a read path and a green suite that no merchant could reach (L15), a folder of
@@ -25,7 +25,9 @@ of a cached score that had been stale for hours, and two sections in one file an
 same name with the dead one first, and a locked constant with a green test and no consumer while a
 hardcoded copy shipped the wrong value to Shopify, and a week of verified production deploys read
 as proof of what Shopify serves while the app version — and a storefront XSS fix inside it — had
-not been released since 9 September. The full list, with the rule each one produced, is
+not been released since 9 September, a piped deploy gate that returned `tail`'s exit code over a CI
+failure, and a legal page that existed on two hosts with each worker verifying a different one. The
+full list, with the rule each one produced, is
 `07-VERIFICATION.md`.*
 
 ## L2 — THE STORE-SHAPE LAW

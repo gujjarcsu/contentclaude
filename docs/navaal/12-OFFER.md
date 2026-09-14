@@ -167,7 +167,7 @@ Do not publish any part of this early. Each line names the phase that must be li
 
 **Added bullets:**
 - `Daily checks tell you when a theme or import breaks your product data` *(Phase 2)*
-- `See which of your products AI shopping assistants can and cannot read` *(Phase 2)*
+- `See what AI shopping feeds require that your products are missing` *(Phase 2 — reworded 2026-09-14 on CC's flag: the old line claimed more than the app shows; this one is exactly what `/app/attention` grades)*
 - `Fix missing barcodes, option names and alt text across your catalog in bulk` *(Phase 2)*
   *(Corrected 2026-09-14 by CC when P2.6 went live: the earlier wording said "availability", which
   the app does not and cannot fix — Shopify supplies availability to every feed from inventory, so
