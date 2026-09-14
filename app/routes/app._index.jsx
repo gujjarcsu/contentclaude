@@ -362,6 +362,23 @@ function StoreScoreCard({ score }) {
           <Text as="span" variant="bodyMd" tone="subdued">
             / 100
           </Text>
+          {/*
+            A2 — the population belongs to the NUMBER, not to a caption under it.
+            Home and the SEO Audit now use the same rubric, the same fields and
+            the same scope, so the only honest difference left between them is
+            how many products each one read. That difference is stated here, on
+            the same line as the score, rather than in small print below where a
+            merchant comparing two screens will not connect it to the gap.
+
+            It sits AFTER "/ 100" on purpose: the listing-capture guard matches
+            "Store SEO score" followed by the number, and text inserted between
+            them would break CW's frame 04 capture.
+          */}
+          {Number.isFinite(score.scanned) && score.scanned > 0 ? (
+            <Text as="span" variant="bodyMd" tone="subdued">
+              {`across ${score.scanned} product${score.scanned === 1 ? "" : "s"} sampled`}
+            </Text>
+          ) : null}
         </InlineStack>
 
         <Text as="p" variant="bodySm" tone="subdued">

@@ -21,6 +21,7 @@
 import logger from "./logger.server.js";
 import { getCache } from "./cache.server.js";
 import { calculateSeoScore } from "./seo.server.js";
+import { scopeQueryFor } from "./candidates.js";
 import { calculateGeoScore } from "./geo.server.js";
 import { shopifyQuery } from "./shopifyQuery.server.js";
 
@@ -46,7 +47,28 @@ export const START_SCAN_TTL_S = 120;
 // `//` inside this template literal is a syntax error Shopify rejects — which
 // no test in this repo would catch, because they all mock the transport and
 // never parse the query.
-export const START_SCAN_QUERY = `query startScan($n: Int!) {
+/**
+ * A2 — THE FIELDS THE STORE SCORE IS COMPUTED FROM. Shared, because the score
+ * depends on them and two screens fetching different fields produce different
+ * numbers from the same rubric.
+ *
+ * This is half of why Home said 48 and the SEO Audit said 90 on the same store
+ * in the same minute. The other half was the rubric. Fixing only the rubric
+ * would have left a ~20-point gap: the audit did not fetch `productType`,
+ * `vendor`, `tags` or `variants.price`, so the graded-attributes dimension
+ * (20 of 100) scored zero on every product it looked at.
+ *
+ * Any surface that shows a store score selects THESE fields and maps them with
+ * `toScorable`. Nothing scores a product it assembled by hand.
+ */
+export const SCORED_PRODUCT_FIELDS = `
+      id title description productType vendor tags
+      seo { title description }
+      featuredMedia { preview { image { url } } }
+      media(first: 3) { edges { node { mediaContentType ... on MediaImage { image { altText } } } } }
+      variants(first: 3) { edges { node { price } } }`;
+
+export const START_SCAN_QUERY = `query startScan($n: Int!, $scoped: String) {
   shop { name }
   collections(first: 20, sortKey: UPDATED_AT, reverse: true) {
     edges { node { title description } }
@@ -54,13 +76,8 @@ export const START_SCAN_QUERY = `query startScan($n: Int!) {
   pages(first: 5, sortKey: UPDATED_AT, reverse: true) {
     edges { node { title body isPublished } }
   }
-  products(first: $n, sortKey: UPDATED_AT, query: "status:active") {
-    edges { node {
-      id title description productType vendor tags
-      seo { title description }
-      featuredMedia { preview { image { url } } }
-      media(first: 3) { edges { node { mediaContentType ... on MediaImage { image { altText } } } } }
-      variants(first: 3) { edges { node { price } } }
+  products(first: $n, sortKey: UPDATED_AT, query: $scoped) {
+    edges { node {${SCORED_PRODUCT_FIELDS}
     } }
   }
 }`;
@@ -107,7 +124,24 @@ export function scoreProduct(p) {
   const geo = calculateGeoScore(p);
   const seoScore = Number(seo?.score) || 0;
   const geoScore = Number(geo?.score) || 0;
-  return { seo: seoScore, geo: geoScore, combined: Math.round((seoScore + geoScore) / 2) };
+
+  // A2 — `combined` USED TO BE (seo + geo) / 2, and that is what made Home and
+  // the SEO Audit disagree by 42 points on the same store in the same minute.
+  // Home averaged two rubrics; the audit reported one of them. The gap was
+  // arithmetic, not sampling: it is exactly (seo - geo) / 2.
+  //
+  // There is one rubric in this app that has been reviewed against the doctrine
+  // — geoRubric.js, rebuilt in P1.3 on what W1 measured, after it stopped giving
+  // a quarter of its marks away for structured data Shopify requires every theme
+  // to emit. calculateSeoScore is the older, cruder one: it awards 30 of 100 for
+  // a description of 50 characters, which is the exact defect W1 found in 43.9%
+  // of stores and the thing this app sells the fix for. A rubric that scores the
+  // problem as a pass cannot be the store's headline.
+  //
+  // So the store score IS the reviewed rubric. `seo` stays in the return because
+  // the first-run reveal shows both and a store can be strong on one and weak on
+  // the other, but it is no longer half of the headline.
+  return { seo: seoScore, geo: geoScore, combined: geoScore };
 }
 
 /** Mean of a numeric field across rows, rounded. 0 for an empty list. Pure. */
@@ -148,10 +182,25 @@ export async function scanStoreForStart(
     // Phase 4 item 6 — through the shared backoff. This scan now feeds the
     // store score on Home as well as the Start state, so a throttle here would
     // blank the merchant's headline number rather than just delaying a page.
+    // A2 — THE SAME SCOPE the SEO Audit uses. This was the literal string
+    // "status:active" while the audit used scopeQueryFor(), which also requires
+    // published_status:published. So the two screens scored different
+    // POPULATIONS as well as using different rubrics: a POS-only or
+    // wholesale-only product counted on Home and not in the audit. Unifying the
+    // rubric alone would have left that difference in place and the two numbers
+    // still disagreeing, for a reason nobody could see on either screen.
+    // scopeForShop reads the database, and this module must not import Prisma at
+    // load time — L10, and it broke tests/utils/startState.test.js the moment it
+    // did. A dynamic import keeps the module graph clean while leaving the scope
+    // resolved in ONE place: if each of the two callers had to pass it in,
+    // either could forget and the populations would silently diverge again,
+    // which is the whole bug.
+    const { scopeForShop } = await import("./candidates.server.js");
+    const scoped = scopeQueryFor(await scopeForShop(shop));
     const r = await shopifyQuery(
       admin.graphql,
       START_SCAN_QUERY,
-      { n: SCAN_LIMIT },
+      { n: SCAN_LIMIT, scoped },
       {
         shop,
         label: "start scan",

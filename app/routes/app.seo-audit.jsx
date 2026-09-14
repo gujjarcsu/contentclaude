@@ -24,6 +24,7 @@ import logger from "../utils/logger.server.js";
 import { scoreTone } from "../utils/scoreBands.js";
 import { shopifyQuery } from "../utils/shopifyQuery.server.js";
 import { scopeForShop, scopeQueryFor } from "../utils/candidates.server.js";
+import { SCORED_PRODUCT_FIELDS, toScorable } from "../utils/startState.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -59,15 +60,18 @@ const AUDIT_RETRY_DELAY_MS = 500; // one backoff before a page is written off
  * The comment lives OUT here. A `//` inside a GraphQL template literal is a
  * valid JS comment and a GraphQL syntax error, which nearly shipped once.
  */
+// A2 — the SHARED field selection. This query used to fetch description, seo
+// and images only. The store score's graded-attributes dimension is worth 20 of
+// 100 and reads productType, vendor, tags and variants.price, none of which were
+// here — so switching this page onto the same rubric WITHOUT the same fields
+// would have left the two screens ~20 points apart for a reason invisible on
+// both of them.
 const AUDIT_PAGE_QUERY = `query getProducts($cursor: String, $scoped: String) {
   products(first: ${AUDIT_PAGE_SIZE}, after: $cursor, sortKey: UPDATED_AT, reverse: true, query: $scoped) {
     pageInfo { hasNextPage endCursor }
     edges {
       node {
-        id title handle
-        description
-        seo { title description }
-        images(first: 5) { edges { node { id url altText } } }
+        handle${SCORED_PRODUCT_FIELDS}
       }
     }
   }
@@ -76,6 +80,7 @@ const AUDIT_PAGE_QUERY = `query getProducts($cursor: String, $scoped: String) {
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const { calculateSeoScore } = await import("../utils/seo.server.js");
+  const { calculateGeoScore } = await import("../utils/geo.server.js");
   const shop = session.shop;
 
   const SIX_MONTHS_AGO = new Date();
@@ -134,14 +139,24 @@ export const loader = async ({ request }) => {
   // for the full catalog (streamed).
   const summarize = (edges, { stoppedByTimeout, stoppedByError, hasNextPage }) => {
     const products = edges.map(({ node }) => {
-      const images = node.images.edges.map((e) => e.node);
-      const productData = {
-        description: node.description || "",
-        seoTitle: node.seo?.title || "",
-        seoDescription: node.seo?.description || "",
-        images,
-      };
-      const { score, checks } = calculateSeoScore(productData);
+      // A2 — one mapper, one rubric. `toScorable` is the same function the Home
+      // scan uses, so neither screen assembles a product by hand.
+      const scorable = toScorable(node);
+      // THE STORE SCORE. calculateGeoScore is the rubric reviewed against the
+      // doctrine and rebuilt in P1.3 on what W1 measured. This page used to
+      // report calculateSeoScore instead, which is why it read 90 while Home
+      // read 48 on the same store in the same minute.
+      const score = calculateGeoScore(scorable).score;
+      // calculateSeoScore is still called, but ONLY for its per-product checks,
+      // which drive the Description / Page title / Search description / Alt text
+      // icons below. Those are diagnostics a merchant can act on; they are no
+      // longer the headline number.
+      const { checks } = calculateSeoScore({
+        description: scorable.description,
+        seoTitle: scorable.seoTitle,
+        seoDescription: scorable.seoDescription,
+        images: scorable.images,
+      });
       const dbRecord = contentByProductId.get(node.id);
       const isStale =
         dbRecord && dbRecord.status === "published" && new Date(dbRecord.updatedAt) < SIX_MONTHS_AGO;

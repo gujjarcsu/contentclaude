@@ -140,7 +140,13 @@ describe("the score is computed from the merchant's own catalogue", () => {
   it("asks Shopify for a bounded page — the score is a sample, and is described as one", async () => {
     const admin = adminReturning([node(1)]);
     await scanStoreForStart(admin, SHOP);
-    expect(admin.graphql.mock.calls[0][1]).toEqual({ variables: { n: SCAN_LIMIT } });
+    // A2 — `scoped` joined `n` here. The scan used to hardcode
+    // query: "status:active" while the SEO Audit used scopeQueryFor(), so the
+    // two screens scored different POPULATIONS as well as using different
+    // rubrics. Both now resolve the same scope.
+    const vars = admin.graphql.mock.calls[0][1].variables;
+    expect(vars.n).toBe(SCAN_LIMIT);
+    expect(typeof vars.scoped).toBe("string");
     expect(SCAN_LIMIT).toBeGreaterThan(0);
   });
 
@@ -196,14 +202,38 @@ describe("the score is computed from the merchant's own catalogue", () => {
   it("scans only ACTIVE products — a draft product is not a storefront problem", async () => {
     const admin = adminReturning([node(1)]);
     await scanStoreForStart(admin, SHOP);
-    expect(admin.graphql.mock.calls[0][0]).toMatch(/status:active/);
+    // A2 — the SAME assertion, moved from the query TEXT to the query VARIABLE.
+    // "status:active" used to be a literal in the template; it now arrives as
+    // $scoped, resolved by the same scopeQueryFor() the SEO Audit uses, so the
+    // two screens cannot describe different populations. The intent of this
+    // test is unchanged: a draft product is still not a storefront problem.
+    const scoped = admin.graphql.mock.calls[0][1].variables.scoped;
+    expect(scoped).toMatch(/status:active/i);
+    // and the query must actually USE the variable, not ignore it
+    expect(admin.graphql.mock.calls[0][0]).toMatch(/query:\s*\$scoped/);
   });
 });
 
 describe("it offers the products that actually hurt the score", () => {
   it("picks the weakest, worst first", async () => {
+    // A2 — the fixture is DECISIVE on purpose. It used to be four products
+    // separated by a few points under the old averaged rubric, and under the
+    // reviewed rubric the top two landed 32 and 34 — two points apart, which
+    // makes "the strongest is not offered" a coin toss rather than an assertion.
+    // Product 1 is now unambiguously the strongest: real length, real
+    // measurements, both metas and every attribute.
     const nodes = [
-      node(1, { description: "x".repeat(400), seoTitle: "T", seoDescription: "D" }),
+      node(1, {
+        description:
+          "A 26cm cast iron skillet weighing 3.2kg, pre-seasoned and oven safe to 260°C. " +
+          "The handle is 12cm and the walls are 4mm thick, so heat holds for 20 minutes after the hob is off. " +
+          "Sand-cast in Yorkshire from 98% recycled iron and finished by hand.",
+        seoTitle: "Cast Iron Skillet 26cm",
+        seoDescription: "A 3.2kg pre-seasoned cast iron skillet, oven safe to 260C.",
+        productType: "Cookware",
+        vendor: "Northline",
+        tags: ["iron"],
+      }),
       node(2, { description: "" }),
       node(3, { description: "tiny" }),
       node(4, { description: "x".repeat(300), seoTitle: "T" }),
@@ -273,7 +303,11 @@ describe("scoreProduct", () => {
     const s = scoreProduct(toScorable(node(1, { description: "x".repeat(400) })));
     expect(s).toHaveProperty("seo");
     expect(s).toHaveProperty("geo");
-    expect(s.combined).toBe(Math.round((s.seo + s.geo) / 2));
+    // A2 — `combined` was Math.round((seo + geo) / 2), and that average is what
+    // made Home disagree with the SEO Audit by 42 points on the same store in
+    // the same minute. The store score is now the single reviewed rubric.
+    expect(s.combined).toBe(s.geo);
+    expect(s.combined).not.toBe(Math.round((s.seo + s.geo) / 2));
   });
 
   it("is total — a product with nothing in it still scores a number", () => {
