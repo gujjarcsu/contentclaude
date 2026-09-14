@@ -145,7 +145,59 @@ rubric behind every score; every failure a merchant can hit says what happened a
 | **P1.6** | CC | **Error states are a product surface** — moved here from Phase 5, because every Phase 2 and 3 step is a support ticket if it fails silently. Throttled · model down · quota gone · no Search Console · Shopify 5xx · feed rejected. Never a stack trace, never a silent zero. |
 | **P1.7** | CC | **Content-quality floor.** Uniqueness checks, a minimum density of real merchant data per description, and a rate limiter on catalogue-wide publishes. Google's scaled-content-abuse policy names our core feature; the defence is the product, not a disclaimer (`09-DOCTRINE.md` §6.5). |
 
-### PHASE 2 — ELIGIBILITY MONITORING. The subscription.
+### W1 CAME BACK 2026-09-14 AND PHASE 2 FAILED ITS OWN KILL CRITERION. READ THIS FIRST.
+
+n = 409 live Shopify storefronts, two independent frames agreeing within 0.3 points. Full write-up
+in `docs/research/w1-eligibility-base-rate/`. The headline cleared the bar; **the eligibility
+finding did not.**
+
+| What was measured | Stores with a finding |
+|---|---|
+| **Anything at all** (the headline) | **71.9%** |
+| Strip `product_type` and thin descriptions — both **content**, not eligibility | **36.2% — BELOW the 40% bar** |
+| OpenAI-required attributes + the policy pages agentic storefronts need | **22.7%** |
+| Structured data missing or duplicated | 15.9% |
+| **Crawler access blocked** | **0.5% — 2 stores in 409** |
+
+**35.7% of all stores have NO finding except those two content checks.** And `product_type` is not
+on OpenAI's required list — it is Shopify's own taxonomy field, so grading it BLOCKING would repeat
+the GTIN overclaim §1 already had to walk back.
+
+**The flagship claim is dead.** `09-DOCTRINE.md` §1 called crawler access *"a real, fixable,
+unmarketed failure… nobody in our category audits this."* All three are true. **It is also nearly
+absent.** Not one store in 409 blocks an AI crawler while allowing Google. Nobody audits it because
+there is almost nothing to find. Keep the check — one fetch, and a total block matters enormously to
+the 0.5% it fires on — but **it cannot carry a pillar.**
+
+**What W1 actually validated is the product we already have.** 44.9% missing `product_type`, 43.9%
+with descriptions under 120 characters. The market's problem is **content**, at scale, and we
+already generate content.
+
+**AND THE MOAT MOVED.** `barcode` is **not exposed in `/products.json`** — Admin API only, verified
+against a live store's raw JSON. So the barcode base rate is unknown to everyone, and **no
+competitor scraping from outside can grade it. We can, because we are installed.** That is a
+structural moat on exactly the attribute this plan spends the most words on, and it was found by
+accident while trying to measure something else.
+
+**THEREFORE PHASE 2 IS RE-AIMED, NOT CANCELLED:**
+1. **Eligibility demotes from "the subscription" to a cheap component of the free scan.** Keep every
+   check — they cost one fetch each. Stop building a phase around a 22.7% base rate.
+2. **Content promotes to the product.** Not volume — volume is commodity, anchored at 11,000 credits
+   for $49, and a scaled-content-abuse risk (§6.5). **Evidence density** is the standard, which is
+   what Zhang et al. actually supports.
+3. **Pillar 1's real content is the Admin-API-only attributes** — barcode, variant option names,
+   availability — the things only an installed app can see.
+4. **The subscription is catalogue decay, not eligibility decay.** A bulk import wipes descriptions.
+   A theme change alters output. **New products arrive unoptimised — a guaranteed recurring event in
+   every active store**, unlike a robots.txt edit. That is what bills forever, and autopilot is
+   already half of it.
+
+*This is the kill criterion working exactly as designed: written in advance, measured honestly,
+acted on. Two days of work instead of two months.*
+
+---
+
+### PHASE 2 — CATALOGUE MONITORING. The subscription. *(re-aimed 2026-09-14 by W1)*
 **Gate:** a merchant is told, the day it happens, that something in their store stopped being
 eligible — and has been told at least once about something they did not know.
 **Blocked by W1:** if the base rate is below 40%, this phase is re-scoped before it is built.

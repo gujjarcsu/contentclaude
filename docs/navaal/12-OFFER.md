@@ -158,6 +158,20 @@ Do not publish any part of this early. Each line names the phase that must be li
 
 ---
 
+## 5.5 TWO LIVE OVER-CLAIMS AND THEIR APPROVED REPLACEMENTS
+*Added 2026-09-14. Both are on the public listing right now — verified by fetch — and in front of
+two real merchants. Plan-feature lines are `maxlength 40`; these fit.*
+
+| Live now | Why it must go | **Approved replacement** | Chars |
+|---|---|---|---|
+| `A/B variant testing` | The feature is built and gated at Growth+, but the app's own button says *"Generate two options to compare"* — it produces two candidate texts for the merchant to pick between. **No traffic split, no winner measured.** "A/B testing" names a measurement we do not perform, and an SEO buyer checks. | **`Two description options to compare`** | 34 |
+| `Priority support` | The same undefined-promise class as "SLA support", which §6 bans by name. There is no defined priority, no queue and no response commitment behind it. | **`Email support from the founder`** | 30 |
+
+Fix both surfaces, not one. `app/routes/app.plans.jsx:271` carries `Priority support` inside the
+app, and the A/B wording appears wherever the Growth tier is described. **P0.8's lesson was exactly
+this: the listing got cleaned on 2026-09-10 and the same two phrases were still shipping inside the
+app on 2026-09-14.**
+
 ## 6. HOW WE DESCRIBE THE HUMAN SERVICE
 
 The owner can and will do this personally, and at a small number of merchants it is a genuine
