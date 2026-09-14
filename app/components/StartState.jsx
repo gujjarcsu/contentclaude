@@ -48,6 +48,7 @@ import {
   ProgressBar,
 } from "@shopify/polaris";
 import { GeoRubric } from "./GeoRubric.jsx";
+import { WATCH_FROM_HERE } from "../utils/firstRun.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
@@ -250,6 +251,8 @@ function StartBody({ scan, start, navigate, onRetry }) {
   // their limit is never shown three spinners that resolve into two refusals.
   const canStart = Math.max(0, Math.min(targets.length, start.remaining));
   const done = drafted.size;
+  // P2.7 — the specific things holding this store back, from the first walk.
+  const blockers = Array.isArray(start.blockers) ? start.blockers : [];
 
   return (
     <BlockStack gap="500">
@@ -293,6 +296,44 @@ function StartBody({ scan, start, navigate, onRetry }) {
         </BlockStack>
       </Card>
 
+      {/* P2.7 — the three specific things holding THIS store back, each with
+          the one action that fixes it. The first is the primary action. */}
+      {blockers.length > 0 && (
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              {blockers.length === 1 ? "The one thing holding this store back" : `The ${blockers.length} things holding this store back`}
+            </Text>
+            {blockers.map((b, i) => (
+              <InlineStack key={b.key} align="space-between" blockAlign="center" wrap gap="300">
+                <BlockStack gap="050">
+                  <Text as="p" variant="bodyMd">
+                    {b.line}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {b.grade === "blocking" ? "A surface cannot list these as they stand." : "Listed, but shown worse."}
+                  </Text>
+                </BlockStack>
+                {b.fix &&
+                  (b.fix.external ? (
+                    <Button url={b.fix.to} target="_top" variant={i === 0 ? "primary" : undefined}>
+                      {b.fix.label}
+                    </Button>
+                  ) : (
+                    <Button variant={i === 0 ? "primary" : undefined} onClick={() => navigate(b.fix.to)}>
+                      {b.fix.label}
+                    </Button>
+                  ))}
+              </InlineStack>
+            ))}
+            <Text as="p" variant="bodySm" tone="subdued">
+              From the fields the OpenAI product feed and Google Search ask for, read from your own
+              catalogue just now. A description of what is missing, not a promise about results.
+            </Text>
+          </BlockStack>
+        </Card>
+      )}
+
       {/* What this costs, said before it is spent */}
       <Box paddingInlineStart="200" paddingInlineEnd="200">
         <BlockStack gap="200">
@@ -332,6 +373,19 @@ function StartBody({ scan, start, navigate, onRetry }) {
           </InlineStack>
         </Card>
       )}
+
+      {/* P2.7 — the sentence that names the subscription, on the screen a
+          merchant sees once. */}
+      <Card>
+        <BlockStack gap="200">
+          <Text as="h2" variant="headingMd">
+            {WATCH_FROM_HERE.title}
+          </Text>
+          <Text as="p" variant="bodySm">
+            {WATCH_FROM_HERE.body}
+          </Text>
+        </BlockStack>
+      </Card>
     </BlockStack>
   );
 }

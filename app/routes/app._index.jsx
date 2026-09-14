@@ -44,7 +44,7 @@ import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
-import { attentionFor } from "../utils/catalogueWatch.server.js";
+import { attentionFor, blockersFor } from "../utils/catalogueWatch.server.js";
 import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad } from "../utils/firstValue.server.js";
@@ -241,6 +241,10 @@ export const loader = async ({ request }) => {
   // has never been walked, so the first load has a real number, not a dash.
   const attention = await attentionFor(admin, shop);
 
+  // P2.7 — the first run names the three specific things holding THIS store
+  // back, from the walk that just ran. One query; never throws.
+  const blockers = isFirstRun ? await blockersFor(shop) : [];
+
   const start = isFirstRun
     ? {
         targetCount: START_TARGETS,
@@ -249,6 +253,7 @@ export const loader = async ({ request }) => {
         // The Start copy says "free generations" only on the free plan; a
         // merchant paying for Pro must not be told their allowance is free.
         planName: plan.planName,
+        blockers,
         scan: scanStoreForStart(admin, shop),
       }
     : null;

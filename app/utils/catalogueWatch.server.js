@@ -303,6 +303,26 @@ export async function attentionList(shop, { limit = 200 } = {}) {
   return rows;
 }
 
+/**
+ * P2.7 — the three specific things holding THIS store back, for the first
+ * run. From the stored findings of the first walk; never throws, because the
+ * first run must render whether or not the walk finished.
+ */
+export async function blockersFor(shop, { now = new Date() } = {}) {
+  try {
+    const { tallyFindings, blockerLines } = await import("./firstRun.js");
+    const { parseFindings } = await import("./catalogueWatch.js");
+    const [rows, crawler] = await Promise.all([
+      prisma.productWatch.findMany({ where: { shop, grade: { not: null } }, select: { grade: true, statusShop: true } }),
+      latestCrawlerAccess(shop, { now }),
+    ]);
+    return blockerLines(tallyFindings(rows, parseFindings), { passwordProtected: crawler?.passwordProtected === true });
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "first-run blockers unavailable (non-fatal)");
+    return [];
+  }
+}
+
 /** P2.4 — every product whose indexability columns produce a finding. */
 export async function indexabilityList(shop, { limit = 200 } = {}) {
   const { indexabilityFindings } = await import("./indexability.js");
