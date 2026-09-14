@@ -28,6 +28,7 @@
  * PURE. No I/O.
  */
 import { gscLine } from "./gscAiControl.js";
+import { indexabilityLine } from "./indexability.js";
 
 // The one definition. catalogGaps.server.js re-exports it; it lives here
 // because this module must stay free of server imports for the routes.
@@ -371,6 +372,9 @@ export function homeAttentionLines(s) {
   // P2.5 — the merchant's own answer, and the line says so.
   const gsc = gscLine(s?.gsc);
   if (gsc) lines.push(gsc);
+  // P2.4 — pages that cannot be indexed as they stand.
+  const idx = indexabilityLine(s?.indexability);
+  if (idx) lines.push(idx);
   const blocking = Number(s?.blocking ?? 0);
   if (blocking > 0) {
     lines.push(`${blocking} ${blocking === 1 ? "product is" : "products are"} missing something an AI shopping surface requires.`);

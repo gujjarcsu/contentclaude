@@ -42,6 +42,8 @@ import { scopeForShop, scopeQueryFor } from "./candidates.server.js";
 import { sydneyParts } from "./scheduler.server.js";
 import { checkCrawlerAccess, latestCrawlerAccess, storefrontPasswordProtected } from "./crawlerAccess.server.js";
 import { gscState } from "./gscAiControl.js";
+import { runIndexability, indexabilityRows } from "./indexability.server.js";
+import { indexabilitySummary } from "./indexability.js";
 import { WATCH_DESC_CAP, snapshotFromNode, diffProduct, summarise, gradeProduct } from "./catalogueWatch.js";
 
 export const WATCH_HOUR_SYDNEY = 2; // before the 08:00 digest, after most edits
@@ -157,6 +159,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
             hasType: next.hasType,
             hasAlt: next.hasAlt,
             createdAtShop: next.createdAtShop,
+            statusShop: String(node?.status ?? "") || null,
             lastSeenAt: now,
             attention: JSON.stringify(attention),
             grade: JSON.stringify(g.findings),
@@ -184,10 +187,13 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
     // P2.1 — crawler access is a component of the same walk: one robots.txt
     // read and six GETs, diffed against yesterday's row. Never throws.
     let crawlerResult = null;
+    let indexability = null;
     if (crawler === "background") {
       void checkCrawlerAccess(graphql, shop, { now, passwordProtected });
     } else if (crawler) {
       crawlerResult = await checkCrawlerAccess(graphql, shop, { now, passwordProtected });
+      // P2.4 — the daily path only: a sitemap read and a bounded page sample.
+      indexability = await runIndexability(graphql, shop, { now, origin: crawlerResult?.origin ?? null, passwordProtected: !storefrontPublic });
     }
 
     const [rows, blocking] = await Promise.all([
@@ -197,10 +203,10 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
     const s = summarise(rows, now, { firstWalkAt: watchStartedAt });
     const crawlerBlocked = crawlerResult?.ok ? crawlerResult.blocked.length : null;
     logger.info(
-      { shop, event: "catalogue_watch_ran", scanned, updated, partial, ...s, blocking, crawlerBlocked, ms: Date.now() - t0 },
+      { shop, event: "catalogue_watch_ran", scanned, updated, partial, ...s, blocking, crawlerBlocked, indexability, ms: Date.now() - t0 },
       "catalogue watch ran",
     );
-    return { ok: true, partial, scanned, updated, ...s, blocking, crawlerBlocked, reason: null };
+    return { ok: true, partial, scanned, updated, ...s, blocking, crawlerBlocked, indexability, reason: null };
   } catch (err) {
     logger.warn({ shop, err: err?.message, event: "catalogue_watch_failed" }, "catalogue watch failed (non-fatal)");
     return {
@@ -213,6 +219,7 @@ export async function runCatalogueWatch(graphql, shop, { now = new Date(), budge
       byKind: {},
       blocking: 0,
       crawlerBlocked: null,
+      indexability: null,
       reason: err?.message ?? "failed",
     };
   }
@@ -239,7 +246,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       everWalked = r.ok;
       partial = r.partial;
     }
-    const [rows, blocking, degrading, graded, crawler, lastRun, growth] = await Promise.all([
+    const [rows, blocking, degrading, graded, crawler, lastRun, growth, idxRows] = await Promise.all([
       prisma.productWatch.findMany({ where: { shop, NOT: { attention: "{}" } }, select: { attention: true } }),
       prisma.productWatch.count({ where: { shop, blocking: { gt: 0 } } }),
       prisma.productWatch.count({ where: { shop, degrading: { gt: 0 } } }),
@@ -248,6 +255,8 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       prisma.productWatch.aggregate({ where: { shop }, _max: { lastSeenAt: true }, _min: { firstSeenAt: true } }),
       // P2.5 — the merchant's own answer to the one check no app can make.
       prisma.growthState.findUnique({ where: { shop }, select: { gscAiControl: true, gscAiControlAt: true } }),
+      // P2.4 — what the sitemap pass and the page sample found so far.
+      indexabilityRows(shop),
     ]);
     const s = summarise(rows, now, { firstWalkAt: lastRun?._min?.firstSeenAt ?? null });
     return {
@@ -259,6 +268,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       degrading,
       graded,
       crawler,
+      indexability: indexabilitySummary(idxRows),
       gsc: gscState({ answer: growth?.gscAiControl ?? null, answeredAt: growth?.gscAiControlAt ?? null }, now),
       lastRunAt: lastRun?._max?.lastSeenAt?.toISOString() ?? null,
     };
@@ -276,6 +286,7 @@ export async function attentionFor(admin, shop, { now = new Date() } = {}) {
       graded: 0,
       crawler: noCrawler,
       gsc: gscState({}, now),
+      indexability: indexabilitySummary([]),
       lastRunAt: null,
     };
   }
@@ -290,6 +301,17 @@ export async function attentionList(shop, { limit = 200 } = {}) {
     take: limit,
   });
   return rows;
+}
+
+/** P2.4 — every product whose indexability columns produce a finding. */
+export async function indexabilityList(shop, { limit = 200 } = {}) {
+  const { indexabilityFindings } = await import("./indexability.js");
+  const rows = await indexabilityRows(shop);
+  return rows
+    .map((r) => ({ ...r, findings: indexabilityFindings(r) }))
+    .filter((r) => r.findings.length > 0)
+    .sort((a, b) => b.findings.filter((f) => f.grade === "blocking").length - a.findings.filter((f) => f.grade === "blocking").length)
+    .slice(0, limit);
 }
 
 /**

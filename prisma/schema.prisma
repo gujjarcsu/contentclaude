@@ -491,10 +491,24 @@ model ProductWatch {
   blocking      Int       @default(0)
   degrading     Int       @default(0)
   cosmetic      Int       @default(0)
+  // P2.4 — indexability, from the storefront itself (no Search Console: no
+  // OAuth, no API for what matters). Sitemap membership for every product
+  // each day; a rotating sample of product pages for robots directives,
+  // canonical and redirect hops. All null until checked; never a guess.
+  statusShop    String?
+  inSitemap     Boolean?
+  pageCheckedAt DateTime?
+  pageUrl       String?
+  pageFinalUrl  String?
+  pageStatus    Int?
+  pageHops      Int       @default(0)
+  noindex       Boolean?
+  canonical     String?
   updatedAt     DateTime  @updatedAt
 
   @@unique([shop, productId])
   @@index([shop, lastSeenAt])
+  @@index([shop, pageCheckedAt])
 }
 
 // P2.1 — crawler access, one row per shop per run. Diffed daily; the interesting

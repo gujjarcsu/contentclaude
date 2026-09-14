@@ -18,18 +18,26 @@ import { authenticate } from "../shopify.server.js";
 import { KIND_LABEL, SURFACE_LABEL, parseAttention, parseFindings, homeAttentionLines } from "../utils/catalogueWatch.js";
 import { CRAWLERS, CRAWLER_NOTE } from "../utils/crawlerAccess.js";
 import { GSC_ANSWER, GSC_LABEL, GSC_TONE, GSC_SETTINGS_URL, GSC_RECHECK_DAYS } from "../utils/gscAiControl.js";
+import { PAGE_SAMPLE } from "../utils/indexability.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
-  const { attentionFor, attentionList, blockingList } = await import("../utils/catalogueWatch.server.js");
-  const [summary, rows, gaps] = await Promise.all([attentionFor(admin, shop), attentionList(shop), blockingList(shop)]);
+  const { attentionFor, attentionList, blockingList, indexabilityList } = await import("../utils/catalogueWatch.server.js");
+  const [summary, rows, gaps, idx] = await Promise.all([attentionFor(admin, shop), attentionList(shop), blockingList(shop), indexabilityList(shop)]);
   const numeric = (gid) => String(gid).split("/").pop();
   return Response.json({
     shopDomain: shop,
     summary,
+    indexability: idx.map((r) => ({
+      productId: r.productId,
+      numericId: numeric(r.productId),
+      title: r.title,
+      handle: r.handle,
+      findings: r.findings,
+    })),
     rows: rows.map((r) => ({
       productId: r.productId,
       numericId: numeric(r.productId),
@@ -146,15 +154,17 @@ function GscCard({ gsc }) {
 }
 
 export default function AttentionPage() {
-  const { shopDomain, summary, rows, gaps } = useLoaderData();
+  const { shopDomain, summary, rows, gaps, indexability = [] } = useLoaderData();
   const navigate = useNavigate();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) return <AppSkeleton />;
 
   const storeHandle = String(shopDomain).split(".")[0];
   const crawler = summary.crawler ?? { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
+  const idx = summary.indexability ?? { checked: 0, sitemapKnown: 0, cannotIndex: 0, withFindings: 0 };
   const lines = homeAttentionLines(summary);
-  const nothing = rows.length === 0 && gaps.length === 0 && crawler.blocked.length === 0 && !summary.gsc?.excluded;
+  const nothing =
+    rows.length === 0 && gaps.length === 0 && indexability.length === 0 && crawler.blocked.length === 0 && !summary.gsc?.excluded;
 
   return (
     <Page
@@ -236,6 +246,42 @@ export default function AttentionPage() {
           </Card>
         )}
 
+        {/* P2.4 — indexability, read from the storefront: the sitemap for every
+            product each day, a rotating sample of pages for robots, canonical
+            and redirects. Null is "not checked yet", so a fresh install shows
+            the method and a count of what has been looked at, not a verdict. */}
+        {(indexability.length > 0 || idx.checked > 0 || idx.sitemapKnown > 0) && (
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingMd">
+              Can search engines index the pages?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Sitemap checked for {idx.sitemapKnown} products; {idx.checked} product pages fetched so far
+              ({PAGE_SAMPLE} more each night). {idx.cannotIndex} cannot be indexed as they stand.
+            </Text>
+            {indexability.map((r) => (
+              <Card key={r.productId}>
+                <BlockStack gap="200">
+                  <ProductHeader r={r} storeHandle={storeHandle} navigate={navigate} />
+                  {r.findings.map((f) => (
+                    <BlockStack key={f.field} gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Badge tone={TONE[f.grade] ?? "info"}>{`Indexing · ${f.field}`}</Badge>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {f.grade === "blocking" ? "cannot be indexed" : "indexed, but worse"}
+                        </Text>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm">
+                        {f.note}
+                      </Text>
+                    </BlockStack>
+                  ))}
+                </BlockStack>
+              </Card>
+            ))}
+          </BlockStack>
+        )}
+
         {/* P2.2 — eligibility, graded per surface. Blocking and degrading only;
             cosmetic lives on the product, not on a list. */}
         {gaps.length > 0 && (
@@ -311,7 +357,10 @@ export default function AttentionPage() {
           names. Each product is compared with the previous day, and measured against the fields the
           OpenAI product feed and Google Search ask for. Blocking means a surface cannot list the
           product without it; degrading means listed, but worse; Shopify's own fields are never
-          called either. Drafts are not graded. Nothing here is a ranking claim.
+          called either. Drafts are not graded. Indexing is read from your storefront the way a
+          crawler reads it: your sitemap for every product, and a sample of product pages each night
+          for robots directives, the declared canonical address and redirect hops — not from Search
+          Console, which we cannot see. Nothing here is a ranking claim.
         </Text>
       </BlockStack>
     </Page>
