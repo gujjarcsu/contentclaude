@@ -1,6 +1,21 @@
 # OWNER CHECKLIST — things only Waqas can do
 
-## 🔴 TODAY — FIVE THINGS, IN THIS ORDER (2026-09-14, Cowork)
+## 🔴 TODAY — SIX THINGS, IN THIS ORDER (2026-09-14, Cowork, revised after Phase 8)
+
+**0. Twenty minutes that produce the first proved result in the app's history (CC's F10).** Phase 3
+is live: the crawl-time holdout submits a random half of changed URLs to Bing and withholds the
+other half, and shows both arms with an interval. It has never run on a real batch because every
+dev store is password-protected and no store has a Bing key. You: (a) item 1 below first; (b) take
+**one** `navaal-ttv-*` store off password protection — never a real store; (c) verify it in Bing
+Webmaster Tools and paste its API key into the app's Settings; (d) turn measurement on; (e) publish
+ten products; (f) run the Crawl-holdout workflow. Seventy-two hours later the app shows a causal
+result about a store. That screen is the trial's hero moment and the first thing worth showing a
+prospect.
+
+**0b. F9 / P0.10 — Shopify Level 2 approval for `read_reports`** (a form, your account). P3.4 —
+AI-referral sessions per product — is built and tested and cannot run until this is granted.
+
+## (the five below stand)
 
 1. **Set `REMEDIATION_LOCKED_SHOPS` — the EBS guardrail.** Phase 2's `/app/fix` can now write to a
    store. Until this secret exists, **nothing is locked.** Put `askebs.myshopify.com` (and any other

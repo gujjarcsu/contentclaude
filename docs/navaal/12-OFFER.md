@@ -158,6 +158,25 @@ on the EBS catalog.
 
 ---
 
+## 5.6 — THE FIVE FEATURE SLOTS AFTER PHASE 2. DECIDED 2026-09-14 BY COWORK. CW TYPES EXACTLY THIS.
+
+Shopify allows **3–5 features**; all five are full; CW proved the `Add` control is disabled. So
+publishing Phase 2 means displacing §4 lines, and the choice is listing copy, which is Cowork's.
+
+| Slot | Line (verbatim) | Chars | Why this, why here |
+|---|---|---|---|
+| 1 | `Full catalog SEO audit, never capped by plan or store size` | 58 | the free hook, unchanged |
+| 2 | `See what AI shopping feeds require that your products are missing` | 65 | **new** — the AI-visibility outcome; `ai visibility` is a search term and until now no line described it |
+| 3 | `AI descriptions, meta tags, alt text and FAQs in your own brand voice` | 69 | the product, unchanged |
+| 4 | `Daily checks tell you when a theme or import breaks your product data` | 69 | **new** — the subscription reason; no §4 line covered monitoring |
+| 5 | `Nothing publishes until you approve it. Edit, publish or roll back anytime` | 74 | trust, unchanged |
+
+**Dropped:** §4's `Blog posts and collection copy written from your own catalog` (a feature, not an
+outcome; blog is also the 3-credit item) and `Every publish is checked against what your store
+actually saved` (a mechanism, and its promise lives inside slot 5). **Not published:** the bulk-fix
+line — it overlaps slot 3 on alt text and bulk is Growth+, and a plan-gated feature as a headline
+bullet is how a Free merchant ends up feeling misled. It goes in the details paragraph instead.
+
 ## 5. THE LISTING — publish this ONLY after Phase 2 and Phase 3 ship
 
 Do not publish any part of this early. Each line names the phase that must be live first.
