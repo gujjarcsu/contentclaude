@@ -1,10 +1,66 @@
 # OWNER CHECKLIST — things only Waqas can do
 
 **Regenerated from the pending `OWNER` rows of `06-QUEUE.md` and from `11-MASTERPLAN.md`.**
-Last regenerated: 2026-09-10 (revision 2).
+Last regenerated: 2026-09-10 (revision 2). **Appended 2026-09-14 (P0.6): the pricing decision below,
+and the one cost figure still unmeasured.** Appended rather than regenerated on purpose — a parallel CW
+session was editing `06-QUEUE.md` at the time (it updated H7 and H10 the same day), and regenerating the
+whole file would have clobbered work in flight. Nothing existing was removed.
 
 Ordered by what each one unblocks. Every item is minutes, not hours. The number in brackets is how
 many other tasks are waiting on it.
+
+---
+
+## NEW, 2026-09-14 — READ THIS ONE FIRST. IT IS A DECISION, NOT A TASK.
+
+### THE PRICE LIST AND THE DOCTRINE CONTRADICT EACH OTHER **[blocks the pricing table, the listing copy and Phase 1's truth gate]** — 10 minutes of thinking, then one sentence
+
+Measuring the real cost per generation (P0.6) turned up something larger than the cost.
+**`08-ECONOMICS.md` was pricing a business we do not sell.**
+
+| | What the doc modelled | What we actually bill |
+|---|---|---|
+| Free | $0 / 150 generations | **$0 / 25** |
+| Starter | $19 / 1,000 | **$9.99 / 50** |
+| Growth | $49 / 5,000 | **$29.99 / 200** |
+| — | Scale $99 / 25,000 | **does not exist** |
+| — | Enterprise $299 / unlimited, own key | **does not exist** |
+| Pro | — | **$79.99 / 1,000** |
+
+Not one row matched. There is no Scale plan, no Enterprise plan and no bring-your-own-key path
+anywhere in the code or the database — searched and confirmed. The doc's headline risk ("Scale is
+the plan to watch… negative at full use") named a plan we do not have.
+
+**The good news, and it is genuinely good:** cost is **not** a problem. Measured, every paid plan
+clears **62.5%–85%** margin even if a merchant spends every credit on the most expensive content
+type, every month. A free install costs at most **$0.75/month**. There is room to move prices in
+either direction.
+
+**The problem is revenue.** `09-DOCTRINE.md` says we sell *proof*, not a utility, and should price
+at roughly **double** the category ARPU of $25–35. The real list yields about **$27.49** ARPU at a
+plausible mix — *inside* the category, not double it. The old ladder promised **~$9.9k** MRR at 150
+merchants. The real list gives **~$4.1k**.
+
+**Your decision — one of two, and only you can make it:**
+
+- **(a) Raise the prices** toward the premium the doctrine claims. The margin data says there is
+  headroom, and nothing in the cost structure argues against it.
+- **(b) Drop the premium claim** from the doctrine and position inside the category at these prices.
+
+Either is defensible. **Continuing with both is not**, because the listing copy, the pricing table
+and every revenue projection depend on which is true.
+
+**What done looks like:** one dated sentence in `04-DECISIONS.md` saying which. Until then
+`08-ECONOMICS.md` §4 says in writing that none of its figures should be used for planning.
+**Paste back:** "(a) raise prices" or "(b) drop the premium claim", and any target ARPU you have in
+mind.
+
+### The one cost figure still unmeasured needs your billing dashboards — 5 minutes
+Every per-generation cost is now `MEASURED`. Infrastructure is not, and nothing in the repository
+can see an invoice. Read last month's actual totals from **Fly**, **Neon**, and whoever bills the
+**Redis**, and paste the three numbers with the month they cover.
+*Why it matters:* at 25 installs, model spend is pennies — so infrastructure may well be the
+**larger** line, which changes where the free-tier ceiling actually binds.
 
 ---
 

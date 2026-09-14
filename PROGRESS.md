@@ -4250,3 +4250,126 @@ on the machine that is already running; it does not deploy.
 **Guard:** the shop argument is user input reaching a shell on a production machine, so the workflow
 refuses anything that is not `<store>.myshopify.com`. Proved against four inputs — the real domain
 ACCEPTED, `evil.com; rm -rf /` REFUSED, a bare handle REFUSED, empty REFUSED.
+
+
+---
+
+# PHASE 0 (CC half) AND P1.1 — 2026-09-14
+
+Shipped in `49d91e1` (failed CI, see below), `e9f5a0b`, `1573dc3`, `fc5bba7`. Production proved at
+each boundary: `/api/build-info` matched the pushed sha, then `status: ok`, `schema.ok: true`,
+**237 columns**, `workerRunning: true`, `failedLast10Min: 0`, `stuckProcessing: 0`.
+
+## The three things that were not true
+
+**P0.1 — the 18-day deadline did not apply to us, and the fix would have made the file worse.**
+The row said `extensions/geo-schema/shopify.extension.toml` "declares no `api_version` at all" and
+had to be pinned to 2025-10 before **1 Oct 2026** or we would be "frozen out of our own storefront
+code". The observation was right; the conclusion was not. **A theme app extension has no
+`api_version` to declare** — its configuration reference lists exactly three properties (`name`,
+`type`, `handle`) and it is versioned as part of the **app** version. The strongest proof came from
+our own build artefact: `.shopify/deploy-bundle/manifest.json` lists `navaal-geo-schema` as
+`type: theme_app_extension` **carrying no `api_version` field**, while six sibling modules in the
+same manifest do carry `api_version: 2026-04`. Shopify's own bundler emits the key where it exists
+and omits it here. The 1 Oct date is the **React → Polaris web components** cutover, sourced
+entirely from `checkout-ui-extensions`, `customer-account-ui-extensions` and `admin-extensions`
+docs, with a remedy of swapping React for Preact in a `package.json`. It binds the `ui_extension`
+family. We ship one extension, it is **pure Liquid**, and there is no `package.json` under
+`extensions/` to migrate.
+
+**P0.6 — the economics file was pricing a business we do not sell.** Worse than the wrong unit cost.
+§3 costed Free/Starter/Growth/**Scale**/**Enterprise** at $0/$19/$49/$99/$299 for
+150/1,000/5,000/25,000/unlimited generations. `app/utils/billing-plans.js` bills **Free $0/25,
+Starter $9.99/50, Growth $29.99/200, Pro $79.99/1,000**. **Not one row matched.** No Scale plan, no
+Enterprise plan, no bring-your-own-key path exists in the code or the schema.
+
+**P1.1 — the first screen a merchant sees claimed something the app cannot see.** Under the GEO
+number: *"GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini and
+Google AI Overviews."* `calculateGeoScore()` grades **six properties of the merchant's own
+content** — answer-first opening, Q&A block, structured data, attribute completeness, meta, alt
+text — and makes no external call. It cannot observe a citation.
+
+## The cost, measured
+
+Through the **real** `ai.server.js` functions on the production machine, 3 samples each:
+
+| Content type | Model | In | Out | Cost |
+|---|---|---|---|---|
+| Alt text | Haiku 4.5 | 409 | 99 | **$0.000906** |
+| Social | Haiku 4.5 | 292 | 491 | **$0.002747** |
+| Collection | Sonnet 4.6 | 291 | 282 | **$0.005103** |
+| Enhance | Sonnet 4.6 | 916 | 383 | **$0.008498** |
+| Product | Sonnet 4.6 | 1,364 | 496 | **$0.0115** |
+| Blog | Sonnet 4.6 | 427 | 1,917 | **$0.0300** |
+
+The `ASSUMED ~$0.005` was wrong **in both directions** — understating a product generation by 2.3×
+and a blog post by 6.0×, overstating alt text by 5×. A **33× spread**, which is why a single blended
+figure could never have held.
+
+**The measurement was impossible before, not merely undone.** `callClaude` discarded the API's
+`usage` block, and `UsageRecord.tokensUsed` is written as the **literal 0** at both of the only two
+places it is ever written. There was no data and there never would have been.
+
+**Alt text routing, now with a number behind it.** It was already on Haiku, so the brief's ask was
+already true in effect — but only by a string literal repeated at six call sites, where nobody could
+see it had been a decision. On Sonnet 4.6 the same measured tokens cost $0.002712: **3.0×** on the
+highest-volume call in the product. Now a named row in `app/utils/modelPricing.js` with a test that
+fails if it moves.
+
+**The conclusion reverses.** Every paid plan clears **62.5%–85%** at 100% utilisation, in any mix.
+Free costs at most **$0.75** per fully-active install per month. **Cost is not the binding
+constraint. Revenue is:** the list tops out at $79.99 while the doctrine claims a premium position,
+and 150 merchants model at **~$4.1k** MRR against the ~$9.9k the old ladder promised. Routed to the
+owner as a decision.
+
+## P0.8 — the listing was cleaned four days ago; the app was not
+
+`H15` records *"Replace 'Dedicated account manager' and 'SLA support' on the live listing — DONE
+2026-09-10 by Cowork."* Both phrases were **still shipping on the Pro plan card** in
+`app/routes/app.plans.jsx` on 2026-09-14. The listing surface was fixed and nobody checked the same
+wording inside the product. Replaced with the exact `12-OFFER.md` §6 wording; the service is
+unchanged, only the two undefined words go.
+
+## Guards added — each broken on purpose before being trusted (L1)
+
+| Guard | Assertions | Broken | Result |
+|---|---|---|---|
+| `check-api-versions.mjs` (P0.3) | — | 6 ways | 6 red, each naming its own cause |
+| `app-store-copy.test.js` (P0.8) | 181 | regex false-positive found | tightened |
+| `doctrine-claims.test.js` (P1.1) | 793 | 8 ways | each fails exactly 1 test, the right one |
+
+Suite **1,457 → 2,445** tests.
+
+The doctrine guard has a second half that matters more than the first: it asserts that
+`09-DOCTRINE.md` §2 **still contains** the row each pattern encodes. Without that, someone edits the
+doctrine, the test keeps passing against a rule that no longer exists, and the guard silently guards
+nothing.
+
+## Four mistakes of my own, all caught before they shipped
+
+1. **`49d91e1` failed CI and did not deploy.** Repo-hygiene requires every script in `scripts/` to be
+   listed in `scripts/README.md`; I added one without a row. 1 failed, 1,456 passed. The guard
+   worked — and `build-info` still showing the old sha is what told me.
+2. **My break-harness ate my own uncommitted fix.** It used `git checkout --` to restore between
+   cases while the fix under test was uncommitted in that same file. I noticed only because the
+   failure counts came back 3 and 4 instead of 1 and I could not explain why, so I looked instead of
+   reporting them. Rewritten to snapshot the working tree to a temp dir.
+   **Never use `git checkout --` as the restore step in a break harness.**
+3. **`wait-for-deploy.sh` asserted a field that does not exist** — `checks.queue.failedLast10m`. The
+   count lives at `checks.jobs.failedLast10Min`. It read empty, and "unreadable" is a failure, so it
+   would have **failed a perfectly healthy deploy**. It also needed `jq` (absent in Git Bash, so
+   every read was empty) and accepted a short sha that `gh run list --commit` does not match.
+4. **I wrote ~$235k enterprise value at 2% churn.** It is ~$206k. Re-derived every figure in the
+   rewrite rather than trusting the ones I had just typed, and corrected it before commit.
+
+## What I did not do, and why
+
+**P0.4 is verified OPEN and routed, not guessed at.** `app/root.jsx` carries no App Bridge script
+and no `shopify-api-key` meta; the tag is emitted by `<AppProvider embedded>` **in the body**
+(confirmed by reading the installed package), and React is **18.3.1**, so it is not hoisted — script
+hoisting is a React 19 feature. Shopify documents the head. The fix is blocked on a genuine
+decision: adding the tag to the head **double-loads App Bridge on every page**, while removing
+AppProvider's copy means `embedded={false}`, which per its own type docs also drops the
+redirect-to-admin-when-loaded-outside behaviour tied to **App Store rejection 2.1.1**. That needs a
+rendered-document proof before and after, not a guess, on the one path whose failure takes the whole
+app down.

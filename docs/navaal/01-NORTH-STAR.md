@@ -167,6 +167,50 @@ That is why G is a phase with named owners and not a hope, and why most of its r
 
 ## 10. LOG
 
+**2026-09-14** — Phase 0 (CC half) and P1.1. Shipped in `49d91e1`, `e9f5a0b`, `1573dc3`, `fc5bba7`.
+Production proved at each: build-info matched the pushed sha, `status: ok`, `schema.ok: true`,
+**237 columns**, `workerRunning: true`, `failedLast10Min: 0`, `stuckProcessing: 0`.
+
+- **P0.1 was a false alarm, and acting on it would have made the file worse.** It said the theme
+  extension "declares no `api_version` at all" and had to be pinned before **1 Oct 2026** — 18 days —
+  or we would be "frozen out of our own storefront code". A theme app extension **has no
+  `api_version` to declare**: its config takes `name`, `type` and `handle` and nothing else, and it
+  is versioned as part of the **app** version. Proof from our own build: the CLI's deploy-bundle
+  manifest lists `navaal-geo-schema` as `theme_app_extension` **with no `api_version` field**, while
+  six sibling modules in the same manifest carry `api_version: 2026-04`. The 1 Oct date is the
+  **React → Polaris** cutover and binds `ui_extension`-family extensions; we ship exactly one
+  extension and it is **pure Liquid**.
+- **P0.2 re-verified clean.** Whole-tree search for every ScriptTag spelling: five hits, all ours —
+  `jsonLdScriptTag()` building a JSON-LD *string*, plus four test references.
+- **P0.3 built.** `scripts/check-api-versions.mjs` in CI before `npm ci`. Broken six ways, six red.
+  Current: both pins 2026-04, **199 days** of support left, sunsets 2027-04-01.
+- **P0.6 measured — and found something bigger than the cost.** Real cost per generation now ranges
+  **$0.000906 (alt text) to $0.0300 (blog)**, a **33× spread**; the `ASSUMED ~$0.005` was wrong in
+  **both** directions. But `08-ECONOMICS.md` was **pricing a business we do not sell**: it costed
+  Free/Starter/Growth/**Scale**/**Enterprise** at $0/$19/$49/$99/$299 for 150/1,000/5,000/25,000/
+  unlimited, while the billable plans are **Free $0/25, Starter $9.99/50, Growth $29.99/200, Pro
+  $79.99/1,000**. **Not one row matched.** §2–§5 rebuilt against the real plans.
+- **The conclusion reverses: cost is not the binding constraint — revenue is.** Every paid plan
+  clears **62.5%–85%** at 100% utilisation. But the list tops out at **$79.99** while the doctrine
+  claims a premium position, and 150 merchants now model at **~$4.1k** MRR against the ~$9.9k the
+  old ladder promised. **Routed to OWNER as a decision, not decided here.**
+- **P0.8 found a live breach.** The Pro plan card still said **"Dedicated account manager"** and
+  **"SLA support"** — the two phrases `08-ECONOMICS.md` guardrail 6 bans. P0.7 covers the listing;
+  nobody had checked the same wording *inside the app*. Replaced with the `12-OFFER.md` §6 wording.
+- **P1.1 — the first screen a merchant sees claimed something the app cannot see.** Under the GEO
+  number: *"GEO measures how ready your products are to be cited by ChatGPT, Perplexity, Gemini and
+  Google AI Overviews."* `calculateGeoScore()` grades **six properties of the merchant's own
+  content** and makes no external call. It cannot observe a citation. Now says what it scores, and
+  says out loud what it cannot see.
+- **P0.4 verified OPEN and routed, not guessed at.** `root.jsx` carries **no App Bridge script and
+  no `shopify-api-key` meta**; the tag is emitted by `<AppProvider embedded>` **in the body**, and
+  React is **18.3.1**, so it is not hoisted (React 19 feature). Shopify documents the head. The fix
+  is blocked on a real decision: adding it to the head double-loads App Bridge, and removing
+  AppProvider's copy drops the outside-admin redirect tied to **App Store rejection 2.1.1**.
+- **Three guards added, all broken on purpose before being trusted:** API versions (6 breaks),
+  App Store copy (181 assertions), doctrine §2 claims (793 assertions, 8 breaks). Suite **1,457 →
+  2,445** tests.
+
 **2026-09-10**
 - Found and fixed: every App Store link on navaal.ai pointed at the pre-rename handle and returned
   **404** — five occurrences across `/apps` and `/apps/navaal-seo`, including the `installUrl` inside the
