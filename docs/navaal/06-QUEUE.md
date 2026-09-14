@@ -454,3 +454,49 @@ I will run no probes against `contentpilot-dev2` once you announce the capture w
 | — | navaal.ai "Coming soon" launch toggle | 2026-09-10 — `/apps` still advertised the app as coming soon with the live badge and install button hidden. Flipped, verified live. |
 | — | Install attribution on navaal.ai | 2026-09-10 — `navaal-nav` + `navaal-footer` on 67 static pages, `blog-post` on 28 posts, `navaal-home` and `navaal-tools` added. All 8 handles return 302 with the ref preserved. |
 | — | 4 test stores uninstalled | 2026-09-10 — to generate real webhook deliveries. |
+
+## POSTED 2026-09-14 BY CC — PART D IS LIVE AT `8922dde`. PHASE 2 IS LIVE, NOT MERGED. `12-OFFER.md` §5 MAY BE PUBLISHED.
+
+Four gates, each polled to its sha on `/api/build-info` with deep health ok: `34f2bb4` (P2.3 walk ·
+P2.2 grading · P2.1 crawlers), `c258549` (the correction the proof forced), `fe1bdec` (P2.5 · P2.4 ·
+P2.6), `8922dde` (P2.7 · proof tooling · write-back; `7777733` was red in CI on a README hygiene test
+and never deployed — recorded as false green 13 in `07-VERIFICATION.md`, mine).
+
+**Production proofs, counts only** (Catalogue watch workflow): run 1 at `34f2bb4` — 9 shops, 1,430
+graded, **150** blocking; run 2 at `c258549` — 8 shops, 1,418 graded, **115** blocking, crawlers 0
+blocked, **7 of 8 storefronts password-protected**; run 3 at `fe1bdec` — same, plus sitemap known
+for 1,350 products (0 absent), 20 pages fetched (0 noindex · 0 404 · 0 chains), 13 exemptions.
+Field tally across all graded products: gtin 1,405 · Google description 281 · OpenAI description 231
+· no image 72 · description empty 50 · product_type 19 · alt 14 · option names 9.
+
+**Read from the live app:**
+
+| Store · screen | Reads |
+|---|---|
+| `contentpilot-dev2` · Home (read-only, freeze respected) | *14 products need attention.* — no false "missing" line, no false "since yesterday" |
+| `contentpilot-dev2` · /app/attention | crawler card: *"Your storefront is password-protected …"* once; gaps: *"0 of 14 products cannot be listed …"* |
+| `contentpilot-dev2` · /app/fix | *Write alt text · 14 (no credits)* · *No barcode by design · 14* · per-row Shopify admin links |
+| `navaal-ttv-03` · /app/fix → /app/attention | 13 gtin findings → pressed *"No barcode by design for 13"* → *"13 applied."* → **0** gtin findings |
+| `navaal-ttv-02` · /app (first run, via the new **First-run reset** workflow) | *Your store scores 39/100* · **The 3 things holding this store back**: *10 products have no description — the OpenAI product feed cannot list them* → Write the rest in bulk · *13 products have no barcode. Own brand or handmade? Say so once and it stops.* → Tell us · *1 description is too short …* · three drafts writing · **"We'll watch it from here."** Screenshot `docs/history/screen-reads/navaal-ttv-02-app.png` |
+
+**The correction (`c258549`):** run 1's 150 blocking were mostly *"not on the Online Store
+channel"* on the two dev stores — untrue: both 302 `/` → `/password`, and Shopify nulls
+`onlineStoreUrl` while the password is on. One shop-level fact now threads grading and the crawler
+card. 150 → 115.
+
+**P2.5 verified before building:** the Search Console API lists searchanalytics, sitemaps, sites,
+urlInspection and nothing else — the generative-AI control is unreadable, so it is a one-question
+guided check, the answer stored as the merchant's.
+
+**For CW:** §5 of `12-OFFER.md` may go to the listing now (no statistic leaves the app). Frame 04
+is capturable: the **First-run reset (one dev store)** workflow puts `navaal-ttv-02` (or any
+`navaal-ttv-*`) back on the first-run screen — it refuses anything else by name pattern. `ttv-02`
+is on that screen right now with the Shopify demo catalogue, as before.
+
+**For the owner** (`OWNER-CHECKLIST.md`, FYI 2026-09-14 Part D): set `REMEDIATION_LOCKED_SHOPS`
+from a file; three scope yes/nos (`write_publications`, `write_online_store_navigation`,
+`read_legal_policies` — none added, stated on `/app/fix`); B8; H12b. New backlog rows F3–F8 —
+F8 is live and visible: `navaal-ttv-02` Home reads *"3 / 25 used"* on Free while the locked table
+says 100; old Plan rows were never re-based when B2 changed the tiers.
+
+`contentpilot-dev2` was not mutated by anything in this pass. Read-only harnesses only.
