@@ -32,16 +32,47 @@ describe("the key has exactly one definition", () => {
   });
 
   it("nothing types the key by hand", async () => {
-    // Writing `startscan:${shop}` at a call site is the defect P5.0 was spent
-    // fixing one file over: a second copy that silently stops matching.
+    // Writing the key at a call site is the defect P5.0 was spent fixing one
+    // file over: a second copy that silently stops matching.
+    //
+    // COMMENTS STRIPPED FIRST, and this assertion is the fourth thing today to
+    // need that. It fired on `cache.server.js` because the docstring for the
+    // newly-exported `cacheKey()` QUOTES the key shape while explaining why
+    // nothing should type it. A guard that reads source and does not strip
+    // comments eventually fires on its own documentation, and the tempting fix
+    // is to delete the explanation rather than the defect.
+    const code = (t) =>
+      t
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .split("\n")
+        .filter((l) => !/^\s*\/\//.test(l))
+        .join("\n");
     const walk = (d) =>
       readdirSync(d, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`],
       );
     const offenders = walk("app")
       .filter((f) => /\.(js|jsx)$/.test(f) && !f.endsWith("storeScanCache.server.js"))
-      .filter((f) => /["'`]startscan:/.test(readFileSync(f, "utf8")));
+      .filter((f) => /["'`]startscan:/.test(code(readFileSync(f, "utf8"))));
     expect(offenders, `hardcode the cache key: ${offenders.join(", ")}`).toEqual([]);
+  });
+
+  it("the REAL Redis key is namespaced, and nothing outside cache.server.js builds it", async () => {
+    // The bug this exists to stop, and it was mine: `score-cache-diag.mjs`
+    // queried `startscan:<shop>` directly and reported a LIVE cache as absent,
+    // twice, because getCache namespaces every key with "cc:". The diagnostic
+    // built to verify P5.2 contained the P5.0 defect.
+    //
+    // It refused to conclude anything from the miss, which is the only reason
+    // it was caught rather than believed.
+    // importActual, not import: this file mocks cache.server.js, and asserting
+    // the namespacing against a mock would prove the mock. That is the same
+    // shape of nothing as asserting a constant equals itself.
+    const { cacheKey } = await vi.importActual("../../app/utils/cache.server.js");
+    expect(cacheKey("startscan:x.myshopify.com")).toBe("cc:startscan:x.myshopify.com");
+    const diag = readFileSync("scripts/score-cache-diag.mjs", "utf8");
+    expect(diag).toMatch(/cacheKey\(storeScanKey\(shop\)\)/);
+    expect(diag).not.toMatch(/redis\.(exists|ttl)\(storeScanKey/);
   });
 });
 

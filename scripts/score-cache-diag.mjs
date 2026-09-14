@@ -24,7 +24,7 @@
  *
  *   fly ssh console -a contentclaude -C "node /app/scripts/score-cache-diag.mjs"
  */
-import { getRedis } from "../app/utils/cache.server.js";
+import { getRedis, cacheKey } from "../app/utils/cache.server.js";
 import { storeScanKey, invalidateStoreScan } from "../app/utils/storeScanCache.server.js";
 import prisma from "../app/db.server.js";
 
@@ -43,6 +43,7 @@ if (!shop) {
   process.exit(1);
 }
 out.shopHandle = String(shop).replace(/\.myshopify\.com$/, "");
+out.keyShape = "cc:startscan:<shop>";
 
 const redis = await getRedis();
 if (!redis) {
@@ -50,7 +51,14 @@ if (!redis) {
   process.exit(1);
 }
 
-const key = storeScanKey(shop);
+// The REAL Redis key, not the logical one.
+//
+// This script first read `startscan:<shop>` and reported a live cache as
+// absent, twice, because `getCache` namespaces every key with `cc:` and this
+// file had guessed the format instead of asking for it. Same defect as P5.0,
+// committed inside the tool built to verify P5.2 — a second copy of a value
+// that is owned somewhere else. `cacheKey()` is now exported for exactly this.
+const key = cacheKey(storeScanKey(shop));
 
 // ── 1. Is it cached at all, and for how long? ──────────────────────────────
 const before = {

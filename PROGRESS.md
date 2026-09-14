@@ -4631,3 +4631,141 @@ the thing it said was unbuilt. That is the same class as `02-BACKLOG.md` C0.5, w
 thing about the same commit: **a document confidently describing code nobody went back and read.**
 No annual
 subscriber exists, so nothing is being denied today — but it must exist before annual is sold.
+
+---
+
+# PHASE 5 — THE TRIAL WAS 7 DAYS, AND A GREEN TEST SAID 14 — 2026-09-14
+
+Gates: `8fa3000` · `8f495d3` · `0e52284` · `63fe948`. All four verified live: `status: ok`,
+`schema.ok: true`, worker running, `failedLast10Min: 0`, `stuckProcessing: 0`.
+
+## P5.0 — the most expensive green in the project, and my replacement for it had the same defect
+
+`TRIAL_DAYS = 14` was exported, asserted green by `expect(TRIAL_DAYS).toBe(14)`, and **imported by
+nothing**. The value that reached Shopify was a literal `trialDays: 7`. Production granted 7-day
+trials across four shas while the locked table, the constant and a passing test all said 14. H12 had
+already told CW the app billed the locked numbers, so the next move was publishing "14 days" onto a
+live Shopify listing the app did not honour.
+
+**Grepping for the VALUE rather than the name found it was one of four.** The plans page was a
+complete second copy of the locked table, hardcoded, stale in four dimensions at once:
+
+| | On the screen | What the app charged |
+|---|---|---|
+| Annual | $99.90 / $299.90 / $799.90 | **$95.90 / $287.90 / $767.90** |
+| Discount shown | **"2 months free"** (16.7%) | 20% |
+| Credits | 25 / 50 / 200 / 1,000 | **100 / 500 / 1,500 / 4,000** |
+| Bulk | Growth and up | **Starter and up** |
+
+`14-PRICING.md` §4 bans the phrase "2 months free" **by name**, and it was rendering on every paid
+card and again on the period toggle. 3,120 tests were green and compatible with all of it, because
+every pricing assertion read `billing-plans.js` against itself.
+
+**The trap inside the prescribed fix.** The rule says *assert on the object handed to the external
+service*. I did — `expect(entry.trialDays).toBe(TRIAL_DAYS)` across all six subscription entries —
+ran the break test with `TRIAL_DAYS = 9`, and got **one failure: the tautological assertion I was
+deleting.** Both sides moved with the constant. Asserting on the consumer proves the **wiring**; it
+does not prove the **value**. Two defects, two assertions, and the second restates the literal 14 on
+purpose because it is the only half that connects the code to the doc rather than to itself. Both
+breaks now produce **7 failures across 2 files**.
+
+**And I reintroduced the class myself, ten minutes after reading the rule.** Having rewritten the
+FAQ to describe credit weighting, I typed "3 credits" and "0 credits" into it — while `credits.js`
+opens with *"the plans page and the quota surfaces show these numbers."* The L18 guard is mechanical
+now because judgement demonstrably is not enough.
+
+## P5.1 — the write path, and the integer
+
+`app.optimize.jsx` called `enumerateProductIds` with **no `query` at all**, so Shopify returned
+everything, archived included, and bulk optimize enqueued generations against products the merchant
+had deliberately archived. Phase 4's A1 scoped the three READ paths and left the WRITE path — the
+one that costs money at 2.00¢ a credit.
+
+**The integer, asked of production rather than reasoned about:**
+
+| | |
+|---|---|
+| Archived products we generated for | **17** |
+| … of those, published to | **15** |
+| Shops with content | 9 (2 unreachable, both `app-review-*`, 401) |
+
+**All 17 are on `contentpilot-dev2` — our own dev store. No merchant was charged, so no refund is
+owed.** The store where the exposure would have been largest is the clearest evidence the leak was
+narrow: `r20bcm-2d` holds **1,518 archived products** and we generated for **0** of them.
+
+**And the 17 closes the "30 live" arithmetic exactly.** dev2 holds content for 33 products, 30
+published, 15 of those archived. 30 − 15 = **15 real**, against 15 active-and-draft on the store.
+
+**"30 live" was the label, not the count.** `publishedProducts` counts distinct products in OUR
+table and asks Shopify nothing, so it keeps counting after a merchant archives or deletes. Right as
+a record, false beside a catalogue total.
+
+**Then I fixed the instance and not the class.** Reading Home on the live app after shipping the
+Products fix, the same claim was on the **first screen**: a stat card reading *"Live on your
+storefront: 30"* above *"14 active and draft products published to your online store"*. The test I
+had written in the same commit guarded only `app.products.jsx`, so it was green while the worse
+instance sat on Home. The guard now walks every `.jsx` in `app/`.
+
+## P5.2 — not a second cache. No invalidator at all.
+
+Home moved 48 → 78 with no deploy, on a value with a 600 s TTL. The hypothesis was a second cache
+outliving the first. Reading the code found one cache, and `startscan:<shop>` was **the only key in
+the app that was written and never cleared** — `bv:` clears on a settings save, `plan:` and
+`canGenerate:` on a billing change, `catalogGaps:` through its own helper, llms.txt on regeneration.
+
+So the TTL was never the bug. **When it falls is:** a merchant publishes, returns to Home, and the
+number that exists to prove the app worked is the one from before they pressed the button.
+
+**The browser proof could not complete, and said so.** `score-cache-lag.mjs` does read → change →
+read, but dev2 has auto-publish on, so nothing ever sits in Review. It reported the lag **UNMEASURED,
+not zero**, which is the only honest output available to it.
+
+## P5.4 — determined in under an hour: the Billing API, so packs are small
+
+Six pieces of evidence. The two that settle it: the app **receives**
+`app_subscriptions/update` (Managed Pricing has sent none since 28 Apr 2026), and production holds a
+populated `shopifyChargeId` (Managed Pricing sends no `charge_id`). `BillingInterval.OneTime` and
+`appPurchaseOneTimeCreate` are already in the installed library. **Not built — the brief said
+determine.**
+
+## P5.5 — BYO key, with the decision recorded before the code
+
+**Zero credits on a merchant's own key, still recorded.** A credit is a unit of model spend; when
+the merchant pays Anthropic there is none. Charging anyway would mean paying us $79.99, paying
+Anthropic, and still being capped at 4,000 — a trade nobody takes, so the feature would exist unused.
+
+The rules with no second chance are **mechanical, not trusted**: no logger call may name key
+material, no `.slice`/`.length` of a key, no `last4` identifier **and no such column**, and the
+Settings loader cannot serialise one because `keyStatusFor` is the only reader. Break-tested three
+ways, all red.
+
+The key travels in **AsyncLocalStorage**, because the bulk processor runs generations concurrently
+and a module-level "current key" could bill one shop's job to another shop's Anthropic account.
+
+**Not live for merchants:** `BYOK_ENCRYPTION_KEY` is not set, and the feature **fails closed**.
+
+## What reading the live screen found that no test could
+
+- The plans page carrying four stale pricing dimensions
+- "Live on your storefront: 30" on Home, after I had "fixed" that bug
+- Three mobile listing frames failing in a way that read as *the app is broken on a phone* — it is
+  not; the harness broke as soon as a frame OBJECT existed instead of waiting for it to PAINT
+- `FRESH_STORE` defaulting to a store where the app is **uninstalled**
+- **80 `pageerror`s per two page loads**, including **React #418 and #423 hydration failures** — new,
+  recorded in C0.4, and pointed at the one BFS criterion still failing (INP: *"Not enough data"*)
+
+## Mistakes, all caught before they shipped
+
+1. My replacement for a tautological assertion **was tautological** — found by breaking it.
+2. I hardcoded credit weights into the FAQ **while fixing hardcoded values**.
+3. I fixed "30 live" on one screen and shipped a test that guarded only that screen.
+4. Three separate times a **comment explaining a rule tripped that rule**, because the stripper knew
+   about `//` and not `/* */` or `{/* */}`.
+5. Two pieces of my own dead code, `sameSecret()` and `describeKeyPresence()`, deleted before they
+   shipped — by the standard I had written hours earlier.
+6. A stale `HEAD.lock` from another session's completed commit blocked mine; removed only after
+   confirming no git process held it and that the owning commit had finished.
+
+Three pre-existing guards caught me: `scripts/README.md` completeness, the 40-character
+listing-field limit, and `SECRETS.md` completeness. All three were right.
+

@@ -35,6 +35,47 @@ Packs: 1,000 / $19 · 2,000 / $39 · 4,000 / $79 (one-time, Billing API).
 Annual carries a **one-time 2× credit allowance in the first month**.
 ~~**Grandfather nobody** — there are no paying merchants, so this is the only moment the change is free.~~ **CORRECTED 2026-09-14 (B8): that premise is false and was queried rather than believed.** Production holds **one active paid subscription with a subscription id** (`activePaidWithSubscription: 1`, `pro:active 1`, read at `8831444`). Whether it is a real charge or a `(Test)` charge on a dev store is the one thing the query deliberately cannot say — it prints no shop domain and no subscription GID, because that output goes into a CI log — so it is routed to the owner in `OWNER-CHECKLIST.md`. **The change was NOT rolled back**, because every part of it is neutral-or-favourable to a Pro subscriber: credits 1,000 → 4,000, annual $799.90 → $767.90, alt text 1 → 0 credits, Pro already unlimited on products and already had bulk. Rolling back would cut their allowance to a quarter. The one line that moved against them is a blog post at 3 credits where it was 1, which is not a constraint at 4,000.
 
+### ARCHIVED-PRODUCT CREDITS — DECIDED 2026-09-14 (P5.1). NO REFUND IS OWED, because no merchant paid.
+
+The P5.1 brief required this: *"If it is non-zero, the fix is twofold — stop it happening, and
+decide whether those credits are refunded."* It is non-zero. **17.**
+
+`app.optimize.jsx` walked the catalogue with no `query` argument, so bulk optimize enqueued
+generations against products merchants had deliberately archived. Under the pricing that shipped in
+Phase 4 that is real credits at 2.00¢ each.
+
+**Read from production at `0e52284`, 2026-09-14, by `archived-generations-diag.mjs`:**
+
+| | |
+|---|---|
+| Archived products we generated for | **17** |
+| … of those, we also published to | **15** |
+| Shops holding generated content | 9 |
+| Shops unreachable (uninstalled, HTTP 401) | 2, both `app-review-*` |
+
+**All 17 are on `contentpilot-dev2`, which is our own development store.** Every other reachable
+shop returned **0**, including the one where the exposure would have been largest: `r20bcm-2d` holds
+**1,518 archived products** and we generated for none of them.
+
+**So: no refund, because no merchant was charged.** That is a finding, not a judgement call — had
+the number landed on a merchant shop, the answer would have been to refund, because they did not ask
+for it and could not see it happening.
+
+**What is NOT claimed.** Two shops could not be read: their offline tokens no longer authenticate,
+which means the app is uninstalled there. They are reported as `reachable: false` rather than
+counted as zero, because an unreachable shop is an unknown and folding it into a total is how a
+reassuring number gets manufactured. Both are Shopify **App Review** stores, so a charge on either
+would have been a test charge on Shopify's own reviewer sandbox.
+
+**The same 17 also closes the "30 live" arithmetic**, which is the reason to trust it: dev2 holds
+content for 33 products and has published to 30, of which 15 are archived. 30 − 15 = **15 real**,
+against exactly 15 active-and-draft products on the store. Two independent numbers meeting is worth
+more than either alone.
+
+**Re-runnable, read-only:** the **Archived generations check** workflow in GitHub Actions.
+
+---
+
 ### BYO KEY — DECIDED 2026-09-14 (P5.5), BEFORE THE CODE WAS WRITTEN
 
 **A generation run on a merchant's own AI key costs them ZERO credits. It is still RECORDED.**

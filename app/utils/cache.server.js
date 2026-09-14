@@ -14,6 +14,21 @@ import logger from "./logger.server.js";
 const REDIS_URL = process.env.REDIS_URL;
 const CACHE_PREFIX = "cc:"; // contentclaude
 
+/**
+ * The real Redis key for a logical cache key.
+ *
+ * Exported because `CACHE_PREFIX` was private and three call sites inside this
+ * file each wrote `CACHE_PREFIX + key` by hand — which is fine while they are
+ * all in one file, and stops being fine the moment anything outside needs to
+ * look at a key. `scripts/score-cache-diag.mjs` needed exactly that, guessed
+ * the format, queried `startscan:<shop>` instead of `cc:startscan:<shop>`, and
+ * reported a live cache as absent. It refused to draw a conclusion from that,
+ * which is the only reason it was caught rather than believed.
+ *
+ * Anything that addresses a cache key from outside this module uses this.
+ */
+export const cacheKey = (key) => CACHE_PREFIX + key;
+
 // In-process fallback cache — bounded LRU to prevent memory growth on long-running servers.
 // At 100k merchants with Redis available, this Map stays near-empty (Redis handles everything).
 // In the rare case Redis is down, cap at 2000 entries so RAM stays bounded.
@@ -70,7 +85,7 @@ export async function getRedis() {
  * @param {number} ttlSeconds - TTL in seconds
  */
 export async function getCache(key, supplier, ttlSeconds = 300) {
-  const fullKey = CACHE_PREFIX + key;
+  const fullKey = cacheKey(key);
 
   // Phase 0 item 16 — a Redis failure and a SUPPLIER failure are different
   // things, and this used to catch both in one try. If the supplier threw, or
@@ -134,7 +149,7 @@ export async function getCache(key, supplier, ttlSeconds = 300) {
  * Write a value directly to cache without a supplier.
  */
 export async function setCache(key, value, ttlSeconds = 300) {
-  const fullKey = CACHE_PREFIX + key;
+  const fullKey = cacheKey(key);
   try {
     const redis = await getRedis();
     if (redis) {
@@ -151,7 +166,7 @@ export async function setCache(key, value, ttlSeconds = 300) {
  * Invalidate a cache key (e.g. after a write).
  */
 export async function invalidateCache(key) {
-  const fullKey = CACHE_PREFIX + key;
+  const fullKey = cacheKey(key);
   memCache.delete(fullKey);
   try {
     const redis = await getRedis();
@@ -166,7 +181,7 @@ export async function invalidateCache(key) {
  * Uses SCAN cursor iteration (non-blocking) instead of KEYS (O(N) blocking).
  */
 export async function invalidateCachePattern(pattern) {
-  const fullPattern = CACHE_PREFIX + pattern;
+  const fullPattern = cacheKey(pattern);
   // Invalidate in-process cache
   const prefix = fullPattern.replace(/\*/g, "");
   for (const key of memCache.keys()) {
