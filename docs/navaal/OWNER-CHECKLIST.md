@@ -75,7 +75,7 @@ machines restarted for the secret.
 
 ---
 
-## 🔴 2026-09-14 — A STOREFRONT SECURITY FIX HAS NOT REACHED SHOPIFY SINCE 9 SEPTEMBER. TWO THINGS MAY NEED YOU TODAY.
+## ✅ RESOLVED 2026-09-14 — app version `p0-xss-f505584` released 06:46 UTC by CC (CLI was authenticated; nothing needed you). A5 exposure scan: **zero** — 5 metafields, 25 question/answer pairs across every installed shop, no markup in any of them. The vulnerability existed for 74 days and was never exercised. Incident write-up in `docs/history/`. Item 2 below (dev2 storefront password) is now optional evidence, not a blocker.
 
 **What happened.** `7942c30` (9 Sep, 21:26 AEST) fixed AI FAQ text rendering **unescaped on merchant
 storefronts** (`faq_visible.liquid`). Every deploy since was green — but Shopify serves theme
@@ -91,6 +91,8 @@ Nothing else in the release needs you.
 `contentpilot-dev2.myshopify.com` once in the browser CW uses (or switch password protection off on
 that dev store — never on a real store). CW can then read the rendered storefront HTML and confirm
 the escaped block is what merchants get.
+
+## ✅ B8 CLOSED 2026-09-14 BY CW, WITHOUT YOU — the active Professional subscription is `contentpilot-dev2` on a `(Test)` charge (`Subscription charge activated — Professional Plan - $79.99 USD (Test)`, 27 Aug, ID 26009600103, never cancelled). Earnings $0.00 across all four types. The 16 unflagged charge rows are all on our own dev stores, June–August, pre-dating per-shop test mode in v13. No money has ever moved. Nothing below this heading needs you.
 
 ## ⚠ 2026-09-14, B8 — "THERE ARE NO PAYING MERCHANTS" IS NOT TRUE. ONE ACTIVE PAID SUBSCRIPTION EXISTS.
 

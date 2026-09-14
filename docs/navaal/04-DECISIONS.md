@@ -226,6 +226,7 @@ extra competitor $10 each · done-for-you setup $750 one-time (contact action, n
 | Five-item nav stays. Nothing is added without removing something. | ✔ |
 | Two severities on every gate (L6). | ✔ |
 | EBS is an instrument, not the customer (L13). | ✔ |
+| **Third-party product names (Google, ChatGPT, Bing, Perplexity) may appear in listing copy descriptively** — as the surfaces the content is *for* — never as a claimed partnership, endorsement or integration, never as a logo or wordmark in any image (4.4.3 covers Shopify's marks; ours is the stricter rule). The live subtitle `Content Google ranks and ChatGPT quotes — you approve it first` stands. Decided 2026-09-14 on CW's flag; CW found no rule against it and neither did Cowork. | ✔ |
 
 
 ---
