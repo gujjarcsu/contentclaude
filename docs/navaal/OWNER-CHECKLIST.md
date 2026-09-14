@@ -414,3 +414,31 @@ You had it as a decision; the brief made it mine (`14-PRICING.md` §6 item 8, *g
 **9 Free rows were raised from 25 to 100; nothing was lowered; the Pro row was already at 4,000.**
 Read on `navaal-ttv-02`: *"Monthly credits · 6 / 100 used"*. From here, a Plan row below the locked
 table for its plan name is raised the first time it is read, so this cannot recur silently.
+
+---
+
+## FYI 2026-09-14 (Phase 8 Part C) — THE PROOF ENGINE IS LIVE; ITS FIRST RESULT NEEDS TWENTY MINUTES OF YOU
+
+**What is live:** a merchant who pastes their Bing Webmaster API key in Settings and switches
+measurement on gets, each night, every batch of product pages we published split at random — half
+submitted to Bing through their key, half withheld — and the time to Bing's first crawl recorded
+for both. `/app/proof` shows both arms, the seed and the 95% interval; a batch with enough pages
+stamps the shop's first proved result, which is now what the review ask is gated on; the weekly
+report goes only in a week with a result. **Verified before building:** an IndexNow key file
+cannot live at a Shopify storefront's root, so the channel is Bing's own submission API — same
+scheduler, stated on the screen.
+
+**Nothing runs until two things only you can do:**
+
+1. **Set `REMEDIATION_LOCKED_SHOPS`** (from a file; `fly secrets import`). The brief forbids any
+   submission while it is unset, and the code refuses (`lockConfigured()`), so this is the switch.
+2. **Give one store a Bing key.** Every dev store is password-protected, and a locked storefront is
+   skipped by design. On one `navaal-ttv-*` store: remove the storefront password (Online Store →
+   Preferences), add and verify the store in Bing Webmaster Tools (import from Search Console or
+   the meta-tag method), copy the API key (Settings → API access), paste it in the app's Settings,
+   switch measurement on. Then publish content for at least ten products (five per arm is the
+   minimum for a verdict). Run the **Crawl holdout** workflow that night, or wait for 03:00 Sydney;
+   `/app/proof` reads out within 72 hours.
+
+**Two decisions filed as backlog rows:** F9 — P3.4 (AI sessions from ShopifyQL) is blocked on the
+Level 2 approval you were already asked to start (P0.10); F10 is the Bing step above.
