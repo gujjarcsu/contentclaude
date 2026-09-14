@@ -119,3 +119,44 @@ export function primaryRowOf(rows) {
   }
   return rows[0];
 }
+
+/**
+ * Does this product belong on the Products list, under this tab?
+ *
+ * A1 — extracted from `app.products.jsx` so it can be tested directly. The
+ * comment on `stateOfContentMap` above records why that matters: the last time a
+ * rule lived only inside the component, the component wrote its own version and
+ * the screen contradicted its own stat cards.
+ *
+ * TWO DIFFERENT AXES, and conflating them is the trap:
+ *
+ *   `product.status`  — Shopify's status: ACTIVE / DRAFT / ARCHIVED / UNLISTED.
+ *                       Whether the product exists for sale.
+ *   `statusFilter`    — OUR tabs, which are CONTENT states. "draft" here means
+ *                       we generated copy that is awaiting review, and has
+ *                       nothing to do with a Shopify draft product.
+ *
+ * Mapping the tabs onto Shopify's `status:` in the GraphQL query would silently
+ * return a completely different set of products under the same tab name.
+ *
+ * ARCHIVED is dropped regardless of tab. The loader already excludes it in the
+ * query — the only place that can also fix the counts and the cursor — and this
+ * is the second line of defence, because Shopify's search reference says an
+ * INVALID FIELD makes the query be ignored and ALL results returned. A typo in
+ * that scope string does not error; the archived products just come back.
+ *
+ * Pure.
+ *
+ * @param {{status?: string}} product
+ * @param {Record<string, {status: string}>|undefined} contentByType
+ * @param {string} statusFilter  "all" | "draft" | "published" | "needsContent"
+ */
+export function matchesListFilter(product, contentByType, statusFilter) {
+  if (product?.status === "ARCHIVED") return false;
+
+  const state = stateOfContentMap(contentByType);
+  if (statusFilter === "draft") return state === PRODUCT_STATE.DRAFT;
+  if (statusFilter === "published") return state === PRODUCT_STATE.PUBLISHED;
+  if (statusFilter === "needsContent") return state === PRODUCT_STATE.NEEDS_CONTENT;
+  return true;
+}

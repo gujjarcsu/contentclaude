@@ -44,6 +44,7 @@ import {
   CONTENT_ACTION_LABEL,
   CONTENT_ACTION_TONE,
   PRODUCT_STATUS,
+  LIST_SCOPE_QUERY,
 } from "./candidates.js";
 
 // Re-exported so no consumer needs to import both modules and pick the right
@@ -66,6 +67,7 @@ export {
   CONTENT_ACTION_LABEL,
   CONTENT_ACTION_TONE,
   PRODUCT_STATUS,
+  LIST_SCOPE_QUERY,
 };
 
 /** Counts change when a merchant edits products; five minutes is plenty. */

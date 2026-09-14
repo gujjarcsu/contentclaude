@@ -35,6 +35,7 @@ import {
 import { useState, useCallback, useMemo } from "react";
 import { CheckCircleIcon, ClockIcon, AlertCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
+import { LIST_SCOPE_QUERY } from "../utils/candidates.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { quotaPct } from "../utils/quota.js";
@@ -58,7 +59,7 @@ import {
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
-import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap } from "../utils/productState.js";
+import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap, matchesListFilter } from "../utils/productState.js";
 import { productScoresFor } from "../utils/storeScore.server.js";
 import { shopifyQuery, productsPage } from "../utils/shopifyQuery.server.js";
 import { publishProductWithRetry } from "../utils/adminGraphql.server.js";
@@ -78,7 +79,7 @@ export const loader = async ({ request }) => {
   const gqlQuery =
     direction === "prev"
       ? `query($cursor: String) {
-          products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE) {
+          products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE, query: "${LIST_SCOPE_QUERY}") {
             pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
             edges { node {
               id title handle status productType vendor description
@@ -89,7 +90,7 @@ export const loader = async ({ request }) => {
           }
         }`
       : `query($cursor: String) {
-          products(first: ${PAGE_SIZE}, after: $cursor, sortKey: TITLE) {
+          products(first: ${PAGE_SIZE}, after: $cursor, sortKey: TITLE, query: "${LIST_SCOPE_QUERY}") {
             pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
             edges { node {
               id title handle status productType vendor description
@@ -346,7 +347,7 @@ export const action = async ({ request }) => {
       const res = await shopifyQuery(
         admin.graphql,
         `query($cursor: String) {
-            products(first: 250, after: $cursor) {
+            products(first: 250, after: $cursor, query: "${LIST_SCOPE_QUERY}") {
               pageInfo { hasNextPage endCursor }
               edges { node { id } }
             }
@@ -550,13 +551,13 @@ export default function ProductsPage() {
   // draft meta title landed in "Published" here while the cards counted it as
   // a draft. The screen contradicted itself: "13 live · 4 ready to review"
   // above "Draft (3) · Published (14)".
-  const tabFilteredProducts = products.filter((p) => {
-    const state = stateOfContentMap(contentMap[p.id]);
-    if (statusFilter === "draft") return state === PRODUCT_STATE.DRAFT;
-    if (statusFilter === "published") return state === PRODUCT_STATE.PUBLISHED;
-    if (statusFilter === "needsContent") return state === PRODUCT_STATE.NEEDS_CONTENT;
-    return true;
-  });
+  // A1 — the SHARED rule, in productState.js beside stateOfContentMap. It lives
+  // there rather than here because the last time a rule like this lived inside
+  // the component, the component grew its own version and the screen
+  // contradicted its own stat cards.
+  const tabFilteredProducts = products.filter((p) =>
+    matchesListFilter(p, contentMap[p.id], statusFilter),
+  );
 
   const filteredProducts = tabFilteredProducts.filter((p) =>
     p.title.toLowerCase().includes(searchValue.toLowerCase()),

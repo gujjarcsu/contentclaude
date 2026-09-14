@@ -57,6 +57,30 @@ export const PRODUCT_STATUS = {
 };
 
 /**
+ * The baseline scope for BROWSING the catalogue — the Products list and its counts.
+ *
+ * Different question from DEFAULT_SCOPE below, which answers "what may we spend a
+ * generation on". This one answers "what does the merchant consider part of their
+ * catalogue", so it is deliberately wider: DRAFT products still appear (a merchant
+ * drafting in bulk wants to see and optimise them) and so do UNLISTED ones, and it
+ * does NOT require Online Store publication — a POS-only product is still theirs.
+ *
+ * ARCHIVED is the one exclusion. A merchant who archived a product told Shopify
+ * they are finished with it; we do not list it, count it, or offer to optimise it.
+ *
+ * Lowercase on purpose: Shopify documents the values as `status:active,archived,
+ * draft,unlisted`, and scopeQueryFor() below already lowercases for the same reason.
+ *
+ * THE TRAP THIS STRING SITS ON. Shopify's search syntax reference says: "If you
+ * specify an INVALID FIELD, then the query is IGNORED and all results are
+ * returned." A typo here does not error — it silently returns archived products
+ * again and every count goes back to being wrong, with nothing on screen to say
+ * so. That is why it is one exported constant asserted by test rather than three
+ * hand-typed strings, and why the fix was also read off the live page.
+ */
+export const LIST_SCOPE_QUERY = "-status:archived";
+
+/**
  * The default scope: what an action may touch unless the merchant says otherwise.
  *
  * `includeArchived` exists for symmetry and completeness, and is never true by
