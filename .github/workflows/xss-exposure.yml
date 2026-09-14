@@ -1,0 +1,33 @@
+name: XSS exposure check
+
+# P0 / A5 — how much stored FAQ content contains markup that WOULD have rendered
+# on a merchant storefront while faq_visible.liquid interpolated it unescaped.
+#
+# Read-only. STRICTER privacy than the other diagnostics: a shop with an
+# exposure is a shop with a vulnerability, so this prints no shop domain and no
+# handle — only an index, a class (dev / MERCHANT) and counts — and it never
+# prints metafield content, because reproducing a payload into a CI log is
+# publishing it.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Count markup in stored FAQ metafields
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Scan
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/xss-exposure-diag.mjs" | tee xss.json
+          {
+            echo '## Stored FAQ markup exposure'
+            echo ''
+            echo '```json'
+            cat xss.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
