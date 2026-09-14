@@ -11,6 +11,57 @@ many other tasks are waiting on it.
 
 ---
 
+## ⚠ 2026-09-14, B8 — "THERE ARE NO PAYING MERCHANTS" IS NOT TRUE. ONE ACTIVE PAID SUBSCRIPTION EXISTS.
+
+**Read before anything else on this page. 2 minutes.**
+
+`14-PRICING.md` §6 item 8 says *"There are no paying merchants. This is the only moment this change
+is free."* The Phase 4 brief said *"Expect zero."* **I queried production instead of believing it,
+and it is not zero.**
+
+Read from the database at `8831444`, 2026-09-14:
+
+| | |
+|---|---|
+| Plan rows | **10** |
+| `free:active` | **9** |
+| **`pro:active`** | **1** |
+| **Active paid WITH a subscription id** | **1** |
+| Rows that ever held a charge | 1 |
+| Currently trialling | 0 |
+
+**WHAT I NEED FROM YOU, and it is the only thing I cannot answer myself.** Open the Partner
+Dashboard and look at the one **Professional** subscription. **Is it a real charge, or a `(Test)`
+charge on one of our own dev stores?** Dev-store subscriptions are billed as test charges and cost
+nobody anything; the app history already shows one on 10 Sep (*"Starter Plan $9.99 USD (Test)"*).
+The query cannot tell the two apart, and **it deliberately does not print the shop domain or the
+subscription id** — a subscription GID identifies a merchant's billing record and that output goes
+into a CI log. That privacy choice is what makes this question yours rather than mine.
+
+**WHAT ALREADY SHIPPED TO THEM, and why I did not roll it back.** The locked allowances went live in
+`7d23792` before this query ran. Every change is **neutral or favourable** to a Pro subscriber:
+
+- credits **1,000 → 4,000** (4× more)
+- annual **$799.90 → $767.90** (cheaper on renewal)
+- alt text now costs **0 credits** instead of 1
+- product cap: Pro is **unlimited**, so no new restriction
+- bulk: Pro already had it
+
+Rolling back would **cut their allowance from 4,000 to 1,000**. That is worse for them than leaving
+it, so it stays. But the premise the change was made on was wrong, and you should know that rather
+than find out later.
+
+**The one thing to check if it IS a real charge:** a blog post now costs 3 credits where it cost 1.
+At 4,000 credits that is not a constraint, but it is the only line that moved against them.
+
+**What to paste back:** "test charge" or "real charge", and the plan name. If real, `14-PRICING.md`
+§6 item 8 needs correcting and `04-DECISIONS.md` should record that the change shipped to a live
+subscriber.
+
+**Re-run it yourself any time:** the **Paid plans check** workflow in GitHub Actions. Read-only.
+
+---
+
 ## NEW, 2026-09-14 — READ THIS ONE FIRST. IT IS A DECISION, NOT A TASK.
 
 ### ✅ CLOSED 2026-09-14 — the owner answered **(b) with a floor**: stay inside the category on price, win on allowance and honesty, never below 42% margin.
