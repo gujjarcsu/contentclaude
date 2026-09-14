@@ -4939,3 +4939,67 @@ After the real click the screen read *"Nothing to review — you're all caught u
 **One honest caveat, and the script says it itself:** an absent key is also what a cold cache looks
 like. A single "NOT CACHED" proves nothing. The SEQUENCE proves it.
 
+
+## Phase 7 Part D — Phase 2, the subscription, built and live (2026-09-14)
+
+**Order followed as briefed:** P2.3 → P2.2 → P2.1 → 🚢 → P2.5 → P2.4 → P2.6 → 🚢 → P2.7 → 🚢.
+Four pushes: `34f2bb4` (P2.3 + P2.2 + P2.1), `c258549` (the correction the proof forced),
+`fe1bdec` (P2.5 + P2.4 + P2.6), and the P2.7 gate recorded in `06-QUEUE.md`. Every push polled
+`/api/build-info` to the sha and deep health ok before anything was recorded.
+
+**What a merchant now has.** One daily walk of the whole catalogue (02:00 Sydney, Redis NX
+day-claim; a first walk on the first Home load, 8 s budget; 30 s for the daily job; 100 products a
+page because the widened query must stay under Shopify's 1,000-point cap). Per product: a diff
+against yesterday (five graded kinds), a grade against the OpenAI product feed and Google Search
+(blocking / degrading / cosmetic — `product_type` cosmetic, GTIN degrading with the own-brand
+exemption stated), and on a public storefront the sitemap for every product and 20 pages a night
+for robots, declared canonical and redirect hops. Per shop: six crawlers against the primary domain,
+diffed daily; the storefront password state; the merchant's own answer to Search Console's
+"Search generative AI" control. Home: up to four lines, most expensive first. `/app/attention`: the
+list, every finding with its note and every section its method. `/app/fix`: brand, option names,
+barcodes (check-digit validated, never invented), own-brand exemption, alt text (0 credits) and
+descriptions (1 credit) through the existing reviewed bulk job — each write checked against
+Shopify's reply, findings updated the moment a write is confirmed; the three fixes the app cannot
+make stated with the scope they would need. The first run names the three specific things holding
+this store back and ends with "We'll watch it from here."
+
+**Production proofs, counts only (never a shop):**
+
+| Run | Build | Shops walked | Graded | Blocking | Crawlers | Notes |
+|---|---|---|---|---|---|---|
+| 1 | `34f2bb4` | 9 / 9 | 1,430 | **150** | 9 checked, 0 blocked | 76 s. Screen read on two dev stores: every product "not on the Online Store channel" — **untrue** (see below) |
+| 2 | `c258549` | 8 / 8 | 1,418 | **115** | 8 checked, 0 blocked, **7 password-protected** | 60 s. First field tally: gtin 1,418 · Google description 281 · OpenAI description 231 · no image 72 · description empty 50 · product_type 19 · alt 14 · option names 9 |
+| 3 | `fe1bdec` | 8 / 8 | 1,418 | 115 | same | 98 s. Indexability: sitemap known 1,350, absent 0; 20 pages, noindex 0, 404 0, chains 0. gtin 1,405 after 13 exemptions |
+
+**The correction the proof forced (`c258549`).** 150 blocking became 115: both dev storefronts
+302 `/` → `/password`, and Shopify nulls every product's `onlineStoreUrl` while the password is on.
+The grading and the crawler card both said something untrue on a locked store. One shop-level fact
+(`onlineStore.passwordProtection.enabled`, validated) now threads through both; the page says it
+once. Also fixed: a first walk stamped everything "since yesterday" — `summarise()` now takes the
+shop's first-walk time. Written up as false green 12 in `07-VERIFICATION.md`.
+
+**P2.5, verified before building.** The Search Console API v1 reference index lists
+`searchanalytics.query`, `sitemaps.*`, `sites.*`, `urlInspection.index.inspect` and nothing else;
+the rollout announcement names no API. Unreadable, so: a one-question guided check, the answer
+stored with its date, labelled as the merchant's everywhere, re-asked after 90 days, and a test
+that walks `app/` and fails if anything ever talks to the Search Console API.
+
+**P2.6, proved by pressing it.** `tools/proof/fix-proof.mjs` on `navaal-ttv-03`: 13 gtin
+findings listed → "No barcode by design for 13" → *"13 applied."* → attention re-read: 0 gtin
+findings. That fix writes only our own column, which is why it was the one pressed; the Shopify
+writes (vendor, option name, barcode) go through `readMutationResult` plus a value check and are
+covered by tests, not yet by a press on a dev store. Every write path starts with
+`assertWritable(shop)` against `REMEDIATION_LOCKED_SHOPS` (unset until the owner sets it).
+
+**Scopes, verified and not added:** `write_publications` (Online Store channel),
+`write_online_store_navigation` (redirects), `read_legal_policies` (policies). Stated on `/app/fix`
+as not fixable from here; a test fails if they appear in the toml without the page changing.
+
+**Tests:** 3,594 → 3,754. Break tests on every increment, each failing exactly the test meant to
+catch it: watchStartedAt clause, GTIN→blocking, robots tie→disallow, password state ignored,
+null sitemap column as absent, excluded=any answer, lock dropped from a writer, any check digit
+accepted, count before grade.
+
+**Still the owner's:** `REMEDIATION_LOCKED_SHOPS`; the three scope decisions; publishing
+`12-OFFER.md` §5 now that Phase 2 is live; B8 (real vs Test charge); H12b listing plan cards (CW).
+Follow-ups F3–F7 in `02-BACKLOG.md`.

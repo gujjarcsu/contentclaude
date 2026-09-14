@@ -280,3 +280,8 @@ support that does not need a human per merchant.
 |---|---|---|---|
 | F1 | CC | Store-shape fixture matrix over every axis in `05-EVIDENCE.md` §4. Report per phase which cells you proved and which you did not. **A cell you did not test is a defect you have not found yet.** | OPEN |
 | F2 | CC | One real dev store per shape that matters most: all-draft · variant-heavy · non-English · B2B-only · catalogue above the plan cap. Fixtures model reality; a real store *is* reality. | OPEN |
+| F3 | CC | **GTIN is read on the first variant only** (`variants(first: 1)` to stay under the 1,000-point query cap at 100 products a page). A multi-variant product whose barcodes live on later variants is graded "no barcode" wrongly. Fix: a second, cheaper pass for multi-variant products flagged gtin, or `variantsCount` + a sampled read. | OPEN |
+| F4 | CC | The production script's cross-shop `acrossShops.sinceYesterday` is computed without each shop's first-walk grace, so it reads as "everything is new" on a first day. Per-shop Home is correct. Pass `firstWalkAt` per shop or drop the aggregate. | OPEN |
+| F5 | CC | `Product.featuredImage` is deprecated in favour of `featuredMedia`; the watch query still uses it (validated, working). Migrate before Shopify removes it. | OPEN |
+| F6 | CC | Indexability samples 20 pages a night; a 5,000-product store takes 250 nights to cover. Consider a per-plan sample size or prioritising products with attention. | OPEN |
+| F7 | CW | The first-run screen can now be captured on a dev store: the **First-run reset** workflow nulls `firstDraftSeenAt` for one named dev store (never a merchant; name-pattern guard). Frame 04. | OPEN |

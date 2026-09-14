@@ -340,3 +340,36 @@ when it arrives.
 - [ ] `navaal.ai/tools` — keep or cut? It exists and now carries an install link.
 - [ ] Bilby ↔ Navaal bundling: one company, two products, one shared probe.
 - [ ] Done-for-you setup at $750 — the process has to exist before it is promoted.
+
+---
+
+## FYI 2026-09-14 (Phase 7 Part D) — THE SUBSCRIPTION IS LIVE. Three decisions, one secret. Ten minutes.
+
+**What is live:** every installed store is walked once a day (02:00 Sydney, Redis-claimed, plus a
+first walk on the first Home load). Each product is diffed against yesterday (five graded kinds),
+graded against what the OpenAI product feed and Google Search ask for, and — on a public storefront —
+checked for sitemap membership and, 20 pages a night, robots/canonical/redirects. Six crawlers are
+checked nightly. Home carries up to four lines, most expensive first; `/app/attention` is the list;
+`/app/fix` applies the fixes the app can make, each reviewed and verified against Shopify's reply.
+
+**1. Set `REMEDIATION_LOCKED_SHOPS` (2 minutes, a secret).** Comma-separated shop domains that are
+monitored but never written to from `/app/fix`. Until it is set, nothing is locked. Write the value
+to a file and `fly secrets import < file` — never `fly secrets set` (Windows `cmd.exe` strips `%xx`).
+I have not typed any store's domain anywhere in code or docs; the choice of which stores to lock is
+yours.
+
+**2. Three scopes, one decision each — yes or no.** Verified against the Admin schema: publishing a
+product to the Online Store channel needs `write_publications`; creating a URL redirect after a
+handle change needs `write_online_store_navigation`; reading shop policies needs
+`read_legal_policies`. The app requests `write_products,write_content` and nothing else, so
+`/app/fix` states those three as *not fixable from here* with the reason. Adding any scope prompts
+every installed merchant to re-approve the app. A test fails if a scope appears in
+`shopify.app.toml` without the page changing.
+
+**3. `12-OFFER.md` §5 may now be published.** The brief held it until Phase 2 was *live, not
+merged*. It is live at the shas recorded in `06-QUEUE.md`. CW can lift it into the listing under
+the standing rule that no statistic leaves the app.
+
+**One fact worth knowing:** 7 of the 8 installed storefronts are password-protected (all the dev
+stores). On a locked store the app says so once and grades everything else; nothing about a locked
+store is presented as "blocked".

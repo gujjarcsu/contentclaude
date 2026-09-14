@@ -314,3 +314,33 @@ moves only when someone edits it. CW's refusal to edit it stands as correct proc
 now routed as H12b with the owner informed, because it is display-only and one live subscriber
 exists. The verified fact is: the app version proves the extension; nothing proves the listing
 price except reading the listing.
+
+## FALSE GREENS 11 AND 12 — both found on 2026-09-14, Phase 7
+
+**11. A guard that matches nothing passes.** Part B's screen-reconciliation test asserted that a
+route's loader did not do X by grepping for `export const loader`. The route declared
+`export async function loader`. The regex found nothing, the "must not contain" assertion passed
+over an empty string, and the guard was green while proving nothing.
+**The rule: a source-reading guard must first assert it FOUND the thing it is guarding**, then
+assert what that thing does or does not contain. `expect(found).not.toBeNull()` before
+`expect(found).not.toMatch(...)`. A guard that can pass on an empty match is decorative.
+
+**12. The code's premise was wrong, and only the production run could say so.** P2.2 graded
+"no `onlineStoreUrl`" as BLOCKING with the note *"not available on the Online Store channel"* —
+true on a public store. The first production proof put 150 blocking findings on the board and the
+screen read showed every product on both dev stores carrying that line. Both storefronts 302
+`/` → `/password`; Shopify returns null for every product's `onlineStoreUrl` while the store
+password is on (confirmed live and in Shopify's own forums). The crawler card was wrong the same
+way: *"all six reached your storefront"* — they reached the password page. **7 of 8 installed
+storefronts are password-protected**; only the real store is public.
+**The rule: the proof run is part of the gate, and its job is to break the premise, not to
+confirm the count.** Read the screen the number came from, on more than one store, before recording
+the number. Tests cannot catch a premise: every test here mocked a public storefront because the
+author assumed one. The fix was one shop-level fact (`onlineStore.passwordProtection.enabled`,
+validated against the schema) threaded through grading and the crawler check, and a screen that
+says the true thing once instead of 27 times.
+
+A smaller one from the same day, for the record: **`vi.mock` is hoisted above every `const` in the
+file**, so a spy declared inside a `describe` and closed over by the mock factory is
+`undefined` when the factory runs. `vi.hoisted(() => ({ spy: vi.fn() }))` at module scope, then
+the mock. Two tests failed with "upsert is not defined" before the reason was obvious.
