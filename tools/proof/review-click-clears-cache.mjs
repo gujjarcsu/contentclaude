@@ -147,21 +147,59 @@ if (STEP === "arm") {
   } else {
     const t = await fr.evaluate(() => document.body?.innerText || "");
     out.reviewSays = t.slice(0, 160).replace(/\s+/g, " ");
-    const btn = fr.locator('button:has-text("Publish"), button:has-text("Approve")').first();
-    if ((await btn.count()) === 0) {
-      out.error = "nothing publishable on /app/review — run --step arm first";
+
+    // REVIEW IS TWO STEPS, and missing that produced a clean-looking false
+    // negative: "Approve all on this page" selects the drafts, and only THEN
+    // does a "Publish N approved" button exist. My first run clicked approve,
+    // saw the page still saying "3 products ready to review", peeked the cache,
+    // found it still warm, and could have been read as "publishing does not
+    // clear the cache". It was "I never published".
+    //
+    // The page has NO button matching /^Publish/ before the approve click —
+    // checked on the live screen, which is the only reason this is understood
+    // rather than guessed at.
+    const approve = fr.locator('button:has-text("Approve all")').first();
+    if ((await approve.count()) === 0) {
+      out.error = "nothing to approve on /app/review — run --step arm first";
     } else {
-      out.buttonText = (await btn.innerText().catch(() => "")).trim();
-      await btn.click();
-      await page.waitForTimeout(15000);
-      const after = await fr.evaluate(() => document.body?.innerText || "").catch(() => "");
-      out.afterClick = after.slice(0, 200).replace(/\s+/g, " ");
-      out.clicked = true;
+      out.approveButton = (await approve.innerText().catch(() => "")).trim();
+      await approve.click();
+      await page.waitForTimeout(4000);
+
+      const publish = fr.locator("button").filter({ hasText: /^Publish/ }).first();
+      const publishCount = await publish.count();
+      out.publishButtonsAfterApprove = publishCount;
+      if (publishCount === 0) {
+        out.error = "approved, but no Publish button appeared — NOT a cache result, a flow result";
+      } else {
+        out.buttonText = (await publish.innerText().catch(() => "")).trim();
+        await publish.click();
+        // Publishing writes to Shopify per product; give it room.
+        await page.waitForTimeout(25000);
+        const after = await fr.evaluate(() => document.body?.innerText || "").catch(() => "");
+        out.afterClick = after.slice(0, 220).replace(/\s+/g, " ");
+        out.clicked = true;
+      }
     }
   }
   out.next = "PEEK THE CACHE AGAIN. Gone = the click reached the invalidator.";
 } else if (STEP === "restore") {
-  out.autoPublish = await setAutoPublish(true);
+  // `--restore true|false`, defaulting to LEAVING IT OFF.
+  //
+  // This used to hardcode `setAutoPublish(true)`, which assumes the store had
+  // auto-publish ON before the proof ran. On navaal-ttv-02 it did not — `arm`
+  // reported `before: false` — so "restoring" would have TURNED ON a setting the
+  // merchant had off, and reported `ok: false` while doing it. A restore step
+  // that changes a store's configuration to something it never had is worse
+  // than no restore step, because it looks like tidying up.
+  //
+  // `arm` prints what it found; pass that value back explicitly.
+  const wantRaw = argOf("--restore", "false");
+  const want = wantRaw === "true";
+  out.restoringTo = want;
+  out.autoPublish = await setAutoPublish(want);
+  out.note =
+    "Pass --restore true ONLY if `arm` reported before:true for this store. The default leaves it off.";
 } else {
   out.error = `unknown --step ${STEP}`;
 }

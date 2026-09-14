@@ -4793,3 +4793,149 @@ and a module-level "current key" could bill one shop's job to another shop's Ant
 Three pre-existing guards caught me: `scripts/README.md` completeness, the 40-character
 listing-field limit, and `SECRETS.md` completeness. All three were right.
 
+---
+
+# PHASE 6 — CLOSE THE APP — 2026-09-14
+
+Gates: `f6c9fe1` · `1656312` · `6429bd9` · `72f6e53`. Live and healthy at each, **255 columns**
+after the support-request migration.
+
+## Two of the brief's premises were wrong, and acting on one would have destroyed data
+
+**`BYOK_ENCRYPTION_KEY` was already set** — the init workflow ran and succeeded at 05:32:43Z, inside
+gate `43f56a2`. The brief said to run it. Re-running refuses by design, and **forcing past that
+refusal makes every stored merchant key undecryptable**. So it was not run; what was actually
+outstanding was the round-trip proof, which is a different thing entirely. Live was `e4d9f98`, one
+ahead of the sha in the brief.
+
+## P6.0 — the loose ends
+
+**The BYOK round trip, proved in production** rather than inferred from a successful install. A
+secret corrupted in transit gives a feature that *appears* to work — card renders, save succeeds —
+and cannot decrypt anything afterwards.
+
+| | |
+|---|---|
+| `featureConfigured` | true |
+| `ciphertextDiffersFromPlaintext` | true |
+| **`decryptsToExactlyWhatWentIn`** | **true** |
+| `loaderStatusKeys` | `configured`, `failing`, `saved`, `validatedAt` — and nothing else |
+| `loaderStatusLeaksNothing` | true |
+| `rowIsEmptyAfterwards` | true |
+
+It encrypts a **synthetic** value, never a real Anthropic key: using a real one would mean writing a
+live credential into a database to test the thing that protects credentials.
+
+**The metrics decision moved into the file that owns it.** It lived in two route comments while
+`metrics.server.js` said nothing — and that file's own state vocabulary defined `published` as
+*"reviewed and live on the storefront"*, which is the exact claim P5.1 removed from two screens. It
+was in the definition the whole time, which is how it reached them.
+
+## P6.1 — the third home, and why two audits missed it
+
+A locked price has **three** homes: the code, the listing fields we author, and **Shopify's
+registered plan metadata**, which we do not author and cannot see from the code. The live listing
+showed `$99.90/year and save 17%` and a `7-day free trial` badge.
+
+Phase 4 audited homes 1 and 2 and called the price consistent. Phase 5 audited them *harder* — 0
+second copies, 7 break-test failures, three new non-test importers — and called it consistent again.
+**Both were true. Both were incomplete.** The sweep was exhaustive within its boundary and never
+said where its boundary was.
+
+`locked-values-sweep.mjs` now **prints its own boundary on every run**, naming all four homes and
+which one it searched. A result silent about its boundary invites the reader to supply the widest
+one — false green #11 one layer out: not a constant asserted against itself, but a **search space**
+asserted against itself.
+
+## P6.2 — the app promised things it did not have
+
+**Support.** The listing has said *"Questions answered within 1 business day"* for weeks. Behind it
+was a `mailto:`, which fails silently in every direction: no mail client, a spam folder, a typo —
+and in each case **nobody learns a question was asked, including us.**
+
+The row is written FIRST; the email is an attempt on top of it. Proved end to end on the live app:
+submitted through the real form, banner read **"Got it — your question is with us"**, reference
+`cmu0us9zg0003tyi8967iysxi`, and the production queue shows `emailed: true`,
+`storedButNotEmailed: 0`. The queue report carries shop, plan and subject — **no email address and
+no message body**.
+
+**And the bug I wrote into the screen built to prevent it.** `const sent = await sendOperatorEmail(...)`
+then `if (sent)` — that function returns an **object**, so a FAILED send is truthy and the merchant
+would be told "emailed" for a message that never left. Break test on the fix: **4 failures**.
+
+**Legal.** `/privacy` and `/terms`, public and unauthenticated, both serving **HTTP 200**. Accurate
+because accuracy is TESTED: the data inventory is asserted against `prisma/schema.prisma` in both
+directions, the "we cannot read your customers" claim is checked against the actual scopes in
+`shopify.app.toml`, and the credit rules are asserted against `CREDIT_WEIGHTS` and `TRIAL_DAYS`.
+
+**GDPR — the handlers do real work, not just 200.** A handler that returns 200 and writes nothing is
+indistinguishable from a working one on Shopify's side.
+
+| Topic | Audit rows | Most recent |
+|---|---|---|
+| `customers/data_request` | **1** | 2026-09-09 |
+| `customers/redact` | **2** | 2026-09-09 |
+| `shop/redact` | **13** | 2026-09-12 |
+
+Audit row fields: `customer_id`, `orders_to_redact`, `shop_id`. **`holdsNoCustomerEmail: true`.**
+
+## The two things tracing uninstall → reinstall found, and one was mine
+
+1. **`ProductScore` was never deleted on redaction.** A merchant who asked Shopify to erase them
+   kept a per-product SEO scoreboard.
+2. **`Shop.aiKeyCiphertext` was never cleared.** A merchant's **encrypted Anthropic credential**
+   survived an erasure request. The Shop row survives by design — anonymised, so uninstall/reinstall
+   cannot mint a fresh trial — but that exemption was written when the row held counters and
+   timestamps. *"We keep an anonymised counter row"* and *"we keep your API key after you asked us to
+   erase you"* are not the same sentence. **I added that column earlier in the same phase and did not
+   think about redaction**, which is exactly how the first one was missed by someone else.
+
+**Fixed as a class**: a test walks the schema and fails on any shop-scoped model that is neither
+deleted nor exempted **with a stated reason** — 60 characters of it, so "TODO" does not pass. It
+guards itself too: if the schema regex stops matching, every assertion would pass vacuously, so the
+model count is asserted first.
+
+## Mistakes, all caught
+
+1. The `{sent: false}` truthiness bug, above.
+2. I added **"Get help" to the sidebar** and two tests went red: it is five items, every label one
+   plain word, by a decision that cut it from thirteen. **I removed my nav item rather than loosen
+   the tests** — loosening is how false green #3 is made. Support lives in the footer (every page)
+   and on Settings.
+3. **A mock that hand-copied the list it mocks.** Adding two models to `GDPR_SHOP_MODELS` made
+   `chunkDelete` throw on an undefined accessor, reported as *"expected spy to be called 1 times,
+   but got 0"* — which points nowhere near the cause. It has no list at all now.
+4. **The fifth time in one day a guard fired on the comment explaining it**, and by then the trap was
+   already written up in `07-VERIFICATION.md` **with the fix in it**. Knowing the rule was not enough;
+   having to retype the helper was the actual failure mode. It is now `tests/helpers/code.js`.
+5. I typed a literal `hello@navaal.ai` into a route three hours after spending a phase removing
+   literal prices from a route.
+
+## P6.0 item 1 — the Review click, PROVED, and the middle reading is why
+
+This was the gap I named at the end of P5.2 and did not close. The invalidator was proved in
+production and every call site was asserted and break-tested — but those together only *imply* the
+click reaches it, and an implication is not a reading.
+
+**Three readings of `cc:startscan:navaal-ttv-02`, taken on production:**
+
+| # | Time | Cache | What happened immediately before |
+|---|---|---|---|
+| 1 | 06:24:56Z | **CACHED**, TTL **575 s** | armed: auto-publish off, one draft generated, Home loaded |
+| 2 | 06:25:54Z | **CACHED**, TTL **517 s** | clicked *"Approve all on this page"* — which does NOT publish |
+| 3 | 06:28:02Z | **GONE** | clicked *"Publish 3 approved"* |
+
+**Reading 2 is the control, and it exists by accident.** Review is a TWO-STEP flow — approve, then
+publish — and I missed that, clicking only "Approve all". The page still said *"3 products with
+draft content ready to review"*, I peeked, and the key was still warm. **That could have been
+written up as "publishing does not clear the cache".** It was "I never published."
+
+Having made the mistake, the failed attempt became the control the proof needed: a click that
+changed nothing left the key alive with its TTL merely ageing 58 seconds; the click that actually
+published cleared it with **about 460 seconds of TTL still to run**, so it cannot be expiry.
+
+After the real click the screen read *"Nothing to review — you're all caught up"*.
+
+**One honest caveat, and the script says it itself:** an absent key is also what a cold cache looks
+like. A single "NOT CACHED" proves nothing. The SEQUENCE proves it.
+
