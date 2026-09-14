@@ -863,12 +863,26 @@ export default function Dashboard() {
             />
           </Layout.Section>
           <Layout.Section variant="oneThird">
+            {/* P5.1 — "Live on your storefront" was the same false claim I had
+                just fixed on the Products page, on the FIRST screen, and I
+                missed it because I fixed the instance instead of the class.
+                Read live on 2026-09-14: "Live on your storefront: 30" above
+                "14 active and draft products published to your online store".
+
+                `generatedCount` counts DISTINCT products in our own
+                GeneratedContent table whose state is published. It asks Shopify
+                nothing, so it keeps counting a product after the merchant
+                archives it and after they delete it — which is exactly right as
+                a record of our work and false as a claim about their storefront.
+
+                The subtext was already accurate. The label was the lie, and it
+                now matches the Products page card word for word. */}
             <StatCard
               icon={CheckCircleIcon}
               iconTone="success"
-              label="Live on your storefront"
+              label="AI Content Published"
               value={generatedCount}
-              subtext="Products with published AI content"
+              subtext="Products we have published content for"
               tone="success"
             />
           </Layout.Section>

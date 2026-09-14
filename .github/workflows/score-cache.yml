@@ -1,0 +1,30 @@
+name: Score cache check
+
+# P5.2 — "how long does a merchant wait for the store score to reflect what they
+# published" is a question about production, so it gets measured there.
+#
+# Deletes one cache key, which is exactly what publishing does. Touches no store
+# and no merchant row, and prints a shop handle rather than a domain.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Measure the store-score cache lag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Measure
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/score-cache-diag.mjs" | tee cache.json
+          {
+            echo '## Store-score cache'
+            echo ''
+            echo '```json'
+            cat cache.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

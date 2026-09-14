@@ -15,17 +15,28 @@
  * never made cannot catch a call that is made wrongly.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { LIST_SCOPE_QUERY } from "../../app/utils/candidates.js";
 
 const OPTIMIZE = readFileSync("app/routes/app.optimize.jsx", "utf8");
 const CREATE_HOOK = readFileSync("app/routes/webhooks.products.create.jsx", "utf8");
 const PRODUCTS = readFileSync("app/routes/app.products.jsx", "utf8");
 
+/**
+ * Comments stripped before every "the source must not say X" assertion.
+ *
+ * BLOCK comments included, and that is not optional: the line-prefix filter
+ * alone misses a JSX comment, which opens `{/*` rather than `/*`. It caught me
+ * immediately — the comment in `app._index.jsx` EXPLAINING why the label no
+ * longer says "Live on your storefront" contains the phrase, so the guard fired
+ * on its own rationale. A file is not less correct for naming the thing it
+ * refuses to do.
+ */
 function code(src) {
   return src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
     .split("\n")
-    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .filter((l) => !/^\s*\/\//.test(l))
     .join("\n");
 }
 
@@ -95,6 +106,34 @@ describe('the Products subtitle no longer says "30 live" about 15 products', () 
     // Only the word beside the catalogue total was the lie.
     expect(code(PRODUCTS)).toMatch(/AI Content Published/);
     expect(code(PRODUCTS)).toMatch(/\{publishedProducts\}/);
+  });
+
+  it("NO screen calls that count 'live' or 'on your storefront'", () => {
+    // THE CLASS, NOT THE INSTANCE — and I needed the live screen to learn it.
+    //
+    // Having fixed the Products subtitle I read Home and found the same false
+    // claim on the FIRST screen a merchant sees: a stat card labelled "Live on
+    // your storefront: 30" above "14 active and draft products published to
+    // your online store". Same number, same lie, one file over, and the test I
+    // had just written guarded only app.products.jsx.
+    //
+    // The count comes from OUR table and asks Shopify nothing, so no screen may
+    // describe it as a fact about the merchant's storefront.
+    const walk = (d) =>
+      readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`],
+      );
+    const offenders = [];
+    for (const f of walk("app").filter((f) => /\.jsx$/.test(f))) {
+      const src = code(readFileSync(f, "utf8"));
+      const countsOurRows = /\b(publishedProducts|generatedCount)\b/.test(src);
+      if (!countsOurRows) continue;
+      if (/live on your storefront/i.test(src)) offenders.push(`${f} (Live on your storefront)`);
+      if (/\$\{(publishedProducts|generatedCount)\} live\b/.test(src)) offenders.push(`${f} (N live)`);
+    }
+    expect(offenders, `describe our own rows as the merchant's storefront: ${offenders.join(", ")}`).toEqual(
+      [],
+    );
   });
 });
 

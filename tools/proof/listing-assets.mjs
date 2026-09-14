@@ -52,8 +52,20 @@ const BROWSER_UA =
 
 /** The store with real products and published content — populated, not empty. */
 const FULL_STORE = process.env.FULL_STORE || "contentpilot-dev2";
-/** A store still on its first run, so the Start state actually renders. */
-const FRESH_STORE = process.env.FRESH_STORE || "navaal-qa-fresh";
+/**
+ * A store still on its first run, so the Start state actually renders.
+ *
+ * `navaal-qa-fresh` was the default and the app is UNINSTALLED there, so frame
+ * 04 failed with "the app frame never appeared" on every run — which reads like
+ * a broken app rather than a missing install. `navaal-ttv-02` has the app and
+ * renders a real first-run screen, and it is what the last successful capture
+ * actually used via an env override nobody had written down.
+ *
+ * Still worth replacing: ttv-02 has content now, so it is drifting away from
+ * being a first run. When it stops looking like one, point this at a new store
+ * rather than loosening the `must` guard below.
+ */
+const FRESH_STORE = process.env.FRESH_STORE || "navaal-ttv-02";
 
 /**
  * `must` is a string only this screen renders. It is the guard against a run
@@ -194,19 +206,49 @@ for (const f of SELECTED) {
       },
     );
 
-    // 1. the app's own frame must exist. No mainFrame() fallback, ever.
+    // 1. the app's own frame must exist AND HAVE PAINTED. No mainFrame()
+    //    fallback, ever.
     //
     // Polled from Playwright's frame list, NOT page.waitForFunction: that polls
     // with requestAnimationFrame inside the page, and the Shopify admin can
     // starve it long enough to time out while the frame is plainly there.
-    const deadline = Date.now() + 60_000;
+    //
+    // WAITING FOR EXISTENCE ALONE WAS NOT ENOUGH, and it cost half a run. This
+    // loop used to `break` the moment a frame object appeared and then evaluate
+    // against it immediately. On the 375-wide MOBILE captures that reliably
+    // produced two different failures:
+    //
+    //   06  "frame is effectively blank (0 chars)"  — the frame existed and had
+    //       not painted yet
+    //   07  "Cannot read properties of null (reading 'innerText')" — document
+    //       .body was null because the frame detached and re-attached during
+    //       hydration, and the cached `frame` reference was pointing at the old
+    //       one
+    //
+    // Both read like the app being broken on a phone. It is not: a probe at the
+    // same viewport rendered 1,761 characters on /app and 1,481 on
+    // /app/products. The harness was the thing that was wrong, and a harness
+    // that reports the app as broken is as bad as one that reports it as fine.
+    //
+    // So: re-resolve the frame EVERY iteration (a reference does not survive a
+    // navigation) and wait for painted text rather than for an object.
+    const deadline = Date.now() + 90_000;
     let frame = null;
+    let painted = 0;
     while (Date.now() < deadline) {
       frame = page.frames().find((fr) => fr.url().includes("app.navaal.ai"));
-      if (frame) break;
-      await page.waitForTimeout(500);
+      if (frame) {
+        painted = await frame
+          .evaluate(() => (document.body?.innerText || "").trim().length)
+          .catch(() => 0);
+        if (painted > 120) break;
+      }
+      await page.waitForTimeout(700);
     }
     if (!frame) throw new Error("the app frame never appeared");
+    if (painted <= 120) {
+      throw new Error(`the app frame never painted (${painted} chars after 90s) — COULD NOT READ`);
+    }
 
     // 2. + 3. it rendered, and it rendered THIS screen.
     // A3 — innerText DOES NOT INCLUDE FORM VALUES, and that is a whole class of
@@ -222,8 +264,13 @@ for (const f of SELECTED) {
     // So what a merchant can READ is innerText PLUS the current value of every
     // input, textarea and select, plus placeholders, because a placeholder is
     // rendered text a reviewer can see too.
+    // Re-resolved once more: everything above can be true and the frame can
+    // still have been replaced in the millisecond since. `document.body?.` for
+    // the same reason — a null body must become a retryable zero, never a
+    // TypeError that reads like a broken app.
+    frame = page.frames().find((fr) => fr.url().includes("app.navaal.ai")) ?? frame;
     const { seen, values } = await frame.evaluate(() => {
-      const text = (document.body.innerText || "").trim();
+      const text = (document.body?.innerText || "").trim();
       const fields = [...document.querySelectorAll("input, textarea, select")]
         .map((el) => [el.value, el.getAttribute("placeholder")].filter(Boolean).join(" "))
         .filter((v) => v && v.trim());
