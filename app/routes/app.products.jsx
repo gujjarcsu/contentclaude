@@ -581,9 +581,27 @@ export default function ProductsPage() {
     const total = totalExact ? `${totalStoreProducts}` : `${totalStoreProducts}+`;
     const cand = candidateExact ? `${candidateProducts}` : `${candidateProducts}+`;
     const scope = candidateProducts === totalStoreProducts ? "" : ` · ${cand} ${candidateLabel}`;
+    // P5.1 — "live" was the wrong word and it produced an impossible sentence.
+    //
+    // Read on the live store 2026-09-14: "32 products in your catalog · 15
+    // active and draft products published to your online store · 30 LIVE".
+    // Thirty of fifteen. Even counting the 13 demo products published before
+    // any of this, 28 — the arithmetic never closes.
+    //
+    // The number is not wrong; the word is. `publishedProducts` counts DISTINCT
+    // productIds in our own GeneratedContent table whose state is published. It
+    // is a record of what THIS APP has done, and it asks Shopify nothing — so
+    // it keeps counting a product after the merchant archives it, and after
+    // they delete it. That is correct for "how much have you published for me",
+    // and beside a catalogue total the word "live" turns it into a claim about
+    // the storefront that we have not checked and cannot support.
+    //
+    // The count stays (the stat card "AI Content Published" is exactly right).
+    // The word goes.
     return (
       `${total} products in your catalog${scope} · ` +
-      `${publishedProducts} live · ${draftProducts} ready to review · ${notOptimized} not yet optimized`
+      `${publishedProducts} with content published · ${draftProducts} ready to review · ` +
+      `${notOptimized} not yet optimized`
     );
   }, [
     countsOk,

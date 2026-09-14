@@ -31,6 +31,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import pLimit from "p-limit";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { invalidateStoreScan } from "../utils/storeScanCache.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "../utils/seo.server.js";
 import { readMutationResult, publishProductWithRetry } from "../utils/adminGraphql.server.js";
 import { decodeHtmlEntities } from "../utils/text.js";
@@ -420,6 +421,10 @@ export const action = async ({ request }) => {
             data: { status: "published", verifiedAt: new Date(), verifyNote: null },
           });
         }
+        // P5.2 — Review is the screen a merchant publishes from and Home is
+        // where they look next. Without this the score they go back to is the
+        // one from before they pressed the button.
+        void invalidateStoreScan(shop);
         // One update per product because the note differs per product — there
         // is no useful single note for "these four all went wrong differently".
         for (const u of unverified) {

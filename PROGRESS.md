@@ -4622,5 +4622,12 @@ pricing was designed around.
 **B6 credit packs** require the Billing API, not App Pricing — App Pricing does not support one-time
 purchases and since 28 Apr 2026 sends no `APP_SUBSCRIPTIONS_UPDATE` and no `charge_id`. The brief
 and `14-PRICING.md` §6 both explicitly permit routing this rather than rushing it. **B7 BYO key** is
-a build, not a toggle. **B5's one-time 2× annual month** is not built; the 20% pricing is. No annual
+a build, not a toggle. ~~**B5's one-time 2× annual month** is not built; the 20% pricing is.~~
+**CORRECTED 2026-09-14 (P5.3): that sentence was already false when I wrote it.** B5 shipped in
+the same phase at `71c7898` — the commit is titled *"B5 — the one-time 2x annual credit month,
+structurally once-ever"* and it brought the migration that took the schema to 240 columns. I wrote
+the paragraph from the plan rather than from the code, and then did not re-read it after building
+the thing it said was unbuilt. That is the same class as `02-BACKLOG.md` C0.5, which said the same
+thing about the same commit: **a document confidently describing code nobody went back and read.**
+No annual
 subscriber exists, so nothing is being denied today — but it must exist before annual is sold.

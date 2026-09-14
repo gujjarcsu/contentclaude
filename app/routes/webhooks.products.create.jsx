@@ -32,6 +32,22 @@ export const action = async ({ request }) => {
   const productId = payload?.admin_graphql_api_id;
   if (!productId) return new Response("No product ID", { status: 200 });
 
+  // P5.1 — an ARCHIVED product is not work the merchant asked for.
+  //
+  // products/create fires on import as well as on a manual add, and a CSV
+  // import can create archived products in bulk — which is exactly the burst
+  // this file's own header warns about ("a catalogue import fires it thousands
+  // of times"). Every other bound here is about how MUCH autopilot spends;
+  // this is about whether it should spend anything at all on this product.
+  //
+  // Read off the webhook payload rather than asked of Shopify: the payload is
+  // authoritative for the product as created, and a second API call inside a
+  // webhook handler is a failure mode we do not need. Shopify sends the REST
+  // shape here, so the value is a lowercase string.
+  if (String(payload?.status || "").toLowerCase() === "archived") {
+    return new Response("Archived product — autopilot skipped", { status: 200 });
+  }
+
   const contentTypes = (brandVoice.autopilotContentTypes || "description,metaTitle,metaDescription")
     .split(",")
     .filter(Boolean);

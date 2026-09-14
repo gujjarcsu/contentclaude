@@ -20,6 +20,10 @@
  */
 import logger from "./logger.server.js";
 import { getCache } from "./cache.server.js";
+// P5.2 — the key lives with its invalidator so neither can drift from the
+// other, and so the three publish paths can clear this cache without
+// importing the scanner, the GraphQL document and the scorer below.
+import { storeScanKey } from "./storeScanCache.server.js";
 import { calculateSeoScore } from "./seo.server.js";
 import { scopeQueryFor } from "./candidates.js";
 import { calculateGeoScore } from "./geo.server.js";
@@ -284,7 +288,7 @@ export async function scanStoreForStart(
   };
 
   try {
-    return skipCache ? await load() : await getCache(`startscan:${shop}`, load, ttlSeconds);
+    return skipCache ? await load() : await getCache(storeScanKey(shop), load, ttlSeconds);
   } catch (err) {
     // A fabricated score is worse than no score. The screen offers a retry.
     logger.error(

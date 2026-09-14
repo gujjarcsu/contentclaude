@@ -31,6 +31,7 @@ import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
+import { invalidateStoreScan } from "../utils/storeScanCache.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -727,6 +728,9 @@ export async function action({ request, params }) {
           }),
         ),
       );
+      // P5.2 — see startState.server.js. One product moves the store score by
+      // less than a bulk run does, but "by less" is not "not at all".
+      void invalidateStoreScan(shop);
 
       // Write FAQ JSON-LD as a metafield so Liquid themes can embed structured data
       let faqWarning = null;

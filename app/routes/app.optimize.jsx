@@ -27,7 +27,7 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN, bulkRefusal } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
-import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server.js";
+import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY } from "../utils/candidates.server.js";
 import { enumerateProductIds } from "../utils/enumerateProducts.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
@@ -145,8 +145,24 @@ export const action = async ({ request }) => {
   //
   // It also stopped at 80 pages (20,000 products) and said nothing at all. One
   // enumerator now, and its result carries WHY it stopped.
+  // P5.1 — THE SCOPE, and its absence was spending money.
+  //
+  // This call passed no `query` at all, so `enumerateProductIds` sent
+  // `products(query: null)` and Shopify returned EVERYTHING — archived products
+  // included. Bulk optimize then enqueued generations against products the
+  // merchant had deliberately archived, and under credit weighting each one is
+  // a real charge against a real allowance at 2.00c per credit.
+  //
+  // A1 scoped the three READ paths on the Products page. It did not scope this,
+  // which is the WRITE path, and the write path is the one that costs money.
+  //
+  // The same Shopify trap applies as everywhere else this constant is used: an
+  // invalid field in a search query is IGNORED and all results are returned, so
+  // a typo here does not error — it silently goes back to charging for archived
+  // products. Hence one constant, asserted by test, never a literal.
   const walk = await enumerateProductIds(admin.graphql, {
     shop,
+    query: LIST_SCOPE_QUERY,
     label: "optimize enumerate",
     select: (node) =>
       mode === "enhance" ? !!(node.description && node.description.trim()) : !existingIds.has(node.id),

@@ -1,0 +1,29 @@
+name: Archived generations check
+
+# P5.1 — "has this app ever spent a merchant's credits on a product they
+# archived" is a question about production, so it gets queried.
+#
+# Read-only: counts and shop handles, never a product id and never a title.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Count generations against archived products
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Query
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app contentclaude \
+            -C "node /app/scripts/archived-generations-diag.mjs" | tee archived.json
+          {
+            echo '## Generations against archived products'
+            echo ''
+            echo '```json'
+            cat archived.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
