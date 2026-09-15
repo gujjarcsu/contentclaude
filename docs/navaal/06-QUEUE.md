@@ -1380,7 +1380,7 @@ unreadable from it and needed Playwright, same limitation as Phase 10.
 ### INBOX
 
 | — | CC | **`navaal-shape-cap` first screen says `we scanned 30 of your products` and `150 …` three times on the same card.** One of the two numbers is wrong. Agrees exactly on the five smaller stores. Not the Free cap (100). | CW → CC |
-| — | CC | **The AI writes English on a fully French catalogue.** `navaal-shape-fr`: page title and description come back in English, `Content quality: 90/100`. Accents survive where the merchant's own text is reused. Published one to prove it. | CW → CC |
+| — | CC | **CORRECTED BELOW — see "I overstated the French finding".** The English output is the app obeying its own `Content Language: English` default, not a writer that cannot write French. The defect is the default and the brand-voice sample, not the model. | CW → CC |
 | — | CC | **`Mitigeur de cuisine 0` loses its `0`** in both the proposed page title and the proposed search description. Products 1 and 5 keep theirs. | CW → CC |
 | — | CC | **Three different price constructions in the same field in one run** — `Seulement $24.00.` / `$24.00.` / `À $24.00 seulement.` — and `$24.00` on a French store. | CW → CC |
 | — | CC | **Webhook failure rate 38.4% over 7 days** on the app Overview, under a green banner that only covers breaking changes. Feeds the 16 Sep webhook item. | CW → CC |
@@ -1532,3 +1532,145 @@ rather than asserted — and it is a compliance question, not a copy question.
 
 | — | OWNER/CC | **Two live, materially different privacy policies** — `app.navaal.ai/privacy` (listing) and `navaal.ai/privacy` (site footer). Each discloses what the other omits; details above. Decide which is canonical and make the other a 301 or a true copy. | CW → OWNER |
 | — | CC | **False green #15:** the sweep's `── CREDIT WEIGHTS ──` line lists module importers as constant importers, so `utils/legal.js` reads as sharing weights it hard-codes. | CW → CC |
+
+---
+
+## PHASE 11 — CW, second pass, 2026-09-15 01:1x–02:0xZ
+
+### I OVERSTATED THE FRENCH FINDING. HERE IS THE CORRECTION, BEFORE ANYONE ACTS ON IT.
+
+Earlier in this pass I wrote *"the AI writes English on a fully French catalogue"* and routed it to
+CC as a writer defect. **I had not read the app's own Settings on that store. I have now.**
+
+`navaal-shape-fr` → `/app/settings`:
+
+- **`Content Language` = `English` (`en`)** — the default. **`French` is in the dropdown**
+  (English, Spanish, **French**, German, Italian, Portuguese, Japanese, Chinese (Simplified),
+  Korean, Arabic, Hindi, Dutch).
+
+**So the writer obeyed its instruction.** It was told English and it wrote English. That is not a
+model failure and I should not have called it one. What is left is still a real defect, and it is a
+sharper one:
+
+**1. The app read French out of the catalogue into its own settings and still defaulted to
+English.** On the same Settings screen, `keyDifferentiators` is populated with
+**`garantie 25 ans. livraison sous 2 jours ouvrés.`** — French, accents and all, extracted by the
+app from the merchant's own products during the first run. **The app had the evidence in its hand,
+wrote it into its own field, and then set Content Language to English anyway** — and offered, at
+`Content quality: 90/100`, to replace a French page title with an English one. A merchant who
+presses Publish gets `Mitigeur de Cuisine 5 – Solid Brass Chrome Tap | Acme` over their French
+title, and nothing on the screen warns them.
+
+**2. The brand-voice sample was seeded with scraped boilerplate.** `sampleContent` on that store
+reads, verbatim: **`Your Privacy Choices: As described in our Privacy Policy, we`** — a truncated
+English privacy-policy fragment. That field is the text the writer is told to imitate. On a store
+whose every product is French, the voice sample is an English cookie notice. This plausibly
+explains the English output as much as the language selector does, and it is wrong on any store,
+French or not.
+
+**3. `storeName` is the raw handle.** `navaal-shape-fr`, not a display name. dev2 has
+`Northline Supply`. Cosmetic, but it is what the writer is handed as the brand's name.
+
+The `$24.00`-on-a-French-store and the `Mitigeur de cuisine 0` losing its `0` both stand as written.
+
+### TASK 2 — qa-fresh: uninstalled, reinstalled, read. Full walk in `docs/history/screen-reads/first-run-qa-fresh-2026-09-15.md`.
+
+**FR2 — PASS.** `Welcome, Northline Supply!` · `0 products optimized · 3 drafts awaiting review`.
+
+**N1 — PASS.** `Free Plan` · `3 / 100 used` · `3%` · **`97 of 100 left this month.`** Ninety-seven,
+not a hundred. Three per cent, not zero.
+
+**Score:** `Store SEO score 21 / 100 across 12 products sampled`. `Total Products 12` ·
+`AI Content Published 0` · `Drafts Pending Review 3`. Every population agrees with the store.
+
+**FR8 — COULD NOT READ, third time, and now I can say exactly why.** The three product scores live
+on the splash that renders **while the three drafts are being written**. It is time-boxed by the
+write, not dismissed by the merchant, and there is no route back to it. I read at ~18s and `/app`
+was already Home. **This is not a flaky read — FR8 is unreadable by design unless the read happens
+inside the write window.** Either the splash gets a durable route, or FR8 stops being a check.
+
+**FR13 — FAIL. Unchanged by `cd96240`, and now measured.** On dev2, the row reading `Ready to
+review` with a button labelled `Review`: the control is a `BUTTON` with **no `href`**, and clicking
+it lands on **`/app/products/7800236671079`** — `Bamboo Chopping Board · ACTIVE · $29.00 ·
+Northline Supply · **Generate Content**`. **The destination exists and is correct**
+(`/app/review?product=<numeric>` works, proved on `navaal-shape-variants`) — **the row does not
+point at it.** A merchant told a draft is ready, handed a button called Review, arrives at a screen
+whose primary action is to write it again. Unblock condition #1 is still open.
+
+**Two things about the uninstall nobody has written down:**
+
+- **Shopify will not let you uninstall without giving a reason.** The confirm button is
+  `aria-disabled="true"` until one of eight reasons is selected. I chose `Other (please specify)`
+  and typed `QA: reinstalling to capture a genuine first run. Not a product complaint.` — none of
+  the other seven was true, and a false one would have poisoned our own uninstall feedback. **Any
+  future scripted uninstall has to pick a reason, and whatever it picks lands in our funnel data.**
+- **The public listing's Install button will not submit from a script.** It is a POST form
+  (`apps.shopify.com/…/install?…`, `_method=put` + authenticity token); a real click and a form
+  submit both did nothing, three attempts. I did not work around it. **I reinstalled through the
+  in-admin listing card instead** (`/store/navaal-qa-fresh/apps/navaal-seo-geo-content` →
+  `You don't have this app installed` → `Install` → the same OAuth grant). Same install, same
+  scopes, same first run; only the referrer differs. **Stated so nobody records this as
+  "installed from the listing".**
+
+### THE CAPTURE — 8/8 taken, and I am NOT posting `CAPTURE COMPLETE`
+
+`FRESH_STORE=navaal-qa-fresh node tools/proof/listing-assets.mjs` → **8/8 frames captured**, all
+four guards passed on every frame, and **frame 04 was taken on a real catalogue for the first time**
+(`Store SEO score 21 / 100 across 12 products sampled`, `Welcome, Northline Supply!`) instead of
+failing with "the app frame never appeared".
+
+Then I did the step the harness says only a human can do, and looked at them.
+
+| frame | verdict |
+|---|---|
+| `01-home-desktop.png` | **NOT CLEAN** |
+| `02-review-desktop.png` | **CLEAN** |
+| `03-products-desktop.png` | **CLEAN** |
+| `04-start-desktop.png` | **NOT CLEAN** |
+| `05-settings-desktop.png` | **CLEAN** |
+
+**01 contradicts itself inside one screenshot.** The score card reads **`Unchanged since September
+14, across the 14 products we sampled.`** The banner directly beneath it reads **`Autopilot
+optimized 15 new products in the last 24 hours`**. The store has **15 products**. Fifteen products
+optimised in a day and a score that has not moved, stacked one on top of the other. The Autopilot
+banner is **new since the 2026-09-14 capture** — the old manifest excerpt for 01 has no such line —
+so this is a regression in what slot 1 says, introduced after the last verdict.
+
+**04 passes the guard and fails as a picture.** Caption: *"We score your store on install, then
+write the three products holding it back."* What the frame shows: the score, the welcome bar, and
+then — as the largest element on the image — an **orange warning banner reading `One-time setup:
+put your FAQ content on your product pages`** followed by four paragraphs of theme-editor
+instructions. **The three products the caption promises are below the fold and not in the picture
+at all.** Slot 4 would show a prospective installer a wall of setup homework.
+
+**Both also waste about a third of their width** — the app renders in a centred column, so a
+1600px frame carries wide empty grey gutters either side.
+
+**Three clean desktop frames is exactly the brief's floor. But the two that fail are slots 1 and
+4 — the hero and the first-run story. Uploading a set whose first image argues with itself is worse
+than leaving yesterday's images up one more day. No upload. `CAPTURE COMPLETE` is not posted, and
+`contentpilot-dev2` stays frozen.**
+
+02, 03 and 05 are good and can go up as a partial set the moment the owner says so.
+
+### INBOX — second pass
+
+| — | CC | **`/app` slot 1 contradicts itself:** `Unchanged since September 14` beside `Autopilot optimized 15 new products in the last 24 hours`, on a 15-product store. New since 2026-09-14. Blocks listing frame 01. | CW → CC |
+| — | CC | **The first run sets `Content Language: English` on a store whose French it has already extracted** into its own `keyDifferentiators` (`garantie 25 ans. livraison sous 2 jours ouvrés.`). Detect the catalogue language, or warn before publishing a title in another one. | CW → CC |
+| — | CC | **`sampleContent` seeded with `Your Privacy Choices: As described in our Privacy Policy, we`** — scraped boilerplate as the brand-voice sample. Wrong on every store, not just the French one. | CW → CC |
+| — | CC | **`storeName` on `navaal-shape-fr` is the raw handle**, not a display name. It is what the writer is given as the brand. | CW → CC |
+| — | CC | **FR13 still fails:** the `Review` button on a `Ready to review` row is an `href`-less BUTTON that navigates to `/app/products/<id>` (primary action: `Generate Content`). The numeric review route works; nothing links to it. | CW → CC |
+| — | CC | **FR8 is unreadable by design.** The three product scores exist only on the write-time splash, which has no route back. Give it one, or retire the check. | CW → CC |
+| — | CC/OWNER | **Frame 04's caption promises three products; the frame shows an orange FAQ-setup banner.** Either the banner is suppressed on a first run, or slot 4 needs a different screen or a different caption. | CW → CC |
+| — | CC | **Uninstall now requires a reason** (`aria-disabled` until one is picked) and that reason lands in our own funnel feedback. Any scripted uninstall pollutes it; `Other` + a QA note is the least-bad choice. | CW → CC |
+
+### STILL OPEN AFTER THIS PASS
+
+- **`CAPTURE COMPLETE` — not posted.** Blocked on 01's contradiction and 04's banner. dev2 stays
+  frozen. 02/03/05 are ready whenever the owner wants a partial upload.
+- **FR8** — needs a durable route to the splash, or retirement as a check.
+- **FR13** — needs the row button rewired; the route it should point at already works.
+- **Funnel "3 real shops"** — still unrun; `schema.prisma` has no `debian-openssl-3.0.x` target.
+- **Task 5** — webhooks 16 Sep (start from the **38.4%** on the app Overview), rank 21 Sep,
+  `navaal.ai` 301 — which turns out not to be a redirect question at all but **two live, different
+  privacy policies**; see the Task 4 section above.

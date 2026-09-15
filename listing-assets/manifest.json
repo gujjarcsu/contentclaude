@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-14T05:22:32.914Z",
+  "at": "2026-09-15T01:32:54.974Z",
   "results": [
     {
       "file": "01-home-desktop.png",
@@ -10,9 +10,9 @@
       "must": {},
       "label": "Home — store score and the one next action",
       "ok": true,
-      "bytes": 193965,
-      "hash": "b9a4c992874d8bd1",
-      "excerpt": "Write a blog post Run audit Store SEO score 65 / 100 across 14 products sampled Your starting score, across the 14 products we sampled. Ho"
+      "bytes": 130307,
+      "hash": "aac2256d6e389642",
+      "excerpt": "Review 6 drafts Store SEO score 65 / 100 across 14 products sampled Unchanged since September 14, across the 14 products we sampled. How i"
     },
     {
       "file": "02-review-desktop.png",
@@ -23,9 +23,9 @@
       "must": {},
       "label": "Review — current copy beside the proposed copy",
       "ok": true,
-      "bytes": 54799,
-      "hash": "b7459a8d15b24aaf",
-      "excerpt": "Review & Publish. This page is ready Review & Publish Nothing to review — you're all caught up Generate content from the Products page, t"
+      "bytes": 184094,
+      "hash": "7bc004886c4e8e2b",
+      "excerpt": "Review & Publish. This page is ready Review & Publish 6 products with draft content ready to review Review each draft, then publish. Publ"
     },
     {
       "file": "03-products-desktop.png",
@@ -36,22 +36,22 @@
       "must": {},
       "label": "Products — every product and where it stands",
       "ok": true,
-      "bytes": 190595,
-      "hash": "b16012809eaf60c6",
-      "excerpt": "Products. This page is ready Products 32 products in your catalog · 14 active and draft products published to your online store · 30 with "
+      "bytes": 185034,
+      "hash": "87a5cfc9e4c98597",
+      "excerpt": "Products. This page is ready Products 15 products in your catalog · 14 active and draft products published to your online store · 8 with c"
     },
     {
       "file": "04-start-desktop.png",
-      "store": "navaal-ttv-02",
+      "store": "navaal-qa-fresh",
       "path": "/app",
       "width": 1600,
       "height": 900,
       "must": {},
       "label": "First run — the store is scored and three drafts are written",
       "ok": true,
-      "bytes": 231180,
-      "hash": "e5293961b9604895",
-      "excerpt": "Review 3 drafts Store SEO score 33 / 100 across 13 products sampled Your starting score, across the 13 products we sampled. How is this sc"
+      "bytes": 164657,
+      "hash": "7b178aa1501aa076",
+      "excerpt": "Review 3 drafts Store SEO score 21 / 100 across 12 products sampled Your starting score, across the 12 products we sampled. How is this sc"
     },
     {
       "file": "05-settings-desktop.png",
@@ -62,8 +62,8 @@
       "must": {},
       "label": "Settings — brand voice and the current plan",
       "ok": true,
-      "bytes": 222582,
-      "hash": "0008d508560965ef",
+      "bytes": 173286,
+      "hash": "c2feb8ace70689e5",
       "excerpt": "Settings. This page is ready Settings Brand voice, autopilot, and content templates Store Identity Tell the AI who you are — the more sp"
     },
     {
@@ -75,9 +75,9 @@
       "must": {},
       "label": "Home on a phone",
       "ok": true,
-      "bytes": 106130,
-      "hash": "c8aad87895b25c6d",
-      "excerpt": "Run audit Store SEO score 65 / 100 across 14 products sampled Your starting score, across the 14 products we sampled. How is this scored? "
+      "bytes": 83368,
+      "hash": "921cd7c097a4a50f",
+      "excerpt": "Review 6 drafts Store SEO score 65 / 100 across 14 products sampled Unchanged since September 14, across the 14 products we sampled. How i"
     },
     {
       "file": "07-review-mobile.png",
@@ -88,9 +88,9 @@
       "must": {},
       "label": "Review on a phone",
       "ok": true,
-      "bytes": 47026,
-      "hash": "f48cc3b3ccf256e5",
-      "excerpt": "Review & Publish. This page is ready Review & Publish Nothing to review — you're all caught up Generate content from the Products page, t"
+      "bytes": 90306,
+      "hash": "dfb23f96b22bed2a",
+      "excerpt": "Review & Publish. This page is ready Review & Publish 6 products with draft content ready to review Review each draft, then publish. Publ"
     },
     {
       "file": "08-products-mobile.png",
@@ -101,9 +101,9 @@
       "must": {},
       "label": "Products on a phone",
       "ok": true,
-      "bytes": 81651,
-      "hash": "f2c67070753f9ca1",
-      "excerpt": "Products. This page is ready Products 32 products in your catalog · 14 active and draft products published to your online store · 30 with "
+      "bytes": 70183,
+      "hash": "8c44784b609e4d6c",
+      "excerpt": "Products. This page is ready Products 15 products in your catalog · 14 active and draft products published to your online store · 8 with c"
     }
   ]
 }
