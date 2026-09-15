@@ -66,7 +66,7 @@ await page.waitForTimeout(3000);
 // ---- the login wall: the owner signs in, in this window. This script does not. ----
 const editorReady = async () => {
   try {
-    if (!/partner-app-submissions/.test(page.url())) return false;
+    if (!/partner-app-submissions|edit_listing/.test(page.url())) return false;
     return (await page.locator("input[type=file]").count()) >= 3;
   } catch { return false; }
 };
@@ -108,11 +108,15 @@ const mark = async () => page.evaluate((oldAlts) => {
       el.setAttribute("data-cw-alt", String(k));
       let a = el, depth = 0, fi = null;
       while (a && depth < 10) { fi = a.querySelector("input[type=file]"); if (fi) break; a = a.parentElement; depth++; }
-      if (fi) { fi.setAttribute("data-cw-file", String(k)); found.push({ k, depth }); }
+      if (fi) {
+        if (fi.hasAttribute("data-cw-file")) { found.push({ k, depth, collidesWith: fi.getAttribute("data-cw-file") }); return; }
+        fi.setAttribute("data-cw-file", String(k)); found.push({ k, depth });
+      }
     }
   });
   return {
     found,
+    distinct: document.querySelectorAll("input[type=file][data-cw-file]").length,
     previews: Array.from(document.querySelectorAll("img")).map(i => i.src).filter(s => /cdn|shopify/i.test(s)),
     fileInputs: document.querySelectorAll("input[type=file]").length,
   };
@@ -121,6 +125,7 @@ const mark = async () => page.evaluate((oldAlts) => {
 let map = await mark();
 say(`slot map: ${JSON.stringify(map.found)} | file inputs on page: ${map.fileInputs}`);
 if (map.found.length !== 3) die(`expected to find all 3 current alt texts paired with a file input, found ${map.found.length}. The listing is not in the state this script was written for — nothing was changed.`);
+if (map.distinct !== 3) die(`the 3 alt texts resolve to ${map.distinct} file input(s), not 3 — a file would land in the wrong slot. Nothing was changed. ${JSON.stringify(map.found)}`);
 report.previewsBefore = map.previews;
 
 const srcOf = (k) => page.evaluate((kk) => {
@@ -139,17 +144,21 @@ for (let k = 0; k < 3; k++) {
   const n0 = uploads.length;
   await page.locator(`input[type=file][data-cw-file="${k}"]`).setInputFiles(s.abs);
 
-  let after = before, waited = 0;
+  let after = before, waited = 0, accepted = false;
   while (waited < 120000) {
     await page.waitForTimeout(2000); waited += 2000;
     after = await srcOf(k);
-    if (after && after !== before) break;
+    const changed = !!after && after !== before;
+    const hosted = changed && /^https:\/\//.test(after) && !/^blob:|^data:/.test(after);
+    const uploaded2xx = uploads.slice(n0).some((u) => u.status >= 200 && u.status < 300);
+    if (hosted || (changed && uploaded2xx)) { accepted = true; break; }
   }
   const net = uploads.slice(n0);
   await page.screenshot({ path: path.join(SHOTS, `02-slot${k + 1}.png`) });
   report.steps.push({ slot: k + 1, file: s.file, before, after, waitedMs: waited, net });
-  if (!after || after === before) {
-    say(`slot ${k + 1}: preview DID NOT CHANGE after ${waited / 1000}s. network: ${JSON.stringify(net)}`);
+  if (!accepted) {
+    say(`slot ${k + 1}: preview after ${waited / 1000}s = ${after} (before ${before}). network: ${JSON.stringify(net)}`);
+    if (after && after !== before) die(`slot ${k + 1} shows a local preview (${String(after).slice(0, 30)}…) but no upload reached Shopify — stopping before any Save; alt text will not be saved over an old picture again.`);
     die(`slot ${k + 1} did not take the file — stopping before any Save, so nothing is written.`);
   }
   say(`slot ${k + 1}: preview changed -> ${after}  (${waited / 1000}s, ${net.length} upload responses)`);
