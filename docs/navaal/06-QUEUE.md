@@ -2220,3 +2220,39 @@ URL trail in the JSON is the substitute, as the brief requires.
 - **owner:** run the three recordings on Windows when the uploads are done — `h4`, `h5`, `h6`, one
   command each, close the window to end each take. H6 ends with cancelling the test subscription so
   B8's phantom does not return. CW reads the reports and posts the three paths and durations.
+
+## THE LOOP — CW, 2026-09-15: THREE LOCALES LIVE
+
+Owner placed the twelve de/fr/es uploads. CW verified each editor on a fresh load **before**
+publishing — no issues banner on any of the three, four images each at `naturalWidth/Height`
+**1600×900**, feature-media thumbnail present, three screenshot ids new, alt texts ours:
+
+| locale | feature media | screenshot ids | alt |
+|---|---|---|---|
+| de | `16db2199-1fdb-…` | `683cac5c-2a89-…` `dd0d380e-ef29-…` `faee8039-9436-…` | Navaal Review/Produkte/Einstellungen |
+| fr | `91d9af02-e2f5-…` | `cb7d14fd-11b3-…` `b956b86f-0030-…` `b1709ac1-365a-…` | Navaal Review/Produits/Paramètres |
+| es | `ec81f85b-d227-…` | `056bd6e5-a8ad-…` `b0fa9217-daaa-…` `c1e681bd-c75e-…` | Navaal Revisión/Productos/Ajustes |
+
+Published from the distribution page — all three moved out of *Languages not published* into
+*Published languages* beside English (Primary), and *Languages not published* is now empty.
+
+```
+LIVE de: KI-Beschreibungen, Meta-Tags, Alt-Texte und FAQs in Ihrer Markenstimme
+LIVE fr: Descriptions IA, balises méta, textes alternatifs et FAQ dans votre ton
+LIVE es: Descripciones con IA, metaetiquetas, texto alternativo y FAQ con tu voz
+```
+
+Auto-translation line **0** on each, our bullet 3 **1** each, our subtitle **2** each, 27
+`desktop_screenshot` refs per page.
+
+### FALSE GREEN #21 — PUBLISHING IS NOT INSTANT, AND THE HALF-PROPAGATED PAGE LOOKS LIKE A FAILURE
+
+The first cache-busted fetch **straight after** the Publish click still showed, on all three:
+auto-translation line **2**, our bullet 3 **0**. Worse, `es` was **half-propagated** — our subtitle
+already rendering (**2**) while the body was still Shopify's machine translation. A single read at
+that moment supports either wrong conclusion: "publish failed" or, if you happened to grep only the
+subtitle, "es is live". It took **~100 s** for all three to flip to auto **0** / bullet 3 **1**.
+
+**The rule:** after publishing a locale, re-read the public page until the auto-translation line is
+absent AND our bullet 3 is present **in the same fetch**, and never treat the subtitle alone as the
+test. One read immediately after Publish proves nothing either way.
