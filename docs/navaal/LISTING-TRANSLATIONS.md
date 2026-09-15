@@ -8,6 +8,8 @@ counter is the one that decides. **App name stays `Navaal: AI SEO, AEO & GEO` in
 (brand-led, requirement 4.1.2). Doctrine applies in every language: no statistics, no superlatives,
 no testimonials; Google/ChatGPT named descriptively only (`04-DECISIONS.md`).
 
+**Revised 2026-09-15 after CW's German entry:** search terms are ≤20 chars each (four locales trimmed to a singular); plan display names (≤18) and screenshot alt text added per locale. The plan-line table (18 unique strings, 20 slots) was already here. German screenshots in the German UI are a follow-up once the owner's admin language is switched.
+
 Source (English, live 2026-09-15): subtitle 62 · intro 86 · details 478 · the five §5.6 slots · the
 five §4 search terms · the plan lines exactly as the public page shows them.
 
@@ -39,7 +41,7 @@ Italian, Portuguese (Brazil), Japanese.
 4. `Tägliche Prüfungen melden, wenn ein Theme oder Import Produktdaten beschädigt` (77/80)
 5. `Nichts wird ohne Ihre Freigabe veröffentlicht. Bearbeiten oder zurücksetzen` (75/80)
 
-**Search terms (exactly five):** `seo audit` · `produktbeschreibungen` · `meta tags` · `alt text` · `ki sichtbarkeit`
+**Search terms (exactly five):** `seo audit` · `produktbeschreibung` · `meta tags` · `alt text` · `ki sichtbarkeit`
 
 **Plan feature lines (≤40 each):**
 
@@ -66,6 +68,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Direct access to the founder | `Direkter Draht zum Gründer` | 26 |
 | Professional | Questions answered within 1 business day | `Antwort innerhalb eines Werktags` | 32 |
 
+**Plan display names (≤18 each):** Free → `Kostenlos` (9) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal Review: sechs Produkte mit Entwürfen, jeder vor der Veröffentlichung freizugeben` (87)
+2. `Navaal Produkte: Katalogübersicht mit Content-Status je Produkt` (63)
+3. `Navaal Einstellungen: Markenstimme, Sprache und Freigaberegeln` (62)
+
 ---
 
 ## French (Français) — `fr`
@@ -88,7 +98,7 @@ Italian, Portuguese (Brazil), Japanese.
 4. `Des contrôles quotidiens vous alertent si un thème ou un import casse vos fiches` (80/80)
 5. `Rien n'est publié sans votre validation. Modifiez, publiez ou annulez` (69/80)
 
-**Search terms (exactly five):** `audit seo` · `descriptions produits` · `balises meta` · `texte alternatif` · `visibilité ia`
+**Search terms (exactly five):** `audit seo` · `description produit` · `balises meta` · `texte alternatif` · `visibilité ia`
 
 **Plan feature lines (≤40 each):**
 
@@ -115,6 +125,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Direct access to the founder | `Accès direct au fondateur` | 25 |
 | Professional | Questions answered within 1 business day | `Réponse sous 1 jour ouvré` | 25 |
 
+**Plan display names (≤18 each):** Free → `Gratuit` (7) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal Review : six produits avec brouillons, chacun à valider avant publication` (80)
+2. `Navaal Produits : vue du catalogue avec le statut du contenu par produit` (72)
+3. `Navaal Paramètres : ton de marque, langue et règles de validation` (65)
+
 ---
 
 ## Spanish (Español) — `es`
@@ -137,7 +155,7 @@ Italian, Portuguese (Brazil), Japanese.
 4. `Revisiones diarias te avisan si un tema o una importación daña tus datos` (72/80)
 5. `Nada se publica sin tu aprobación. Edita, publica o revierte cuando quieras` (75/80)
 
-**Search terms (exactly five):** `auditoria seo` · `descripciones de productos` · `meta etiquetas` · `texto alternativo` · `visibilidad ia`
+**Search terms (exactly five):** `auditoria seo` · `descripcion producto` · `meta etiquetas` · `texto alternativo` · `visibilidad ia`
 
 **Plan feature lines (≤40 each):**
 
@@ -163,6 +181,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Unlimited products covered | `Productos ilimitados` | 20 |
 | Professional | Direct access to the founder | `Acceso directo al fundador` | 26 |
 | Professional | Questions answered within 1 business day | `Respuesta en 1 día hábil` | 24 |
+
+**Plan display names (≤18 each):** Free → `Gratis` (6) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal Revisión: seis productos con borradores, cada uno se aprueba antes de publicar` (85)
+2. `Navaal Productos: vista del catálogo con el estado del contenido por producto` (77)
+3. `Navaal Ajustes: voz de marca, idioma y reglas de aprobación` (59)
 
 ---
 
@@ -213,6 +239,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Direct access to the founder | `Accesso diretto al fondatore` | 28 |
 | Professional | Questions answered within 1 business day | `Risposta entro 1 giorno lavorativo` | 34 |
 
+**Plan display names (≤18 each):** Free → `Gratuito` (8) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal Revisione: sei prodotti con bozze, ognuna da approvare prima della pubblicazione` (87)
+2. `Navaal Prodotti: vista del catalogo con lo stato dei contenuti per prodotto` (75)
+3. `Navaal Impostazioni: voce di marca, lingua e regole di approvazione` (67)
+
 ---
 
 ## Portuguese, Brazil (Português) — `pt-BR`
@@ -235,7 +269,7 @@ Italian, Portuguese (Brazil), Japanese.
 4. `Verificações diárias avisam quando um tema ou importação quebra seus dados` (74/80)
 5. `Nada é publicado sem a sua aprovação. Edite, publique ou desfaça quando quiser` (78/80)
 
-**Search terms (exactly five):** `auditoria seo` · `descrições de produtos` · `meta tags` · `texto alternativo` · `visibilidade ia`
+**Search terms (exactly five):** `auditoria seo` · `descricao de produto` · `meta tags` · `texto alternativo` · `visibilidade ia`
 
 **Plan feature lines (≤40 each):**
 
@@ -261,6 +295,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Unlimited products covered | `Produtos ilimitados` | 19 |
 | Professional | Direct access to the founder | `Acesso direto ao fundador` | 25 |
 | Professional | Questions answered within 1 business day | `Resposta em 1 dia útil` | 22 |
+
+**Plan display names (≤18 each):** Free → `Grátis` (6) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal Revisão: seis produtos com rascunhos, cada um aprovado antes de publicar` (79)
+2. `Navaal Produtos: visão do catálogo com o status do conteúdo por produto` (71)
+3. `Navaal Configurações: voz da marca, idioma e regras de aprovação` (64)
 
 ---
 
@@ -310,6 +352,14 @@ Italian, Portuguese (Brazil), Japanese.
 | Professional | Unlimited products covered | `対象商品数無制限` | 8 |
 | Professional | Direct access to the founder | `創業者に直接連絡` | 8 |
 | Professional | Questions answered within 1 business day | `1営業日以内に回答` | 9 |
+
+**Plan display names (≤18 each):** Free → `無料` (2) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
+*(Plan names stay English except Free, which is a word not a brand.)*
+
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
+1. `Navaal レビュー：下書きのある6商品。公開前にそれぞれ承認` (32)
+2. `Navaal 商品：商品ごとのコンテンツ状況を示すカタログ一覧` (31)
+3. `Navaal 設定：ブランドの声、言語、承認ルール` (25)
 
 ---
 
