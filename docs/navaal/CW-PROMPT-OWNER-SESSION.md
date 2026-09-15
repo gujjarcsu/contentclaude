@@ -100,6 +100,13 @@ Cowork recommends **no to all three** until ten merchants. Record the answer ver
 
 ## TASK 13 — ENTER ALL SIX LISTINGS (30 minutes; the app speaks each on production)
 
+**Order (12:58Z): text for all six locales first, images last in one owner sitting.** Finish every
+German text field (alt text, remaining plan lines, anything the editor flags), then fr, es, it, pt-BR,
+ja — text only, saved and read back per locale. Then post ONE list for the owner: locale · slot · file
+(the same three `listing-assets/1600x900/` files) · localized alt text — fifteen uploads in one
+sitting, not five interruptions. If the editor publishes a translation without its own screenshots,
+say so and text publishes first.
+
 Re-read `/api/build-info` first. For each of **de, fr, es, it, pt-BR, ja**, from
 `docs/navaal/LISTING-TRANSLATIONS.md`: Partner Dashboard → listing → that language → paste every
 field verbatim (subtitle, introduction, details, five features, five search terms, the eighteen
@@ -179,6 +186,11 @@ three old images, old alt text, slots 4–5 gone). Cowork looked at 02/03/05 and
 three** — 03's header/tab count (8 vs 9 "published") is queued for CC and 03 is re-captured after;
 the old images (pre-rename name, admin chrome) are worse. **01 stays held** (three identical
 `56/100`), **04 waits with it.**
+
+**Status 12:58Z: images DONE by the owner's own click (1600×900 exactly — the editor's requirement; the
+3200×1800 files are rejected; use `listing-assets/1600x900/`). Three new ids live; ALT TEXT NOT YET —
+CW types the three English alt texts, saves once, reads back, re-reads the public page (`usage stats`
+must read 0). No script route fires this DropZone; do not try again.** The paragraph below is history:
 
 **Upload 02, 03, 05 — CW does it, fully.** The editor's uploader ignores a synthetic file event.
 Two routes that give it a real file, in order: (1) the browser extension's **file-upload tool**
