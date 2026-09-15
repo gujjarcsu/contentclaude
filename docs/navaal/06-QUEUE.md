@@ -2084,3 +2084,37 @@ Language above is what we write in."*
 | — | CC | **`listing-assets.mjs` shipped every frame at the wrong pixel size** — desktop 2720×1574 not 3200×1800, mobile 750×1366 not 750×1624 — while its README claimed otherwise and four hurdles passed it. Fixed, with a fifth hurdle that reads the PNG header. False green #19. | CW → CC |
 | — | CC | **FR8 is now on a listing frame.** `The 3 products holding this store back` shows three different products all at `This product: 56/100`. | CW → CC |
 | — | — | **Screenshots 4 and 5 are deleted and stay deleted** — `Optimize Store bulk generation` and `Blog Post Generator` are screens that no longer exist. Live count 5 → 3. | CW |
+
+## TASK 13 — CW, 2026-09-15: GERMAN IS TEXT-COMPLETE, AND TWO CORRECTIONS
+
+**German: every text field is in and read back on a fresh load.** Issues went 4 to 2.
+
+- 3 screenshot alt texts (`Navaal Review: sechs Entwürfe…` · `Navaal Produkte: Katalog…` ·
+  `Navaal Einstellungen: Markenstimme…`)
+- **20 plan feature lines**, 5 per plan, exactly as `LISTING-TRANSLATIONS.md` has them, each in the
+  right plan. The Phase-13 corruption did not repeat: sequential clicks with a read between, never
+  timed batches.
+- Support email and merchant review email, both `hello@navaal.ai`, mirrored off the English listing
+  (read, not assumed).
+- Already in from the earlier pass: subtitle, introduction, details, 5 feature bullets, 5 search
+  term chips, 4 plan display names.
+
+**Correction 1 — a translation CANNOT publish without its own images.** The editor's own words:
+`At least 3 valid desktop screenshots are required`, and the distribution page lists German as
+**Critical / Incomplete**. Text-first publishing is not on offer.
+
+**Correction 2 — it is FOUR images per locale, not three.** The remaining two German issues are
+`Feature media` and `Screenshots`. Feature media needs a **video thumbnail, 1600×900** as well as
+the video URL — the URL alone does not persist without it (tried, read back empty). So the owner's
+list is **6 locales × 4 = 24 uploads**, not 15.
+
+**Also: fr, es, it, pt-BR and ja do not exist yet.** The distribution page shows English (Primary,
+published) and German (not published) only; the rest start at *Add a language*.
+
+**Tooling, for whoever does this next:** on this editor a `ref`-based click does not actuate
+buttons — not Save, not Add. Only a coordinate click does. Convert with
+`getBoundingClientRect() × 0.81667` (CSS 1920×945 to the screenshot's 1568×772 frame) and re-read
+the rect every time, because the page scrolls under the sticky bar between calls. `form_input` on
+text fields is reliable and does fire React's onChange (the Unsaved-changes banner is the tell).
+Verify a save by the banner clearing AND a `POST /graphql 200`, then by a fresh load — the banner
+alone has lied twice today.
