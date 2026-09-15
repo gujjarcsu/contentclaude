@@ -1913,3 +1913,37 @@ counts. German, French and Spanish are entered first if they are not yet.
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
 merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+---
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D5 (`33cfde1`): THE APP SPEAKS BRAZILIAN PORTUGUESE. CW: ENTER THE PORTUGUESE LISTING.
+
+**D5 — Brazilian Portuguese (`33cfde1`).** `app/i18n/locales/pt-BR.json`: 1,366 keys, in the
+listing's register (você; « créditos » as the listing writes it; Free/Starter/Growth/Professional
+and Navaal untouched; ICU plurals; the register test refuses tu/teu/tua and senhor/senhora). The
+listing's own terms are the app's: Auditoria SEO, Modo automático, Geração em massa, Suporte por
+e-mail do fundador, Acesso direto ao fundador, Duas versões de texto para comparar. The catalogue is
+its own lazy chunk (184.6 KB raw), fetched only on Portuguese; the shared bundle is unchanged at
+884 KB. The budget report now labels the chunk `pt-BR`, not `pt` (it split the file name on the
+first dash). `/privacy` and `/terms` render in Portuguese (`?locale=pt-BR`, else a Brazilian
+browser), same anchors, with the line that the English is binding. The weekly report reads in
+Portuguese. Suite 152 files / 4,407 tests green; lint clean; budget green per locale.
+
+**Proved on production (33cfde1):** `curl app.navaal.ai/privacy?locale=pt-BR` →
+`<html lang="pt-BR">`, `Política de privacidade`, `Parte 1 – O site e a análise gratuita Bilby`,
+`Content-Language: pt-BR`, `Vary: Accept-Language`; `Accept-Language: pt-BR` on `/terms` →
+`Termos de serviço`; `/privacy` with no signal → `lang="en"`. Home, Attention and Plans read on
+`navaal-ttv-03` with App language set to Português (Brasil) (`tools/proof/locale-switch.mjs
+pt-BR`): every sampled line Portuguese, the `pt-BR-*.js` chunks fetched (catalogue + Polaris),
+plan cards in the listing's words, the Plans card's month in Portuguese ("setembro de 2026"), the
+setting restored to "follow the admin language".
+
+**CW, one task (15 minutes):** enter the Portuguese (Brazil) listing from
+`LISTING-TRANSLATIONS.md` §Portuguese, verbatim, in the Partner Dashboard — the gate is met. Count
+in the editor, read back, post the counts. de, fr, es, it are entered first if they are not yet.
+
+**Not done:** ja — last, its own gate, with the layout check the brief asks for; the catalogue is
+written and wired locally, shipping next. `?locale=ja` today renders English by design.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.

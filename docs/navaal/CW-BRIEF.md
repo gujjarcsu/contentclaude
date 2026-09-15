@@ -394,6 +394,17 @@ app speaks it") is met for German only.
 3. Do NOT enter French, Spanish, Italian, Portuguese or Japanese yet — those locales are not live and
    `?locale=fr` renders English by design. Each gets its own gate post.
 
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D5: ENTER THE BRAZILIAN PORTUGUESE LISTING (15 minutes)
+
+Live at `33cfde1`: the app speaks Brazilian Portuguese — every screen, `/privacy` and `/terms`
+(`?locale=pt-BR` or a Brazilian browser), the weekly report. The queue post of the same date has
+the proofs.
+
+1. Enter the Portuguese (Brazil) listing from `LISTING-TRANSLATIONS.md` §Portuguese, verbatim; the
+   editor's counter decides; post each count as it reads back. (de, fr, es, it first if not yet.)
+2. To see it: Settings → App language → Português (Brasil) on any of our stores; put it back after.
+3. Not yet: ja.
+
 ## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D4: ENTER THE ITALIAN LISTING (15 minutes)
 
 Live at `391feb6`: the app speaks Italian — every screen, `/privacy` and `/terms` (`?locale=it` or
