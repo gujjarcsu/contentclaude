@@ -104,8 +104,13 @@ Re-read `/api/build-info` first. For each of **de, fr, es, it, pt-BR, ja**, from
 `docs/navaal/LISTING-TRANSLATIONS.md`: Partner Dashboard → listing → that language → paste every
 field verbatim (subtitle, introduction, details, five features, five search terms, the eighteen
 plan lines) → the editor's counter wins over the file's → save → read back on a fresh load → switch
-the public listing to that language and confirm the subtitle and five bullets render → post per
-locale, with any field the editor made you trim, verbatim. Then set the listing's **Languages**
+the public listing to that language → **do not read "the bullets render" as proof: Shopify
+machine-translates every listing into every locale already, marked *"Enthält automatisch
+übersetzten Text"* / *"Contient du texte traduit automatiquement"* (false green #19). Proof is
+that line ABSENT plus one string only we wrote — de bullet 3 `…in Ihrer Markenstimme`, not
+Shopify's `…in deiner eigenen Markenstimme`; for the other five, the §5.6 bullet 3 from
+`LISTING-TRANSLATIONS.md` verbatim** → post per locale, with any field the editor made you trim,
+verbatim. Then set the listing's **Languages**
 field to all seven. This is the last Track B item that scales without the owner's time.
 
 ---
@@ -175,7 +180,9 @@ itself. Read the live gallery back. Post `CAPTURE COMPLETE (n of 8)`.
 ## TASK 14 — THE SWEEP, LAST
 
 Standing sweep plus: `navaal.ai/privacy` and `/terms` → 301; the W1 post live with `36.2%` ×2;
-ttv-03 public; the listing's Languages field; six locale subtitles rendering.
+ttv-03 public; the listing's Languages field; six locales with the auto-translation line absent
+and our bullet 3 present (not "rendering" — #19); the gallery's alt texts are the new set (the old
+`One-click Optimize Store` and `usage stats` read 0). Not the feed: it caps at 20 by design.
 
 ---
 

@@ -126,6 +126,7 @@ Before claiming a pass, check you are not repeating one of these:
 16. A control proved by its route: the URL works, the button never pointed at it — three times on one button (FR13).
 17. A record deleted on a loop by a sweep that matched a domain, not an install — while the app kept serving screens.
 18. Fly's *Deploy Secrets* pressed as a restart: it releases the newest built image, not the running one (CW, owner session).
+19. A translated listing "rendering" in a locale that Shopify machine-translates anyway: the public page shows German before any German is published (Cowork, 2026-09-15).
 
 ---
 
@@ -427,3 +428,22 @@ identifier names.** Consume the request once (`completedAt`); a request older th
 install is for the install before it; and before deleting or flagging, ask the system that actually
 knows — Shopify's token answers or it does not. In the runbook as the first thing to check when a
 store "has no row".
+
+**#19 — the locale page renders before the translation exists.** `apps.shopify.com/…?locale=de`
+served a German title, German feature bullets and `14-tägige` on 2026-09-15 while the German
+listing sat unpublished in the editor. Shopify machine-translates every listing into every store
+locale and marks it with one line — *"Enthält automatisch übersetzten Text"* (de), *"Contient du
+texte traduit automatiquement"* (fr) — so "switch the public listing to German and confirm the five
+bullets render" passes on day zero with nobody having published anything. The machine copy also
+uses *du* where the register decision says *Sie*. **The proof that a translation is live is the
+absence of that line plus one string only we would write:** for German, bullet 3 reads
+`KI-Beschreibungen, Meta-Tags, Alt-Texte und FAQs in Ihrer Markenstimme` (ours) and not
+`…in deiner eigenen Markenstimme` (Shopify's). Same shape as #12: a surface that looks right for a
+reason other than the change you made. Read the reason, not the surface.
+
+**A red that was not one, recorded alongside (2026-09-15).** "`blog/feed.xml` is 8 posts behind the
+index (20 vs 28)" went to CC as a build task. `scripts/gen-sitemap.cjs` line 14: the feed is *"RSS
+2.0 with the 20 newest posts"* — a cap by design. The seven absent posts are all older than the
+oldest item in the feed (checked page by page: July and late-August dates against a 30 Aug floor).
+Nothing to regenerate; the row is withdrawn. **A count mismatch is a defect only after reading the
+rule that produces the count.**
