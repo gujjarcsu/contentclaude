@@ -220,11 +220,14 @@ N1 / FR13 / FR2, capture 04 there and the dev2 set, ≥3 clean desktop, upload, 
 
 ---
 
-## TASK 13 — LISTING TRANSLATIONS (only if `docs/navaal/LISTING-TRANSLATIONS.md` exists)
+## TASK 13 — LISTING TRANSLATIONS (ungated; the file exists — 20 minutes)
 
-Cowork is producing the six-language listing (B1.6). If the file is there: Partner Dashboard →
-listing → each language → enter the fields verbatim, length-check each against the limits in the
-file, save, read back per language. If the file is not there, skip.
+`docs/navaal/LISTING-TRANSLATIONS.md` is delivered: German, French, Spanish, Italian, Portuguese
+(Brazil), Japanese — subtitle, introduction, details, the five §5.6 bullets, five search terms and
+all eighteen plan lines per language, every string script-counted inside Shopify's limits. Follow
+the file's *HOW CW ENTERS IT* section exactly: one language at a time, paste verbatim, the editor's
+counter wins over the file's, save, read back per language, confirm on the public listing with the
+language switched. Post any field the editor made you trim, verbatim, for Cowork.
 
 ---
 
