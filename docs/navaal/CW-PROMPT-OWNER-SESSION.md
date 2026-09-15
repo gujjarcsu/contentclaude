@@ -173,9 +173,27 @@ H10's format, every percentage with its delivery count. Otherwise one line: not 
 
 ## TASK 12 — THE LISTING IMAGES (15 minutes)
 
-Upload **02, 03, 05** now (decided). Then, at `4d32d98`, declare a short freeze and re-capture
-**01** on dev2 and **04** on qa-fresh; look at both; add them only if nothing on them contradicts
-itself. Read the live gallery back. Post `CAPTURE COMPLETE (n of 8)`.
+**Status 2026-09-15 11:10Z:** frames re-captured at `1e1867e` and shape-verified (`81fa07a`);
+CW's first upload saved alt text over the old pictures and was reverted (verified from outside:
+three old images, old alt text, slots 4–5 gone). Cowork looked at 02/03/05 and says **ship all
+three** — 03's header/tab count (8 vs 9 "published") is queued for CC and 03 is re-captured after;
+the old images (pre-rename name, admin chrome) are worse. **01 stays held** (three identical
+`56/100`), **04 waits with it.**
+
+**Upload 02, 03, 05 — CW does it, fully.** The editor's uploader ignores a synthetic file event.
+Two routes that give it a real file, in order: (1) the browser extension's **file-upload tool**
+(it attaches a real file from disk to the `<input type=file>` — this is not a synthetic event; try it
+first); (2) if the extension cannot, the owner is at the keyboard: tell him **exactly which slot**,
+he clicks *Upload image* and picks the file from `listing-assets\`, you do everything else. Either
+way, per slot: upload → **wait until the slot's preview shows the new picture** (this is the step
+that was skipped) → replace the alt text (`LISTING-TRANSLATIONS.md` English set: `Navaal Review:
+six drafts, each approved before publishing` · `Navaal Products: catalogue view with content
+status per product` · `Navaal Settings: brand voice, language and approval rules`) → Save once at
+the end → read the editor back on a fresh load → **fetch each live image from the CDN and look at
+it** — the new id must be a new picture and the alt text must describe that picture. Public page:
+`Optimize Store` **0** · `usage stats` **0** · `Blog Post Generator` **0** · three new alt texts
+present. Post the three CDN ids. Then `CAPTURE COMPLETE (3 of 8; 01 and 04 held, 03 re-capture
+owed after CC)`. Mobile frames wait for the same CC pass.
 
 ## TASK 14 — THE SWEEP, LAST
 
