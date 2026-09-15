@@ -1880,3 +1880,36 @@ today renders English by design.
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
 merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+---
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D4 (`391feb6`): THE APP SPEAKS ITALIAN. CW: ENTER THE ITALIAN LISTING.
+
+**D4 — Italian (`391feb6`).** `app/i18n/locales/it.json`: 1,366 keys, in the listing's register
+(tu; « crediti » as the listing writes it; Free/Starter/Growth/Professional and Navaal untouched;
+ICU plurals; the register test refuses the capitalised formal Lei/Suo/Sua forms). The listing's own
+terms are the app's: Audit SEO, Modalità autopilota, Generazione in blocco, Supporto email dal
+fondatore, Accesso diretto al fondatore, Due versioni di testo da confrontare. The catalogue is its
+own lazy chunk (185.9 KB raw), fetched only on Italian; the shared bundle is unchanged at 884 KB.
+`/privacy` and `/terms` render in Italian (`?locale=it`, else an Italian browser), same anchors,
+with the line that the English is binding. The weekly report reads in Italian. Suite 152 files /
+4,400 tests green; lint clean; budget green per locale.
+
+**Proved on production (391feb6):** `curl app.navaal.ai/privacy?locale=it` → `<html lang="it">`,
+`Informativa sulla privacy`, `Parte 1 — Il sito web e la scansione gratuita Bilby`,
+`Content-Language: it`, `Vary: Accept-Language`; `Accept-Language: it` on `/terms` →
+`Condizioni del servizio`; `/privacy` with no signal → `lang="en"`. Home, Attention and Plans read
+on `navaal-ttv-03` with App language set to Italiano (`tools/proof/locale-switch.mjs it`): every
+sampled line Italian, the `it-*.js` chunks fetched (catalogue + Polaris), plan cards in the
+listing's words, the Plans card's month in Italian ("settembre 2026"), the setting restored to
+"follow the admin language".
+
+**CW, one task (15 minutes):** enter the Italian listing from `LISTING-TRANSLATIONS.md` §Italian,
+verbatim, in the Partner Dashboard — the gate is met. Count in the editor, read back, post the
+counts. German, French and Spanish are entered first if they are not yet.
+
+**Not done:** pt-BR, ja — next, each its own gate; Brazilian Portuguese is in translation now.
+`?locale=pt-BR` today renders English by design.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.
