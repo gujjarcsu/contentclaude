@@ -1685,3 +1685,83 @@ than leaving yesterday's images up one more day. No upload. `CAPTURE COMPLETE` i
   privacy policies**; see the Task 4 section above.
 
 | — | CW | **Git from the device shell leaves stale `.git/HEAD.lock` and `.git/index.lock` after every commit** and cannot unlink them (the mount has no delete permission, and a request for it was refused). They block the *next* commit and `git pull`. Workaround that works: `mkdir -p .git/_stale && mv .git/HEAD.lock .git/index.lock .git/_stale/` before committing. Same cause as the `ORIG_HEAD.lock` note from Phase 10. | CW |
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE A (`356684c`) AND B (`d3242f0`), PLUS C1 AND THE FIRST OF PART E (`3773f8d`). CW: RE-CAPTURE 01 AND 04, RE-WALK THE FRENCH STORE, READ BOTH PARTS OF `/privacy`.
+
+**A1 — FR13, proved by a click this time.** The row's handler always navigated to
+`/app/review?product=<id>` — and then the click BUBBLED into the `ResourceItem`'s own `onClick`,
+which navigated to `/app/products/<id>` last. That is why the route proved right twice and the
+button still landed wrong: false green #16, a control proved by its route. The handler now stops the
+bubble. **`tools/proof/fr13-click.mjs` on `navaal-ttv-03`, live at `356684c`:** clicked the `Review`
+button on the `Ready to review` row (Gift Card) → `after click: /app/review?product=10460239823148`
+· `"Showing one product" banner: yes` · `approve controls on the landing screen: 1` · exit 0. The
+harness reads `location` inside the app frame after the click and prints the pathname and the product
+param only — never the search string, which carries the session token.
+
+**A2 —** `?product=gid://…` now shows **every draft** under *"That product link was malformed — showing
+all your drafts"*; the empty state is only for no drafts. Phase 11's refusal had turned a wrong link
+into a false all-clear; a test holds that a malformed param never renders the empty-state copy while
+drafts exist.
+
+**A3 — frame 01.** One change window on Home: the autopilot banner counts from the score card's
+baseline moment and names the same date (*"Autopilot optimized N new products since September 14"*);
+with no baseline both say the last 24 hours. Two jobs of different state in a test — the one before
+the baseline is not counted. The banner and the card can no longer disagree.
+
+**A4 — frame 04.** Until the first publish, Home leads with **the three products the first run scored
+lowest, with their scores** (durable, from `ProductScore` — FR8 has a route back at last) and the
+walk's findings; the theme-embed step is one dismissible line until there is published content to
+show, then the full card. The first screen a new merchant sees is a result.
+
+**A5 — the French store.** `shopLocales` needs `read_locales`, a scope this app will not add; decided
+in `04-DECISIONS.md`. Three scope-free signals set the default: the language the catalogue's own copy
+is written in (detected; `navaal-shape-fr`'s reads as French at ≥ 0.5), the admin locale Shopify passes
+to the embedded app, then the shop's country. The splash says *"Drafts are written in French — from
+the language your products are written in. Change it in Settings."*; the brand voice is created with
+it; `Shop.locale` records it. **Re-walk `navaal-shape-fr`** after a reset: the first draft should be
+French without touching Settings. (Its existing BrandVoice row still says `en` — inference is
+create-only; set Content Language to French on that store or ask me to reset the row.)
+
+**A6 —** the voice inference drops policy pages by title and any text carrying the boilerplate lexicon
+(*"Your Privacy Choices: As described in our Privacy Policy, we"* can never be a sample again), and
+**Settings warns** when the extracted copy reads as another language than the setting. `storeName` on
+shape-fr is the store's own Shopify name (the store was created with the handle as its name) — not a
+defect.
+
+**Also:** `binaryTargets = ["native", "debian-openssl-3.0.x"]` — every Prisma-touching script runs
+from your VM now; the TTV report ignores anonymised ghosts (R7 closed); `SHAPE-MATRIX.md` names the
+NOT RUN cells no shape store can close, under their own heading.
+
+**B — one privacy policy, two parts, one generator (`d3242f0`).** Part 1 (the website and the free
+Bilby scan — the beacon, coarse location, what a scan keeps, the per-store record, the outreach rules)
+is constants in `legal.js`, taken from the live page and not paraphrased — the one substitution is
+the contact address, `hello@navaal.ai`, the inbox that answers. Its four processors (Cloudflare,
+Fly.io, Stripe, Resend) each carry a transfer basis and a link, with the same build guard as the
+app's: a processor without a basis fails the build (break-tested). `app.navaal.ai/privacy` carries
+both parts with a table of contents; `/terms` is unchanged. `_UPLOAD-LEGAL-REDIRECTS.md` now says:
+**terms redirect now; privacy redirect only after `cc33bf2`**, with the curl that proves the page has
+both parts. **CW: read both parts on `app.navaal.ai/privacy`; then the owner may upload the privacy
+redirect.**
+
+**C1 (`3773f8d`).** The Proof screen, the Proof card and the weekly report now lead with one plain
+sentence — *"Pages we submitted were crawled a median 31 hours sooner than pages we didn't — with this
+few pages the honest range is 9 to 52 hours."* — never the point estimate alone, never a verdict under
+five pages per arm, the seed still on the screen and the statistician's line under it. C2–C4 wait on
+the owner's session (ttv-03 public, Bing key, ten published products, the holdout run) and the ~72 h
+readout.
+
+**E, the first four lines, at `3773f8d`:** A6 the clocks (`clocks.js` + a test red 90 days before:
+Admin API 2026-04 → 2027-04-01; ScriptTag end 2027-03-01 as a guard that we use none; and
+re-verification rows for the three models, `featuredImage`, Polaris 13 and the app framework — a date
+nobody has announced is a 90-day re-check, never "no risk"). A9 secrets (`secretsNeverAppear.test.js`:
+a full generation with a merchant's key and with ours, under a provider that echoes the key in a 401
+body, and every Bing path under a Bing that does the same; every log line, thrown error and returned
+value grepped for the key and every twelve-character window of it) — **and it found one:** the AI
+caller put the upstream error body verbatim into the thrown error and the log line. `redact.js` now
+masks the key in use and the shapes keys take, in both callers; break-tested. A7 (`failureModes.test.js`
++ the table in the runbook) and A10 (`docs/navaal/RUNBOOK.md`: the five 3 am failures, each tried, and
+the restore drill written so a second person could run it). **A4 is NOT ticked:** the Neon point-in-
+time restore needs the project's console; it is the owner's single step in `OWNER-CHECKLIST.md`, timed
+and written back before it counts. A5 needs the owner's phone.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`. Nothing here touched a merchant's store.

@@ -1,5 +1,31 @@
 # OWNER CHECKLIST — things only Waqas can do
 
+## 🔴 PHASE 12, ENGINEERING DONE — TWO LINES ONLY YOU CAN TICK (2026-09-15)
+
+**A4 — the restore drill (15 minutes, Neon console).** Line A4 of `11-MASTERPLAN.md` §6.5 says *a
+tested restore*. The procedure is written in `docs/navaal/RUNBOOK.md` §6 so a second person could
+repeat it; it needs the Neon project's console, which CC does not have. Do exactly this and paste
+the two numbers back into the queue:
+
+1. console.neon.tech → the project → **Restore** → *Point in time* → a moment inside the last 24 h
+   → **restore to a new branch** named `drill-2026-09-15`. Note the clock when you press the button.
+2. Copy the new branch's **pooled** connection string. Do not paste it anywhere but your shell.
+3. `DATABASE_URL="<branch>" node scripts/schema-check.mjs` from the repo → expect `schema.ok: true`
+   and the column count the live health line reports (`curl -s https://app.navaal.ai/api/health?deep=1`
+   → `columns=`).
+4. Note the clock when the branch answered. **Minutes from 1 to 4 is the drill number.**
+5. Delete the branch. Paste: the date, the number of minutes, the column count.
+
+**A5 — the alert reaches your phone (5 minutes).** The deep-health monitor emails the operator
+address after three red minutes and the daily digest carries it, but line A5 wants **one alert
+received on a phone**. In UptimeRobot (H16, the second contact): open the `app.navaal.ai/api/health`
+monitor → **Send test notification** → confirm the SMS/push arrived on your phone → paste the time
+into the queue. If UptimeRobot is not yet set up (H16), that is the step first.
+
+Until both are pasted, A4 and A5 stay unticked and §6.5 stays open — CC will not tick a line it has
+not proved the way the line says.
+
+
 > **2026-09-15: everything below is now scheduled into ONE sitting — `CW-PROMPT-OWNER-SESSION.md`.** Paste it with the owner at the keyboard; he signs in at each login wall, CW does everything else. H17 is closed (the scheduled task was deleted). Budget ~2 hours.
 
 ## 🔴 TODAY — SIX THINGS, IN THIS ORDER (2026-09-14, Cowork, revised after Phase 8)

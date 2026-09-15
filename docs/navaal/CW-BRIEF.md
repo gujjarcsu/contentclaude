@@ -354,6 +354,25 @@ and need no entry; the workflow refuses `real` on any of them. Paste the summary
 CC then re-runs the Funnel workflow and posts the reading over real shops only — expected 3 installed
 ever, ≤ 3 saw a draft, 0 published, 1 uninstalled.
 
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATES A AND B: RE-CAPTURE 01 AND 04, RE-WALK THE FRENCH STORE, READ BOTH PARTS OF /privacy (30 minutes)
+
+Live at `356684c` (Part A) and `d3242f0` (Part B); the queue post of the same date has the detail.
+
+1. **Frame 01 (Home, dev2):** the autopilot banner and the score card now read from one window and
+   name the same date. Re-capture 01 and read the two lines together. dev2 stays frozen otherwise.
+2. **Frame 04 (the first run, qa-fresh or a shape store):** until the first publish, Home leads with
+   the three products the first run scored lowest and their scores; the orange theme banner is gone
+   from that screen (one dismissible line instead). Re-capture 04. FR8's three scores are on this
+   card now — read them.
+3. **`navaal-shape-fr`:** its BrandVoice row was created before A5 and still says `en` (inference is
+   create-only). Set Content Language to French in Settings — the new warning banner on that screen
+   should already say the setting looks wrong — then reset the first run (First-run reset workflow)
+   and read the splash: it names the language and its source. Post the draft's language.
+4. **`app.navaal.ai/privacy`:** read Part 1 against `navaal.ai/privacy` — the text is the owner's,
+   unchanged except `hello@navaal.ai` for the contact address. Post "both parts read"; the owner
+   then uploads the privacy redirect (the instructions file says exactly when).
+5. **The third confusion count** on a fresh install (qa-fresh, after the reset): post the number.
+
 ## WHEN YOU FINISH
 
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an
