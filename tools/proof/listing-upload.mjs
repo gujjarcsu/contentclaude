@@ -31,9 +31,24 @@ const SLOTS = [
 ];
 
 const report = { startedAt: new Date().toISOString(), steps: [] };
-const say = (m) => { console.log(m); report.steps.push({ t: new Date().toISOString(), m }); };
+const LOG = path.join(RUN, "console.log");
+const say = (m) => {
+  console.log(m);
+  report.steps.push({ t: new Date().toISOString(), m });
+  try { fs.appendFileSync(LOG, `[${new Date().toISOString()}] ${m}\n`); } catch {}
+};
 const dump = () => fs.writeFileSync(path.join(RUN, "upload-report.json"), JSON.stringify(report, null, 2));
 const die = (m) => { say("ABORT: " + m); report.ok = false; dump(); throw new Error(m); };
+
+// a crash must still leave evidence behind
+for (const ev of ["unhandledRejection", "uncaughtException"]) {
+  process.on(ev, (e) => {
+    report.ok = false;
+    report.crash = { ev, message: String(e && e.message || e), stack: String(e && e.stack || "").split("\n").slice(0, 6) };
+    try { say(`CRASH (${ev}): ${report.crash.message}`); dump(); } catch {}
+    process.exit(1);
+  });
+}
 
 for (const s of SLOTS) {
   const abs = path.join(ROOT, s.file);
@@ -137,33 +152,113 @@ const srcOf = (k) => page.evaluate((kk) => {
 }, k);
 
 // ---- one slot at a time ----
+// Two routes per slot, in this order. Route A is the one the DropZone is built for:
+// clicking it opens Chromium's own file chooser, which Playwright intercepts.
+// Route B is setInputFiles on the hidden input. The 2026-09-15 11:43 run proved B
+// alone is silent here: preview unchanged after 120s and ZERO network requests.
+const slotEl = (k) => page.evaluateHandle((kk) => {
+  const fi = document.querySelector(`input[type=file][data-cw-file="${kk}"]`);
+  if (!fi) return null;
+  return fi.closest(".Polaris-DropZone") || fi.parentElement;
+}, k);
+
+const filesOn = (k) => page.evaluate((kk) => {
+  const fi = document.querySelector(`input[type=file][data-cw-file="${kk}"]`);
+  if (!fi) return { present: false };
+  return {
+    present: true, count: fi.files ? fi.files.length : -1,
+    name: fi.files && fi.files[0] ? fi.files[0].name : null,
+    size: fi.files && fi.files[0] ? fi.files[0].size : null,
+    disabled: fi.disabled, accept: fi.accept || null, multiple: fi.multiple,
+    inDropZone: !!fi.closest(".Polaris-DropZone"),
+  };
+}, k);
+
+const settled = async (k, before, n0) => {
+  const after = await srcOf(k);
+  const changed = !!after && after !== before;
+  const hosted = changed && /^https:\/\//.test(after) && !/^blob:|^data:/.test(after);
+  const uploaded2xx = uploads.slice(n0).some((u) => u.status >= 200 && u.status < 300);
+  return { after, changed, accepted: hosted || (changed && uploaded2xx) };
+};
+
 for (let k = 0; k < 3; k++) {
   const s = SLOTS[k];
   const before = await srcOf(k);
-  say(`slot ${k + 1}: ${path.basename(s.file)} -> preview before = ${before}`);
-  const n0 = uploads.length;
-  await page.locator(`input[type=file][data-cw-file="${k}"]`).setInputFiles(s.abs);
+  say(`slot ${k + 1}: ${path.basename(s.file)} -> preview before = ${String(before).slice(0, 90)}…`);
 
-  let after = before, waited = 0, accepted = false;
-  while (waited < 120000) {
+  const handle = (await slotEl(k)).asElement();
+  if (handle) await handle.scrollIntoViewIfNeeded().catch(() => {});
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(SHOTS, `02-slot${k + 1}-before.png`) });
+
+  const attempts = [];
+  let res = { accepted: false, after: before, changed: false };
+
+  // ---- route A: the file chooser ----
+  const n0 = uploads.length;
+  let routeA = "not attempted";
+  if (handle) {
+    try {
+      const [chooser] = await Promise.all([
+        page.waitForEvent("filechooser", { timeout: 15000 }),
+        handle.click({ timeout: 10000 }),
+      ]);
+      await chooser.setFiles(s.abs);
+      routeA = "file chooser opened and was given the file";
+    } catch (e) { routeA = `no file chooser: ${e.message.split("\n")[0]}`; }
+  } else { routeA = "could not resolve the DropZone element"; }
+  say(`slot ${k + 1} route A — ${routeA}`);
+  let waited = 0;
+  while (waited < 45000) {
     await page.waitForTimeout(2000); waited += 2000;
-    after = await srcOf(k);
-    const changed = !!after && after !== before;
-    const hosted = changed && /^https:\/\//.test(after) && !/^blob:|^data:/.test(after);
-    const uploaded2xx = uploads.slice(n0).some((u) => u.status >= 200 && u.status < 300);
-    if (hosted || (changed && uploaded2xx)) { accepted = true; break; }
+    res = await settled(k, before, n0);
+    if (res.accepted) break;
   }
-  const net = uploads.slice(n0);
-  await page.screenshot({ path: path.join(SHOTS, `02-slot${k + 1}.png`) });
-  report.steps.push({ slot: k + 1, file: s.file, before, after, waitedMs: waited, net });
-  if (!accepted) {
-    say(`slot ${k + 1}: preview after ${waited / 1000}s = ${after} (before ${before}). network: ${JSON.stringify(net)}`);
-    if (after && after !== before) die(`slot ${k + 1} shows a local preview (${String(after).slice(0, 30)}…) but no upload reached Shopify — stopping before any Save; alt text will not be saved over an old picture again.`);
-    die(`slot ${k + 1} did not take the file — stopping before any Save, so nothing is written.`);
+  attempts.push({ route: "A filechooser", detail: routeA, waitedMs: waited, filesOnInput: await filesOn(k), ...res });
+
+  // ---- route B: setInputFiles on the hidden input ----
+  if (!res.accepted) {
+    const n1 = uploads.length;
+    let routeB = "ok";
+    try {
+      await page.locator(`input[type=file][data-cw-file="${k}"]`).setInputFiles(s.abs, { timeout: 15000 });
+    } catch (e) { routeB = `threw: ${e.message.split("\n")[0]}`; }
+    const landed = await filesOn(k);
+    say(`slot ${k + 1} route B — setInputFiles ${routeB}; the input now holds ${landed.count} file(s) ${landed.name || ""}`);
+    let w2 = 0;
+    while (w2 < 45000) {
+      await page.waitForTimeout(2000); w2 += 2000;
+      res = await settled(k, before, n1);
+      if (res.accepted) break;
+    }
+    attempts.push({ route: "B setInputFiles", detail: routeB, waitedMs: w2, filesOnInput: landed, ...res });
   }
-  say(`slot ${k + 1}: preview changed -> ${after}  (${waited / 1000}s, ${net.length} upload responses)`);
+
+  await page.screenshot({ path: path.join(SHOTS, `02-slot${k + 1}-after.png`) });
+  report.steps.push({ slot: k + 1, file: s.file, before, attempts, net: uploads.slice(n0) });
+
+  if (!res.accepted) {
+    report.diagnostics = report.diagnostics || {};
+    report.diagnostics[`slot${k + 1}`] = await page.evaluate((kk) => {
+      const fi = document.querySelector(`input[type=file][data-cw-file="${kk}"]`);
+      if (!fi) return { note: "input vanished" };
+      const dz = fi.closest(".Polaris-DropZone");
+      const item = dz ? dz.parentElement : fi.parentElement;
+      return {
+        inputOuter: fi.outerHTML.slice(0, 400),
+        dzClass: dz ? dz.className : null,
+        dzHTML: dz ? dz.outerHTML.slice(0, 1200) : null,
+        itemHTML: item ? item.outerHTML.slice(0, 2000) : null,
+      };
+    }, k).catch((e) => ({ error: e.message }));
+    if (res.changed) die(`slot ${k + 1} shows a local preview (${String(res.after).slice(0, 30)}…) but no upload reached Shopify — stopping before any Save; alt text will not be saved over an old picture again.`);
+    die(`slot ${k + 1} did not take the file on either route — stopping before any Save, so nothing is written. Diagnostics are in the report.`);
+  }
+  say(`slot ${k + 1}: ACCEPTED -> ${String(res.after).slice(0, 90)}…`);
   map = await mark(); // re-mark: React may have replaced the nodes
 }
+
 
 // ---- alt text, then ONE save ----
 for (let k = 0; k < 3; k++) {
