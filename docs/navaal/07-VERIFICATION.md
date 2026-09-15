@@ -125,6 +125,7 @@ Before claiming a pass, check you are not repeating one of these:
 15. A push chained after a failed suite with `;` (CC).
 16. A control proved by its route: the URL works, the button never pointed at it — three times on one button (FR13).
 17. A record deleted on a loop by a sweep that matched a domain, not an install — while the app kept serving screens.
+18. Fly's *Deploy Secrets* pressed as a restart: it releases the newest built image, not the running one (CW, owner session).
 
 ---
 
