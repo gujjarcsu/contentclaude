@@ -447,3 +447,48 @@ index (20 vs 28)" went to CC as a build task. `scripts/gen-sitemap.cjs` line 14:
 oldest item in the feed (checked page by page: July and late-August dates against a 30 Aug floor).
 Nothing to regenerate; the row is withdrawn. **A count mismatch is a defect only after reading the
 rule that produces the count.**
+
+## THE LISTING UPLOADER: WHICH ROUTES CAN FIRE A POLARIS DROPZONE, AND WHICH CANNOT (CW, 2026-09-15)
+
+Recorded so nobody tries the dead routes again. The App Store listing editor's screenshot slots are
+`.Polaris-DropZone`, each wrapping a hidden `<input type=file>`.
+
+**Cannot fire it — do not retry:**
+
+- **A synthetic `change`/`input` event** on the input (`dispatchEvent(new Event('change',{bubbles:true}))`).
+  Page script. No reaction, no network request.
+- **A synthetic `drop`** on the DropZone element with a built `DataTransfer` (`dragenter`/`dragover`/`drop`).
+  No preview, and `read_network_requests` returned **no requests at all**.
+- **The Chrome extension's `file_upload` tool.** The file genuinely lands on the input —
+  `files[0].name = "02-review-desktop.png"`, `size 210810`, `type "image/png"`, read back off the
+  element — and the DropZone still ignores it. This is the trap: the *input* is correct and the
+  *listing* does not change. It is page-script-originated and therefore untrusted, so Chromium does
+  not fire the trusted `change` the DropZone listens for.
+- **The extension's `upload_image` tool.** Accepts only a screenshot id from the computer tool, not a
+  file on disk. It cannot carry a 3200×1800 asset.
+- **Desktop automation of the native file dialog** (`computer_*` tools on the owner's Windows Chrome).
+  `computer_resolve_access` answers: *"Browsers can only be granted in 'read' mode — you can see what
+  is on screen but cannot interact."* Screenshot only. No click, no typing, so no file dialog.
+
+**Can fire it:** **Playwright `setInputFiles`.** It goes through CDP `DOM.setFileInputFiles`, so
+Chromium itself fires a trusted `change`. This is how Polaris DropZones are tested.
+
+**But not from the device VM.** Two independent blockers, both read off the machine:
+
+1. **No display.** `DISPLAY` is empty; only `Xvfb` is installed. A headed context runs on an invisible
+   virtual framebuffer. There is no window for the owner to sign in to.
+2. **No process outlives one call.** Every `device_bash` call runs inside
+   `bwrap --dev-bind / / --proc /proc --unshare-pid --die-with-parent`. `setsid`, `nohup` and `disown`
+   all die when the call returns (confirmed twice: exit 143, and a fresh PID namespace on the next
+   call). The ceiling is a single synchronous run of ≤180s — not enough for a human sign-in.
+
+Proven, not assumed: a synchronous headed launch under Xvfb reached the editor URL and landed on
+`accounts.shopify.com/lookup`, `title: "Log in — Shopify App Store"`, `fileInputs: 0`, `dropzones: 0`.
+The route works; the device cannot host the sign-in.
+
+**So the harness runs on Windows, where there is a screen:** `tools/proof/listing-upload.mjs`.
+`node tools\proof\listing-upload.mjs` from `C:\Users\PC4\contentclaude`. It opens a real Chromium
+window, stops at the login wall and *watches* — it never types an email, password or code — then does
+all three slots one at a time, waits for each preview `src` to become a new id before the next,
+sets the three alt texts, saves **once**, and reads back on a fresh load. It aborts before any Save
+if a preview does not change, so a repeat of false green #20 cannot be written.

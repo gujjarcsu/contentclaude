@@ -73,3 +73,6 @@ docs/navaal/*.bak-*
 
 # Files an agent could not delete (device_bash cannot rm); owner clears this folder
 _to_delete/
+
+docs/history/_pw-profile/
+docs/history/_pw-run/
