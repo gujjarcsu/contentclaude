@@ -189,7 +189,21 @@ let failed = 0;
 for (const f of SELECTED) {
   const context = await browser.newContext({
     storageState: AUTH,
-    viewport: { width: f.width, height: f.height },
+    // The frame element, not the page, is what gets captured (see below), and
+    // the app's iframe is NARROWER than the viewport by the width of Shopify's
+    // admin sidebar. Opening at exactly f.width therefore produced a 1360x787
+    // CSS element - 2720x1574 at 2x - and every desktop frame shipped at
+    // ratio 1.728 while this file's own README claimed 3200x1800 at 16:9.
+    // Nothing checked it. So: open WIDER than the frame we want, then clip the
+    // element's box to exactly f.width x f.height, and assert the PNG's real
+    // pixels afterwards (hurdle 5).
+    // Mobile has no sidebar but the admin's own top and bottom chrome still
+    // eats 129px of height, so a 375x812 viewport yielded a 375x683 frame and
+    // the three mobile images shipped at 750x1366 instead of 750x1624. Both
+    // shapes needed room, not just the desktop one.
+    viewport: f.width >= 500
+      ? { width: f.width + 320, height: f.height + 200 }
+      : { width: f.width, height: f.height + 220 },
     deviceScaleFactor: 2,
     userAgent: BROWSER_UA, // desktop UA even at 375px — a phone UA makes the
     hasTouch: f.width < 500, // admin cover itself with a "Download the app" promo
@@ -312,11 +326,38 @@ for (const f of SELECTED) {
     // Shopify's chrome instead of our app, so the choice is gone.
     const target = await frame.frameElement();
     if (!target) throw new Error("could not resolve the frame element to screenshot");
-    await target.screenshot({ path: `${OUT}/${f.file}` });
+    const box = await target.boundingBox();
+    if (!box) throw new Error("the app frame has no bounding box - it is not laid out");
+    if (box.width < f.width || box.height < f.height) {
+      throw new Error(
+        `the app frame is ${Math.round(box.width)}x${Math.round(box.height)} CSS px, ` +
+        `smaller than the ${f.width}x${f.height} frame we owe the listing - widen the viewport`
+      );
+    }
+    // Clip to exactly the frame we promised, from the app iframe's own origin,
+    // so no admin chrome can enter and the aspect ratio is not a coincidence.
+    await page.screenshot({
+      path: `${OUT}/${f.file}`,
+      clip: { x: box.x, y: box.y, width: f.width, height: f.height },
+    });
 
     // 4. the file is real, and is not a duplicate of another frame this run.
     const bytes = readFileSync(`${OUT}/${f.file}`);
     const size = statSync(`${OUT}/${f.file}`).size;
+
+    // 5. the PNG's REAL pixels are what the listing was promised. A frame that
+    // is the wrong shape is not a near miss: Shopify letterboxes or crops it,
+    // and the merchant sees a picture with grey bars or a cut edge. This ran
+    // for months at 2720x1574 while the README said 3200x1800, because no
+    // hurdle ever opened the file and looked.
+    const pw = bytes.readUInt32BE(16);
+    const ph = bytes.readUInt32BE(20);
+    if (pw !== f.width * 2 || ph !== f.height * 2) {
+      throw new Error(
+        `PNG is ${pw}x${ph}; the listing was promised ${f.width * 2}x${f.height * 2} ` +
+        `(${f.width}x${f.height} at 2x)`
+      );
+    }
     if (size < 20_000) throw new Error(`PNG is implausibly small (${size} bytes) — probably a blank page`);
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
     if (hashes.has(hash))

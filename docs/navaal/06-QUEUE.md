@@ -1989,3 +1989,90 @@ stated premise about the sender, so the sender change was his call, not mine. **
 himself.** Drafts `r5555496560338993252` (Zephyrine Wynter) and `r5880474336608035648` (Peter Shops),
 subject `One question from the person who built Navaal`, bodies exactly as approved. Nothing sent by
 CW.
+
+### TASK 12 — I PUT A FALSE GREEN ON THE LIVE LISTING AND TOOK IT BACK OFF. READ THIS ONE.
+
+**What I did.** Uploaded 02/03/05 into the English listing's three screenshot slots, set new alt
+text, deleted slots 4 and 5, saved. The editor accepted everything and the save read back clean.
+
+**What was actually true.** I fetched the live CDN image afterwards and **looked at it**. It is still
+the old launch screenshot: **`Navaal: AI SEO & GEO Content`** (the pre-rename name),
+**`Welcome back, E2E Test Store!`**, **`Generate Content →`**, **`Monthly Usage · Growth Plan ·
+24 / 200 used`**, **`The Collection Snowboard: Oxygen`**, with Shopify's admin chrome and the
+**Sidekick icon** across the top — every item the README names as a Built for Shopify rejection
+reason.
+
+**The alt text saved. The images did not.** For about fifteen minutes the public listing carried
+three accurate new descriptions of three obsolete pictures — worse than what was there before,
+because alt text that misdescribes the image is an accessibility failure as well as a stale one.
+**I reverted the alt text to the originals and confirmed it live.** The listing is coherent again.
+
+**Why the upload failed, and it is not fixable from here.** `input.files` is set correctly — the
+file is in the input, `02-review-desktop.png`, confirmed from the DOM — but Shopify's uploader never
+reacts. No preview, no filename, no progress, no `<img>` anywhere in the editor. Dispatching
+`input`, `change`, and a full synthetic `drop` with a populated `DataTransfer` changed nothing.
+**The uploader requires a trusted, user-initiated file-picker event.** Two attempts; I stopped
+rather than try a third variant.
+
+**The one thing that did stick, and is worth keeping: the listing is down from five screenshots to
+three.** `One-click Optimize Store bulk generation screen` and `Blog Post Generator creating
+SEO-optimized blog content` are gone for good. Those two showed screens that no longer exist under
+those names.
+
+**THE MANUAL PROCEDURE — three minutes, owner only.** At
+`apps.shopify.com/services/partner-app-submissions/1279a14cca41d4a6f8e6e3c485870b77/en`, Desktop
+screenshots: click `Upload image` on each slot and pick the file, then replace the alt text, then
+Save.
+
+| slot | file (`contentclaude/listing-assets/`) | alt text (≤64) |
+|---|---|---|
+| 1 | `02-review-desktop.png` | `Navaal Review: six drafts, each approved before publishing` (58) |
+| 2 | `03-products-desktop.png` | `Navaal Products: catalogue view with content status per product` (63) |
+| 3 | `05-settings-desktop.png` | `Navaal Settings: brand voice, language and approval rules` (57) |
+
+### THE CAPTURE HARNESS WAS SHIPPING THE WRONG SHAPE, FOR MONTHS
+
+Before uploading I measured the PNGs instead of trusting them. **Every frame was
+`2720x1574`, ratio 1.728.** `listing-assets/README.md` says, verbatim: *"Sizes are 2× … so a
+1600×900 frame is a 3200×1800 PNG — which is what Shopify wants for a crisp listing."* That was
+never true of a single file it produced.
+
+**Cause.** The harness screenshots `frame.frameElement()` — the app's iframe — not the page. The
+iframe is narrower than the viewport by Shopify's admin sidebar, so a `1600x900` viewport yielded a
+`1360x787` CSS element. Four hurdles guarded that capture and **not one of them ever opened the file
+and read its pixels.**
+
+**Fixed in `tools/proof/listing-assets.mjs`:** the context now opens wider than the frame it owes
+(`+320 x +200` desktop, `+220` height on mobile), the element's bounding box is clipped to exactly
+`f.width x f.height` from the app iframe's own origin — so no admin chrome can enter and the ratio
+is not a coincidence — and a **fifth hurdle** reads the PNG's IHDR and fails the run unless the file
+is exactly `2×f.width` by `2×f.height`.
+
+**The new hurdle immediately caught a second one nobody knew about.** The three mobile frames failed
+with *"the app frame is 375x683 CSS px, smaller than the 375x812 frame we owe the listing"* — the
+mobile admin's own chrome eats 129px, so every mobile image had been `750x1366` instead of
+`750x1624`. Both shapes were wrong; only the desktop one had been noticed, and only today.
+
+**All eight frames are now exactly right for the first time:** desktop `3200x1800` at ratio
+**1.7778**, mobile `750x1624`.
+
+### FRAME 01 AT `1e1867e` — THE CONTRADICTION IS GONE, A DIFFERENT PROBLEM IS NOT
+
+Phase 12 Part A replaced the `Autopilot optimized 15 new products in the last 24 hours` banner with
+**`The 3 products holding this store back`** — three named products, each with a score badge and a
+`Review its draft` button. The self-contradiction I refused to upload yesterday no longer exists.
+
+**But all three read `This product: 56/100` — the same score.** It may be arithmetically true;
+on a marketing image, three different products carrying one identical number reads as fabricated,
+and it is **FR8 failing in the one place a prospective customer would see it.** 01 stays held.
+
+**05 gained the fix for the French finding**, visible on the frame: a new **`App language`**
+selector reading `Follow my Shopify admin language`, with *"The language of these screens. Content
+Language above is what we write in."*
+
+### INBOX — Task 12
+
+| — | OWNER | **Three screenshots need uploading by hand** — the uploader ignores a synthetic file event. Files and alt text in the table above. Until then the listing shows the pre-rename app with `E2E Test Store` and the Sidekick icon. | CW → OWNER |
+| — | CC | **`listing-assets.mjs` shipped every frame at the wrong pixel size** — desktop 2720×1574 not 3200×1800, mobile 750×1366 not 750×1624 — while its README claimed otherwise and four hurdles passed it. Fixed, with a fifth hurdle that reads the PNG header. False green #19. | CW → CC |
+| — | CC | **FR8 is now on a listing frame.** `The 3 products holding this store back` shows three different products all at `This product: 56/100`. | CW → CC |
+| — | — | **Screenshots 4 and 5 are deleted and stay deleted** — `Optimize Store bulk generation` and `Blog Post Generator` are screens that no longer exist. Live count 5 → 3. | CW |

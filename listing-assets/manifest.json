@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-15T01:32:54.974Z",
+  "at": "2026-09-15T10:49:53.570Z",
   "results": [
     {
       "file": "01-home-desktop.png",
@@ -10,8 +10,8 @@
       "must": {},
       "label": "Home — store score and the one next action",
       "ok": true,
-      "bytes": 130307,
-      "hash": "aac2256d6e389642",
+      "bytes": 174356,
+      "hash": "9872f42278013296",
       "excerpt": "Review 6 drafts Store SEO score 65 / 100 across 14 products sampled Unchanged since September 14, across the 14 products we sampled. How i"
     },
     {
@@ -23,8 +23,8 @@
       "must": {},
       "label": "Review — current copy beside the proposed copy",
       "ok": true,
-      "bytes": 184094,
-      "hash": "7bc004886c4e8e2b",
+      "bytes": 210810,
+      "hash": "59bb22fecfd351af",
       "excerpt": "Review & Publish. This page is ready Review & Publish 6 products with draft content ready to review Review each draft, then publish. Publ"
     },
     {
@@ -36,8 +36,8 @@
       "must": {},
       "label": "Products — every product and where it stands",
       "ok": true,
-      "bytes": 185034,
-      "hash": "87a5cfc9e4c98597",
+      "bytes": 219703,
+      "hash": "5b095d1caa83d3bf",
       "excerpt": "Products. This page is ready Products 15 products in your catalog · 14 active and draft products published to your online store · 8 with c"
     },
     {
@@ -49,8 +49,8 @@
       "must": {},
       "label": "First run — the store is scored and three drafts are written",
       "ok": true,
-      "bytes": 164657,
-      "hash": "7b178aa1501aa076",
+      "bytes": 169754,
+      "hash": "9e7fb816b251d73e",
       "excerpt": "Review 3 drafts Store SEO score 21 / 100 across 12 products sampled Your starting score, across the 12 products we sampled. How is this sc"
     },
     {
@@ -62,8 +62,8 @@
       "must": {},
       "label": "Settings — brand voice and the current plan",
       "ok": true,
-      "bytes": 173286,
-      "hash": "c2feb8ace70689e5",
+      "bytes": 201791,
+      "hash": "ca5ed1e5e43b01ba",
       "excerpt": "Settings. This page is ready Settings Brand voice, autopilot, and content templates Store Identity Tell the AI who you are — the more sp"
     },
     {
@@ -75,8 +75,8 @@
       "must": {},
       "label": "Home on a phone",
       "ok": true,
-      "bytes": 83368,
-      "hash": "921cd7c097a4a50f",
+      "bytes": 116899,
+      "hash": "cf7fdf25fb292c05",
       "excerpt": "Review 6 drafts Store SEO score 65 / 100 across 14 products sampled Unchanged since September 14, across the 14 products we sampled. How i"
     },
     {
@@ -88,8 +88,8 @@
       "must": {},
       "label": "Review on a phone",
       "ok": true,
-      "bytes": 90306,
-      "hash": "dfb23f96b22bed2a",
+      "bytes": 97925,
+      "hash": "72d884ef549ca0ba",
       "excerpt": "Review & Publish. This page is ready Review & Publish 6 products with draft content ready to review Review each draft, then publish. Publ"
     },
     {
@@ -101,8 +101,8 @@
       "must": {},
       "label": "Products on a phone",
       "ok": true,
-      "bytes": 70183,
-      "hash": "8c44784b609e4d6c",
+      "bytes": 83546,
+      "hash": "ff8a6e6243d7fe7f",
       "excerpt": "Products. This page is ready Products 15 products in your catalog · 14 active and draft products published to your online store · 8 with c"
     }
   ]
