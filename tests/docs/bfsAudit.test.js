@@ -56,7 +56,8 @@ describe("2. Admin performance — the code-side budget", () => {
     const total = files.reduce((n, f) => n + statSync(join("build/client/assets", f)).size, 0);
     expect(total).toBeLessThanOrEqual(1024 * 1024);
     const perLocale = {};
-    for (const f of all.filter(isLocale)) perLocale[f.split("-")[0]] = (perLocale[f.split("-")[0]] ?? 0) + statSync(join("build/client/assets", f)).size;
+    const localeOf = (f) => f.match(/^(de|fr|es|it|pt-BR|ja)-/)[1];
+    for (const f of all.filter(isLocale)) perLocale[localeOf(f)] = (perLocale[localeOf(f)] ?? 0) + statSync(join("build/client/assets", f)).size;
     for (const [loc, bytes] of Object.entries(perLocale)) expect(bytes, `locale ${loc}`).toBeLessThanOrEqual(224 * 1024);
   });
 });

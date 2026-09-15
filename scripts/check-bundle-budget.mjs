@@ -49,7 +49,8 @@ const total = sized.reduce((n, s) => n + s.bytes, 0);
 const kb = (b) => `${(b / 1024).toFixed(1)} KB`;
 // one line per locale: both of its chunks (catalogue + Polaris) added up
 const locales = {};
-for (const s of allSized) if (isLocale(s.file)) locales[s.file.split("-")[0]] = (locales[s.file.split("-")[0]] ?? 0) + s.bytes;
+const localeOf = (f) => f.match(LOCALE_CHUNK_RE)[1]; // "pt-BR-abc.js" is pt-BR, not pt
+for (const s of allSized) if (isLocale(s.file)) locales[localeOf(s.file)] = (locales[localeOf(s.file)] ?? 0) + s.bytes;
 
 const failures = [];
 if (routes[0] && routes[0].bytes > ROUTE_MAX) failures.push(`heaviest route ${routes[0].file} is ${kb(routes[0].bytes)} > ${kb(ROUTE_MAX)}`);
