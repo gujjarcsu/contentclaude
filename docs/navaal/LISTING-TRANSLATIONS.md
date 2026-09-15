@@ -8,7 +8,7 @@ counter is the one that decides. **App name stays `Navaal: AI SEO, AEO & GEO` in
 (brand-led, requirement 4.1.2). Doctrine applies in every language: no statistics, no superlatives,
 no testimonials; Google/ChatGPT named descriptively only (`04-DECISIONS.md`).
 
-**Revised 2026-09-15 after CW's German entry:** search terms are ≤20 chars each (four locales trimmed to a singular); plan display names (≤18) and screenshot alt text added per locale. The plan-line table (18 unique strings, 20 slots) was already here. German screenshots in the German UI are a follow-up once the owner's admin language is switched.
+**Revised 2026-09-15 after CW's German entry:** search terms are ≤20 chars each (four locales trimmed to a singular); plan display names (≤18) and screenshot alt text added per locale, **re-cut to ≤64 on 2026-09-15 after CW read the field's `maxLength` off the input** — the earlier ≤100 assumption was wrong. The plan-line table (18 unique strings, 20 slots) was already here. German screenshots in the German UI are a follow-up once the owner's admin language is switched.
 
 Source (English, live 2026-09-15): subtitle 62 · intro 86 · details 478 · the five §5.6 slots · the
 five §4 search terms · the plan lines exactly as the public page shows them.
@@ -71,10 +71,10 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `Kostenlos` (9) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal Review: sechs Produkte mit Entwürfen, jeder vor der Veröffentlichung freizugeben` (87)
-2. `Navaal Produkte: Katalogübersicht mit Content-Status je Produkt` (63)
-3. `Navaal Einstellungen: Markenstimme, Sprache und Freigaberegeln` (62)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal Review: sechs Entwürfe, vor Veröffentlichung freigeben` (61)
+2. `Navaal Produkte: Katalog mit Content-Status je Produkt` (54)
+3. `Navaal Einstellungen: Markenstimme, Sprache, Freigaberegeln` (59)
 
 ---
 
@@ -128,10 +128,10 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `Gratuit` (7) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal Review : six produits avec brouillons, chacun à valider avant publication` (80)
-2. `Navaal Produits : vue du catalogue avec le statut du contenu par produit` (72)
-3. `Navaal Paramètres : ton de marque, langue et règles de validation` (65)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal Review : six brouillons, validés avant publication` (57)
+2. `Navaal Produits : catalogue avec statut du contenu par produit` (62)
+3. `Navaal Paramètres : ton de marque, langue, validation` (53)
 
 ---
 
@@ -185,10 +185,10 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `Gratis` (6) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal Revisión: seis productos con borradores, cada uno se aprueba antes de publicar` (85)
-2. `Navaal Productos: vista del catálogo con el estado del contenido por producto` (77)
-3. `Navaal Ajustes: voz de marca, idioma y reglas de aprobación` (59)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal Revisión: seis borradores, aprobados antes de publicar` (61)
+2. `Navaal Productos: catálogo con estado del contenido` (51)
+3. `Navaal Ajustes: voz de marca, idioma y aprobación` (49)
 
 ---
 
@@ -242,10 +242,10 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `Gratuito` (8) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal Revisione: sei prodotti con bozze, ognuna da approvare prima della pubblicazione` (87)
-2. `Navaal Prodotti: vista del catalogo con lo stato dei contenuti per prodotto` (75)
-3. `Navaal Impostazioni: voce di marca, lingua e regole di approvazione` (67)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal Revisione: sei bozze, approvate prima di pubblicare` (58)
+2. `Navaal Prodotti: catalogo con stato dei contenuti` (49)
+3. `Navaal Impostazioni: voce di marca, lingua, approvazione` (56)
 
 ---
 
@@ -299,10 +299,10 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `Grátis` (6) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal Revisão: seis produtos com rascunhos, cada um aprovado antes de publicar` (79)
-2. `Navaal Produtos: visão do catálogo com o status do conteúdo por produto` (71)
-3. `Navaal Configurações: voz da marca, idioma e regras de aprovação` (64)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal Revisão: seis rascunhos, aprovados antes de publicar` (59)
+2. `Navaal Produtos: catálogo com status do conteúdo` (48)
+3. `Navaal Configurações: voz da marca, idioma, aprovação` (53)
 
 ---
 
@@ -356,9 +356,9 @@ Italian, Portuguese (Brazil), Japanese.
 **Plan display names (≤18 each):** Free → `無料` (2) · Starter → `Starter` · Growth → `Growth` · Professional → `Professional`
 *(Plan names stay English except Free, which is a word not a brand.)*
 
-**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images, translate only the alt text; ≤100 chars each):**
-1. `Navaal レビュー：下書きのある6商品。公開前にそれぞれ承認` (32)
-2. `Navaal 商品：商品ごとのコンテンツ状況を示すカタログ一覧` (31)
+**Screenshot alt text (three live frames — 02 Review, 03 Products, 05 Settings; reuse the English images; the field is `maxLength=64`, read off the input):**
+1. `Navaal レビュー：下書き6件。公開前にそれぞれ承認` (28)
+2. `Navaal 商品：商品ごとのコンテンツ状況を示すカタログ` (29)
 3. `Navaal 設定：ブランドの声、言語、承認ルール` (25)
 
 ---
