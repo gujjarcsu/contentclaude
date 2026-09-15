@@ -1189,3 +1189,107 @@ FR13 as well.**
    same time.
 
 Both freezes stay on. `navaal-ttv-03` was read only.
+
+## POSTED 2026-09-15 BY CC — PHASE 11 PART A: THE APP WAS DELETING `navaal-qa-fresh` EVERY TEN MINUTES. THE CLASS IS FIXED AT `cd96240`. **qa-fresh: CC is done with it.**
+
+**What the diag found, in place, before anything was touched.** There is **no Shop row** for
+`navaal-qa-fresh.myshopify.com`. Not flagged uninstalled — gone. The LogEvent timeline (retention back
+to 10 Sep) for that domain reads, verbatim, event and minute:
+
+```
+2026-09-12 04:25  shop_redacted           ← the 10 Sep uninstall's shop/redact, 48 h later. Correct.
+2026-09-14 07:39  shop_installed           ← CW installs from the listing (ref:navaal-nav)
+2026-09-14 07:43  shop_redacted           ← 4 minutes later
+2026-09-14 07:51  shop_installed
+2026-09-14 07:53  shop_redacted           ← 2 minutes later
+2026-09-14 07:53  shop_installed
+2026-09-14 08:12  shop_redacted           ← 19 minutes later
+2026-09-14 12:41  shop_installed
+2026-09-14 12:44  shop_redacted           ← 3 minutes later
+2026-09-14 23:44  shop_installed
+2026-09-14 23:50  shop_redacted           ← 6 minutes later
+```
+
+One `shop_redact` audit row (12 Sep 04:25) and **five redactions after it, each minutes after an
+install.** The sequence CW reconstructed was right about the dates and wrong about the mechanism:
+not a late `app/uninstalled`, but the **ten-minute webhook sweep**. Its "owed redaction" check found
+the 12 Sep audit row, looked up the Shop row *by domain*, found the NEW row the reinstall had created,
+saw `redactedAt: null`, and "finished" the redaction: every per-shop row deleted, the Shop row
+anonymised to `redacted:<hash>`. The app kept serving screens because token exchange recreates a
+Session on every visit and the next authenticated request recreates a Shop row as a fresh install —
+so every visit was a new install, and every install was destroyed within ten minutes. **The domain is
+not the shop; the install is.** That is the class.
+
+**Why the reset refused and the walk went 9 → 8:** both read the Shop row; there wasn't one. **Why the
+funnel said 11 real shops:** it counted the ghosts — the anonymised rows of the same store, five of
+them from the 14th alone, none matching a test-store pattern.
+
+**The fix, four places, every one asserted with a test that fails when it is removed:**
+1. **A shop/redact request is consumed once.** `GDPRRequest.completedAt` (additive migration; every
+   request already on file is marked complete, including the 12 Sep one). The sweep owes only
+   unconsumed requests, and **a request older than the current install is a different install of the
+   same domain — superseded, consumed, logged, nothing deleted.**
+2. **`shop/redact` for a shop whose token Shopify still honours is recorded, marked complete, and not
+   executed.** Shopify sends it 48 h after an uninstall even if the merchant reinstalled inside the
+   window. The data goes when the shop actually uninstalls — at uninstall time, as always.
+3. **`app/uninstalled` asks Shopify before it believes the delivery.** A token that still answers
+   means the install this delivery describes has been redone: acknowledged, not acted on, re-probed
+   30 s later in case revocation was slower than the webhook. The timestamp guard only ever worked
+   when the reinstall had been recorded; H10's 68 % delivery meant it often had not.
+4. **The sweep asks Shopify before deleting a flagged row's leftovers**, and restores the row when the
+   token answers; **nightly, every flagged row with a session and every installed row is probed** —
+   flagged-but-answering restored, installed-but-refused counted and logged, never stamped. The
+   per-process "seen" cache expires every ten minutes so a flag flipped on the other machine is read.
+
+**The cross-shop count, from the same diag, 00:45Z:** rows flagged uninstalled with a live session:
+**0**. Rows the app believes installed: **8 — the same number as Shopify's `Merchants with your app:
+8`.** Domains installed again after a shop/redact in the last 30 days: **1 (qa-fresh)**. **No real
+merchant was in the loop.** Zephyrine Wynter and Peter Shops never uninstalled, so no redact request
+exists for them; Hoodify uninstalled and was redacted and has not reinstalled — had they, this would
+have deleted their store's records ten minutes after every visit. That is the blast radius, and it is
+closed.
+
+**qa-fresh now:** the next install creates a Shop row that stays. **CW: uninstall and reinstall from
+the listing** — a genuine first run on a store already named Northline Supply — read FR8, N1 and FR13
+in one pass, capture frame 04. The uninstall exercises the fixed path end to end (probe → token
+refused → stamp → delete), and the reinstall is recorded as one (the `ref:navaal-nav` attribution will
+be on the new row). Post the timeline if anything reads differently.
+
+**After the fix went live (`cd96240`, 01:07Z), the same two reads again.** Install state: rows the app
+believes installed **14** — up from 8 at 00:45Z because your six `navaal-shape-*` installs landed in
+between (all ours by handle); flagged-with-session **0**; every one of the **13** `shop/redact` requests
+on file is now marked complete; ghost rows **9**, of which **5 were anonymised while installed** — the
+five qa-fresh cycles; domains active after a redact in 30 days: **1 (qa-fresh, 5 installs, 6
+redactions)**; **0 currently in the loop.** Funnel, real shops only: **0 real counted · 11 of ours
+excluded · 0 of Shopify's · 3 unclassified** — the three are EBS (ours, not in the pattern) and the
+two real merchants, which is exactly the seed the Shop kind workflow needs from you. Once it is run,
+the reading will be **2 real installed**; Hoodify's row was anonymised on 11 Sep and stays a ghost,
+so "3 ever" lives in your ledger, not in this table.
+
+## POSTED 2026-09-15 BY CC — PHASE 11 PARTS B, C, D AT `cd96240`
+
+**B — `ShopKind` replaces the pattern.** `Shop.kind` ∈ ours / shopify / real / unclassified, default
+unclassified; our own handle (`navaal-ttv-*`, `-qa-*`, `-shape-*`, `-test-*`, `contentpilot-dev*`,
+`contentpilot-test`) is ours whatever the row says and can never be classified real. The funnel counts
+**real only**, excludes anonymised ghosts at the query, and reports unclassified as a count that is
+never silently a merchant; the Monday digest sends when there is a real shop OR an unclassified one to
+classify, and says how many are waiting. **Seeding needs the domains, which the ledger names by store
+name.** The **Shop kind** workflow lists every shop with its stored and effective kind when run with
+no input; CW or the owner runs it once with `domain=kind` pairs from the ledger (EBS = ours; the two
+reviewer stores, Mars ×3, Ace, appstoretest4 = shopify; Zephyrine Wynter, Peter Shops, Hoodify = real).
+Until then the reading is **0 real, N unclassified** — the honest number, not 11. I re-run the Funnel
+workflow after the seed and post it over real shops only.
+
+**C —** `/app/attention`'s Method paragraph now reads *"the barcodes of up to 50 variants when the
+first has none"* from the same constant the query uses. One `CREDIT_ROLLOVER_SENTENCE` feeds `/terms`
+and the plans FAQ. **F3 asserted directly:** `variantBarcodes: ["", "9312345678907"]` → **no GTIN
+finding, one fewer degrading**; control `["", ""]` → *"No barcode on any of the 2 variants we read."*;
+first-variant-only → *"No barcode on the first variant."* **`/app/review?product=gid://…` now refuses**
+with *"That product reference isn't valid"* and shows no drafts; the numeric form scopes as before.
+
+**D — the simulated week.** One test advances a clock minute by minute through 14–20 Sep (AEST) and
+5–11 Oct (AEDT, after the clocks move) and asks every scheduled job at every minute through an
+in-memory Redis with real NX claims: digest 07:00 ×7, backup 03:00 ×7, catalogue walk 02:00 ×7 (the
+crawler diff, the indexability sample and the new install reconcile ride inside it), holdout 03:00
+×7, weekly report Monday 09:00 ×1, funnel Monday 08:30 ×1 — each exactly that often, at that hour,
+never elsewhere. A source guard holds that the scheduler ticks all six.

@@ -5138,3 +5138,50 @@ install LAST → post the handle) are in the queue for CW.
 **Routed, unchanged:** P3.1 real batch, the Lighthouse number and the storefront read (owner F10);
 P3.4 (P0.10); P3.5 (F11); Phase 5 (ten merchants); BFS Apply (100 calls); the qa-fresh install and
 frame 04 (CW); the six shape stores (CW).
+
+## Phase 11 — a shop the app thought was gone, a funnel that counted the wrong shops, every job proves it fires (2026-09-15)
+
+**Part A (`cd96240`).** Diagnosed in place with a read-only diag (`install-state` workflow) before
+anything was touched: `navaal-qa-fresh` had **no Shop row**. The LogEvent timeline showed the 10 Sep
+uninstall's `shop/redact` processed on 12 Sep — correct — and then **five install → redact cycles on
+14 Sep, each redaction two to nineteen minutes after the install.** The mechanism was the ten-minute
+webhook sweep: its "owed redaction" check found the one 12 Sep audit row, looked up the Shop row by
+*domain*, found the new row each reinstall had created, and finished the redaction — every per-shop
+row deleted, the Shop row anonymised. Token exchange recreated a Session on every visit and the next
+request recreated a Shop row as a fresh install, so the app served its screens while destroying the
+store's records on a loop. The reset refused and the walk went 9 → 8 because there was no row; the
+funnel's "11 real shops" counted the anonymised ghosts. **The domain is not the shop; the install is.**
+Fixed as a class: `GDPRRequest.completedAt` (additive; every request on file marked complete), the
+sweep owes only unconsumed requests and treats a request older than the current install as
+superseded; `shop/redact` for a shop whose token Shopify still honours is recorded, marked complete
+and not executed; `app/uninstalled` probes Shopify before believing a delivery and re-probes after
+the 200; the sweep probes before deleting a flagged row's leftovers and restores the row instead;
+the nightly walk reconciles both directions (flagged-but-answering restored, installed-but-refused
+counted, never stamped); the per-process "seen" cache expires. Break test: disabling the supersede
+check fails its test. Cross-shop count: flagged-with-session 0; believed installed 8 = Shopify's 8;
+domains installed again after a redact in 30 days: 1 (qa-fresh). No real merchant was in the loop.
+
+**Part B.** `Shop.kind` ∈ ours / shopify / real / unclassified (default unclassified, additive
+migration); `shopKind.js` is pure — our own handle is ours whatever the row says and can never be
+real; the funnel counts real only, excludes anonymised rows at the query, reports unclassified as a
+count and sends the Monday digest when there is a real shop or an unclassified one to classify. The
+**Shop kind** workflow lists every shop with its stored and effective kind, or writes the named
+domains only, refusing a non-myshopify domain, an unknown kind and "real" on our own handle. The
+ledger names stores by name, not domain, so the seed is one workflow run by CW/owner (queued); until
+then the reading is 0 real and N unclassified.
+
+**Part C.** The Method paragraph reads the barcode sample from the same constant as the query; one
+`CREDIT_ROLLOVER_SENTENCE` on `/terms` and the plans FAQ; F3 asserted directly (barcode on variant 2
+→ no GTIN finding; control → "No barcode on any of the 2 variants we read."); the GID form of
+`?product=` is refused with a message and no drafts.
+
+**Part D.** `tests/utils/scheduledWeek.test.js` advances a clock minute by minute through an AEST
+week and the AEDT week after the clocks move, asking every scheduled job at every minute through an
+in-memory Redis with real NX claims: digest 07:00 ×7, backup 03:00 ×7, catalogue walk 02:00 ×7 (the
+crawler diff, the indexability sample and the install reconcile ride inside it), holdout 03:00 ×7,
+weekly report Monday 09:00 ×1, funnel Monday 08:30 ×1 — each exactly that often, at that hour. A
+source guard holds that the scheduler ticks all six.
+
+**Found, nobody asked:** the funnel's row query had no `redactedAt` filter, so anonymised ghosts of
+past installs counted as shops; the ttv report already masked them but counted them too. Both now
+read live rows only (the funnel; the ttv report is unchanged and named in the doc as next).

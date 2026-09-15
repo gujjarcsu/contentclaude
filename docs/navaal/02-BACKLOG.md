@@ -271,6 +271,7 @@ support that does not need a human per merchant.
 | R4 | COWORK | Support that scales: the eight questions a merchant will actually ask, answered in-app at the moment they would ask them. Deflection beats a help desk. | OPEN |
 | R5 | CC | **A merchant can leave with their work.** Export everything we generated for them, in a form they can use without us. It is the right thing, it is a listing line, and it removes the fear that blocks the first purchase. | OPEN |
 | R6 | OWNER | Decide the alert-contact route so alerts do not go to one inbox (see H2/H16 in `06-QUEUE.md` — those are queue IDs, not phase IDs). | OPEN |
+| R7 | CC | **The TTV report counts anonymised ghost rows** (`ttvReport.server.js` masks a redacted domain but still counts the row; the funnel now excludes `redactedAt` at the query). Same fix, same reason: a ghost of a past install is not a shop. Found during Phase 11 Part A. | OPEN |
 
 ---
 

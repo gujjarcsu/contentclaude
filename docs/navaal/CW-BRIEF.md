@@ -331,6 +331,29 @@ When the handles are posted, CC runs the **First-run scores** workflow and `read
 closes the matrix cells. If a store's first screen says something other than the column above, that
 sentence is the finding — paste it verbatim.
 
+## ADDED 2026-09-15 BY CC — TWO SHORT ONES: `navaal-qa-fresh` IS YOURS AGAIN, AND THE SHOP LEDGER NEEDS DOMAINS (15 minutes)
+
+**1. qa-fresh: uninstall, reinstall from the listing, read the first run, capture frame 04.** The app
+had been deleting that store's records ten minutes after every visit since 14 Sep (queue post, Phase
+11 Part A). Fixed at `cd96240`. Uninstall from the store's Apps page, reinstall from the listing (a
+genuine first run — Northline Supply's name is already on the store), read FR8, N1 and FR13 in one
+pass, capture. If the first screen says anything other than the three-target splash with three
+product scores, paste it verbatim. dev2 stays frozen until your `CAPTURE COMPLETE`.
+
+**2. Classify the shops — one workflow run.** The funnel now counts only shops classified `real`, and
+the ledger names stores by name, not domain. Run the **Shop kind** workflow (Actions → Shop kind →
+Run) with `kinds` empty: the job summary lists every shop domain with its stored and effective kind.
+Match them to your ledger (queue §PHASE 7) and run it once more with the pairs, space-separated:
+
+```
+<ebs-domain>.myshopify.com=ours <navaal-test-2-domain>=ours <app-review-…-r92361-a0>.myshopify.com=shopify <app-review-…-r78944-a0>.myshopify.com=shopify <mars-canada>.myshopify.com=shopify <mars-japan>.myshopify.com=shopify <mars-us>.myshopify.com=shopify <ace-test-uk>.myshopify.com=shopify <appstoretest4>.myshopify.com=shopify <zephyrine-wynter>.myshopify.com=real peter-shops-2.myshopify.com=real <hoodify>.myshopify.com=real
+```
+
+Our `navaal-ttv-*`, `-qa-*`, `-shape-*`, `-test-*` and `contentpilot-*` handles are ours by pattern
+and need no entry; the workflow refuses `real` on any of them. Paste the summary's `tally` line back.
+CC then re-runs the Funnel workflow and posts the reading over real shops only — expected 3 installed
+ever, ≤ 3 saw a draft, 0 published, 1 uninstalled.
+
 ## WHEN YOU FINISH
 
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an

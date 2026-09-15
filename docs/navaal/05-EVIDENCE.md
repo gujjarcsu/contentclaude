@@ -147,3 +147,24 @@ the commit at **16:00:36**. Four minutes of shipped-but-unverified. The tests ha
 **The lesson, which is the reusable part:** when you remove a redundancy, ask what that redundancy was
 *accidentally* protecting. And note that this was only visible because the item demanded a LIVE proof —
 a guard proved in the abstract would have shipped the regression with a green suite behind it.
+
+## 7c. A SHOP THE APP DELETED EVERY TEN MINUTES — the pattern to expect (2026-09-15)
+
+`navaal-qa-fresh`: uninstalled 10 Sep, `shop/redact` processed 12 Sep 04:25 (correct), reinstalled
+14 Sep 07:39. Then, from the LogEvent table: redacted 07:43 · installed 07:51 · redacted 07:53 ·
+installed 07:53 · redacted 08:12 · installed 12:41 · redacted 12:44 · installed 23:44 · redacted 23:50.
+Five install → redact cycles in one day under one audit row. The ten-minute sweep found the 12 Sep
+request, looked the Shop row up **by domain**, found the new row each reinstall had created, and
+"finished" the redaction: every per-shop row deleted, the Shop row anonymised. Token exchange
+recreated a Session on every visit; the next authenticated request recreated a Shop row as a fresh
+install. The app served its screens the whole time.
+
+**The pattern:** a durable "work owed" marker keyed on an identifier that outlives the thing it was
+about (the domain outlives the install), never consumed once the work is done. It is a fifth false
+green of a different kind: nothing failed, every guard passed, and the sweep's own log line said
+"Redaction owed but incomplete — finishing" five times as if it were being diligent. **Rule:** a
+request is consumed once (`completedAt`); a request older than the current install is for the install
+before it; and before anything is deleted or flagged, ask the system that actually knows — Shopify's
+token answers or it does not. The three integers that closed it: flagged-with-session 0 · believed
+installed 8 = Shopify's 8 · domains reinstalled after a redact in 30 days 1 (this one). No real
+merchant was in the loop; had Hoodify reinstalled, it would have been.
