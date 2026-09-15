@@ -172,6 +172,34 @@ export { fmt as formatHours };
  * The sentence, never a point estimate alone. Every number carries its
  * method in the screen's paragraph; this is what the number says.
  */
+/**
+ * Phase 12 Part C (C1) — the sentence that leads the readout: both arms, the
+ * interval and the direction, in words. Never the point estimate alone (the
+ * range is always in the sentence), never a verdict under MIN_PER_ARM.
+ *
+ *   "Pages we submitted were crawled a median 31 hours sooner than pages we
+ *    didn't — with this few pages the honest range is 9 to 52 hours."
+ */
+export function plainSentence(s) {
+  if (!s) return "";
+  if (!s.enough) {
+    return `Not enough pages yet to say anything honest: ${s.submit.n} submitted and ${s.hold.n} withheld, and we need ${MIN_PER_ARM} of each. The next batch of changed pages adds to it.`;
+  }
+  // Plain hours, whole numbers, no unit games: a merchant reads "31 hours",
+  // not "1.3 d", and a range is two numbers of the same unit.
+  const hours = (h) => `${Math.round(Math.abs(h))} hour${Math.round(Math.abs(h)) === 1 ? "" : "s"}`;
+  const few = s.submit.n + s.hold.n < 40 ? "with this few pages " : "";
+  const lo = Math.min(s.lo, s.hi);
+  const hi = Math.max(s.lo, s.hi);
+  if (s.favourable) {
+    return `Pages we submitted were crawled a median ${hours(s.diffHours)} sooner than pages we didn't — ${few}the honest range is ${Math.round(lo)} to ${hours(hi)}.`;
+  }
+  if (s.lo !== null && s.hi !== null && hi < 0) {
+    return `Pages we submitted were crawled a median ${hours(s.diffHours)} LATER than pages we didn't — ${few}the honest range is ${Math.round(Math.abs(hi))} to ${hours(lo)} later (both sides slower). Rare, and worth knowing.`;
+  }
+  return `We cannot tell the two halves apart this batch: submitted pages were crawled a median ${hours(s.diffHours)} ${s.diffHours >= 0 ? "sooner" : "later"}, but ${few}the honest range runs from ${hours(lo)} later to ${hours(hi)} sooner, which includes no difference at all.`;
+}
+
 export function verdictSentence(s) {
   if (!s) return "";
   if (!s.enough) {

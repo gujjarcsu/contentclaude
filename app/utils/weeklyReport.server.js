@@ -17,7 +17,7 @@ import { shopifyQuery } from "./shopifyQuery.server.js";
 import { getFreshOfflineSession } from "./offlineToken.server.js";
 import { offlineGraphql } from "./catalogueWatch.server.js";
 import { sendEmailTo } from "./notify.server.js";
-import { verdictSentence } from "./crawlHoldout.js";
+import { verdictSentence, plainSentence } from "./crawlHoldout.js";
 import { experimentsFor } from "./crawlHoldout.server.js";
 import { attentionList } from "./catalogueWatch.server.js";
 
@@ -39,6 +39,7 @@ export function composeWeeklyReport({ storeHandle, experiments, sinceAt, attenti
   const admin = `https://admin.shopify.com/store/${storeHandle}/apps/navaal-seo-geo-content`;
   const lines = ["Your Navaal result this week", ""];
   for (const e of reported) {
+    lines.push(plainSentence(e.summary));
     lines.push(verdictSentence(e.summary));
     lines.push(`Method: a seeded random half of ${e.summary.submit.n + e.summary.hold.n} changed pages submitted to Bing, the other half withheld; time to Bing's first crawl after the change, both arms, 95% bootstrap interval on the difference of medians. Seed ${e.seed}, so the split can be reproduced.`);
     lines.push(`See both arms: ${admin}/app/proof`);

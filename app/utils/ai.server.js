@@ -4,6 +4,7 @@ import { getProductTypeInstructions, getLanguageName } from "./seo.server.js";
 import { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } from "./text.js";
 import { modelFor, costUsd, costMicroUsd } from "./modelPricing.js";
 import { currentUsageRecord, currentMerchantKey } from "./usageContext.server.js";
+import { redactSecrets } from "./redact.js";
 import { recordTokensUsed } from "./plans.server.js";
 
 // ─── P0.6 — real cost accounting ─────────────────────────────────────────────
@@ -684,7 +685,9 @@ async function callClaude(apiKey, body, attempt = 0, { interactive = false, cont
     return callClaude(apiKey, body, attempt + 1, { interactive, contentType });
   }
 
-  const errorBody = await response.text();
+  // A9 (Phase 12) — an upstream error body is untrusted text. Whatever it
+  // carries, the key in use never reaches a log line, Sentry or the caller.
+  const errorBody = redactSecrets(await response.text(), apiKey).slice(0, 500);
   logger.error({ model: body.model, status: response.status, attempt, body: errorBody }, "Claude API error");
   throw new Error(`Claude API error ${response.status}: ${errorBody}`);
 }

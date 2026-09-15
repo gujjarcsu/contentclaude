@@ -25,8 +25,11 @@ export function bingUrl(method, params = {}) {
 }
 
 /** The same URL with the key replaced, for logs and errors. */
-export function redactKey(text) {
-  return String(text ?? "").replace(/([?&]apikey=)[^&\s]*/gi, "$1[redacted]");
+export function redactKey(text, key = null) {
+  let s = String(text ?? "").replace(/([?&]apikey=)[^&\s]*/gi, "$1[redacted]");
+  // A9 (Phase 12) — and the raw value anywhere in an upstream message.
+  if (key && String(key).length >= 8) s = s.split(String(key)).join("[redacted]");
+  return s;
 }
 
 /** Unwrap Bing's { d: ... } envelope. */

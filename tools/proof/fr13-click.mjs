@@ -46,7 +46,8 @@ const settled = async (fr, marker) => {
 await p.goto(`https://admin.shopify.com/store/${STORE}/apps/navaal-seo-geo-content/app/products`, { waitUntil: "domcontentloaded", timeout: 90000 });
 let fr = await frame();
 await settled(fr, "products in your catalog");
-const before = await fr.evaluate(() => location.pathname + location.search);
+const where = async (fr) => fr.evaluate(() => `${location.pathname}?${new URLSearchParams(Object.fromEntries([...new URLSearchParams(location.search)].filter(([k]) => k === "product")))}`).catch(() => "?");
+const before = await where(fr);
 console.log(`before: ${before}`);
 
 // The first row whose badge says "Ready to review", and its Review button.
@@ -67,7 +68,7 @@ const dl = Date.now() + 30000;
 let after = before;
 while (Date.now() < dl) {
   fr = await frame();
-  after = await fr.evaluate(() => location.pathname + location.search).catch(() => before);
+  after = await where(fr);
   if (after !== before) break;
   await p.waitForTimeout(300);
 }

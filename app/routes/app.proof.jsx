@@ -12,7 +12,7 @@
 import { useLoaderData, useNavigate } from "react-router";
 import { Page, Card, Text, BlockStack, InlineStack, Badge, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
-import { verdictSentence, formatHours, MIN_PER_ARM, CENSOR_DAYS } from "../utils/crawlHoldout.js";
+import { verdictSentence, plainSentence, formatHours, MIN_PER_ARM, CENSOR_DAYS } from "../utils/crawlHoldout.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 
@@ -110,7 +110,11 @@ export default function ProofPage() {
                   </BlockStack>
                 </InlineStack>
 
-                <Text as="p" variant="bodyMd">
+                {/* Phase 12 C1 — the plain sentence leads; the statistician's line follows it. */}
+                <Text as="p" variant="bodyLg" fontWeight="semibold">
+                  {plainSentence(s)}
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
                   {verdictSentence(s)}
                 </Text>
 

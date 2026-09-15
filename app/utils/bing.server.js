@@ -37,12 +37,12 @@ async function call(method, { key, params = {}, body = null }) {
       json = null;
     }
     if (!r.ok) {
-      const msg = redactKey(String(json?.Message ?? json?.message ?? `HTTP ${r.status}`));
+      const msg = redactKey(String(json?.Message ?? json?.message ?? `HTTP ${r.status}`), key);
       return { ok: false, status: r.status, reason: msg, data: null };
     }
     return { ok: true, status: r.status, reason: null, data: unwrap(json) };
   } catch (err) {
-    return { ok: false, status: null, reason: redactKey(err?.name === "AbortError" ? "timeout" : err?.message ?? "failed"), data: null };
+    return { ok: false, status: null, reason: redactKey(err?.name === "AbortError" ? "timeout" : err?.message ?? "failed", key), data: null };
   } finally {
     clearTimeout(t);
   }
