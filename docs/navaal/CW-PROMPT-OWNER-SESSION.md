@@ -1,6 +1,9 @@
 # CW — THE OWNER SESSION: EVERYTHING ON HIS LIST, IN ONE SITTING, WITH HIM AT THE KEYBOARD
 
-Paste this whole file **with the owner present at the computer for the whole session.** This is
+Paste this whole file **with the owner present at the computer for the whole session.** *(Revised
+2026-09-15 after Phase 11: the privacy redirect is split in two, the three clean frames go up today,
+the translations are gated per locale on the app speaking it, H18 is closed, the shop-kind seed is a
+workflow.)* This is
 the one session where every item that has ever been "owner-blocked" gets done, because the owner
 is here to do the single thing you never do: **sign in.**
 
@@ -72,11 +75,13 @@ Check live: `curl -sL "https://navaal.ai/blog/shopify-product-data-409-stores?cb
 must be **2**. If 0, pull the page down — the headline must never appear without its sensitivity
 row.
 
-**2b — the legal redirects**, exactly as `_UPLOAD-LEGAL-REDIRECTS.md`: upload `privacy.html` and
-`terms.html` from `_upload-legal-redirects/`; paste `htaccess-snippet.txt` into the existing
-`.htaccess` at the position the file names — **do not overwrite `.htaccess`**. Run the four
-checks in §3 of that file: `301` + `location: https://app.navaal.ai/privacy` (and `/terms`), one
-hop each.
+**2b — the legal redirects, in two halves.** CW found `navaal.ai/privacy` is **not** a stale copy but
+a two-part policy (website + the Bilby scan, and the app); a redirect would delete the website's only
+policy. So: upload **`terms.html` only** now (the 8 July terms are stale app terms), plus the
+`.htaccess` line for `/terms` only, exactly as `_UPLOAD-LEGAL-REDIRECTS.md` describes for that file.
+**Do not upload `privacy.html`** until CC posts the Part B sha that merges both parts into the
+generated page — if that sha is already in the queue when you get here, upload both. Check:
+`curl -sI "https://navaal.ai/terms?cb=$(date +%s)"` → `301` + `location: https://app.navaal.ai/terms`.
 
 **2c — `support@` on the marketing pages.** CC found `support@navaal.ai` on five marketing
 pages while `hello@` is everywhere else. Find them (`grep -rl "support@navaal.ai"` on the local
@@ -167,8 +172,8 @@ H4/H5/H6 have been on the owner's list since day one. Record with Playwright's v
 the queue rather than pretending; the content is what matters.
 
 - **H4** — a fresh install from the listing on a dev store → OAuth grant → first screen → first
-  draft. Under 120 seconds. (If `navaal-qa-fresh` is released by CC's "done with it", use it —
-  this doubles as Task 12's first run. Otherwise a `navaal-shape-*` store.)
+  draft. Under 120 seconds. (`navaal-qa-fresh` is released — CC posted "done with it" and CW has already reinstalled it once;
+  use it, or a `navaal-shape-*` store.)
 - **H5** — a Free store driven from 0 toward its 100-credit cap: capture the warning surface when
   it appears and the 100% card. Stop when both are on film; do not burn the whole allowance for
   its own sake.
@@ -192,11 +197,13 @@ be the same inbox, say so and close H16 as moot.
 
 ---
 
-## TASK 10 — CLASSIFY THE SHOPS (5 minutes, if CC's `ShopKind` has landed)
+## TASK 10 — CLASSIFY THE SHOPS (5 minutes)
 
-If the funnel now has `ShopKind`, classify every `unclassified` row with the owner beside you:
-ours / Shopify's / real — using your own ledger in `06-QUEUE.md` §PHASE 7. Then re-run the funnel
-read-only and quote it: expect 3 real ever, 2 now, 0 published.
+`Shop.kind` is live (`f974f49`). CC queued the **Shop kind seed workflow** with a domain-list step;
+your ledger in `06-QUEUE.md` §PHASE 7 is the source — ours / Shopify's / real. Run it (GitHub, the
+owner logged in — or post the domain list and CC runs it), then the **Funnel workflow** — not
+Prisma from this VM, the client is Windows-built until CC adds the debian target. Quote the
+reading: expect real 2 installed / 3 ever, ours 11, Shopify's 7, unclassified 0, published 0.
 
 ---
 
@@ -208,24 +215,33 @@ contains the launch-day failures, one line: not yet.
 
 ---
 
-## TASK 12 — THE CAPTURE (only if CC has posted "qa-fresh: CC is done with it")
+## TASK 12 — THE LISTING IMAGES: THREE TODAY, TWO WHEN CC POSTS (15 minutes)
 
-Then exactly `CW-PROMPT-P11.md` Task 2: uninstall/reinstall qa-fresh from the listing, read FR8 /
-N1 / FR13 / FR2, capture 04 there and the dev2 set, ≥3 clean desktop, upload, read back,
-`CAPTURE COMPLETE`. If CC has not posted, skip; say so.
+Decided in `04-DECISIONS.md`: **upload frames 02 (Review), 03 (Products) and 05 (Settings) now** —
+the three you judged clean — replacing whatever launch screenshots are live (the earlier set showed
+Shopify's admin chrome and a Sidekick glyph, a named BFS rejection reason). Captions from
+`12-OFFER.md` §4 language only. Read the live listing back on a fresh load; the three showing are
+the three you uploaded. Post `CAPTURE COMPLETE (3 of 8)`; dev2's freeze lifts.
 
----
+**01 (Home) and 04 (First run)** wait on CC's Part A sha — the *"Unchanged since"* / *"Autopilot
+optimized 15"* contradiction and the orange theme banner are both CC's. When the sha is live:
+declare a short freeze, re-capture only those two on dev2 and qa-fresh, look at them, add them if
+clean. **Never upload a frame with a contradiction on it**, whatever the gallery count.
 
-## TASK 13 — LISTING TRANSLATIONS (ungated; the file exists — 20 minutes)
+## TASK 13 — LISTING TRANSLATIONS, ONE LOCALE AT A TIME, ONLY AFTER THE APP SPEAKS IT
 
-`docs/navaal/LISTING-TRANSLATIONS.md` is delivered: German, French, Spanish, Italian, Portuguese
-(Brazil), Japanese — subtitle, introduction, details, the five §5.6 bullets, five search terms and
-all eighteen plan lines per language, every string script-counted inside Shopify's limits. Follow
-the file's *HOW CW ENTERS IT* section exactly: one language at a time, paste verbatim, the editor's
-counter wins over the file's, save, read back per language, confirm on the public listing with the
-language switched. Post any field the editor made you trim, verbatim, for Cowork.
+`docs/navaal/LISTING-TRANSLATIONS.md` is ready — six languages, every string script-counted inside
+Shopify's limits. **But the app's UI is English-only today**, and a translated listing for an
+English-only app is a false claim on a Shopify submission. So the rule (`11-MASTERPLAN.md` §6.5 B):
+**enter a locale's listing only after CC posts that locale live in the app** — German first, then
+French, Spanish, Italian, Portuguese (Brazil), Japanese.
 
----
+For each locale CC has posted: Partner Dashboard → listing → that language → paste every field
+verbatim from the file → the editor's counter wins over the file's → save → read back on a fresh
+load → switch the public listing to that language and confirm the subtitle and five bullets render
+→ set the listing's **Languages** field to include it → post per locale, with any field the editor
+made you trim, verbatim, for Cowork. If no locale is posted yet when you reach this task, skip and
+say so — that is correct, not a failure.
 
 ## TASK 14 — THE SWEEP, LAST
 

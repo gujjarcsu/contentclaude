@@ -122,6 +122,9 @@ Before claiming a pass, check you are not repeating one of these:
 12. A verified production deploy, read as proof of what Shopify serves.
 13. A piped deploy gate returning the pipe's exit code, not the script's (CC, `| tail`).
 14. Two hosts serving the same legal page — one current, one stale — each worker reading a different one.
+15. A push chained after a failed suite with `;` (CC).
+16. A control proved by its route: the URL works, the button never pointed at it — three times on one button (FR13).
+17. A record deleted on a loop by a sweep that matched a domain, not an install — while the app kept serving screens.
 
 ---
 
@@ -385,3 +388,18 @@ next command ran anyway because `;` does not care. Same family as 13 (a pipe ret
 exit) — a gate that is *displayed* is not a gate that is *enforced*. **The rule: capture the exit
 code and branch on it** — `npx vitest run > log; rc=$?; if [ $rc -eq 0 ]; then … push …; fi` — and
 never `;` between a check and a push. `6d7f556` is the fix; `ae731f3` never deployed.
+
+**16. A control proved by its route.** `/app/review?product=<id>` works and was proved working
+three times (`11c5bbf`, `f77eef9`, Phase 11 Part C). The row's `[Review]` button — an href-less
+`<button>` — still landed on `/app/products/<id>` every time CW clicked it. **The rule:** a
+merchant-facing control is proved by **clicking it in a browser and reading where it landed**, never
+by asserting on the route it was meant to reach. A loader test proves the destination exists; only
+a click proves the button goes there.
+
+**17. A sweep that matched a domain, not an install.** `navaal-qa-fresh` was deleted every ten
+minutes for a day: an old `shop/redact` request, keyed on the domain, found the *new* Shop row each
+reinstall created and finished the redaction again, while token exchange kept the app serving
+screens. Shopify's "installed" and the app's "installed" disagreed and both were, in their own
+terms, right. **The rule:** *the domain is not the shop; the install is.* Every destructive action
+keyed on a shop is keyed on the install it belongs to, and probes Shopify before believing a
+delivery. CW's refusal to uninstall the only live example is what made the diagnosis possible.
