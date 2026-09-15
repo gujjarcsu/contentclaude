@@ -393,3 +393,13 @@ app speaks it") is met for German only.
    → Deutsch, then Home, Attention, Plans. Put it back to "Follow my Shopify admin language" after.
 3. Do NOT enter French, Spanish, Italian, Portuguese or Japanese yet — those locales are not live and
    `?locale=fr` renders English by design. Each gets its own gate post.
+
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D2: ENTER THE FRENCH LISTING (15 minutes)
+
+Live at `86b417c`: the app speaks French — every screen, `/privacy` and `/terms` (`?locale=fr` or
+a French browser), the weekly report. The queue post of the same date has the proofs.
+
+1. Enter the French listing from `LISTING-TRANSLATIONS.md` §French, verbatim; the editor's counter
+   decides; post each count as it reads back. (German first if not yet entered.)
+2. To see it: Settings → App language → Français on any of our stores; put it back after.
+3. Not yet: es, it, pt-BR, ja.

@@ -67,7 +67,7 @@
   "{length}/60 characters": "{length}/60 caractères",
   "{max} points": "{max} points",
   "{n, plural, one {# bulk job} other {# bulk jobs}} generating in the background": "{n, plural, one {# traitement en masse} other {# traitements en masse}} en cours en arrière-plan",
-  "{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote. The first three are being written below.": "{n, plural, one {# description est} other {# descriptions sont}} trop courte(s) pour qu'une réponse puisse la citer. Les trois premières sont en cours de rédaction ci-dessous.",
+  "{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote. The first three are being written below.": "{n, plural, one {# description est trop courte pour qu'une réponse puisse la citer.} other {# descriptions sont trop courtes pour qu'une réponse puisse les citer.}} Les trois premières sont en cours de rédaction ci-dessous.",
   "{n, plural, one {# draft} other {# drafts}} ready to review": "{n, plural, one {# brouillon prêt} other {# brouillons prêts}} pour relecture",
   "{n, plural, one {# draft} other {# drafts}} waiting for review": "{n, plural, one {# brouillon en attente} other {# brouillons en attente}} de relecture",
   "{n, plural, one {# image has} other {# images have}} no alt text — free to write, reviewed before it is published.": "{n, plural, one {# image n'a} other {# images n'ont}} pas de texte alternatif – rédaction gratuite, relue avant publication.",

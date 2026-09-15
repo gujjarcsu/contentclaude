@@ -18,17 +18,20 @@ import { composeWeeklyReport } from "../../app/utils/weeklyReport.server.js";
 import { PRIVACY_SECTIONS, TERMS_SECTIONS } from "../../app/utils/legal.js";
 
 /**
- * Second-person familiar forms, by language — the listing addresses every
- * merchant formally. Boundaries are Unicode-aware: JavaScript's \b is ASCII,
- * so "prêtes" would end in a "tes" it thinks is a word.
+ * The register is the listing's (LISTING-TRANSLATIONS.md): German and French
+ * address the merchant formally (Sie / vous), Spanish and Italian informally
+ * (tú / tu), Brazilian Portuguese with the neutral você, Japanese politely.
+ * What is forbidden in a catalogue is the OTHER register. Boundaries are
+ * Unicode-aware: JavaScript's \b is ASCII, so "prêtes" would end in a "tes"
+ * it thinks is a word.
  */
-const word = (forms) => new RegExp(`(?<![\\p{L}'’])(${forms})(?![\\p{L}])`, "iu");
-const INFORMAL = {
+const word = (forms, flags = "iu") => new RegExp(`(?<![\\p{L}'’])(${forms})(?![\\p{L}])`, flags);
+const FORBIDDEN = {
   de: word("du|dich|dir|dein|deine|deinem|deinen|deiner|deines|deins"),
   fr: word("tu|toi|ta|tes"), // "ton" is the noun in "ton de marque"
-  es: word("tú|tu|tus|tuyo|tuya|tuyos|tuyas"),
-  it: word("tu|tuo|tua|tuoi|tue"),
-  "pt-BR": word("tu|teu|tua|teus|tuas"),
+  es: word("usted|ustedes"),
+  it: word("Lei|Suo|Sua|Suoi|Sue", "u"), // the capitalised formal forms only
+  "pt-BR": word("tu|teu|tua|teus|tuas|senhor|senhora"),
   ja: null,
 };
 /** What the credit unit reads as, by language (the listing's word). */
@@ -50,11 +53,11 @@ for (const loc of LIVE_UI_LOCALES.filter((l) => l !== "en")) {
       expect(t("Review drafts")).toBe(table["Review drafts"]);
     });
 
-    it("addresses the merchant formally, as the listing does", () => {
-      const informal = INFORMAL[loc];
-      if (!informal) return;
-      const offenders = Object.entries(table).filter(([, v]) => informal.test(String(v)));
-      expect(offenders.map(([k]) => k.slice(0, 60)), `informal address in ${loc}.json`).toEqual([]);
+    it("addresses the merchant in the listing's register", () => {
+      const forbidden = FORBIDDEN[loc];
+      if (!forbidden) return;
+      const offenders = Object.entries(table).filter(([, v]) => forbidden.test(String(v)));
+      expect(offenders.map(([k]) => k.slice(0, 60)), `wrong register in ${loc}.json`).toEqual([]);
     });
 
     it("keeps the credit unit, the plan names and the app name", () => {

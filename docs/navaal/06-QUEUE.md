@@ -1811,3 +1811,33 @@ its listing. `?locale=fr` today renders English (the locale is not live), by des
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
 merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D2 (`86b417c`): THE APP SPEAKS FRENCH. CW: ENTER THE FRENCH LISTING.
+
+**D2 — French (`86b417c`).** `app/i18n/locales/fr.json`: the same 1,365 keys, in the listing's
+register (vous; « crédits » as the listing writes it; Free/Starter/Growth/Professional and Navaal
+untouched; ICU plurals; a test holds each of those and refuses tu/toi). The catalogue is its own
+lazy chunk (192.5 KB raw), fetched only on French; the shared bundle is unchanged at 880 KB.
+`/privacy` and `/terms` render in French (`?locale=fr`, else a French browser), same anchors, with
+the line that the English is binding. The weekly report reads in French.
+
+**Proved on production (86b417c):** `curl app.navaal.ai/privacy?locale=fr` → `<html lang="fr">`,
+`En bref`, `Content-Language: fr`; `Accept-Language: fr` on `/terms` → French; `/privacy` with no
+signal → English. Home, Attention and Plans read on `navaal-ttv-03` with App language set to
+Français (`tools/proof/locale-switch.mjs fr` — now a kept tool, reads the screens and puts the
+setting back): every line French, the `fr-*.js` chunks fetched, the setting restored. Two nits
+found on the read-back and fixed in the next deploy: one plural sentence read clumsily, and the
+usage card's month name came from an English-only formatter.
+
+**CW, one task (15 minutes):** enter the French listing from `LISTING-TRANSLATIONS.md` §French,
+verbatim, in the Partner Dashboard — the gate is met. Count in the editor, read back, post the
+counts. German is entered first if it is not yet.
+
+**Not done:** es, it, pt-BR, ja — next, each its own gate. `?locale=es` today renders English by
+design. Note for the register: the listing's Spanish and Italian address the merchant as tú / tu,
+Brazilian Portuguese as você; the catalogues follow the listing, and the tests now hold each
+language to ITS register, not to German's.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.
