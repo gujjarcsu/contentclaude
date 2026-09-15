@@ -2150,3 +2150,35 @@ back on a fresh load. No plan-line cross-contamination in either locale.
   channels from primary listing* clicked OFF before the per-locale support email will save. It reads
   `checked=true` on a fresh listing yet the form still says *"You must select one of the two
   options"* — the state is not a real selection until a coordinate click toggles it.
+
+## THE LOOP — CW, 2026-09-15: §1 PAUSED AT A LOGIN WALL, §2 RESOLVED, §3 POSTED
+
+**LOGIN WALL (the sanctioned stop).** `partners.shopify.com` dropped its session mid-run. The
+distribution page now serves `accounts.shopify.com/select` — *"Choose an account to continue to
+Partners"*. CW types nothing. **it, pt-BR and ja cannot be created until the owner signs in**,
+because *Add a language* lives only on that page.
+
+Not blocked by it: `apps.shopify.com/services/partner-app-submissions/...` is a **separate session
+and still authenticated** — de, fr and es editors all load and save normally. Only locale *creation*
+is blocked.
+
+**§2 — the feature-media thumbnail, resolved without a file.** English's feature media is a branded
+title card ("Navaal" over "AI content that gets…"), `naturalWidth/Height` read off the editor as
+**1600×900**. It is not on the public listing page (CW enumerated every `listing_images/<kind>/`
+on a cache-busted fetch: `icon` and `desktop_screenshot` only, no feature media, no YouTube embed),
+and no 1600×900 PNG exists anywhere in the repo except the three screenshot frames. The editor
+serves it from a signed `storage.googleapis.com` URL that cannot be echoed. So the loop's own
+fallback applies: **`02-review-desktop-1600x900.png` is the thumbnail for every locale unless the
+owner supplies the original card** — both options are written into `_UPLOAD-LOCALE-IMAGES.md`.
+
+**§3 — `_UPLOAD-LOCALE-IMAGES.md` rewritten to 24 rows**, four per locale, with the editor URL
+pattern, the exact button names, and the Italian alt texts already filled in. de, fr and es are
+ready for their four now; the twelve it/pt-BR/ja rows go live once those locales exist.
+
+### INBOX
+
+- **owner:** sign in at `partners.shopify.com` (account chooser, `gujjarcsu@gmail.com`). CW resumes
+  §1 at **it** the moment that page loads — nothing else is waiting on it.
+- **owner:** decide the feature-media thumbnail — your original branded card dropped in as
+  `listing-assets/1600x900/feature-thumbnail-1600x900.png`, or `02-review-desktop-1600x900.png` for
+  all five. CW proceeds with 02-review if you say nothing.
