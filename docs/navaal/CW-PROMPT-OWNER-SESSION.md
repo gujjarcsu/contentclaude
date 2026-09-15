@@ -1,6 +1,7 @@
 # CW — THE OWNER SESSION, CONTINUED: HOSTINGER IS SIGNED IN. EVERYTHING REMAINING, IN ORDER.
 
-Paste this whole file into the running session (or a fresh one — it re-orients itself). It replaces
+Paste this whole file into the running session that is paused at *LOGIN NEEDED: Hostinger* (or a
+fresh one — it re-orients itself). Treat the earlier pause as answered: the owner has signed in. It replaces
 the earlier owner-session file and the addendum; both are in `_superseded/`. The owner is at the
 keyboard. **The protocol does not change:** you never type a credential; at any login wall you print
 `LOGIN NEEDED: <service>` and wait for "go"; every write is announced, then made, then read back;
@@ -12,9 +13,13 @@ EBS is read-only; real merchants' stores are public pages only.
   via *Deploy Secrets*, which — your finding, now false green #18 — shipped the newest built image.
 - **Task 5 done.** `docs/navaal/PROSPECTS.md`: thirty stores with whole-catalogue counts and a
   contact route; the barcode rule written in. Nobody is contacted in this session.
-- **Two owner answers, given:** `support@navaal.ai` **is a real inbox** — Task 2c is closed with
-  nothing to edit; note in the queue that both addresses are real and `CONTACT_EMAIL` stays as is.
-  **Hostinger is signed in** in this browser — Task 2 starts without a login prompt.
+- **Owner answers, given:** `support@navaal.ai` **is a real inbox** — Task 2c is closed with nothing
+  to edit; note in the queue that both addresses are real and `CONTACT_EMAIL` stays as is.
+  **Every account this file names is already signed in in this browser** — Hostinger, Bing Webmaster
+  Tools, GitHub, Gmail, UptimeRobot, Neon, the Shopify Partner chooser. So do **not** pause at the
+  `LOGIN NEEDED` lines below; proceed. Print the line and stop **only** if a page actually presents
+  a login wall or a 2FA prompt — then the owner handles it and says "go". You still never type a
+  credential.
 - **Phase 12 is live.** Cowork verified from outside: production **`4d32d98`**, 329 columns,
   healthy; `/privacy` and `/terms` answer `Accept-Language` for `de fr es it pt-BR ja` with
   `Content-Language` set; `grep -c 'id="part-1"'` on `app.navaal.ai/privacy` returns **1**, so the
