@@ -28,6 +28,7 @@ import { calculateSeoScore } from "./seo.server.js";
 import { scopeQueryFor } from "./candidates.js";
 import { calculateGeoScore } from "./geo.server.js";
 import { shopifyQuery } from "./shopifyQuery.server.js";
+import { defaultLanguageFor } from "./language.js";
 
 /**
  * How many products to score. The store score is a sample and is described as
@@ -73,7 +74,7 @@ export const SCORED_PRODUCT_FIELDS = `
       variants(first: 3) { edges { node { price } } }`;
 
 export const START_SCAN_QUERY = `query startScan($n: Int!, $scoped: String) {
-  shop { name }
+  shop { name billingAddress { countryCodeV2 } }
   collections(first: 20, sortKey: UPDATED_AT, reverse: true) {
     edges { node { title description } }
   }
@@ -180,7 +181,7 @@ export function pickWeakest(scored, n = START_TARGETS) {
 export async function scanStoreForStart(
   admin,
   shop,
-  { skipCache = false, ttlSeconds = START_SCAN_TTL_S } = {},
+  { skipCache = false, ttlSeconds = START_SCAN_TTL_S, adminLocale = null } = {},
 ) {
   const load = async () => {
     // Phase 4 item 6 — through the shared backoff. This scan now feeds the
@@ -213,6 +214,9 @@ export async function scanStoreForStart(
     if (!r.ok) throw new Error(r.error ?? "scan unavailable");
 
     const shopName = r.data?.shop?.name ?? null;
+    // Phase 12 A5 — the shop's country, read with the name, one of the three
+    // scope-free signals the language default uses.
+    const country = r.data?.shop?.billingAddress?.countryCodeV2 ?? null;
     // A4.6 — a merchant's differentiators live in their COLLECTION copy far more
     // often than in a product description: 21 of 30 sampled collections on the
     // real store carried full hand-written text naming certifications, the trade
@@ -247,7 +251,7 @@ export async function scanStoreForStart(
       }))
       .filter((p) => p.text.length > 0);
     const nodes = (r.data?.products?.edges ?? []).map((e) => e.node).filter(Boolean);
-    if (nodes.length === 0) return { empty: true, shopName };
+    if (nodes.length === 0) return { empty: true, shopName, country, language: defaultLanguageFor({ adminLocale, country }) };
 
     const scored = nodes.map((node) => {
       const p = toScorable(node);
@@ -269,9 +273,18 @@ export async function scanStoreForStart(
         .slice(0, 280),
     }));
 
+    // Phase 12 A5 — the language this store writes in, from its own copy
+    // first, then the admin locale, then the country. Named on the splash,
+    // stored on the Shop row, and the brand voice's default when the merchant
+    // has not chosen one.
+    const catalogueText = [...scored.map((p) => `${p.title} ${p.description}`), ...collectionCopy.map((c) => c.text)].join(" ");
+    const language = defaultLanguageFor({ catalogueText, adminLocale, country });
+
     return {
       empty: false,
       shopName,
+      country,
+      language,
       collectionCopy,
       pageCopy,
       // Phase 4 item 4.3 — every scored product, so the store score and the

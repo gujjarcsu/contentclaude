@@ -30,6 +30,7 @@ import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { plainText } from "./contentQuality.js";
 import { recurringClaims } from "./standingClaims.js";
+import { isBoilerplate, POLICY_TITLE_PATTERN, SUPPORTED_LANGUAGES } from "./language.js";
 
 /** How many of the merchant's own descriptions to keep as voice samples. */
 export const SAMPLE_COUNT = 3;
@@ -67,7 +68,9 @@ export const MAX_DIFFERENTIATORS = 5;
  * Invents nothing: a shop that repeats nothing gets "".
  */
 export function inferDifferentiators(texts) {
-  const found = recurringClaims(texts, { minShare: 0.2, minCount: 3 });
+  // Phase 12 A6 — a cookie notice repeated on every page is not a differentiator.
+  const own = (Array.isArray(texts) ? texts : []).filter((t) => !isBoilerplate(t));
+  const found = recurringClaims(own, { minShare: 0.2, minCount: 3 });
   return found
     .slice(0, MAX_DIFFERENTIATORS)
     .map((f) => f.text.trim())
@@ -121,7 +124,11 @@ export function pickVoiceSamples(scored, { count = SAMPLE_COUNT, collectionCopy 
     score: PAGE_SAMPLE_SCORE,
   }));
 
+  // Phase 12 A6 — navaal-shape-fr's voice sample began "Your Privacy Choices:
+  // As described in our Privacy Policy, we". A policy page by title, or any
+  // text carrying the boilerplate lexicon, is never a voice sample.
   return [...products, ...collections, ...pages]
+    .filter((p) => !POLICY_TITLE_PATTERN.test(p.title ?? "") && !isBoilerplate(p.text))
     .filter((p) => p.text.length >= MIN_SAMPLE_CHARS)
     .sort((a, b) => b.score - a.score || b.text.length - a.text.length)
     .slice(0, count);
@@ -155,7 +162,7 @@ export function buildSampleContent(samples) {
  */
 export async function ensureInferredBrandVoice(
   shop,
-  { scored = [], shopName = null, collectionCopy = [], pageCopy = [] } = {},
+  { scored = [], shopName = null, collectionCopy = [], pageCopy = [], language = null, languageSource = null } = {},
 ) {
   try {
     const existing = await prisma.brandVoice.findUnique({
@@ -179,9 +186,11 @@ export async function ensureInferredBrandVoice(
     // an empty string — "Alpine Supply" reads as a brand, "" reads as a bug.
     const storeName = String(shopName || "").trim() || String(shop).split(".")[0];
 
+    // Phase 12 A5 — the language the store was read as, never a silent "en".
+    const lang = SUPPORTED_LANGUAGES.includes(language) ? language : "en";
     await prisma.brandVoice.upsert({
       where: { shop },
-      create: { shop, storeName, sampleContent, keyDifferentiators },
+      create: { shop, storeName, sampleContent, keyDifferentiators, language: lang },
       // Empty ON PURPOSE. If the row appeared between the read above and this
       // write, the merchant's own settings win — inference never overwrites.
       update: {},
@@ -194,6 +203,8 @@ export async function ensureInferredBrandVoice(
         samples: samples.length,
         collectionsSampled: samples.filter((s) => s.score === COLLECTION_SAMPLE_SCORE).length,
         differentiators: keyDifferentiators ? keyDifferentiators.length : 0,
+        language: lang,
+        languageSource,
         event: "brand_voice_inferred",
       },
       "Brand voice inferred from the shop's own copy",

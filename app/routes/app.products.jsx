@@ -1266,9 +1266,16 @@ export default function ProductsPage() {
                             a real `enhance` action. */}
                         <Button
                           size="slim"
-                          onClick={() =>
-                            rowActionLabel(id, description) === "Review" ? navigate(`/app/review?product=${numericId}`) : navigate(`/app/products/${numericId}`)
-                          }
+                          onClick={(e) => {
+                            // FR13, third time (Phase 12 A1). This handler always ran — and
+                            // then the click BUBBLED into the ResourceItem's own onClick,
+                            // which navigated to /app/products/<id> last. The route was
+                            // right twice over and the click still landed on the product
+                            // page. Stop the bubble; then navigate once.
+                            e?.stopPropagation?.();
+                            e?.preventDefault?.();
+                            navigate(rowActionLabel(id, description) === "Review" ? `/app/review?product=${numericId}` : `/app/products/${numericId}`);
+                          }}
                         >
                           {rowActionLabel(id, description)}
                         </Button>

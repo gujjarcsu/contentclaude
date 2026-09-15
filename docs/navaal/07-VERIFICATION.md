@@ -403,3 +403,26 @@ screens. Shopify's "installed" and the app's "installed" disagreed and both were
 terms, right. **The rule:** *the domain is not the shop; the install is.* Every destructive action
 keyed on a shop is keyed on the install it belongs to, and probes Shopify before believing a
 delivery. CW's refusal to uninstall the only live example is what made the diagnosis possible.
+
+## FALSE GREENS 16 AND 17 — found 2026-09-15, Phase 11
+
+**#16 — a control proved by its route.** *(CW's, numbered here so it does not collide with #15.)*
+FR13 was proved twice: the loader scoped `/app/review?product=<numeric id>` correctly, a read-only
+harness loaded that URL and counted one card, the row button's `onClick` read `navigate("/app/
+review?product=…")` in the source. Nobody clicked the button. When CW did, it landed on
+`/app/products/<id>` — the handler ran, and then the click bubbled into the `ResourceItem`'s own
+`onClick`, which navigated last. **A route is not a control. The proof of a button is a click that
+reads `location` afterwards** (`tools/proof/fr13-click.mjs`), not a loader test and not a grep of the
+handler. Three sessions accepted the route as the proof.
+
+**#17 — the domain is not the shop; the install is.** `navaal-qa-fresh` was installed, served every
+screen, and had no Shop row: an old `shop/redact` request (12 Sep, for the 10 Sep uninstall — correct
+then) was found by the ten-minute sweep on every run, matched by **domain** to the **new** row each
+reinstall created, and "finished" — every per-shop row deleted, the row anonymised — minutes after
+every install, five times in one day. Every guard passed; the sweep's own log line said *"Redaction
+owed but incomplete — finishing"* as if it were being diligent. **Any durable "work owed" marker keyed
+on an identifier that outlives the thing it was about will be re-applied to the next thing that
+identifier names.** Consume the request once (`completedAt`); a request older than the current
+install is for the install before it; and before deleting or flagging, ask the system that actually
+knows — Shopify's token answers or it does not. In the runbook as the first thing to check when a
+store "has no row".

@@ -132,6 +132,23 @@ PASS 107 · HELD 15 · NOT RUN 75 · n/a 127 — 36 rows × 9 phases.
 - `PLAN:ABOVE_ANY_PLAN` / Screens → no 20,000-product store
 - `API:DEPLOY_MID_JOB` / Publish → a deploy during a publish on a navaal-shape-* store
 
+**NOT RUN that no shape store can close (14 cells) — a size, a plan or a moment the six stores are not; the reason is the store it would take:**
+
+- `SIZE:ONE_PAGE` / Screens — a 250-product dev store
+- `SIZE:ONE_PAGE` / Draft — a 250-product dev store
+- `SIZE:ONE_PAGE` / Publish — a 250-product dev store
+- `SIZE:MULTI_PAGE` / Screens — no 3,000-product dev store
+- `SIZE:MULTI_PAGE` / Draft — no 3,000-product dev store
+- `SIZE:MULTI_PAGE` / Publish — no 3,000-product dev store
+- `SIZE:LARGE` / Screens — no 50,000-product store; Count says 10,000+
+- `SIZE:LARGE` / Draft — no 50,000-product store
+- `SIZE:LARGE` / Publish — no 50,000-product store
+- `SIZE:HUGE` / Screens — no 500,000-product store; Count says 10,000+
+- `SIZE:HUGE` / Draft — no 500,000-product store
+- `SIZE:HUGE` / Publish — no 500,000-product store
+- `PLAN:MID_TIER` / Screens — a paid dev store (Phase 8 read-screen on Starter)
+- `PLAN:ABOVE_ANY_PLAN` / Screens — no 20,000-product store
+
 **HELD, and by what:**
 
 - `SIZE:EMPTY` / Screens — tests/routes/emptyStates.test.js

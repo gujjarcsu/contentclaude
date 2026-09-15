@@ -2,7 +2,9 @@ import { Suspense, useState } from "react";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { EmbedSetupCard, embedDeepLink } from "../components/EmbedSetupCard.jsx";
+import { EmbedSetupCard, EmbedLaterNote, embedDeepLink } from "../components/EmbedSetupCard.jsx";
+import { FirstRunFindingsCard } from "../components/FirstRunFindingsCard.jsx";
+import { changeWindowFor, autopilotBannerTitle } from "../utils/homeCopy.js";
 import { StartState } from "../components/StartState.jsx";
 import { scoreTone } from "../utils/scoreBands.js";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
@@ -52,7 +54,7 @@ import { homeAttentionLines } from "../utils/catalogueWatch.js";
 import { scanStoreForStart, START_TARGETS } from "../utils/startState.server.js";
 import { stampProductCountAtFirstLoad, markFirstScreen, markReturned } from "../utils/firstValue.server.js";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
-import { getStoreScore } from "../utils/storeScore.server.js";
+import { getStoreScore, firstRunFindings } from "../utils/storeScore.server.js";
 import { recentAutopilotWork } from "../utils/autopilot.server.js";
 
 /** A2 (Phase 8) — how long after the first draft a visit is still the first one. */
@@ -165,7 +167,7 @@ export const loader = async ({ request }) => {
     // Not "has no content" (a merchant who deleted every draft is not new) and
     // not a GrowthState flag (those did not survive uninstall/reinstall): the
     // first-value milestone on the Shop row, which ttvReport measures.
-    prisma.shop.findUnique({ where: { shop }, select: { firstDraftSeenAt: true } }).catch(() => null),
+    prisma.shop.findUnique({ where: { shop }, select: { firstDraftSeenAt: true, firstPublishAt: true } }).catch(() => null),
   ]);
 
   // Phase 2 item 2.1 - one definition of product state, shared with Products
@@ -244,16 +246,25 @@ export const loader = async ({ request }) => {
   // 100% used. Null when the shop is below the threshold, already out (that is
   // the card's job, on the screens where the action lives), or dismissed it in
   // the last 7 days. Never throws.
-  const [quotaWarning, storeScore, autopilotRecap] = await Promise.all([
+  // Phase 12 A5 — the admin locale Shopify passes to the embedded app, one of
+  // the three scope-free signals the language default reads.
+  const adminLocale = new URL(request.url).searchParams.get("locale");
+  const [quotaWarning, storeScore] = await Promise.all([
     getQuotaWarning({ shop, plan, usageCount, surface: "dashboard" }),
     // Phase 4 item 4.3 — the merchant's proof the app worked. One GraphQL page,
     // cached 10 minutes per shop, so reloading Home does not re-scan. Returns
     // { available: false } rather than a number it cannot stand behind.
-    getStoreScore(admin, shop),
-    // Phase 4 item 5 — autopilot works while the merchant is not looking, so
-    // the one place it must show up is the screen they open next.
-    recentAutopilotWork(shop),
+    getStoreScore(admin, shop, { adminLocale }),
   ]);
+  // Phase 12 A3 — ONE window for "what changed" on this screen: the score
+  // card's baseline moment. Frame 01 read "Unchanged since September 14" above
+  // "Autopilot optimized 15 new products in the last 24 hours" — two windows,
+  // one screen. The autopilot recap now counts from the same moment and the
+  // banner names the same date.
+  const changeWindow = changeWindowFor(storeScore);
+  // Phase 4 item 5 — autopilot works while the merchant is not looking, so
+  // the one place it must show up is the screen they open next.
+  const autopilotRecap = await recentAutopilotWork(shop, { since: changeWindow.since });
 
   // P2.3 — the subscription's one number. Walks inline once for a shop that
   // has never been walked, so the first load has a real number, not a dash.
@@ -264,7 +275,13 @@ export const loader = async ({ request }) => {
 
   // P2.7 — the first run names the three specific things holding THIS store
   // back, from the walk that just ran. One query; never throws.
-  const blockers = isFirstRun ? await blockersFor(shop) : [];
+  // Phase 12 A4 / FR8 — until the first publish, Home leads with the result of
+  // the first run: the three lowest-scoring products (durable, from
+  // ProductScore) and the specific things the walk found. The theme step
+  // waits until there is published content to show.
+  const beforeFirstPublish = !!shopRow && !shopRow.firstPublishAt;
+  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop) : [];
+  const findings = beforeFirstPublish && !isFirstRun ? await firstRunFindings(shop) : [];
   // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
   const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
 
@@ -286,7 +303,7 @@ export const loader = async ({ request }) => {
         // thing: the products exist; none is where AI search can read it.
         totalProducts,
         candidateProducts,
-        scan: scanStoreForStart(admin, shop),
+        scan: scanStoreForStart(admin, shop, { adminLocale }),
       }
     : null;
 
@@ -321,6 +338,10 @@ export const loader = async ({ request }) => {
     quotaWarning,
     storeScore,
     autopilotRecap,
+    changeWindowLabel: changeWindow.label,
+    beforeFirstPublish,
+    findings,
+    blockers,
     attention,
     proof,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
@@ -667,6 +688,10 @@ export default function Dashboard() {
     quotaWarning,
     storeScore,
     autopilotRecap,
+    changeWindowLabel,
+    beforeFirstPublish,
+    findings,
+    blockers,
     attention,
     proof,
     plan,
@@ -775,11 +800,16 @@ export default function Dashboard() {
             number that tells a merchant the app did something for them. */}
         <StoreScoreCard score={storeScore} />
 
-        {/* Phase 4 item 5 — what autopilot did while nobody was watching. */}
-        {autopilotRecap && (
+        {/* Phase 12 A4 / FR8 — the result of the first run leads until the first publish. */}
+        {beforeFirstPublish && <FirstRunFindingsCard findings={findings} blockers={blockers} navigate={navigate} />}
+
+        {/* Phase 4 item 5 — what autopilot did while nobody was watching.
+            Phase 12 A3 — counted over the score card's own window, and named
+            with the same date, so the two lines can never disagree. */}
+        {autopilotRecap && autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }) && (
           <Banner
             tone="info"
-            title={`Autopilot optimized ${autopilotRecap.products} new product${autopilotRecap.products === 1 ? "" : "s"} in the last 24 hours`}
+            title={autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel })}
             action={{ content: "Review the drafts", onAction: () => navigate("/app/review") }}
           >
             <p>
@@ -862,8 +892,10 @@ export default function Dashboard() {
           </Banner>
         )}
 
-        {/* ── Theme embed setup (5.1.3) — persistent until confirmed done ── */}
-        <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
+        {/* ── Theme embed setup (5.1.3) — persistent until confirmed done.
+            Phase 12 A4 — promoted only once there is published content to
+            show; before the first publish it is one dismissible line. ── */}
+        {beforeFirstPublish ? <EmbedLaterNote confirmed={embedConfirmed} /> : <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />}
 
         {/* ── Onboarding checklist ───────────────────────────────────────── */}
         {isNewShop && (

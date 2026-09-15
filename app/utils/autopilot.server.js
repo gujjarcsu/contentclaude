@@ -71,15 +71,17 @@ export async function autopilotDailyUsage(shop, { now = new Date(), cap = AUTOPI
  * Reports only COMPLETED jobs with products in them. A queued or failed job is
  * not something to tell a merchant about on their dashboard.
  */
-export async function recentAutopilotWork(shop, { now = new Date() } = {}) {
+export async function recentAutopilotWork(shop, { now = new Date(), since = null } = {}) {
   try {
-    const since = new Date(now.getTime() - 24 * 3600 * 1000);
+    // Phase 12 A3 — the caller passes the screen's one change window (the score
+    // baseline moment); the 24-hour fallback is for a shop with no baseline yet.
+    const from = since && Number.isFinite(new Date(since).getTime()) ? new Date(since) : new Date(now.getTime() - 24 * 3600 * 1000);
     const rows = await prisma.generationJob.findMany({
       where: {
         shop,
         source: AUTOPILOT_SOURCE,
         status: "complete",
-        completedAt: { gte: since },
+        completedAt: { gte: from },
       },
       select: { completedProducts: true, completedAt: true },
       orderBy: { completedAt: "desc" },

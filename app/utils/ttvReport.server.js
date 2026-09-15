@@ -134,7 +134,8 @@ export function summarizeGrowth({ cohortRows = [], attempts = [], prompts = [], 
  * @param {{cohortSize?: number, excludeShops?: string[], windowDays?: number, now?: Date, diagShop?: string}} [opts]
  */
 export async function computeTtvReport(prisma, { cohortSize = 20, excludeShops = DEFAULT_EXCLUDE_SHOPS, windowDays = 30, now = new Date(), diagShop = null } = {}) {
-  const all = await prisma.shop.findMany({ where: { installSource: { not: "pre_tracking" }, shop: { notIn: excludeShops } } });
+  // R7 (Phase 12) — an anonymised row is a ghost of a past install, not a shop.
+  const all = await prisma.shop.findMany({ where: { installSource: { not: "pre_tracking" }, shop: { notIn: excludeShops }, redactedAt: null } });
   const sorted = all
     .filter((r) => installAtOf(r))
     .sort((a, b) => new Date(installAtOf(b)).getTime() - new Date(installAtOf(a)).getTime());

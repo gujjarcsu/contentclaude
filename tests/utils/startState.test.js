@@ -156,7 +156,7 @@ describe("the score is computed from the merchant's own catalogue", () => {
     // one of them would have parsed it. Shopify would have rejected every
     // scan in production.
     expect(START_SCAN_QUERY).not.toMatch(/\/\//);
-    expect(START_SCAN_QUERY).toMatch(/shop \{ name \}/);
+    expect(START_SCAN_QUERY).toMatch(/shop \{ name billingAddress \{ countryCodeV2 \} \}/);
   });
 
   it("asks for collection copy on the SAME request (A4.6)", () => {

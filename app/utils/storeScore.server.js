@@ -46,9 +46,9 @@ export const STORE_SCORE_TTL_S = 600;
  * @returns {Promise<{available: boolean, current?: number, atInstall?: number,
  *   delta?: number, since?: string|null, scanned?: number}>}
  */
-export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
+export async function getStoreScore(admin, shop, { now = new Date(), adminLocale = null } = {}) {
   try {
-    const scan = await scanStoreForStart(admin, shop, { ttlSeconds: STORE_SCORE_TTL_S });
+    const scan = await scanStoreForStart(admin, shop, { ttlSeconds: STORE_SCORE_TTL_S, adminLocale });
     if (!scan || scan.error || scan.empty || !Number.isFinite(scan.storeScore)) {
       return { available: false };
     }
@@ -81,7 +81,11 @@ export async function getStoreScore(admin, shop, { now = new Date() } = {}) {
       // A4.6 / A4.8 — where the merchant's differentiators actually live.
       collectionCopy: scan.collectionCopy ?? [],
       pageCopy: scan.pageCopy ?? [],
+      // Phase 12 A5 — the store's language, not "en".
+      language: scan.language?.code ?? null,
+      languageSource: scan.language?.source ?? null,
     });
+    void stampShopLocale(shop, scan.language);
 
     const atInstall = row?.storeScoreAtInstall;
     if (!Number.isFinite(atInstall)) {
@@ -186,5 +190,40 @@ export async function productScoresFor(shop, productIds) {
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "product scores unavailable (non-fatal)");
     return {};
+  }
+}
+
+/**
+ * Phase 12 A5 — remember the language the store was read as, refreshed on
+ * every scan (the scan is cached ten minutes, so this is per session in
+ * practice, like the name). Never throws.
+ */
+export async function stampShopLocale(shop, language) {
+  if (!shop || !language?.code) return false;
+  try {
+    const r = await prisma.shop.updateMany({ where: { shop }, data: { locale: language.code, localeSource: language.source ?? null } });
+    return r.count > 0;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "could not stamp the shop locale (non-fatal)");
+    return false;
+  }
+}
+
+/**
+ * Phase 12 A4 / FR8 — the three products the first run scored lowest, from
+ * the durable per-product rows, so the result the splash showed for twenty
+ * seconds has a place a merchant (and CW) can read later. Never throws.
+ */
+export async function firstRunFindings(shop, { take = 3 } = {}) {
+  try {
+    return await prisma.productScore.findMany({
+      where: { shop, scoreBefore: { not: null } },
+      orderBy: [{ scoreBefore: "asc" }, { productTitle: "asc" }],
+      take,
+      select: { productId: true, productTitle: true, scoreBefore: true, scoreAfter: true },
+    });
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "first-run findings unavailable (non-fatal)");
+    return [];
   }
 }

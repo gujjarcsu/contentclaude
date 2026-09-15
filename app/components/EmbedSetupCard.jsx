@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Banner, BlockStack, Text, InlineStack, Button, List } from "@shopify/polaris";
 
@@ -153,6 +154,24 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
           </fetcher.Form>
         </InlineStack>
       </BlockStack>
+    </Banner>
+  );
+}
+
+/**
+ * Phase 12 A4 — before the first publish there is nothing for the theme block
+ * to show, so the setup card would be a chore in front of a result. One line,
+ * dismissible for this visit; the full card takes over after the first publish.
+ */
+export function EmbedLaterNote({ confirmed }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (confirmed || dismissed) return null;
+  return (
+    <Banner tone="info" onDismiss={() => setDismissed(true)}>
+      <Text as="p" variant="bodySm">
+        Later, once you publish: a two-minute theme step puts the FAQ answers on your product pages. We will show it here
+        when there is something to show.
+      </Text>
     </Banner>
   );
 }

@@ -107,7 +107,8 @@ describe("A5 — buttons do what they say", () => {
   const p = src("app/routes/app.products.jsx");
 
   it("a row's Review button opens Review", () => {
-    expect(p).toMatch(/rowActionLabel\(id, description\) === "Review" \? navigate\(`\/app\/review\?product=\$\{numericId\}`\)/);
+    expect(p).toMatch(/navigate\(rowActionLabel\(id, description\) === "Review" \? `\/app\/review\?product=\$\{numericId\}` : `\/app\/products\/\$\{numericId\}`\)/);
+    expect(p).toMatch(/e\?\.stopPropagation\?\.\(\);/); // FR13, third time: the click must not bubble into the row
   });
 
   it("on Free the primary writes drafts through the per-product path; the bulk run is a secondary that names what it needs", () => {

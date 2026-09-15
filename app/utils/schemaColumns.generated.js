@@ -258,6 +258,8 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "Shop.installedAt",
   "Shop.kind",
   "Shop.lastWeeklyReportAt",
+  "Shop.locale",
+  "Shop.localeSource",
   "Shop.productCountAtFirstLoad",
   "Shop.provedResultAt",
   "Shop.quickStartDraftCount",

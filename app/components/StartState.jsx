@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { Await, useFetcher } from "react-router";
 import { scoreTone } from "../utils/scoreBands.js";
+import { languageName, languageSourceLabel } from "../utils/language.js";
 import {
   Page,
   Card,
@@ -329,6 +330,11 @@ function StartBody({ scan, start, navigate, onRetry }) {
             <Text as="p" variant="bodyMd" tone="subdued">
               {`Most stores start here: the score measures what is on your product pages, and every draft below moves it. These ${Math.min(targets.length, start.targetCount)} products hurt it most; we scanned ${scan.totalScanned} of your products.`}
             </Text>
+            {scan.language?.code && (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {`Drafts are written in ${languageName(scan.language.code)} — ${languageSourceLabel(scan.language.source)}. Change it in Settings.`}
+              </Text>
+            )}
           </BlockStack>
 
           <InlineStack gap="600" wrap>

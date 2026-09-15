@@ -101,7 +101,7 @@ describe("N1 — the splash states what the card will show", () => {
 
 describe("FR13 — Review opens Review, scoped to the product", () => {
   it("the Products row navigates with the product id", () => {
-    expect(code(readFileSync("app/routes/app.products.jsx", "utf8"))).toMatch(/navigate\(`\/app\/review\?product=\$\{numericId\}`\)/);
+    expect(code(readFileSync("app/routes/app.products.jsx", "utf8"))).toMatch(/navigate\(rowActionLabel\(id, description\) === "Review" \? `\/app\/review\?product=\$\{numericId\}` : `\/app\/products\/\$\{numericId\}`\)/); // Phase 12 A1: one navigate, after the bubble is stopped
   });
   it("the Review loader honours ?product= (numeric only) and the page says it is scoped, with a way back to all", () => {
     const src = code(readFileSync("app/routes/app.review.jsx", "utf8"));

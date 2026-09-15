@@ -117,6 +117,17 @@ export function cellsWith(status) {
   return out;
 }
 
+/**
+ * The NOT RUN cells no navaal-shape-* store can close: they name a store size
+ * none of the six is (250, 3,000, 50,000, 500,000 products), a paid dev store,
+ * or a deploy timed against a publish. CW's close-out count: 61 of the 90
+ * routed lines point at a shape store; these are the rest. Nobody should
+ * chase a store for them — each says what would.
+ */
+export function fixtureOnly() {
+  return cellsWith("NOT RUN").filter((c) => !/navaal-shape/.test(c.where));
+}
+
 export function tally() {
   const t = { PASS: 0, HELD: 0, "NOT RUN": 0, "n/a": 0 };
   for (const phases of Object.values(CELLS)) for (const p of PHASES) t[phases[p.key].status] += 1;
@@ -144,6 +155,10 @@ export function renderMatrix() {
   lines.push("**NOT RUN, and where each one goes:**");
   lines.push("");
   for (const c of cellsWith("NOT RUN")) lines.push(`- \`${c.row}\` / ${PHASES.find((p) => p.key === c.phase).label} → ${c.where}`);
+  lines.push("");
+  lines.push(`**NOT RUN that no shape store can close (${fixtureOnly().length} cells) — a size, a plan or a moment the six stores are not; the reason is the store it would take:**`);
+  lines.push("");
+  for (const c of fixtureOnly()) lines.push(`- \`${c.row}\` / ${PHASES.find((p) => p.key === c.phase).label} — ${c.where}`);
   lines.push("");
   lines.push("**HELD, and by what:**");
   lines.push("");

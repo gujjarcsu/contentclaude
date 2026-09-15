@@ -126,7 +126,7 @@ const RUN = {
     expect(s).toMatch(/they are drafts, archived, or sold through another channel only/);
     expect(s).toMatch(/url: "shopify:\/\/admin\/products",\s*target: "_blank"/);
     const h = src("app/routes/app._index.jsx");
-    expect(h).toMatch(/totalProducts,\s*candidateProducts,\s*scan: scanStoreForStart\(admin, shop\)/);
+    expect(h).toMatch(/totalProducts,\s*candidateProducts,\s*scan: scanStoreForStart\(admin, shop, \{ adminLocale \}\)/);
   },
   "MAJORITY_ARCHIVED/candidates": () => expect(SHAPES.MAJORITY_ARCHIVED.filter((p) => isCandidate(p))).toHaveLength(14),
   "MAJORITY_ARCHIVED/content": () => expect(SHAPES.MAJORITY_ARCHIVED.filter((p) => p.status === "ARCHIVED").every((p) => hasRealContent(p.description))).toBe(true),

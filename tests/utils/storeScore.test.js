@@ -142,7 +142,7 @@ describe("what it refuses to report", () => {
 
   it("reads the scan through a 10-minute cache, so reloading Home does not re-scan", async () => {
     await getStoreScore({}, SHOP, { now: NOW });
-    expect(scanStoreForStart).toHaveBeenCalledWith({}, SHOP, { ttlSeconds: STORE_SCORE_TTL_S });
+    expect(scanStoreForStart).toHaveBeenCalledWith({}, SHOP, { ttlSeconds: STORE_SCORE_TTL_S, adminLocale: null }); // Phase 12 A5: the admin locale rides along
     expect(STORE_SCORE_TTL_S).toBe(600);
   });
 });

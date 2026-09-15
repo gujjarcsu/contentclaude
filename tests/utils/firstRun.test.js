@@ -87,13 +87,13 @@ describe("the sentence that names the subscription", () => {
 });
 
 describe("wiring", () => {
-  it("the first run renders the blockers and the watch sentence; Home computes blockers only on a first run", () => {
+  it("the first run renders the blockers and the watch sentence; Home computes blockers on a first run and until the first publish", () => {
     const start = code(readFileSync("app/components/StartState.jsx", "utf8"));
     expect(start).toMatch(/WATCH_FROM_HERE/);
     expect(start).toMatch(/start\.blockers/);
     expect(start).toMatch(/holding this store back/);
     const home = code(readFileSync("app/routes/app._index.jsx", "utf8"));
-    expect(home).toMatch(/isFirstRun \? await blockersFor\(shop\) : \[\]/);
+    expect(home).toMatch(/isFirstRun \|\| beforeFirstPublish \? await blockersFor\(shop\) : \[\]/); // Phase 12 A4: also until the first publish, for the findings card
   });
 
   it("blockersFor never throws — the first run must render whether or not the walk finished", () => {

@@ -1,0 +1,47 @@
+/**
+ * Phase 12 Part A (A3) — one source of truth for "what changed" on Home.
+ *
+ * Frame 01 read "Unchanged since September 14, across the 14 products we
+ * sampled" directly above "Autopilot optimized 15 new products in the last
+ * 24 hours", on a 15-product store. Both were true: the score baseline was
+ * stamped on 14 Sep AFTER autopilot had run, and the recap counted a fixed
+ * 24-hour window. Two windows, two sentences, one screen, a contradiction.
+ *
+ * There is one window now: the score card's baseline moment. The autopilot
+ * banner counts what autopilot did SINCE that moment and names the same
+ * date. When no baseline exists yet, both fall back to the last 24 hours and
+ * say so. PURE.
+ */
+
+export const FALLBACK_WINDOW_MS = 24 * 3600 * 1000;
+
+/** "September 14" — the card's own phrasing, reused by the banner. */
+export function sinceLabelFor(since) {
+  if (!since) return null;
+  const d = new Date(since);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "long" });
+}
+
+/**
+ * The window every "what changed" sentence on Home uses.
+ *
+ * @param {{since?: string|null, baselineIsNew?: boolean}|null} score the store-score payload
+ * @param {Date} [now]
+ * @returns {{since: Date, label: string, kind: "baseline"|"last24h"}}
+ */
+export function changeWindowFor(score, now = new Date()) {
+  const sinceIso = score?.since;
+  const since = sinceIso ? new Date(sinceIso) : null;
+  if (since && Number.isFinite(since.getTime()) && !score?.baselineIsNew) {
+    return { since, label: `since ${sinceLabelFor(since)}`, kind: "baseline" };
+  }
+  return { since: new Date(now.getTime() - FALLBACK_WINDOW_MS), label: "in the last 24 hours", kind: "last24h" };
+}
+
+/** The autopilot banner's title, from the same window. Null when there is nothing to say. */
+export function autopilotBannerTitle(recap, window) {
+  const n = Number(recap?.products) || 0;
+  if (n <= 0) return null;
+  return `Autopilot optimized ${n} new product${n === 1 ? "" : "s"} ${window.label}`;
+}

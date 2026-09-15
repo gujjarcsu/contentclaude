@@ -1,5 +1,6 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
+import { languageMismatch, languageName } from "../utils/language.js";
 import {
   Modal,
   ChoiceList,
@@ -58,6 +59,9 @@ export const loader = async ({ request }) => {
     aiKey,
     aiKeyAvailable,
     bing,
+    // Phase 12 A6 — if what the app extracted from the store reads as another
+    // language than the setting, say so where the setting is.
+    languageMismatch: languageMismatch(`${brandVoice?.keyDifferentiators ?? ""} ${brandVoice?.sampleContent ?? ""}`, brandVoice?.language ?? "en"),
     brandVoice: brandVoice || {
       storeName: "",
       brandTone: "professional",
@@ -295,6 +299,7 @@ const lengthOptions = [
 ];
 
 export default function SettingsPage() {
+  const { languageMismatch: mismatch = null } = useLoaderData();
   const { brandVoice, templates, entitlements, aiKey, aiKeyAvailable, bing } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -384,6 +389,13 @@ export default function SettingsPage() {
           <Layout>
             <Layout.Section>
               <BlockStack gap="400">
+                {mismatch && (
+                  <Banner tone="warning" title="Your content language setting looks wrong">
+                    <Text as="p" variant="bodySm">
+                      {`Content Language is set to ${languageName(mismatch.setting)}, but the copy we read from your store looks like ${languageName(mismatch.detected)}. If your products are written in ${languageName(mismatch.detected)}, change Content Language below before you publish.`}
+                    </Text>
+                  </Banner>
+                )}
                 {/* Store Identity */}
                 <Card>
                   <BlockStack gap="400">

@@ -122,16 +122,15 @@ export const loader = async ({ request }) => {
   // is ignored and the page shows every draft.
   const productParam = String(url.searchParams.get("product") ?? "").trim();
   const scopedTo = /^\d+$/.test(productParam) ? `${PRODUCT_GID_PREFIX}${productParam}` : null;
-  // Phase 11 Part C — a GID (gid://shopify/Product/123) or anything else that
-  // is not the numeric id used to fall through to "every draft", which looks
-  // like it works. It is refused with a message and NO drafts, so a wrong
-  // link never passes for a right one.
+  // Phase 12 A2 — a malformed link (a GID, a handle) must never become a false
+  // all-clear. Phase 11's "refuse with no drafts" showed "Nothing to review —
+  // you're all caught up" to a merchant with three drafts waiting, which is
+  // worse than the fallback it replaced. The malformed form now shows EVERY
+  // draft under a one-line notice; the empty state is only for no drafts.
   const scopeRefused = productParam !== "" && scopedTo === null;
   const draftWhere = scopedTo
     ? { shop, status: "draft", productId: scopedTo }
-    : scopeRefused
-      ? { shop, status: "draft", productId: "__refused__" }
-      : { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
+    : { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
 
   // Page by DISTINCT product: order rows by recency, derive the ordered
   // distinct product list, slice the page, then fetch that page's full rows.
@@ -852,10 +851,10 @@ export default function ReviewPage() {
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
         {scopeRefused && (
-          <Banner tone="critical" title="That product reference isn't valid" action={{ content: "Show all drafts", onAction: () => navigate("/app/review") }}>
+          <Banner tone="warning" title="That product link was malformed — showing all your drafts">
             <Text as="p" variant="bodySm">
-              Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Nothing is shown for a
-              reference we cannot read, so a wrong link never looks like it worked.
+              Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Every draft is listed
+              below, so nothing is hidden behind a wrong link.
             </Text>
           </Banner>
         )}

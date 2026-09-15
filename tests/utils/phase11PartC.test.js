@@ -79,12 +79,12 @@ describe("C3 — F3, asserted directly since no dev store could carry it", () =>
 });
 
 describe("C4 — the GID form of ?product= is refused, not silently ignored", () => {
-  it("the loader scopes to nothing and says so; the numeric form still scopes", () => {
+  it("the loader shows every draft under a notice (Phase 12 A2 — never a false all-clear); the numeric form still scopes", () => {
     const r = src("app/routes/app.review.jsx");
     expect(r).toMatch(/const scopeRefused = productParam !== "" && scopedTo === null;/);
-    expect(r).toMatch(/productId: "__refused__"/);
+    expect(r).not.toMatch(/__refused__/); // Phase 11's refusal rendered "you're all caught up" over three waiting drafts
     expect(r).toMatch(/scopeRefused,/); // returned by the loader
-    expect(r).toMatch(/title="That product reference isn't valid"/);
+    expect(r).toMatch(/title="That product link was malformed — showing all your drafts"/);
     expect(r).toMatch(/not a GID or a handle/);
     expect(r).toMatch(/scopedTo = \/\^\\d\+\$\/\.test\(productParam\)/);
   });

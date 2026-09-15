@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Phase 12 — CW's VM runs the read-only diags; without the Linux target every
+  // Prisma-touching script was Windows-only from that side.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 // ── Database ────────────────────────────────────────────────────────────────
@@ -413,6 +416,11 @@ model Shop {
   // Set by the Shop kind workflow from the ledger; every new install starts
   // unclassified and is never counted as a merchant until somebody says so.
   kind                    String    @default("unclassified")
+  // Phase 12 A5 — the language the store was read as (catalogue copy, then the
+  // admin locale, then the country), refreshed on every scan. The brand
+  // voice's default when the merchant has not chosen one.
+  locale                  String?
+  localeSource            String?
   firstScreenAt           DateTime? // first authenticated dashboard render
   firstApproveAt          DateTime? // first Review submission with ≥1 product approved
   returnedAt              DateTime? // first dashboard render on a calendar day after the install day
