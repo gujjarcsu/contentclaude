@@ -345,6 +345,73 @@ they are the critical path.
 
 ---
 
+## 6.5 THE CLOSING PHASE — ENGINEERING DONE, WRITTEN AS A GATE (added 2026-09-15, Cowork)
+
+The owner's instruction, verbatim in spirit: *conclude this so we can focus on market; once
+deployed it must not break down; it must deliver exceptional results; and it must market itself.*
+Three of those are engineering gates and one is a Track B checklist. They are written here so that
+"ready now" has a definition a session can prove line by line, and so that no brief after this one
+adds a feature that is not on this list.
+
+### A. ENGINEERING DONE — every line proved on production, then CC's job changes from building to keeping
+
+| | Line | Proof |
+|---|---|---|
+| A1 | **Nothing a merchant can reach contradicts itself.** | CW's confusion count on a fresh install ≤ 3, and every number on every screen reconciles to the catalogue. |
+| A2 | **Install state is Shopify's truth, never ours.** | The qa-fresh class fixed; nightly reconciliation asks Shopify; the out-of-order webhook test. |
+| A3 | **Every scheduled job proves it fires.** | The simulated-week test covers all of them, across the AEDT flip. |
+| A4 | **A tested restore.** | The Neon restore drill executed once, timed, written up; a second person could repeat it from the runbook. |
+| A5 | **Alerting reaches a human.** | Deep-health monitor + a second alert contact + one deliberately triggered alert received on a phone. |
+| A6 | **The clocks are in the code.** | Tests that go red 90 days before: Admin API 2026-04 sunset (2027-04-01), the model deprecation dates in `modelPricing.js`, `featuredImage` removal, script-tag injection end (2027-03-01). |
+| A7 | **Failure is loud, bounded and recoverable.** | AI circuit breaker, queue failure, Shopify 429 and 5xx, a revoked token, an expired trial, a failed webhook — each broken on purpose in a test and each shown to degrade to a truthful screen, never a silent zero. |
+| A8 | **Money is exact.** | Credits debited exactly once per generation; the cap never overshoots; the annual 2× boost once ever; packs consumed after the allowance; every one break-tested. |
+| A9 | **Secrets and keys never appear anywhere.** | Merchant AI key, Bing key, our keys: grep-tested absent from logs, errors, client payloads. |
+| A10 | **A one-page runbook** for the five 3 am failures: database down, Redis down, AI provider down, Shopify API version rejected, a merchant reports wrong content published. | `docs/navaal/RUNBOOK.md`, each entry tried once. |
+| A11 | **The shape matrix has no NOT RUN cells** that a real merchant could occupy. | The six `navaal-shape-*` stores walked. |
+| A12 | **App-version discipline.** | Any `extensions/` or toml change releases a version; the Versions page cited, not a sha. |
+
+When A1–A12 are ticked, Track A becomes maintenance: security fixes, platform sunsets, merchant-reported defects, and nothing else without an explicit re-open.
+
+### B. THE APP IN SIX LANGUAGES — and the rule that keeps it honest
+
+Generation already writes in the merchant's chosen language (`brandVoice.language`, prompt-enforced).
+The **UI is English-only** (no i18n framework exists), and `Shop.locale` is stored but the
+generation default must be **verified** to follow the store's primary locale without the merchant
+touching Settings — a French store must get French drafts on its first run or the French listing
+is a lie.
+
+| | Item | Owner |
+|---|---|---|
+| B1 | Generation language defaults from the shop's primary locale at install; Settings can override; the first-run splash says which language it is writing in. | CC |
+| B2 | UI localisation: an i18n layer (Polaris-compatible), every merchant-visible string extracted, six locales — de, fr, es, it, pt-BR, ja — with a test that fails on any untranslated string in a shipped locale. Dates, numbers, currency by locale. | CC |
+| B3 | Listing translations (`LISTING-TRANSLATIONS.md`) entered **only for a locale after B2 is live for it** — a translated listing for an English-only app is a false claim on a Shopify submission. | CW |
+| B4 | Legal pages and the support form in the six languages, generated from the same constants. | CC |
+| B5 | The listing's *Languages* field updated to match, per locale. | CW |
+
+**Sequencing rule: B1 → B2 (a locale at a time) → B3/B5 for that locale.** German first — largest
+non-English Shopify base — then French, Spanish, Italian, Portuguese, Japanese.
+
+### C. THE APP MARKETS ITSELF — every surface that can carry it, within the rules
+
+| | Surface | Status | Owner |
+|---|---|---|---|
+| C1 | App Store listing: copy, five slots, plan cards, privacy link | live, clean | CW sweeps |
+| C2 | Listing images (3–6 desktop) and a 2–3 minute video, screencast ≤25% | images blocked on the capture; video not started | CW |
+| C3 | Listing in six languages | file ready; gated on B | CW |
+| C4 | The in-app review ask, once, after a real result, never rewarded | live | — |
+| C5 | Built for Shopify: apply the day every criterion we control passes and 100 admin calls exist | `BFS-AUDIT.md`; calls 26/100 | OWNER presses Apply |
+| C6 | navaal.ai: the W1 research post (the one statistic we may publish), the blog, install attribution on every page, legal redirects | post written, blocked on Hostinger | OWNER session |
+| C7 | External traffic — Shopify's own ranking signal: the W1 post seeded to the communities where the problem is discussed; a second aggregate study when Phase 2 has data across ten merchants | not started | COWORK writes, OWNER posts |
+| C8 | Public, anonymised, consented holdout results on navaal.ai once three merchants have them — the moat made visible before install | gated on F10 + merchants | COWORK |
+| C9 | Thirty prospects, drafted from W1; the owner's network on top; founder outreach | drafting in the owner session | OWNER sends |
+| C10 | The weekly report to merchants — the heartbeat that earns the review | live; never fired (no merchant with a result yet) | — |
+
+What this list deliberately excludes, because the doctrine forbids it: paid reviews, statistics on
+the listing, testimonials we did not receive, superlatives, and any claim the app cannot show on a
+screen.
+
+---
+
 ## 7. THE SCOREBOARD
 
 | # | Metric | Now (2026-09-10) | Next gate | Who |
