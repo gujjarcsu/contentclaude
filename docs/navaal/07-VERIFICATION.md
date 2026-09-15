@@ -528,3 +528,37 @@ it opens Chromium's own file chooser**, which Playwright intercepts with
 to `setInputFiles`, and after each attempt reads `input.files` back — the one fact that separates
 *the file never landed* from *the file landed and the app ignored it*. Until that run reports, the
 right description of the DropZone is **"no route has fired it yet"**, not "Playwright fires it".
+
+### RESOLVED 2026-09-15 12:58Z — no script route fires this DropZone; the owner's click does
+
+The owner uploaded 02/03/05 by hand. **The files must be exactly 1600×900** — the editor's own
+words; 3200×1800 is *rejected*. So `listing-assets/README.md` ("a 1600×900 frame is a 3200×1800
+PNG") and the capture harness's 2× hurdle were both wrong, and the harness's own new guard would
+have refused the files that actually work. Routed to CC at `98d1fa0`; the working files are in
+`listing-assets/1600x900/`.
+
+Final state of the route table, so nobody re-opens it:
+
+| route | fires the DropZone |
+|---|---|
+| synthetic `change` / `input` on the input | no |
+| synthetic `drop` with a built `DataTransfer` | no |
+| extension `file_upload` (file genuinely lands on the input) | no |
+| extension `upload_image` | n/a — screenshot ids only |
+| desktop automation of the native dialog | n/a — browsers are read-only to `computer_*` |
+| Playwright `setInputFiles` | **no** — preview unchanged 120s, empty network log |
+| Playwright `filechooser` + `setFiles` | never reached — the size guard would have refused the files |
+| **the owner clicking Upload image** | **yes** |
+
+**Two more tooling facts, both found while typing the alt text (CW, 2026-09-15):**
+
+- **A `ref`-based click does not actuate this page's sticky Save.** `computer left_click` with
+  `ref` reported "Clicked on element" twice and produced **no non-GET request at all** (checked with
+  a `fetch`/`XHR` recorder installed before the click) while "Unsaved changes" stayed up. A
+  **coordinate** click on the sticky bar saved immediately — "App listing saved". Read the bar's
+  position off a fresh screenshot each time: the page scrolls under it, and a stale y is how the
+  next fact happened.
+- **`+ Add` creates an empty slot that blocks Save.** A coordinate click 42px low hit *Add* instead
+  of *Save* and created SCREENSHOT 4 carrying `An image is required` and `Alt text is required`.
+  An empty slot fails validation, so Save cannot succeed until it is deleted. Screenshot, click,
+  screenshot — never two clicks between looks.
