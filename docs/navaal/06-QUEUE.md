@@ -1947,3 +1947,103 @@ written and wired locally, shipping next. `?locale=ja` today renders English by 
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
 merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+---
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D6 (`23423bb`, follow-up `4d32d98`): THE APP SPEAKS JAPANESE — ALL SIX. CW: ENTER THE JAPANESE LISTING; THAT IS THE LAST ONE.
+
+**D6 — Japanese (`23423bb`).** `app/i18n/locales/ja.json`: 1,366 keys (1,416 after the follow-up
+below), polite register as the listing writes it; « クレジット » as the credit unit; Free/Starter/
+Growth/Professional and Navaal untouched; ICU plural blocks kept for the runtime (Japanese has one
+form, so `one` and `other` read the same); the listing's own terms are the app's: SEO監査,
+自動運転モード, 一括生成, 創業者によるメールサポート, 創業者に直接連絡, 比較用の説明文を2案. The catalogue
+is its own lazy chunk (203.1 KB raw at `23423bb`, 209.7 KB after the follow-up — the largest of the
+six, under the 224 KB budget), fetched only on Japanese; the shared bundle is unchanged at 885 KB.
+`/privacy` and `/terms` render in Japanese (`?locale=ja`, else a Japanese browser), same anchors,
+with the line that the English is binding. The weekly report reads in Japanese. Suite 153 files /
+4,418 tests green; lint clean; budget green.
+
+**Proved on production (23423bb):** `curl app.navaal.ai/privacy?locale=ja` → `<html lang="ja">`,
+`プライバシーポリシー`, `第1部 — ウェブサイトと無料のBilbyスキャン`, `Content-Language: ja`,
+`Vary: Accept-Language`; `Accept-Language: ja` on `/terms` → `利用規約`; `/privacy` with no signal →
+`lang="en"`. Home, Attention and Plans read on `navaal-ttv-03` with App language set to 日本語
+(`tools/proof/locale-switch.mjs ja --shots`): every sampled line Japanese, the `ja-*.js` chunks
+fetched (catalogue + Polaris), the Plans card's month in Japanese ("2026年9月"), the setting
+restored to "follow the admin language".
+
+**The layout check the brief asked for.** `--shots` is new on the proof tool: a full-page PNG of
+each screen, in `tools/proof/out/locale-ja-{home,attention,plans}.png`, read by eye. Japanese
+holds: the score card, the three blocker lines and their buttons, the BEFORE/AFTER draft panes, the
+Attention cards with their red/amber badges (`OpenAI商品フィード · description これがないと掲載不可`),
+the four plan cards and the comparison table all wrap cleanly, nothing overflows or clips, no
+button label breaks mid-word. No layout change was needed.
+
+**What the screenshots found that the sampled phrases did not — and what the guard written for it
+then found (follow-up `4d32d98`).** Two English sentences, on every language: (1) the Attention
+summary's " Your storefront is password-protected, so nothing is listed anywhere yet — this is what
+each surface will ask for the day it opens." was a bare literal inside the vars of a `t()` call —
+the scanner catalogued the outer key and never looked inside; (2) the Growth card's "Blog posts (3
+credits each)" was a template literal in the `features` array — arrays are not JSX children or
+object props, the two places the scanner walked. Three scanner rules were written for those classes
+(merchant text passed as a t() variable; a template literal with words inside an array; a template
+or ternary with words assigned to a variable — sentences have spaces, GraphQL documents are
+excluded), and **`--check` on the old code then flagged 47 more of the same** across Products (the
+whole caption sentence and its error line), Collections (the subtitle and its error line), Home
+(the hero subtitle and "N content types"), the SEO audit subtitle, Settings ("Autopilot stays off"),
+RouteError (title and message), the quota prompt (its title from `planFit.js`, the "Counted as"
+definition, the rate clause) and a dozen fragments (" — too long", "not crawled yet", "Untitled",
+"20–40 seconds", the plan names). All 49 are keys now, translated in the six catalogues (1,416 keys
+each); the two catalogue-error sentences that a LOADER built now ship a reason and are made on the
+screen; `quotaGapTitle` takes the screen's translator with English by default so the test that pins
+the brief's exact line still holds; two source guards that read Products through `unwrapT()`
+learned the keyed form. `--check` is clean at `4d32d98`, prints the reason for each finding, and
+the class cannot return. This is D1's lesson one level down: a complete catalogue proves the words
+exist; only the screen, read in the language on production, proves which code path built them.
+
+**Re-read on production at `4d32d98`** (`locale-switch.mjs ja --shots` again): both sentences gone — the
+Attention summary ends in Japanese and the Growth card reads ブログ記事(1件3クレジット); every sampled
+line Japanese; the `ja-*.js` chunks fetched; the setting restored. The only English on the three
+screens is the store's own product copy, which is the merchant's language, not the app's.
+
+**CW, one task (15 minutes):** enter the Japanese listing from `LISTING-TRANSLATIONS.md` §Japanese,
+verbatim, in the Partner Dashboard — the gate is met. Shopify's counter counts characters, not
+bytes; post each count as it reads back. de, fr, es, it, pt-BR are entered first if they are not
+yet. **B3 is complete once your six counts are posted; B5 (the listing's Languages field) with it.**
+
+**Part D is done:** six locales live in one day — de `a9ffd38`, fr `86b417c`, es `36d95ee`, it
+`391feb6`, pt-BR `33cfde1`, ja `23423bb` + `4d32d98` — each read on production in its language, each
+with its missing-key test, each in its listing's register.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+---
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE E: ENGINEERING DONE, TWELVE LINES WITH THEIR PROOFS. COWORK RE-VERIFIES; THE OWNER AND CW HOLD FOUR OF THEM.
+
+Each line below is either **proved** (the proof the line names, with the file, the sha and the
+count of tests that go red when the guard is broken), **routed** (the proof belongs to someone
+else and is named), or **not ticked** (the line says what it wants and it has not happened). Nothing
+here is ticked that was not proved the way §6.5 A says.
+
+| | Line | State | Proof |
+|---|---|---|---|
+| A1 | Nothing a merchant can reach contradicts itself | **routed — CW's third count** | Part A closed the last two on the list (`356684c`: FR13 proved by a click, `tools/proof/fr13-click.mjs`; frame 04 and the numbers). Every screen number reconciles through one join: `tests/routes/screenReconciles.test.js` (15 cases — Total Products through the one scope constant; content counted only among the population on screen; both CASE blocks textually identical; the greeting trusts Shopify's name). CW's second count was **4** (from 15). The line asks for the **third** count ≤ 3 after Part A; that count is CW's and is not posted yet. |
+| A2 | Install state is Shopify's truth | **proved** | Phase 11: `24527df` (the read-only install-state diag), `cd96240` (a shop/redact request is consumed once; the token is the fact), `f974f49` (write-back, three decisions). `05-EVIDENCE.md` §7c — the three integers that closed it: **flagged-with-session 0 · believed installed 8 = Shopify's 8 · domains reinstalled after a redact in 30 days 1**. Guards: `tests/utils/installState.test.js`, `tests/utils/webhookWork.test.js` (out-of-order delivery), `tests/utils/uninstallReinstall.test.js`. |
+| A3 | Every scheduled job proves it fires | **proved** | `tests/utils/scheduledWeek.test.js`: a simulated week across the AEDT flip; "every maybe* is called from the minute tick"; "no job in the list is missing from the simulation" — the list is read from the scheduler, so a job added without a simulation row fails the suite by construction. Phase 12 added no scheduled job (Part D is render-time; Part C's readout rides the existing nightly walk). |
+| A4 | A tested restore | **not ticked — owner's single step** | The drill is written in `RUNBOOK.md` so a second person can run it; executing it needs the Neon project console, which no agent holds. `OWNER-CHECKLIST.md` carries it: restore the latest point-in-time to a branch, schema check, row-count comparison, time it, write the numbers back. It counts when the numbers are in the runbook. |
+| A5 | Alerting reaches a human | **not ticked — owner's phone** | Deep-health monitor live; the second contact (H16) and the deliberately triggered alert received on the owner's phone are the owner's; the owner confirms in the queue. |
+| A6 | The clocks are in the code | **proved** (`3773f8d`) | `app/utils/clocks.js` + its test, red 90 days before each date: Admin API 2026-04 → 2027-04-01; ScriptTag end 2027-03-01 as a guard that we use none; re-verification rows for the three models, `featuredImage`, Polaris 13 and the app framework. |
+| A7 | Failure is loud, bounded and recoverable | **proved** (`3773f8d`) | `tests/utils/failureModes.test.js` — AI provider down, queue worker dead, Shopify 429 and 5xx, revoked token, expired trial, failed webhook, Redis down, database down — each broken in a test and shown to reach a truthful screen; the table in `RUNBOOK.md`. |
+| A8 | Money is exact | **proved** (`8e8ce9b`) | **New today:** `tests/utils/creditsConcurrency.test.js` — two simultaneous generations against a fake that behaves like PostgreSQL SERIALIZABLE (snapshot reads, P2034 at commit on a stale write): both land with one debit each and consecutive `remaining` (24, 23), the race costs exactly one retry; with **one credit left, one wins and one is refused `credit_limit`** — the month holds 1, never 2; a blog post debits 3 in one record and two of them at 5 left leave exactly 2; the gate asks for `Serializable`. **Break-test: delete the `isolationLevel` option in `plans.server.js` → 4 of 4 fail; restored → 4 pass.** Already held: the annual 2× once ever (`annualBoost.test.js`: a second grant changes nothing; one boosted month, not two; twice, not infinitely); trial credits separate (`trialCredits.test.js`: charges the trial bucket, not the monthly; a spent monthly allowance does not block a trialling merchant); the cap in bulk (`optimize.quota.test.js`: takes exactly the remaining quota; starts nothing when spent; unknown remaining is zero, never unlimited); refunds on every failure (`credits.test.js`). **Not testable because it does not exist:** credit packs — `14-PRICING.md` row 6 says they need the Billing API (one-time purchases), and no pack code or schema exists; "packs after allowance" has nothing to break-test until packs are built. |
+| A9 | Secrets never appear | **proved** (`3773f8d`) | `tests/utils/secretsNeverAppear.test.js` — a full generation on a merchant's key and on ours under a provider that echoes the key in a 401 body, every Bing path under a Bing that does the same; every log line, thrown error and returned value grepped for the key and every twelve-character window of it. It found one (the AI caller's upstream body) and `redact.js` closed it. |
+| A10 | The runbook | **proved** (`3773f8d`) | `docs/navaal/RUNBOOK.md`: the five 3 am failures, each with symptoms, first command, recovery, who to tell, each tried once; the restore drill written for a second person. |
+| A11 | No untested store shape a real merchant could occupy | **routed — CW's walks** | `SHAPE-MATRIX.md` (2026-09-15): PASS 107 · HELD 15 · NOT RUN 75 · n/a 127. **61** NOT RUN lines route to the six `navaal-shape-*` stores; **14** cells are named under their own heading with the store it would take (a 250-product, 3,000-, 50,000-, 500,000-, 20,000-product store; a paid dev store on Starter) — a stated reason each, as the line asks. CW built, imported and read the six stores (`c52641e`); `navaal-shape-fr` was run on 2026-09-15 and half of what it was meant to prove was false (recorded in §3). The Draft and Publish cells on the other five are CW's walks and are not closed. |
+| A12 | App-version discipline | **proved** | The rule is in `CC-STANDING-PROMPT.md` (toml or `extensions/` ⇒ `shopify app deploy`, version named by sha, Versions page cited). The last released version is **`p0-xss-f505584`, September 14, 2026 at 6:46 am UTC, Active** (CW's read, in this queue). `git log 7942c30..HEAD -- extensions shopify.app.toml` is **empty**: no change this phase touched what Shopify holds, so no version was owed and none was skipped. |
+
+**Score:** 8 proved (A2, A3, A6, A7, A8, A9, A10, A12) · 2 routed to CW (A1's third count, A11's five
+walks) · 2 to the owner (A4, A5). **§6.5 A stays open on those four lines**, and it is marked so in
+the masterplan — not CLOSED, because the brief says do not tick what you have not proved.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store.

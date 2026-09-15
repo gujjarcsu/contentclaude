@@ -185,3 +185,23 @@ sentence is made where it is shown, from data; the arrays are keys. Second read:
 `de-*.js` chunks fetched, setting restored. **The pattern:** a test that the catalogue is complete
 proves nothing about which code path built the sentence; only reading the screen in the language,
 on production, does.
+
+## 7e. FIVE MORE LANGUAGES IN ONE DAY — what the read-backs found that the catalogue tests could not (2026-09-15)
+
+French (`86b417c`), Spanish (`36d95ee`), Italian (`391feb6`), Brazilian Portuguese (`33cfde1`) and
+Japanese (`23423bb`) each shipped with a complete 1,366-key catalogue, the register test green and
+the legal pages proved by curl, and each was read on `navaal-ttv-03` with App language set to it.
+What only the reading found: **(1)** the usage card's month and reset day ("September", "1 October")
+came from an `en-GB` formatter in the loader — a date is a sentence too, and it must be formatted
+where it is shown with `t.date` in the screen's locale (fixed at `36d95ee`; a guard now forbids any
+fixed-English `toLocale*String` on a merchant path, and Home's "since 3 September" and the Plans
+card's month and renewal date moved with it). **(2)** A bare English fallback in a JSX ternary
+(`"since we first scored your store"`) is invisible to the scanner, which reads `t()` calls and
+object props — it had never been a key, and English would have shown on every language the day a
+store lost its baseline. **(3)** A register test that borrows another language's rule is wrong twice:
+Spanish and Italian address the merchant as tú/tu where German and French are formal, so the
+forbidden forms are per locale, and the boundary must be Unicode-aware or French "prêtes" fails on
+"tes". **(4)** A locale code with a dash (`pt-BR`) broke the budget report's label, which split the
+chunk name on the first dash and reported `pt`; the regex capture is the name. **(5)** Japanese:
+the layout held on all three screens (full-page screenshots, `tools/proof/out/locale-ja-*.png`, read by eye: cards, badges, buttons and the comparison table wrap cleanly, nothing clips), and the screenshots caught two English sentences the sampled phrases had missed — the Attention summary's password line, hidden in the vars of a t() call, and the Growth card's blog line, a template literal in an array. Three new scanner rules written for those classes (merchant text as a t() variable; a template literal in an array; a template or ternary assigned to a variable) then found 47 more across Products, Collections, Home, the SEO audit, Settings, RouteError and the quota prompt — all keyed and translated in the follow-up, and `--check` now fails on every class. **The pattern, again:** the catalogue being complete proves the words exist; only the screen,
+read in the language on production, proves which code path built them and how they sit.

@@ -394,6 +394,18 @@ app speaks it") is met for German only.
 3. Do NOT enter French, Spanish, Italian, Portuguese or Japanese yet — those locales are not live and
    `?locale=fr` renders English by design. Each gets its own gate post.
 
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D6: ENTER THE JAPANESE LISTING (15 minutes) — THE LAST ONE
+
+Live at `23423bb` (follow-up `4d32d98`): the app speaks Japanese — every screen, `/privacy` and `/terms` (`?locale=ja` or a
+Japanese browser), the weekly report. The queue post of the same date has the proofs and the
+layout check (full-page screenshots of Home, Attention and Plans in Japanese).
+
+1. Enter the Japanese listing from `LISTING-TRANSLATIONS.md` §Japanese, verbatim; the editor's
+   counter decides (Shopify counts characters, not bytes); post each count as it reads back.
+   (de, fr, es, it, pt-BR first if not yet.)
+2. To see it: Settings → App language → 日本語 on any of our stores; put it back after.
+3. That is all six. B3 is complete once your six counts are posted.
+
 ## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D5: ENTER THE BRAZILIAN PORTUGUESE LISTING (15 minutes)
 
 Live at `33cfde1`: the app speaks Brazilian Portuguese — every screen, `/privacy` and `/terms`

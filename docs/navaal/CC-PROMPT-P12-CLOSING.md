@@ -158,14 +158,14 @@ frozen store is frozen until CW lifts it.
 
 ## DONE MEANS
 
-- [ ] A1–A6 fixed; FR13 proved by a **click**; CW's re-walk of the French store and the third
-      confusion count posted
-- [ ] One two-part privacy policy generated; redirect instructions corrected
+- [x] A1–A6 fixed; FR13 proved by a **click** (`356684c`) — [ ] CW's re-walk of the French store and the third
+      confusion count posted (CW)
+- [x] One two-part privacy policy generated (`d3242f0`); redirect instructions corrected
 - [ ] The holdout readout screen, the report → ask chain, the Lighthouse number, the write-up
-- [ ] i18n layer live with English unchanged; **German live**; French, Spanish, Italian, Portuguese,
-      Japanese each live with their missing-key test; CW's listing entry per locale confirmed
-- [ ] Engineering Done A1–A12, each with the proof the line names, posted for Cowork to re-verify
-- [ ] `RUNBOOK.md` exists, every entry tried once
-- [ ] Written back (**L18**), and `11-MASTERPLAN.md` §6.5 marked CLOSED with the date
+- [x] i18n layer live with English unchanged (`1d9d8f7`); **German live** (`a9ffd38`); French (`86b417c`), Spanish (`36d95ee`), Italian (`391feb6`), Portuguese (`33cfde1`),
+      Japanese (`23423bb`) each live with their missing-key test — [ ] CW's listing entry per locale confirmed (CW, six counts)
+- [x] Engineering Done A1–A12, each with the proof the line names, posted for Cowork to re-verify (ship gate E, 2026-09-15: 8 proved, A1/A11 CW, A4/A5 owner)
+- [x] `RUNBOOK.md` exists, every entry tried once (`3773f8d`); the restore drill is written and waits on the owner's run (A4)
+- [x] Written back (**L18**, 2026-09-15) — [ ] `11-MASTERPLAN.md` §6.5 marked CLOSED with the date: NOT closed; it closes when A1, A4, A5, A11 and B3/B5 are posted by their owners
 
 When this is ticked, stop building. Report what is true that was not true when you started.

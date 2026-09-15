@@ -370,6 +370,8 @@ adds a feature that is not on this list.
 | A11 | **The shape matrix has no NOT RUN cells** that a real merchant could occupy. | The six `navaal-shape-*` stores walked. |
 | A12 | **App-version discipline.** | Any `extensions/` or toml change releases a version; the Versions page cited, not a sha. |
 
+**Status 2026-09-15 (CC, ship gate E in `06-QUEUE.md`):** proved — A2 (Phase 11 `cd96240`, the three integers in `05-EVIDENCE.md` §7c), A3 (`scheduledWeek.test.js`), A6, A7, A9, A10 (`3773f8d`), A8 (`creditsConcurrency.test.js` at `8e8ce9b`: two simultaneous generations, one debit each, the cap never overshoots; break-test 4/4; credit packs are not built, so that clause has nothing to test), A12 (no toml/`extensions/` change since `7942c30`; released version `p0-xss-f505584`). Routed — A1 (CW's third confusion count; second was 4), A11 (CW's Draft/Publish walks on five `navaal-shape-*` stores; 14 cells named with the store they would take). Owner — A4 (Neon restore drill, `OWNER-CHECKLIST.md`), A5 (the alert on a phone). **§6.5 is NOT CLOSED: it closes when A1, A4, A5, A11 and B3/B5 are posted by their owners.**
+
 When A1–A12 are ticked, Track A becomes maintenance: security fixes, platform sunsets, merchant-reported defects, and nothing else without an explicit re-open.
 
 ### B. THE APP IN SIX LANGUAGES — and the rule that keeps it honest
@@ -384,7 +386,7 @@ is a lie.
 |---|---|---|
 | B1 | Generation language defaults from the shop's primary locale at install; Settings can override; the first-run splash says which language it is writing in. | CC |
 | B2 | UI localisation: an i18n layer (Polaris-compatible), every merchant-visible string extracted, six locales — de, fr, es, it, pt-BR, ja — with a test that fails on any untranslated string in a shipped locale. Dates, numbers, currency by locale. | CC |
-| | **Status 2026-09-15:** layer live `1d9d8f7` (D0); **de live `a9ffd38`** (D1, 1,365 keys, read back on production); **fr live `86b417c`** (D2, read back on production); **es live `36d95ee`** (D3, read back on production; the same deploy moved every date on a merchant screen to the screen's locale); **it live `391feb6`** (D4, read back on production); **pt-BR live `33cfde1`** (D5, read back on production); ja not yet — `?locale=ja` renders English by design until its catalogue is complete. | |
+| | **Status 2026-09-15:** layer live `1d9d8f7` (D0); **de live `a9ffd38`** (D1, 1,365 keys, read back on production); **fr live `86b417c`** (D2, read back on production); **es live `36d95ee`** (D3, read back on production; the same deploy moved every date on a merchant screen to the screen's locale); **it live `391feb6`** (D4, read back on production); **pt-BR live `33cfde1`** (D5, read back on production); **ja live `23423bb`** (D6, read back on production with the layout check; the check found two English sentences on every language and the scanner rules written for them found 47 more — all keyed at `4d32d98`). **All six live; B2 is done.** | |
 | B3 | Listing translations (`LISTING-TRANSLATIONS.md`) entered **only for a locale after B2 is live for it** — a translated listing for an English-only app is a false claim on a Shopify submission. | CW |
 | B4 | Legal pages and the support form in the six languages, generated from the same constants. | CC |
 | | **Status 2026-09-15:** `/privacy` and `/terms` render in every live language from `legal.js` (`?locale=`, then Accept-Language; English binding, same anchors); the support form is the app's own screen and follows the app language. de live `a9ffd38`. | |
@@ -399,7 +401,7 @@ non-English Shopify base — then French, Spanish, Italian, Portuguese, Japanese
 |---|---|---|---|
 | C1 | App Store listing: copy, five slots, plan cards, privacy link | live, clean | CW sweeps |
 | C2 | Listing images (3–6 desktop) and a 2–3 minute video, screencast ≤25% | images blocked on the capture; video not started | CW |
-| C3 | Listing in six languages | **German (`a9ffd38`), French (`86b417c`), Spanish (`36d95ee`), Italian (`391feb6`) and Brazilian Portuguese (`33cfde1`): gates met — CW enters them now.** ja gated on B2 | CW |
+| C3 | Listing in six languages | **All six gates met — de `a9ffd38`, fr `86b417c`, es `36d95ee`, it `391feb6`, pt-BR `33cfde1`, ja `23423bb`. CW enters them now; C3 closes when CW's six counts are posted.** | CW |
 | C4 | The in-app review ask, once, after a real result, never rewarded | live | — |
 | C5 | Built for Shopify: apply the day every criterion we control passes and 100 admin calls exist | `BFS-AUDIT.md`; calls 26/100 | OWNER presses Apply |
 | C6 | navaal.ai: the W1 research post (the one statistic we may publish), the blog, install attribution on every page, legal redirects | post written, blocked on Hostinger | OWNER session |
