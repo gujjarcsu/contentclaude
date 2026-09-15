@@ -1674,3 +1674,5 @@ than leaving yesterday's images up one more day. No upload. `CAPTURE COMPLETE` i
 - **Task 5** — webhooks 16 Sep (start from the **38.4%** on the app Overview), rank 21 Sep,
   `navaal.ai` 301 — which turns out not to be a redirect question at all but **two live, different
   privacy policies**; see the Task 4 section above.
+
+| — | CW | **Git from the device shell leaves stale `.git/HEAD.lock` and `.git/index.lock` after every commit** and cannot unlink them (the mount has no delete permission, and a request for it was refused). They block the *next* commit and `git pull`. Workaround that works: `mkdir -p .git/_stale && mv .git/HEAD.lock .git/index.lock .git/_stale/` before committing. Same cause as the `ORIG_HEAD.lock` note from Phase 10. | CW |
