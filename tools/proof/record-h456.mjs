@@ -58,16 +58,35 @@ await new Promise((resolve) => {
   page.on("close", resolve);
 });
 
-const firstApp = trail.find((e) => /app\.navaal\.ai|\/apps\/navaal/i.test(e.url));
+// The clock must start at the install boundary, not at the first app URL the take happens to hit.
+// A take that wanders - switching stores, or uninstalling and reinstalling mid-recording - has more
+// than one app segment, and bracketing it end to end measures the wandering, not the flow.
+const isApp = (u) => /app\.navaal\.ai|\/apps\/navaal/i.test(u);
+const isInstallBoundary = (u) => /settings\/apps|\/oauth\/|\/grant|app_installations/i.test(u);
 const lastMs = trail.length ? trail[trail.length - 1].atMs : 0;
+const lastBoundary = [...trail].reverse().find((e) => isInstallBoundary(e.url));
+const clockStart = trail.find((e) => isApp(e.url) && (!lastBoundary || e.atMs > lastBoundary.atMs));
+const appSegments = trail.filter((e) => isApp(e.url)).length;
+const boundariesAfterFirstApp = (() => {
+  const fa = trail.find((e) => isApp(e.url));
+  return fa ? trail.filter((e) => e.atMs > fa.atMs && isInstallBoundary(e.url)).length : 0;
+})();
+const mixed = boundariesAfterFirstApp > 0;
+const elapsed = clockStart ? lastMs - clockStart.atMs : null;
 const report = {
   which: WHICH, what: SPEC.what,
   startedAt: new Date(t0).toISOString(),
   totalMs: lastMs,
-  firstAppUrlAtMs: firstApp ? firstApp.atMs : null,
-  elapsedInAppMs: firstApp ? lastMs - firstApp.atMs : null,
+  clockStartAtMs: clockStart ? clockStart.atMs : null,
+  clockStartUrl: clockStart ? clockStart.url : null,
+  elapsedFromClockStartMs: elapsed,
   budgetMs: SPEC.budgetMs || null,
-  withinBudget: SPEC.budgetMs && firstApp ? (lastMs - firstApp.atMs) <= SPEC.budgetMs : null,
+  withinBudget: (SPEC.budgetMs && elapsed !== null && !mixed) ? elapsed <= SPEC.budgetMs : null,
+  takeLooksMixed: mixed,
+  verdictNote: mixed
+    ? "NO VERDICT. This take navigates back through an install boundary AFTER the app was already open, so it contains more than the measured flow - most likely a store switch or an uninstall/reinstall inside the recording. Re-record the flow alone, or read the bracket off the trail by hand."
+    : (elapsed === null ? "NO VERDICT: the take never reached an app URL." : "Clock runs from the first app URL after the last install boundary to the last navigation."),
+  appSegments,
   note: "Playwright recordVideo does not capture the browser URL bar; the URL trail below is the substitute.",
   trail,
 };

@@ -2258,3 +2258,37 @@ subtitle, "es is live". It took **~100 s** for all three to flip to auto **0** /
 **The rule:** after publishing a locale, re-read the public page until the auto-translation line is
 absent AND our bullet 3 is present **in the same fetch**, and never treat the subtitle alone as the
 test. One read immediately after Publish proves nothing either way.
+
+## FR8 CONFIRMED ON PRODUCTION — owner's screen read, for CC
+
+**Owner's finding, not CW's** — CW did not run this and has not seen the screen; recorded here as
+the owner reported it, with the file confirmed present.
+
+On `navaal-qa-fresh` at `1e1867e` (production), all three rows under *products holding this store
+back* read **"This product: 21/100"** — identical to the store score. That is **FR8 on production**,
+not just on the splash. Screenshot: `docs/history/screen-reads/qa-fresh-home-after-reinstall-2026-09-16.png`
+(present, 451,442 bytes).
+
+**Owner: CC.**
+
+Also from the same screen, the owner corrected an earlier read of his own: the first run had
+finished — the home screen shows *"3 drafts awaiting review"* with Review buttons. No defect there.
+
+## TASK 8 — H4 RECORDED, BUT ITS 120s VERDICT IS NOT VALID (CW)
+
+The video is good and the flow is in it. The report's `withinBudget: false` is **not** an H4 failure
+and must not be counted as one — CW's own harness bracketed the take wrongly. The trail shows 116 s
+spent reaching the right store (it opened on `contentpilot-dev2` first), then the app at 145.5 s,
+then a **170-second excursion back out through `settings/apps`** — the uninstall/reinstall — before
+returning at 328.4 s. `elapsedInAppMs 182991` measures the recording session, not install-to-first-draft.
+
+Harness fixed: the clock now starts at the first app URL **after the last install boundary**, and a
+take that re-crosses an install boundary once the app is open gets **no verdict at all** —
+`withinBudget: null`, `takeLooksMixed: true`, reason in `verdictNote`. A wandering take gets neither
+a green nor a red; it gets re-recorded. Full trail and reasoning in `docs/history/recordings/README.md`.
+
+### INBOX
+
+- **owner:** one more H4 take — open the app on `navaal-qa-fresh`, install → grant → first screen →
+  first draft, close the window, nothing else in the take. Two of the three `.webm` files have no
+  report and unfinalised headers (`ffprobe` returns `N/A`); they are not evidence and can be deleted.
