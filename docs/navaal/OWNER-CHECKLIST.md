@@ -1,5 +1,7 @@
 # OWNER CHECKLIST — things only Waqas can do
 
+> **2026-09-15: everything below is now scheduled into ONE sitting — `CW-PROMPT-OWNER-SESSION.md`.** Paste it with the owner at the keyboard; he signs in at each login wall, CW does everything else. H17 is closed (the scheduled task was deleted). Budget ~2 hours.
+
 ## 🔴 TODAY — SIX THINGS, IN THIS ORDER (2026-09-14, Cowork, revised after Phase 8)
 
 **0. Twenty minutes that produce the first proved result in the app's history (CC's F10).** Phase 3
