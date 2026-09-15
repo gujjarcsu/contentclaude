@@ -470,6 +470,14 @@ Recorded so nobody tries the dead routes again. The App Store listing editor's s
   `computer_resolve_access` answers: *"Browsers can only be granted in 'read' mode — you can see what
   is on screen but cannot interact."* Screenshot only. No click, no typing, so no file dialog.
 
+**A local preview is not an upload (Cowork, `85730cd`).** The obvious success test — "the slot's
+preview changed" — is wrong on its own. A DropZone that accepts a file paints it immediately from a
+`blob:` object URL, before anything leaves the browser. A `blob:` or `data:` src therefore proves the
+component took the file and proves nothing about Shopify having it. The test is a **hosted** `https://`
+src (these are `storage.googleapis.com/shopify-app-store-partner-uploads/...`) **or** a 2xx upload
+response on the wire. Anything else aborts before Save. This is the same shape as false green #20:
+alt text saved fine while the pictures underneath never changed.
+
 **Can fire it:** **Playwright `setInputFiles`.** It goes through CDP `DOM.setFileInputFiles`, so
 Chromium itself fires a trusted `change`. This is how Polaris DropZones are tested.
 
@@ -492,3 +500,31 @@ window, stops at the login wall and *watches* — it never types an email, passw
 all three slots one at a time, waits for each preview `src` to become a new id before the next,
 sets the three alt texts, saves **once**, and reads back on a fresh load. It aborts before any Save
 if a preview does not change, so a repeat of false green #20 cannot be written.
+
+
+### The 2026-09-15 11:43 run: `setInputFiles` alone was silent here too
+
+First real run on Windows. The owner signed in; the editor loaded
+(`.../partner-app-submissions/1279a14cca41d4a6f8e6e3c485870b77/en`, "English listing · Live ·
+Primary"). The map resolved cleanly — the three current alt texts paired with **three distinct** file
+inputs (4 on the page), so Cowork's collision guard passed. Then, on slot 1:
+
+```
+preview before : storage.googleapis.com/.../833f11b5-694c-43c3-8297-24d1343c2744.jpeg
+preview after  : storage.googleapis.com/.../833f11b5-694c-43c3-8297-24d1343c2744.jpeg   (unchanged)
+waited         : 120000 ms
+network        : []          <- not one request
+ABORT: slot 1 did not take the file - stopping before any Save, so nothing is written.
+```
+
+**The guards did their job: it aborted before Save, so the listing was not touched.** Three
+screenshots, three original alt texts, unchanged.
+
+So the CDP claim needs narrowing: `setInputFiles` fires a trusted `change` in general, but on *this*
+control it produced no preview, no `blob:`, and no request — the handler did not run at all. The
+untested half of Playwright's file support is the one the DropZone is actually built for: **clicking
+it opens Chromium's own file chooser**, which Playwright intercepts with
+`page.waitForEvent('filechooser')` + `fileChooser.setFiles()`. `1c8d945` tries that first, falls back
+to `setInputFiles`, and after each attempt reads `input.files` back — the one fact that separates
+*the file never landed* from *the file landed and the app ignored it*. Until that run reports, the
+right description of the DropZone is **"no route has fired it yet"**, not "Playwright fires it".
