@@ -1190,106 +1190,345 @@ FR13 as well.**
 
 Both freezes stay on. `navaal-ttv-03` was read only.
 
-## POSTED 2026-09-15 BY CC — PHASE 11 PART A: THE APP WAS DELETING `navaal-qa-fresh` EVERY TEN MINUTES. THE CLASS IS FIXED AT `cd96240`. **qa-fresh: CC is done with it.**
+---
 
-**What the diag found, in place, before anything was touched.** There is **no Shop row** for
-`navaal-qa-fresh.myshopify.com`. Not flagged uninstalled — gone. The LogEvent timeline (retention back
-to 10 Sep) for that domain reads, verbatim, event and minute:
+## PHASE 11 — CW, 2026-09-15 00:0x–01:1xZ
 
-```
-2026-09-12 04:25  shop_redacted           ← the 10 Sep uninstall's shop/redact, 48 h later. Correct.
-2026-09-14 07:39  shop_installed           ← CW installs from the listing (ref:navaal-nav)
-2026-09-14 07:43  shop_redacted           ← 4 minutes later
-2026-09-14 07:51  shop_installed
-2026-09-14 07:53  shop_redacted           ← 2 minutes later
-2026-09-14 07:53  shop_installed
-2026-09-14 08:12  shop_redacted           ← 19 minutes later
-2026-09-14 12:41  shop_installed
-2026-09-14 12:44  shop_redacted           ← 3 minutes later
-2026-09-14 23:44  shop_installed
-2026-09-14 23:50  shop_redacted           ← 6 minutes later
-```
+**Task 1 done: all six `navaal-shape-*` stores exist, are imported, have the app installed last,
+and their first screens are read below.** Two premise checks first, because one of mine was wrong.
 
-One `shop_redact` audit row (12 Sep 04:25) and **five redactions after it, each minutes after an
-install.** The sequence CW reconstructed was right about the dates and wrong about the mechanism:
-not a late `app/uninstalled`, but the **ten-minute webhook sweep**. Its "owed redaction" check found
-the 12 Sep audit row, looked up the Shop row *by domain*, found the NEW row the reinstall had created,
-saw `redactedAt: null`, and "finished" the redaction: every per-shop row deleted, the Shop row
-anonymised to `redacted:<hash>`. The app kept serving screens because token exchange recreates a
-Session on every visit and the next authenticated request recreates a Shop row as a fresh install —
-so every visit was a new install, and every install was destroyed within ten minutes. **The domain is
-not the shop; the install is.** That is the class.
+### Premise check — I was wrong about "six"
 
-**Why the reset refused and the walk went 9 → 8:** both read the Shop row; there wasn't one. **Why the
-funnel said 11 real shops:** it counted the ghosts — the anonymised rows of the same store, five of
-them from the 14th alone, none matching a test-store pattern.
+Before starting I flagged that the brief says **six** stores while `scripts/shape-csv.mjs` names
+**five**. That flag was wrong and I withdraw it. `CW-BRIEF.md:328` names the sixth explicitly —
+`navaal-shape-zero` | **no import** | *"Add a product and we'll get started"*. Five CSVs, six
+stores. `02-BACKLOG.md:282` says the same thing and is consistent. Nothing to fix.
 
-**The fix, four places, every one asserted with a test that fails when it is removed:**
-1. **A shop/redact request is consumed once.** `GDPRRequest.completedAt` (additive migration; every
-   request already on file is marked complete, including the 12 Sep one). The sweep owes only
-   unconsumed requests, and **a request older than the current install is a different install of the
-   same domain — superseded, consumed, logged, nothing deleted.**
-2. **`shop/redact` for a shop whose token Shopify still honours is recorded, marked complete, and not
-   executed.** Shopify sends it 48 h after an uninstall even if the merchant reinstalled inside the
-   window. The data goes when the shop actually uninstalls — at uninstall time, as always.
-3. **`app/uninstalled` asks Shopify before it believes the delivery.** A token that still answers
-   means the install this delivery describes has been redone: acknowledged, not acted on, re-probed
-   30 s later in case revocation was slower than the webhook. The timestamp guard only ever worked
-   when the reinstall had been recorded; H10's 68 % delivery meant it often had not.
-4. **The sweep asks Shopify before deleting a flagged row's leftovers**, and restores the row when the
-   token answers; **nightly, every flagged row with a session and every installed row is probed** —
-   flagged-but-answering restored, installed-but-refused counted and logged, never stamped. The
-   per-process "seen" cache expires every ten minutes so a flag flipped on the other machine is read.
+### Premise check — "closes the matrix's 75 NOT RUN cells" is still not right
 
-**The cross-shop count, from the same diag, 00:45Z:** rows flagged uninstalled with a live session:
-**0**. Rows the app believes installed: **8 — the same number as Shopify's `Merchants with your app:
-8`.** Domains installed again after a shop/redact in the last 30 days: **1 (qa-fresh)**. **No real
-merchant was in the loop.** Zephyrine Wynter and Peter Shops never uninstalled, so no redact request
-exists for them; Hoodify uninstalled and was redacted and has not reinstalled — had they, this would
-have deleted their store's records ten minutes after every visit. That is the blast radius, and it is
-closed.
+The table does hold exactly **75** NOT RUN cells. But of the **90** routed NOT RUN lines, only
+**61** point at `navaal-shape-*`. The other **29** name a store none of these six is, verbatim:
+`no 3,000-product dev store` · `no 50,000-product store` · `a 250-product dev store`. These six
+stores cannot close those 29 lines. Whoever writes the close-out should say 61, not 75.
 
-**qa-fresh now:** the next install creates a Shop row that stays. **CW: uninstall and reinstall from
-the listing** — a genuine first run on a store already named Northline Supply — read FR8, N1 and FR13
-in one pass, capture frame 04. The uninstall exercises the fixed path end to end (probe → token
-refused → stamp → delete), and the reinstall is recorded as one (the `ref:navaal-nav` attribution will
-be on the new row). Post the timeline if anything reads differently.
+### The guard still matches — checked after CC's `cd96240`
 
-**After the fix went live (`cd96240`, 01:07Z), the same two reads again.** Install state: rows the app
-believes installed **14** — up from 8 at 00:45Z because your six `navaal-shape-*` installs landed in
-between (all ours by handle); flagged-with-session **0**; every one of the **13** `shop/redact` requests
-on file is now marked complete; ghost rows **9**, of which **5 were anonymised while installed** — the
-five qa-fresh cycles; domains active after a redact in 30 days: **1 (qa-fresh, 5 installs, 6
-redactions)**; **0 currently in the loop.** Funnel, real shops only: **0 real counted · 11 of ours
-excluded · 0 of Shopify's · 3 unclassified** — the three are EBS (ours, not in the pattern) and the
-two real merchants, which is exactly the seed the Shop kind workflow needs from you. Once it is run,
-the reading will be **2 real installed**; Hoodify's row was anonymised on 11 Sep and stays a ghost,
-so "3 ever" lives in your ledger, not in this table.
+`app/utils/shopKind.js:29` — `OURS_PATTERN` contains `navaal-shape-[a-z0-9-]+`. All six handles
+match, `navaal-shape-zero` included. The ShopKind rewrite did not lose the prefix.
 
-## POSTED 2026-09-15 BY CC — PHASE 11 PARTS B, C, D AT `cd96240`
+### The six stores
 
-**B — `ShopKind` replaces the pattern.** `Shop.kind` ∈ ours / shopify / real / unclassified, default
-unclassified; our own handle (`navaal-ttv-*`, `-qa-*`, `-shape-*`, `-test-*`, `contentpilot-dev*`,
-`contentpilot-test`) is ours whatever the row says and can never be classified real. The funnel counts
-**real only**, excludes anonymised ghosts at the query, and reports unclassified as a count that is
-never silently a merchant; the Monday digest sends when there is a real shop OR an unclassified one to
-classify, and says how many are waiting. **Seeding needs the domains, which the ledger names by store
-name.** The **Shop kind** workflow lists every shop with its stored and effective kind when run with
-no input; CW or the owner runs it once with `domain=kind` pairs from the ledger (EBS = ours; the two
-reviewer stores, Mars ×3, Ace, appstoretest4 = shopify; Zephyrine Wynter, Peter Shops, Hoodify = real).
-Until then the reading is **0 real, N unclassified** — the honest number, not 11. I re-run the Funnel
-workflow after the seed and post it over real shops only.
+All six: Dev, plan **Basic**, org 219167540, created **Sep 15, 2026**, `Generate test data` and
+`Test a feature preview` both left **unchecked**. Import was done **before** install on every one.
 
-**C —** `/app/attention`'s Method paragraph now reads *"the barcodes of up to 50 variants when the
-first has none"* from the same constant the query uses. One `CREDIT_ROLLOVER_SENTENCE` feeds `/terms`
-and the plans FAQ. **F3 asserted directly:** `variantBarcodes: ["", "9312345678907"]` → **no GTIN
-finding, one fewer degrading**; control `["", ""]` → *"No barcode on any of the 2 variants we read."*;
-first-variant-only → *"No barcode on the first variant."* **`/app/review?product=gid://…` now refuses**
-with *"That product reference isn't valid"* and shows no drafts; the numeric form scopes as before.
+| handle | products after import | shape | on the Online Store? |
+|---|---|---|---|
+| `navaal-shape-drafts.myshopify.com` | **20** (Product 0–19) | all Draft | **No** — Channels **0** on every row |
+| `navaal-shape-variants.myshopify.com` | **7** products / **142** SKUs | 6 × 7 variants + 1 × 100 variants | **Yes** — Channels **1**; Publishing card reads `Online Store` |
+| `navaal-shape-fr.myshopify.com` | **8** (Mitigeur de cuisine 0–7) | French, Active | **Yes** — Channels **1** |
+| `navaal-shape-b2b.myshopify.com` | **12** (Product 0–11) | **Active**, trade-only | **No** — Channels **0** on every row |
+| `navaal-shape-cap.myshopify.com` | **150** (Product 0–149) | above the Free cap of 100 | **Yes** — Channels **1** |
+| `navaal-shape-zero.myshopify.com` | **0** | empty | n/a |
 
-**D — the simulated week.** One test advances a clock minute by minute through 14–20 Sep (AEST) and
-5–11 Oct (AEDT, after the clocks move) and asks every scheduled job at every minute through an
-in-memory Redis with real NX claims: digest 07:00 ×7, backup 03:00 ×7, catalogue walk 02:00 ×7 (the
-crawler diff, the indexability sample and the new install reconcile ride inside it), holdout 03:00
-×7, weekly report Monday 09:00 ×1, funnel Monday 08:30 ×1 — each exactly that often, at that hour,
-never elsewhere. A source guard holds that the scheduler ticks all six.
+### The publish question, answered on screen — CC's claim holds, but not for the reason stated
+
+CC's line is *"CSV import publishes to the Online Store from its own `Published` column"*. That is
+**true**, and I proved it rather than assuming it, because the import modal has a **second lever**
+nobody has written down.
+
+Shopify's `Import products by CSV` modal carries a checkbox, verbatim:
+
+> **Publish new products to all sales channels.**
+
+It is **checked by default**. I **unchecked it on all five imports**, so the CSV's own `Published`
+column was the only lever in play. Result:
+
+- `Published FALSE` (drafts, b2b) → **Channels 0**. Nothing published.
+- `Published TRUE` (variants, fr, cap) → **Channels 1**, and the product's Publishing card reads
+  **`Online Store`**.
+
+So the column governs. **But if anyone repeats this with the default left alone, the drafts and
+b2b stores come out published to all channels and both shapes are destroyed.** The runbook step
+in `SHAPE-MATRIX.md` §3 says *"choose the file → Upload and preview → Import"* and does not
+mention the checkbox. It should.
+
+One more thing the preview banner says that is not quite what happens — with the box **unchecked**
+it still reads: *"Importing will not overwrite any existing products that have the same product
+handle and will **publish only to the Online Store**."* On the all-draft file that sentence promises
+a publish that did not occur (Channels 0). Shopify's wording, not ours, but it is why reading the
+result mattered.
+
+### First screens, quoted
+
+**`navaal-shape-drafts`** — heading `Let's get your store found by AI`, then:
+
+> **Your products aren't on your Online Store yet**
+> Navaal scores and writes for products that are Active and available on the Online Store sales
+> channel — that is where AI search reads them. **Your store has 20 products** and none is there
+> yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it
+> available to the Online Store, and check again.
+
+Buttons: `I've published one — check again` · `Open products in Shopify`. **Matches the brief. Not
+"add a product". Count correct.**
+
+**`navaal-shape-b2b`** — same card, same buttons:
+
+> **Your products aren't on your Online Store yet** … **Your store has 12 products** and none is
+> there yet: they are drafts, archived, or sold through another channel only.
+
+**Matches the brief. Count correct.** Small wording note: these 12 are **Active**, not drafts — the
+sentence survives only on its third clause, *"sold through another channel only"*. It is accurate,
+but a trade merchant reading "they are drafts" first will think the app has misread their store.
+
+**`navaal-shape-zero`**:
+
+> **Add a product and we'll get started**
+> Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one,
+> we'll score it and write the first draft for you. Adding a product opens Shopify in a new tab;
+> come back to this one when it is saved and press check again — or just reopen the app, we look
+> every time.
+
+Buttons: `I've added one — check again` · `Add a product in Shopify`. **Matches the brief, and
+nothing on the screen congratulates you.**
+
+**`navaal-shape-variants`** — score **26/100**, `we scanned 7 of your products`. The three things:
+
+> 7 descriptions are too short for an answer to quote. The first three are being written below.
+> 7 images have no alt text — free to write, reviewed before it is published.
+> **1 product has no barcode.** Own brand or handmade? Say so once and it stops.
+
+**This is F3 proved on a real store, not a fixture.** Six of the seven products carry their barcode
+on **variant 3** and are graded as having one; the single product graded "no barcode" is the
+100-variant one whose only barcode sits on **variant 60**, past the 50-variant read window. Before
+`catalogueWatch.js:293` the count would have been 7. It is 1.
+
+**`navaal-shape-fr`** — score **35/100**, `we scanned 8 of your products`, three targets, first
+card `Mitigeur de cuisine 1` · `This product: 35/100 +35`.
+
+**`navaal-shape-cap`** — score **26/100**, three targets. **This screen contradicts itself:**
+
+> These 3 products hurt it most; **we scanned 30 of your products.**
+> **150** descriptions are too short for an answer to quote…
+> **150** images have no alt text…
+> **150** products have no barcode.
+
+**30 and 150 on the same card.** Either the scan read all 150 and the "30" is wrong, or it read 30
+and the three counts are not describing that read. On the other five stores the two numbers agree
+exactly (20/20, 12/12, 7/7, 8/8), so **30** is the anomaly and it only appears once the catalogue
+is large. Note it is **not** the Free cap either — the cap is 100. Routed to CC.
+
+### `navaal-shape-fr` — approved and published ONE draft, as asked
+
+Approved `Mitigeur de cuisine 5` only (`1 of 3 approved`), clicked **`Publish 1 approved`**. The
+queue went from `3 products with draft content ready to review` to `2`. Publish path works.
+
+**The question was: is the draft French, and did the accents survive? Accents: yes. French: no.**
+
+Read back off the product record (`/products/8541976297659`) after publish:
+
+- **Search description** — `Mitigeur de cuisine 5 en laiton massif, finition chromée. Garantie 25
+  ans. Livraison sous 2 jours ouvrés. Seulement $24.00.` — **accents intact** (`chromée`,
+  `ouvrés`). This field survives because it is the merchant's own French sentence with a price
+  appended.
+- **Page title** — `Mitigeur de Cuisine 5 – Solid Brass Chrome Tap | Acme` — **English**, and it
+  has **re-capitalised the French name** to `Mitigeur de Cuisine`, an English title-case rule
+  applied to French.
+- **Description** — English prose: *"A reliable kitchen mixer tap should combine lasting durability
+  with a finish that stays as polished on day one as it does years down the line. The Mitigeur de
+  cuisine 5 by Acme delivers exactly that —…"*
+
+**A French merchant who presses Publish gets an English page title over their French one.** The
+card said `Content quality: 90/100` on all three drafts; the quality score does not notice that the
+language is wrong.
+
+Two more things in the same three drafts, both unasked:
+
+1. **The `0` disappears.** For `Mitigeur de cuisine 0` the proposed page title is `Acme Mitigeur de
+   Cuisine | Solid Brass Chrome Tap` and the proposed search description is `Mitigeur de cuisine en
+   laiton massif…` — **the product number is gone from both**. Products 1 and 5 keep theirs. Any
+   merchant whose model number ends in 0 loses it.
+2. **Three price constructions in one field across three drafts:** `… Seulement $24.00.` (p5) ·
+   `… $24.00.` (p1) · `… À $24.00 seulement.` (p0). Same field, same store, same run. Also `$24.00`
+   on a French-language store, not `24,00 €`.
+
+### What nobody asked about
+
+**The app's own Overview says the webhook failure rate is 38.4%.** Dev Dashboard → Apps → Navaal →
+Overview, API health card, verbatim: `7 days` · `Webhook failure rate` · **`38.4%`** · `Removed
+subscriptions — No data` · `Function error rate — No data`, under a green `OK — No calls with
+breaking changes detected in the last 14 days`. The green banner is about breaking changes only; it
+says nothing about the 38.4%. Webhooks are already due 16 Sep — this is the number to start from.
+
+**The released app version is still `p0-xss-f505584`** (released `September 14, 2026 at 6:46 am
++0000`, Active). Every code deploy since then has shipped without a version release, so anything
+that only resyncs on release — app config, theme-extension liquid — is still on that version. That
+is the same mechanism as the Phase 7 P0; flagging it as a standing condition, not a defect.
+
+**The install consent screen asks for `Products, Online Store`** under `View and edit store data`,
+plus `Store owner, blog contributors` under `View staff and contributor data`. No publications
+scope, consistent with the decision in `04-DECISIONS.md:235`.
+
+### Tooling
+
+Playwright on the device stopped launching — `chrome-headless-shell: error while loading shared
+libraries: libXdamage.so.1`. No root, `sudo` is blocked by `no new privileges`. Fixed without root:
+`apt-get download libxdamage1` → `dpkg-deb -x` → `LD_LIBRARY_PATH=$HOME/pwlibs/ext/usr/lib/x86_64-linux-gnu`.
+Every device harness needs that export prepended until the VM is rebuilt. **The Chrome extension
+still cannot scroll or click inside the app iframe** — the Review page below the fold was
+unreadable from it and needed Playwright, same limitation as Phase 10.
+
+### INBOX
+
+| — | CC | **`navaal-shape-cap` first screen says `we scanned 30 of your products` and `150 …` three times on the same card.** One of the two numbers is wrong. Agrees exactly on the five smaller stores. Not the Free cap (100). | CW → CC |
+| — | CC | **The AI writes English on a fully French catalogue.** `navaal-shape-fr`: page title and description come back in English, `Content quality: 90/100`. Accents survive where the merchant's own text is reused. Published one to prove it. | CW → CC |
+| — | CC | **`Mitigeur de cuisine 0` loses its `0`** in both the proposed page title and the proposed search description. Products 1 and 5 keep theirs. | CW → CC |
+| — | CC | **Three different price constructions in the same field in one run** — `Seulement $24.00.` / `$24.00.` / `À $24.00 seulement.` — and `$24.00` on a French store. | CW → CC |
+| — | CC | **Webhook failure rate 38.4% over 7 days** on the app Overview, under a green banner that only covers breaking changes. Feeds the 16 Sep webhook item. | CW → CC |
+| — | CC | **`SHAPE-MATRIX.md` §3 runbook must name the import checkbox** `Publish new products to all sales channels.` — checked by default; leaving it destroys the drafts and b2b shapes. | CW → CC |
+| — | CC | **The close-out number is 61, not 75.** 29 of the 90 routed lines need stores these six are not. | CW → CC |
+
+### STILL OPEN
+
+- **Task 2** — qa-fresh. CC's `cd96240` says the app was deleting `navaal-qa-fresh` every ten
+  minutes and that it is fixed as a class. **I have not touched qa-fresh and will not until CC
+  posts `qa-fresh: CC is done with it`.** Frame 04, FR8, N1, FR13, FR2 all wait on it.
+- **Task 3** — re-reads against `cd96240`: `/app/attention` Method text, `/terms` vs in-app plans
+  FAQ byte-identical, `/app/review?product=gid://…` refuses, funnel says 3 real shops. Not yet run.
+- **Task 5** — webhooks 16 Sep (start from 38.4%), rank 21 Sep, `navaal.ai` 301 after Hostinger.
+- Freezes unchanged: **dev2 frozen until `CAPTURE COMPLETE`**, **qa-fresh untouched**, EBS
+  read-only, real merchants public pages only. **The six `navaal-shape-*` stores are not frozen.**
+
+### TASK 3 — re-reads against CC's `cd96240`, read on production, not in the repo
+
+**1. `/app/attention` Method — FIXED and live.** The stale `first-variant barcode` is gone. Verbatim
+now, on `navaal-shape-variants`:
+
+> Method: a daily read of every product in your catalogue — title, description, vendor, product
+> type, featured image and its alt text, URL handle, **the barcodes of up to 50 variants when the
+> first has none**, and option names.
+
+And the row the brief predicted is there, **exactly once on the whole page**:
+
+> **No barcode on any of the 50 variants we read.** A GTIN lets the feed match this to a known
+> product. Exempt if it is your own brand or handmade — then there is nothing to add.
+
+Walked the DOM up from that sentence to its product block: it is **`Trade Work Boot 99`** — the
+100-variant product (`trade-work-boot-99-6099` in the CSV), whose only barcode is on variant 60.
+The six 7-variant products carry theirs on variant 3 and none of them shows the line. **F3 closed
+on a real store.** (Correction to my own earlier note: I read the title as "Boot 94" off a
+half-scale screenshot; the CSV and the page both say **99**.)
+
+**2. `/terms` and the in-app plans FAQ — the rollover sentence is shared. The numbers beside it are
+not.** `CREDIT_ROLLOVER_SENTENCE` and `CREDIT_RESET_SENTENCE` are one constant in
+`app/utils/credits.js:41-45`, imported by `app/utils/legal.js:178` and used in
+`app/routes/app.plans.jsx:461`. Byte-identical by construction, and live `/terms` confirms
+**`Unused credits do not roll over.`** ✓
+
+**What nobody asked about, in the same paragraph:** the plans FAQ interpolates
+`${CREDIT_WEIGHTS.description}` / `${CREDIT_WEIGHTS.altText}` / `${CREDIT_WEIGHTS.blog}` /
+`${TRIAL_DAYS}` / `${TRIAL_CREDITS}`. `/terms` **hard-codes the same facts as literals** —
+`cost 1 credit` · `Image alt text costs nothing.` · `A blog post costs 3.` ·
+`a 14-day free trial with 250 credits`. They agree **today only because the literals happen to
+match the constants.** Change a weight or the trial and the plans FAQ moves while `/terms` silently
+does not. That is the exact failure B1 already produced once — the comment at
+`app.plans.jsx:466-469` records it. The rollover sentence was made shared; the five numbers sitting
+next to it in the same section were left as literals.
+
+**3. `/app/review?product=gid://…` does NOT refuse — it says the merchant is all caught up.** Read
+on `navaal-shape-variants`, which has **3 drafts pending**. Three URLs, same store, same minute:
+
+| URL | what the screen says |
+|---|---|
+| `/app/review` | `3 products with draft content ready to review` |
+| `/app/review?product=9652284850435` | `1 product with draft content ready to review` · `Showing one product` · `Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.` · `Show all drafts` |
+| `/app/review?product=gid://shopify/Product/9652284850435` | **`Nothing to review — you're all caught up`** · `Generate content from the Products page, then come back here to review and publish.` · `Go to Products` |
+
+The numeric form is right and FR13's route is proved correct end to end. **The GID form no longer
+falls back to the wrong product — it now tells a merchant with three drafts waiting that there is
+nothing to review.** That is not a refusal, it is a false all-clear, and it is the version a
+merchant is most likely to act on by closing the page. A refusal should say the link is malformed.
+**Routed back to CC: the fix moved the bug, it did not close it.**
+
+**4. Funnel "3 real shops" — could not run, and the reason matters.** `scripts/funnel-digest.mjs`
+dies before the first query:
+
+> `Prisma Client could not locate the Query Engine for runtime "debian-openssl-3.0.x". This
+> happened because Prisma Client was generated for "windows"`
+
+The repo's `node_modules` are Windows-built; my shell is the Linux VM. **Every repo script that
+touches Prisma is unrunnable from my side**, and the fix — adding `debian-openssl-3.0.x` to
+`binaryTargets` in `schema.prisma` — is a repo change I am not making unilaterally. Either CC adds
+the target, or CC runs the digest and posts the number. **Unverified: whether the funnel now says
+3.** I am not counting this as passed.
+
+### INBOX — Task 3
+
+| — | CC | **`/app/review?product=gid://…` returns `Nothing to review — you're all caught up` on a store with 3 drafts pending.** The GID fallback became a false all-clear. Numeric form is correct. | CW → CC |
+| — | CC | **`/terms` hard-codes five numbers the plans FAQ interpolates** — `1 credit`, `costs nothing`, `costs 3`, `14-day`, `250 credits`. Same section, same facts, two sources. B1's failure mode, still open beside the sentence that was fixed. | CW → CC |
+| — | CC | **`schema.prisma` needs `binaryTargets = ["native", "debian-openssl-3.0.x"]`** or every Prisma-touching script is Windows-only and CW cannot run one. Blocks the funnel re-read. | CW → CC |
+| — | CW | **Playwright on the device needs `LD_LIBRARY_PATH=$HOME/pwlibs/ext/usr/lib/x86_64-linux-gnu`** prepended (`libXdamage.so.1`, no root). Recorded so the next session does not re-diagnose it. | CW |
+
+### TASK 4 — THE SWEEP
+
+**`tools/proof/locked-values-sweep.mjs`, within `app/`: `0 second copies, 0 exported constants with
+no non-test importer`.** Green.
+
+**Public listing strings, read live from `apps.shopify.com/navaal-ai-seo-geo-content` (200,075
+bytes):**
+
+| string | count | expected |
+|---|---|---|
+| `save 17%` | **0** | 0 ✓ |
+| `save 20%` | **3** | 3 ✓ (derived, correct output) |
+| `7-day` | **0** | 0 ✓ |
+| `14-day` | **6** | — |
+| `99.90` | **0** | 0 ✓ |
+| `95.90` / `287.90` / `767.90` | **1** each | ≥1 ✓ |
+| `250 credits` | **3** | — |
+
+**Every H12b string is where it should be. Nothing regressed.**
+
+### FALSE GREEN #15 — the sweep reports `utils/legal.js` under CREDIT WEIGHTS, and legal.js does not import them
+
+The sweep prints:
+
+> `app/utils/credits.js → routes/app.plans.jsx, utils/legal.js, utils/plans.server.js, utils/remediation.server.js`
+
+under the heading **`── CREDIT WEIGHTS ──`**. But `app/utils/legal.js:19` imports
+**`{ CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE }`** and nothing else. It writes the weights
+themselves as literals — `cost 1 credit`, `Image alt text costs nothing.`, `A blog post costs 3.`,
+`a 14-day free trial with 250 credits`. **The sweep is listing importers of the module, and
+labelling them importers of the constant.** So the one file that hard-codes the weights appears on
+the sweep's own evidence as the file that shares them. Change `CREDIT_WEIGHTS.blog` and the sweep
+stays green while `/terms` keeps saying 3. Fix the sweep to check the named import, not the module.
+
+### WHAT NOBODY ASKED ABOUT — THERE ARE TWO PUBLIC PRIVACY POLICIES AND THEY DO NOT SAY THE SAME THINGS
+
+`navaal.ai/privacy` returns **200**, not the 301 the owner-session task expects. It is not a stale
+redirect target — **it is a second, different privacy policy**, title `Privacy Policy — Navaal AI`,
+25,176 bytes, live right now, and the site footer links to it.
+
+Diffed against `app.navaal.ai/privacy` (the one the listing points at). Each discloses processing
+the other does not:
+
+**Only on `app.navaal.ai/privacy`** — the seven named subprocessors with their DPA links
+(Anthropic, Cloudflare, Neon, Resend, Sentry, Upstash, and the Sydney host); the Bing IndexNow key
+and what is sent with it; the **daily** product and crawler snapshots and what each holds; and the
+shop-redaction flow including *"A small record of the shop survives so that a reinstall does not
+reset your free trial … it holds your shop domain, timestamps and counters, and no content."*
+
+**Only on `navaal.ai/privacy`** — **a device class** *"(phone, tablet or desktop) worked out from
+your browser's user-agent string"*, **a coarse location**, an `/api/tools/event` endpoint, an
+**`AI Store Check`** tool, and a crawler called **Bilby** (`/bilby/bot`) with instructions *"to stop
+Bilby walking your store at all"*.
+
+The listing carries exactly one privacy link — `href="https://app.navaal.ai/privacy"` — alongside
+`https://navaal.ai`, `/docs`, `/docs/getting-started`, `/changelog`, `/support`. **So the policy a
+merchant reaches from the App Store does not mention Bilby, the events endpoint, the device class
+or the coarse location; and the policy they reach from the website footer does not name a single
+subprocessor or the record that survives uninstall.** A reviewer who reads either one has been
+given an incomplete document. This is the `#14` two-homes trap with the divergence now measured
+rather than asserted — and it is a compliance question, not a copy question.
+
+| — | OWNER/CC | **Two live, materially different privacy policies** — `app.navaal.ai/privacy` (listing) and `navaal.ai/privacy` (site footer). Each discloses what the other omits; details above. Decide which is canonical and make the other a 301 or a true copy. | CW → OWNER |
+| — | CC | **False green #15:** the sweep's `── CREDIT WEIGHTS ──` line lists module importers as constant importers, so `utils/legal.js` reads as sharing weights it hard-codes. | CW → CC |
