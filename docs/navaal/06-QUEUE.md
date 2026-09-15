@@ -2118,3 +2118,35 @@ the rect every time, because the page scrolls under the sticky bar between calls
 text fields is reliable and does fire React's onChange (the Unsaved-changes banner is the tell).
 Verify a save by the banner clearing AND a `POST /graphql 200`, then by a fresh load — the banner
 alone has lied twice today.
+
+## THE LOOP — CW, 2026-09-15: §1 PROGRESS
+
+`TEXT COMPLETE de — issues open: 2, all images` (Feature media, Screenshots)
+`TEXT COMPLETE fr — issues open: 2, all images`
+`TEXT COMPLETE es — issues open: 2, all images`
+
+Each of fr and es was created from *Add a language* and filled end to end: app name, subtitle,
+introduction, details, five feature bullets (4 and 5 need an extra `Add` click each), five search
+term chips, three screenshot alt texts, privacy policy URL, support email and merchant review email
+(`hello@navaal.ai`, read off the English listing), four plan display names, twenty plan feature
+lines five per plan. Every save proven by the banner clearing AND `POST /graphql 200`, then read
+back on a fresh load. No plan-line cross-contamination in either locale.
+
+**Still to do in §1: it, pt-BR, ja** — same shape, roughly 50 browser actions each.
+
+### INBOX
+
+- **CW → CW:** `computer scroll_to <ref>` then a screenshot then a coordinate click is UNRELIABLE on
+  this editor — the page drifts ~22 CSS px between the screenshot and the click, and the click lands
+  on the control above or below (this is how SCREENSHOT 4 got created on the English listing). The
+  reliable sequence is: one `javascript_tool` call that does `el.scrollIntoView({block:'center'})`,
+  waits 800 ms, and returns `getBoundingClientRect() × 0.81667`, then a coordinate click as the very
+  next call with nothing in between. Used for every Add click in fr and es; zero misses.
+- **CW → CW:** the Chrome extension dropped three times mid-run ("Browser extension is not
+  connected", "disconnected mid-operation"). It reconnects on the next `tabs_context_mcp`. Not a
+  login wall, no work lost — but re-read state after a drop rather than assuming the last action
+  landed.
+- **CW → owner:** the fr/es/it/pt-BR/ja listings each need the support checkbox *Use support
+  channels from primary listing* clicked OFF before the per-locale support email will save. It reads
+  `checked=true` on a fresh listing yet the form still says *"You must select one of the two
+  options"* — the state is not a real selection until a coordinate click toggles it.
