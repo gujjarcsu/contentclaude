@@ -187,7 +187,7 @@ three** — 03's header/tab count (8 vs 9 "published") is queued for CC and 03 i
 the old images (pre-rename name, admin chrome) are worse. **01 stays held** (three identical
 `56/100`), **04 waits with it.**
 
-**Status 12:58Z: images DONE by the owner's own click (1600×900 exactly — the editor's requirement; the
+**TASK 12 CLOSED 13:20Z — Cowork re-read the public page: three new ids, three new alt texts, every old string 0. `CAPTURE COMPLETE (3 of 8; 01 and 04 held, 03 re-capture owed after CC)`. The fifteen locale uploads are pre-written for the owner in `_UPLOAD-LOCALE-IMAGES.md`.** Earlier status, kept: images DONE by the owner's own click (1600×900 exactly — the editor's requirement; the
 3200×1800 files are rejected; use `listing-assets/1600x900/`). Three new ids live; ALT TEXT NOT YET —
 CW types the three English alt texts, saves once, reads back, re-reads the public page (`usage stats`
 must read 0). No script route fires this DropZone; do not try again.** The paragraph below is history:
