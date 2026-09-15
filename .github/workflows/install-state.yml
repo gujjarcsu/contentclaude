@@ -1,0 +1,45 @@
+name: Install state (read-only)
+
+# Phase 11 Part A — the app and Shopify disagree about whether a shop is
+# installed. This reads what the app believes (the Shop row, its sessions, the
+# rows the uninstall path deletes, the GDPR audit) and asks Shopify what is
+# true (`shop { name }` with the stored offline token). With no shop input it
+# reads every row flagged uninstalled and probes the ones that still hold a
+# token — the cross-shop count the brief asks for. Writes nothing of the
+# merchant's; the only write it can cause is Shopify's own token refresh
+# updating our Session row. Prints no token.
+#
+# It does NOT deploy: it runs a command on the machine that is already running.
+on:
+  workflow_dispatch:
+    inputs:
+      shop:
+        description: "One shop domain (e.g. navaal-qa-fresh.myshopify.com), or empty for the cross-shop count"
+        required: false
+        type: string
+
+jobs:
+  read:
+    name: Read the install state
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SHOP: ${{ inputs.shop }}
+        run: |
+          set -euo pipefail
+          case "$SHOP" in
+            ""|*.myshopify.com) : ;;
+            *) echo "::error::shop must be a myshopify domain or empty"; exit 1 ;;
+          esac
+          flyctl ssh console --app contentclaude \
+            -C "sh -c 'DIAG_SHOP=${SHOP} node /app/scripts/install-state-diag.mjs'" | tee state.json
+          {
+            echo '## Install state'
+            echo ''
+            echo '```json'
+            cat state.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
