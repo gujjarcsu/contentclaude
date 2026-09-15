@@ -195,10 +195,43 @@ for (let k = 0; k < 3; k++) {
   const attempts = [];
   let res = { accepted: false, after: before, changed: false };
 
-  // ---- route A: the file chooser ----
+  // ---- route A0: the slot's own button, if it has one ----
   const n0 = uploads.length;
   let routeA = "not attempted";
-  if (handle) {
+  const btn = await page.evaluateHandle((kk) => {
+    const fi = document.querySelector(`input[type=file][data-cw-file="${kk}"]`);
+    if (!fi) return null;
+    let a = fi, depth = 0;
+    while (a && depth < 8) {
+      const b = Array.from(a.querySelectorAll("button,label,[role=button]")).find((x) => /upload|replace|change|add (an )?image|choose/i.test((x.textContent || "") + " " + (x.getAttribute("aria-label") || "")));
+      if (b) return b;
+      a = a.parentElement; depth++;
+    }
+    return null;
+  }, k);
+  const btnEl = btn.asElement();
+  if (btnEl) {
+    const label = await btnEl.evaluate((b) => (b.textContent || b.getAttribute("aria-label") || "").trim().slice(0, 40));
+    try {
+      const [chooser] = await Promise.all([
+        page.waitForEvent("filechooser", { timeout: 15000 }),
+        btnEl.click({ timeout: 10000 }),
+      ]);
+      await chooser.setFiles(s.abs);
+      routeA = `slot button "${label}" opened the chooser and was given the file`;
+    } catch (e) { routeA = `slot button "${label}" opened no chooser: ${e.message.split("\n")[0]}`; }
+    say(`slot ${k + 1} route A0 — ${routeA}`);
+    let w0 = 0;
+    while (w0 < 45000) {
+      await page.waitForTimeout(2000); w0 += 2000;
+      res = await settled(k, before, n0);
+      if (res.accepted) break;
+    }
+    attempts.push({ route: "A0 slot button", detail: routeA, waitedMs: w0, filesOnInput: await filesOn(k), ...res });
+  } else { say(`slot ${k + 1} route A0 — no upload/replace button found near the slot`); }
+
+  // ---- route A: the file chooser from the DropZone body ----
+  if (!res.accepted && handle) {
     try {
       const [chooser] = await Promise.all([
         page.waitForEvent("filechooser", { timeout: 15000 }),
@@ -252,8 +285,29 @@ for (let k = 0; k < 3; k++) {
         itemHTML: item ? item.outerHTML.slice(0, 2000) : null,
       };
     }, k).catch((e) => ({ error: e.message }));
-    if (res.changed) die(`slot ${k + 1} shows a local preview (${String(res.after).slice(0, 30)}…) but no upload reached Shopify — stopping before any Save; alt text will not be saved over an old picture again.`);
-    die(`slot ${k + 1} did not take the file on either route — stopping before any Save, so nothing is written. Diagnostics are in the report.`);
+    // ---- route C: the owner, in this window. No route below saves anything by itself. ----
+    say("");
+    say("  ===================================================================");
+    say(`  SLOT ${k + 1}: automation could not hand the file to this slot.`);
+    say(`  In the Chromium window: on screenshot slot ${k + 1}, click Upload image`);
+    say(`  (or Replace) and pick  ${s.abs}`);
+    say("  Do NOT press Save. This script is watching the slot and continues");
+    say("  by itself once the upload has reached Shopify. 10 minutes.");
+    say("  ===================================================================");
+    say("");
+    const n2 = uploads.length;
+    let w3 = 0;
+    while (w3 < 600000) {
+      await page.waitForTimeout(3000); w3 += 3000;
+      res = await settled(k, before, n2);
+      if (res.accepted) break;
+    }
+    attempts.push({ route: "C owner picked the file", waitedMs: w3, filesOnInput: await filesOn(k), ...res });
+    report.steps[report.steps.length - 1].attempts = attempts;
+    if (!res.accepted) {
+      if (res.changed) die(`slot ${k + 1} shows a local preview (${String(res.after).slice(0, 30)}…) but no upload reached Shopify — stopping before any Save; alt text will not be saved over an old picture again.`);
+      die(`slot ${k + 1} did not take the file on any route — stopping before any Save, so nothing is written. Diagnostics are in the report.`);
+    }
   }
   say(`slot ${k + 1}: ACCEPTED -> ${String(res.after).slice(0, 90)}…`);
   map = await mark(); // re-mark: React may have replaced the nodes
