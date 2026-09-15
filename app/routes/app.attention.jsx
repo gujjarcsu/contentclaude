@@ -283,7 +283,7 @@ export default function AttentionPage() {
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">
               {t("{blocking} of {graded} products cannot be listed by at least one surface as they stand; {degrading} would be listed but shown worse. {v}", { blocking: summary.blocking, graded: summary.graded, degrading: summary.degrading, v: crawler.passwordProtected
-                ? " Your storefront is password-protected, so nothing is listed anywhere yet — this is what each surface will ask for the day it opens."
+                ? t(" Your storefront is password-protected, so nothing is listed anywhere yet — this is what each surface will ask for the day it opens.")
                 : "" })}
             </Text>
             {gaps.map((r) => (

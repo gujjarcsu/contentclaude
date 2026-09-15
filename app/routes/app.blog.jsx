@@ -691,7 +691,7 @@ export default function BlogPage() {
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={CheckCircleIcon} tone="success" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
-                      {generated ? t("Blog post generated and saved as draft — review and edit below") : t("Editing draft: {v}", { v: resumePost?.title || resumePost?.topic || "Untitled" })}
+                      {generated ? t("Blog post generated and saved as draft — review and edit below") : t("Editing draft: {v}", { v: resumePost?.title || resumePost?.topic || t("Untitled") })}
                     </Text>
                   </InlineStack>
                 </Box>

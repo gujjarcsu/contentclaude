@@ -608,8 +608,7 @@ function RecentActivityCard({ items, navigate }) {
             const target = isProduct
               ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
               : "/app/collections";
-            const typeLabel =
-              item.contentTypesCount > 1 ? `${item.contentTypesCount} content types` : "1 content type";
+            const typeLabel = t("{n, plural, one {# content type} other {# content types}}", { n: item.contentTypesCount });
             return (
               <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
                 <InlineStack align="space-between" blockAlign="center">
@@ -739,13 +738,13 @@ export default function Dashboard() {
   // Hero message
   let heroSubtitle;
   if (isNewShop) {
-    heroSubtitle = "Let's generate your first product description — it takes under 30 seconds.";
+    heroSubtitle = t("Let's generate your first product description — it takes under 30 seconds.");
   } else {
     // Phase 2 item 2.9 - the hero used to turn into an upsell whenever quota
     // ran low ("Only 2 generations left - upgrade to keep momentum going").
     // Quota is stated once, plainly, in the usage card. The hero says what the
     // merchant has actually done.
-    heroSubtitle = `${generatedCount} product${generatedCount !== 1 ? "s" : ""} optimized · ${draftCount} draft${draftCount !== 1 ? "s" : ""} awaiting review`;
+    heroSubtitle = t("{generatedCount, plural, one {# product} other {# products}} optimized · {draftCount, plural, one {# draft} other {# drafts}} awaiting review", { generatedCount, draftCount });
   }
 
   /* Phase 2 item 2.7 — ONE primary action, chosen by what the merchant should

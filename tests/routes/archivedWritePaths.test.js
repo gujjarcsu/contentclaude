@@ -97,8 +97,9 @@ describe('the Products subtitle no longer says "30 live" about 15 products', () 
     // from our own table, and it asks Shopify nothing — so it keeps counting a
     // product after the merchant archives or deletes it. Correct as a record,
     // false as a claim about the storefront.
-    expect(code(PRODUCTS)).not.toMatch(/\$\{publishedProducts\} live/);
-    expect(code(PRODUCTS)).toMatch(/\$\{publishedProducts\} with content published/);
+    // D6: the sentence is a t() key with {published} where it used to be a template with ${publishedProducts}
+    expect(code(PRODUCTS)).not.toMatch(/\{published\} live|\$\{publishedProducts\} live/);
+    expect(code(PRODUCTS)).toMatch(/\{published\} with content published/);
   });
 
   it("the stat card keeps the number, because the number is right", () => {
@@ -129,7 +130,7 @@ describe('the Products subtitle no longer says "30 live" about 15 products', () 
       const countsOurRows = /\b(publishedProducts|generatedCount)\b/.test(src);
       if (!countsOurRows) continue;
       if (/live on your storefront/i.test(src)) offenders.push(`${f} (Live on your storefront)`);
-      if (/\$\{(publishedProducts|generatedCount)\} live\b/.test(src)) offenders.push(`${f} (N live)`);
+      if (/(\$\{(publishedProducts|generatedCount)\}|\{(published|generatedCount)\}) live\b/.test(src)) offenders.push(`${f} (N live)`);
     }
     expect(offenders, `describe our own rows as the merchant's storefront: ${offenders.join(", ")}`).toEqual(
       [],

@@ -1,6 +1,7 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { useT } from "../i18n/react.jsx";
 import { tForRequest, T } from "../i18n/index.js";
+import { PLAN_LABELS } from "../utils/planFit.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { languageMismatch, languageName } from "../utils/language.js";
 import { LIVE_UI_LOCALES, UI_LOCALE_NAMES, normaliseUiLocale } from "../i18n/index.js";
@@ -166,7 +167,7 @@ export const action = async ({ request }) => {
     const ent = await checkEntitlement(shop, "contentTemplates");
     if (!ent.allowed) {
       return Response.json({
-        error: t("Content templates require the {v} plan. Upgrade to unlock this feature.", { v: ent.requiredPlan ?? "Starter" }),
+        error: t("Content templates require the {v} plan. Upgrade to unlock this feature.", { v: PLAN_LABELS[ent.requiredPlan] ?? T("Starter") }),
         limitReached: true,
       });
     }
@@ -240,7 +241,7 @@ export const action = async ({ request }) => {
     const apEnt = await checkEntitlement(shop, "autopilot");
     if (!apEnt.allowed) {
       autopilotEnabled = false;
-      autopilotNotice = `Your settings were saved, but Autopilot stays off — it requires the ${apEnt.requiredPlan ?? "Growth"} plan.`;
+      autopilotNotice = t("Your settings were saved, but Autopilot stays off — it requires the {plan} plan.", { plan: PLAN_LABELS[apEnt.requiredPlan] ?? T("Growth") });
     }
   }
 

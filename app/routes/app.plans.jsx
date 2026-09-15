@@ -350,7 +350,7 @@ const PLAN_DISPLAY = [
       productLine(BILLING_PLANS.growth.productLimit),
       T("Everything in Starter"),
       trialLine,
-      `Blog posts (${CREDIT_WEIGHTS.blog} credits each)`,
+      { key: T("Blog posts ({n} credits each)"), vars: { n: CREDIT_WEIGHTS.blog } },
       T("Autopilot mode"),
       // 12-OFFER.md 5.5 - the feature generates two candidate texts for the
       // merchant to choose between. There is no traffic split and no winner

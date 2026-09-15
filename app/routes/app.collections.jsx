@@ -70,11 +70,8 @@ export const loader = async ({ request }) => {
     getCollectionCandidateCounts(admin, shop),
   ]);
 
-  const catalogError = page.ok
-    ? null
-    : page.throttled
-      ? "Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly."
-      : "We could not read your collections from Shopify just now. This list may be incomplete.";
+  // D6 — the loader ships a reason, never a sentence; the screen makes the sentence in its language
+  const catalogError = page.ok ? null : page.throttled ? "throttled" : "unreadable";
 
   const collections = (page.data?.collections?.edges ?? []).map(({ node }) => ({
     id: node.id,
@@ -412,14 +409,14 @@ export default function CollectionsPage() {
    * instruction to Generate over collections that already had descriptions.
    */
   const collectionsSubtitle = (() => {
-    if (total === null) return "We could not read your collection totals from Shopify just now.";
+    if (total === null) return t("We could not read your collection totals from Shopify just now.");
     const shown = collections.length;
     const totalText = totalExact ? `${total}` : `${total}+`;
     const withCopy = collections.filter((c) => c.hasOwnContent).length;
-    const scope = truncated ? `Showing the first ${shown} of ${totalText} collections` : `${totalText} collections`;
+    const scope = truncated ? t("Showing the first {shown} of {total} collections", { shown, total: totalText }) : t("{total} collections", { total: totalText });
     return withCopy > 0
-      ? `${scope} · ${withCopy} already have a description of your own`
-      : `${scope} · none have a description yet`;
+      ? t("{scope} · {n} already have a description of your own", { scope, n: withCopy })
+      : t("{scope} · none have a description yet", { scope });
   })();
 
   const updateVoiceForm = (collectionId, field, value) => {
@@ -474,7 +471,7 @@ export default function CollectionsPage() {
             looked identical. */}
         {catalogError && (
           <Banner tone="warning" title={t("This list may be incomplete")}>
-            <p>{catalogError}</p>
+            <p>{catalogError === "throttled" ? t("Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly.") : t("We could not read your collections from Shopify just now. This list may be incomplete.")}</p>
           </Banner>
         )}
         {/* Group 2.1 — a cap must never be presented as a total. This says what
@@ -483,7 +480,7 @@ export default function CollectionsPage() {
         {truncated && (
           <Banner tone="info" title={t("Showing part of your collections")}>
             <p>
-              {t("Your store has {v} collections and this page shows the first {length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.", { v: totalExact ? total : `more than ${total}`, length: collections.length })}
+              {t("Your store has {v} collections and this page shows the first {length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.", { v: totalExact ? total : t("more than {total}", { total }), length: collections.length })}
             </p>
           </Banner>
         )}

@@ -45,6 +45,7 @@ const ROOTS = ["app/routes", "app/components"];
 // data module, so nothing in them is rewritten or flagged.
 const CATALOGUE_ONLY = [
   "app/utils/legal.js",
+  "app/utils/planFit.js",
   "app/utils/catalogueWatch.js",
   "app/utils/indexability.js",
   "app/utils/firstRun.js",
@@ -255,12 +256,56 @@ function processFile(file, catalogue) {
     return null;
   };
 
+  const flagAssignedTemplate = (path, node) => {
+    // a template, or a ternary of templates/strings (`const clause = a ? \`…\` : \`…\``)
+    if (!node || (node.type !== "TemplateLiteral" && node.type !== "ConditionalExpression")) return;
+    const r = stringExpr(node);
+    if (!r || !/\s/.test(r.key.replace(/\{\w+\}/g, ""))) return;
+    // GraphQL documents are templates with words and spaces; they are not merchant text
+    if (/^\s*(query|mutation|fragment|subscription)\b/.test(r.key) || r.key.includes("#graphql")) return;
+    report.wrapped += 1; // counted, so --check fails on it
+    report.unwrapped.push({ line: node.loc?.start.line, key: r.key.slice(0, 60), why: "template literal with words assigned to a variable — a t() key with {placeholders}" });
+  };
+
   traverse(ast, {
     // keys already wrapped — so a re-run regenerates the catalogue from the source as it is
     CallExpression(path) {
       const c = path.node.callee;
       if (c.type === "Identifier" && (c.name === "t" || c.name === "T") && path.node.arguments[0]?.type === "StringLiteral") {
         catalogue.set(path.node.arguments[0].value, path.node.arguments[0].value);
+        // D6 — merchant text hidden in the VARS of a t() call: `t("… {v}", { v: cond ? " A sentence." : "" })`
+        // renders the sentence in English on every language. Found on the Japanese read-back
+        // (the Attention summary's password sentence). Such a value must be its own t() key.
+        const vars = path.node.arguments[1];
+        if (vars?.type === "ObjectExpression") {
+          for (const prop of vars.properties) {
+            if (prop.type !== "ObjectProperty") continue;
+            const r = stringExpr(prop.value);
+            if (!r) continue;
+            report.wrapped += 1; // counted, so --check fails on it
+            report.unwrapped.push({ line: prop.loc?.start.line, key: r.key.slice(0, 60), why: "merchant text passed as a t() variable — make it its own t() key" });
+          }
+        }
+      }
+    },
+    // D6 — a template literal with words inside an array (`features: [\`Blog posts (${n} credits each)\`]`)
+    // is merchant text the JSX and object-prop walks never see. A key with {placeholders} instead.
+    // D6 — a template literal with words assigned to a variable (`notice = \`Your settings were saved, but …\``)
+    // reaches a screen through that variable; the walks above never see an assignment. Sentences have
+    // spaces: a single token (a cache key, a path) is not flagged.
+    VariableDeclarator(path) {
+      flagAssignedTemplate(path, path.node.init);
+    },
+    AssignmentExpression(path) {
+      flagAssignedTemplate(path, path.node.right);
+    },
+    ArrayExpression(path) {
+      for (const el of path.node.elements) {
+        if (!el || el.type !== "TemplateLiteral") continue;
+        const r = stringExpr(el);
+        if (!r) continue;
+        report.wrapped += 1; // counted, so --check fails on it
+        report.unwrapped.push({ line: el.loc?.start.line, key: r.key.slice(0, 60), why: "template literal with words in an array — a t()/T() key with {placeholders}" });
       }
     },
     JSXAttribute(path) {
@@ -438,6 +483,7 @@ if (CHECK) {
   // would still be wrapped — i.e. a hard-coded merchant-visible string.
   const offenders = reports.filter((r) => r.wrapped + r.moduleLevel > 0);
   for (const r of offenders) console.log(`${r.file}: ${r.wrapped + r.moduleLevel} unwrapped`);
+  for (const r of offenders) for (const u of r.unwrapped) console.log(`  ${r.file}:${u.line} ${u.why} — ${u.key}`);
   console.log(offenders.length ? `FAIL: ${totalWrapped + totalModule} merchant-visible literal(s) not wrapped in t()` : "ok: every merchant-visible literal is wrapped");
   process.exit(offenders.length ? 1 : 0);
 }

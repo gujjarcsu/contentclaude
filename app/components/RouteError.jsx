@@ -19,16 +19,16 @@ export function RouteError() {
   const is401 = status === 401 || status === 403;
 
   const title = is404
-    ? "Page not found"
+    ? t("Page not found")
     : is401
-      ? "Session expired — please re-authenticate"
-      : "An unexpected error occurred";
+      ? t("Session expired — please re-authenticate")
+      : t("An unexpected error occurred");
 
   const message = is404
-    ? "This product or page doesn't exist. It may have been deleted from your Shopify store."
+    ? t("This product or page doesn't exist. It may have been deleted from your Shopify store.")
     : is401
-      ? "Your session has expired. Click below to log back in — your data is safe."
-      : `Something went wrong on our end.${error?.message ? ` Details: ${error.message}` : ""} Please try refreshing the page.`;
+      ? t("Your session has expired. Click below to log back in — your data is safe.")
+      : t("Something went wrong on our end.{details} Please try refreshing the page.", { details: error?.message ? t(" Details: {message}", { message: error.message }) : "" });
 
   const action = is404
     ? { content: t("Back to Products"), onAction: () => navigate("/app/products") }

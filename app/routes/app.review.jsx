@@ -1167,7 +1167,7 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
               onChange={handleChange}
               onBlur={handleBlur}
               multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? " — too long" : "" }) : t("Edits are saved when you leave the field")}
+              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? t(" — too long") : "" }) : t("Edits are saved when you leave the field")}
               error={overLimit ? t("Shorten to under {charLimit} characters", { charLimit }) : ""}
               autoComplete="off"
             />

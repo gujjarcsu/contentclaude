@@ -139,11 +139,8 @@ export const loader = async ({ request }) => {
   // constantly: it failed for exactly the merchants worth having.
   const page = productsPage(gqlData);
   const { edges, pageInfo } = page;
-  const catalogError = page.ok
-    ? null
-    : page.throttled
-      ? "Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly."
-      : "We could not read your full product list from Shopify just now. This list may be incomplete.";
+  // D6 — the loader ships a reason, never a sentence; the screen makes the sentence in its language
+  const catalogError = page.ok ? null : page.throttled ? "throttled" : "unreadable";
   const products = edges.map(({ node }) => ({
     id: node.id,
     numericId: node.id.replace("gid://shopify/Product/", ""),
@@ -335,7 +332,7 @@ export const action = async ({ request }) => {
     return {
       success: true,
       restored: true,
-      message: t("Your original description is live again for \"{v}\". The AI version is saved as a draft.", { v: row?.productTitle || "this product" }),
+      message: t("Your original description is live again for \"{v}\". The AI version is saved as a draft.", { v: row?.productTitle || t("this product") }),
     };
   }
 
@@ -638,11 +635,11 @@ export default function ProductsPage() {
    */
   const subtitleText = useMemo(() => {
     if (!countsOk || totalStoreProducts === null) {
-      return "We could not read your catalogue totals from Shopify just now.";
+      return t("We could not read your catalogue totals from Shopify just now.");
     }
     const total = totalExact ? `${totalStoreProducts}` : `${totalStoreProducts}+`;
     const cand = candidateExact ? `${candidateProducts}` : `${candidateProducts}+`;
-    const scope = candidateProducts === totalStoreProducts ? "" : ` · ${cand} ${candidateLabel}`;
+    const scope = candidateProducts === totalStoreProducts ? "" : t(" · {n} {label}", { n: cand, label: candidateLabel });
     // P5.1 — "live" was the wrong word and it produced an impossible sentence.
     //
     // Read on the live store 2026-09-14: "32 products in your catalog · 15
@@ -663,13 +660,18 @@ export default function ProductsPage() {
     // Part B — one population. `total` is non-archived; every count after the
     // scope clause is about the candidates it names. The archived count is
     // stated so "15" beside a Shopify admin showing 32 is not a contradiction.
-    const archivedNote = archivedProducts > 0 ? ` · ${archivedProducts} archived not shown` : "";
-    return (
-      `${total} products in your catalog${scope} · ` +
-      `${publishedProducts} with content published · ${draftProducts} ready to review${draftsOutsideScope > 0 ? ` (${draftsOutsideScope} on ${draftsOutsideScope === 1 ? "a product" : "products"} not on your Online Store)` : ""} · ` +
-      `${notOptimized} not yet optimized${archivedNote}`
-    );
+    const archivedNote = archivedProducts > 0 ? t(" · {n} archived not shown", { n: archivedProducts }) : "";
+    return t("{total} products in your catalog{scope} · {published} with content published · {drafts} ready to review{outside} · {notOptimized} not yet optimized{archived}", {
+      total,
+      scope,
+      published: publishedProducts,
+      drafts: draftProducts,
+      outside: draftsOutsideScope > 0 ? t(" ({n, plural, one {# on a product} other {# on products}} not on your Online Store)", { n: draftsOutsideScope }) : "",
+      notOptimized,
+      archived: archivedNote,
+    });
   }, [
+    t,
     countsOk,
     totalStoreProducts,
     totalExact,
@@ -975,7 +977,7 @@ export default function ProductsPage() {
             message belongs where the action was, not at the top of the page. */}
         {catalogError && (
           <Banner tone="warning" title={t("This list may be incomplete")}>
-            <p>{catalogError}</p>
+            <p>{catalogError === "throttled" ? t("Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly.") : t("We could not read your full product list from Shopify just now. This list may be incomplete.")}</p>
           </Banner>
         )}
 

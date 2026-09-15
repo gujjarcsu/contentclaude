@@ -81,7 +81,7 @@ function ResultBanner({ data }) {
   if (data.error) return <Banner tone="critical" title={data.error} />;
   if (data.jobId || data.queued !== undefined) {
     return (
-      <Banner tone="success" title={t("{queued} queued for review{v}.", { queued: data.queued, v: data.quotaSkipped ? ` — ${data.quotaSkipped} left out, past this month's credits` : "" })}>
+      <Banner tone="success" title={t("{queued} queued for review{v}.", { queued: data.queued, v: data.quotaSkipped ? t(" — {n} left out, past this month's credits", { n: data.quotaSkipped }) : "" })}>
         <Text as="p" variant="bodySm">
           {t("Drafts appear on the Review page as they are written. Nothing is published until you approve it.")}
         </Text>

@@ -1,5 +1,6 @@
 // Client-safe plan-fit helpers (brief item 5). No server imports.
 import { BILLING_PLANS } from "./billing-plans.js";
+import { T, enT } from "../i18n/index.js";
 
 export const PLAN_RANK = { free: 0, starter: 1, growth: 2, pro: 3 };
 export const PLAN_LABELS = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
@@ -46,15 +47,17 @@ export const QUOTA_MONTH_FORMAT = Object.freeze({ month: "long", timeZone: "UTC"
 export const QUOTA_RESET_FORMAT = Object.freeze({ day: "numeric", month: "long", timeZone: "UTC" });
 
 /** The exact title line the brief asks for. Pure. */
-export function quotaGapTitle({ n, truncated = false, fit }) {
+/** D6 — `t` is the screen's translator; English by default so the tests that pin the brief's exact line hold. */
+export function quotaGapTitle({ n, truncated = false, fit }, t = enT) {
   const count = Math.max(0, Number(n) || 0);
-  const noun = `${count} product${count === 1 ? "" : "s"} still need${count === 1 ? "s" : ""} content`;
-  const head = `${truncated ? "At least " : ""}${noun}`;
-  return fit ? `${head} · ${fit.label} covers ${fit.monthlyCredits}/month` : head;
+  const noun = t("{count, plural, one {# product still needs content} other {# products still need content}}", { count });
+  const head = truncated ? t("At least {noun}", { noun }) : noun;
+  return fit ? t("{head} · {label} covers {n}/month", { head, label: fit.label, n: fit.monthlyCredits }) : head;
 }
 
+// D6 — keys; the screen passes each through t()
 export const N_DEFINITION_COPY = {
-  catalog_gaps: "active products whose description is missing or under 50 characters and that have no Navaal draft yet",
-  no_ai_description: "products with no Navaal description (draft or published)",
-  audit_missing_description: "products in this audit missing a description (scanned just now)",
+  catalog_gaps: T("active products whose description is missing or under 50 characters and that have no Navaal draft yet"),
+  no_ai_description: T("products with no Navaal description (draft or published)"),
+  audit_missing_description: T("products in this audit missing a description (scanned just now)"),
 };

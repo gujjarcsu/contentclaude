@@ -85,13 +85,17 @@ describe("every surface states which set its numbers mean", () => {
   // A1.2's second half. A number whose population is unstated cannot be checked
   // by the merchant, which is the whole reason the original defect survived.
   it.each([
-    ["Products", products],
-    ["Home", home],
-    ["Optimize", optimize],
-  ])("%s renders the scope label rather than only receiving it", (_name, src) => {
+    ["Products", products, "app/routes/app.products.jsx"],
+    ["Home", home, "app/routes/app._index.jsx"],
+    ["Optimize", optimize, "app/routes/app.optimize.jsx"],
+  ])("%s renders the scope label rather than only receiving it", (_name, src, file) => {
+    // unwrapT() drops the vars of a t() call, so the D6 form — the label passed as {label} of a
+    // keyed sentence — is checked on the raw source, where `label: candidateLabel` still reads.
+    const raw = readFileSync(file, "utf8");
     // Receiving `candidateLabel` in the loader payload is not the same as
     // showing it. Optimize sent it and never rendered it for one commit.
-    const usesIt = /\{candidateLabel/.test(src) || /\$\{candidateLabel\}/.test(src);
+    // rendered as a JSX child, in a template, or (D6) passed to t() as the {label} of a keyed sentence
+    const usesIt = /\{candidateLabel/.test(src) || /\$\{candidateLabel\}/.test(src) || /t\("[^"]*\{label\}[^"]*",\s*\{[^}]*label:\s*candidateLabel\b/.test(raw);
     expect(usesIt).toBe(true);
   });
 

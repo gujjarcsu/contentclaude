@@ -383,8 +383,8 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
   ]);
 
   const subtitle = pending
-    ? `Scored the first ${products.length} product${products.length !== 1 ? "s" : ""} — the rest of your catalog is still being read`
-    : `${products.length} product${products.length !== 1 ? "s" : ""} analyzed — sorted by score (worst first)${truncatedReason ? " · partial scan" : ""}`;
+    ? t("Scored the first {n, plural, one {# product} other {# products}} — the rest of your catalog is still being read", { n: products.length })
+    : t("{n, plural, one {# product} other {# products}} analyzed — sorted by score (worst first){partial}", { n: products.length, partial: truncatedReason ? t(" · partial scan") : "" });
 
   return (
     <Page
@@ -433,7 +433,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
         {staleCount > 0 && (
           <Banner
             tone="warning"
-            title={t("{staleCount} product{v} content older than 6 months", { staleCount, v: staleCount !== 1 ? "s have" : " has" })}
+            title={t("{staleCount, plural, one {# product has} other {# products have}} content older than 6 months", { staleCount })}
           >
             <p>{t("These descriptions were written more than six months ago.")}</p>
             <Box paddingBlockStart="200">

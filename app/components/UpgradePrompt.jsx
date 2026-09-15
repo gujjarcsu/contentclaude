@@ -138,18 +138,18 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
   }
 
   const { fit, n, truncated, nDefinition, scanned } = upsell;
-  const title = quotaGapTitle({ n, truncated, fit });
+  const title = quotaGapTitle({ n, truncated, fit }, t);
   const clause =
     !truncated && fit.covers
-      ? ` — enough to finish these ${n}`
+      ? t(" — enough to finish these {n}", { n })
       : !fit.covers
-        ? ` — at that rate ${n} products take about ${fit.monthsToCover} months`
+        ? t(" — at that rate {n} products take about {months} months", { n, months: fit.monthsToCover })
         : "";
-  let definition = `Counted as: ${N_DEFINITION_COPY[nDefinition] || N_DEFINITION_COPY.catalog_gaps}`;
+  let definition = t("Counted as: {v}", { v: t(N_DEFINITION_COPY[nDefinition] || N_DEFINITION_COPY.catalog_gaps) });
   if (truncated && nDefinition === "catalog_gaps" && scanned)
-    definition += ` · scan stopped at ${scanned} products`;
+    definition += t(" · scan stopped at {scanned} products", { scanned });
   if (truncated && nDefinition === "audit_missing_description" && scanned)
-    definition += ` · ${n} of the ${scanned} products scanned`;
+    definition += t(" · {n} of the {scanned} products scanned", { n, scanned });
 
   const goPlans = (withFit) => {
     post("cta_clicked");

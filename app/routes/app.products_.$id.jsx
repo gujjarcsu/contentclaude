@@ -1,6 +1,7 @@
 import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
 import { useT } from "../i18n/react.jsx";
-import { tForRequest } from "../i18n/index.js";
+import { tForRequest, T } from "../i18n/index.js";
+import { PLAN_LABELS } from "../utils/planFit.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -711,7 +712,7 @@ export async function action({ request, params }) {
         const msg =
           mutation.userErrors.length > 0
             ? mutation.errorMessages.join(";")
-            : "Shopify couldn't apply the update. Please try again in a moment.";
+            : t("Shopify couldn't apply the update. Please try again in a moment.");
         return { error: t("Publishing failed — {msg} Nothing was published.", { msg }) };
       }
 
@@ -875,7 +876,7 @@ export async function action({ request, params }) {
       const vhEnt = await checkEntitlement(shop, "versionHistory");
       if (!vhEnt.allowed) {
         return {
-          error: t("Version history requires the {v} plan. Upgrade to unlock this feature.", { v: vhEnt.requiredPlan ?? "Starter" }),
+          error: t("Version history requires the {v} plan. Upgrade to unlock this feature.", { v: PLAN_LABELS[vhEnt.requiredPlan] ?? T("Starter") }),
           limitReached: true,
         };
       }
@@ -914,7 +915,7 @@ export async function action({ request, params }) {
       const ent = await checkEntitlement(shop, "abVariants");
       if (!ent.allowed) {
         return {
-          error: t("Comparing two options requires the {v} plan. Upgrade to unlock this feature.", { v: ent.requiredPlan ?? "Growth" }),
+          error: t("Comparing two options requires the {v} plan. Upgrade to unlock this feature.", { v: PLAN_LABELS[ent.requiredPlan] ?? T("Growth") }),
           limitReached: true,
         };
       }
@@ -1089,7 +1090,7 @@ export async function action({ request, params }) {
       const tplEnt = await checkEntitlement(shop, "contentTemplates");
       if (!tplEnt.allowed) {
         return {
-          error: t("Content templates require the {v} plan. Upgrade to unlock this feature.", { v: tplEnt.requiredPlan ?? "Starter" }),
+          error: t("Content templates require the {v} plan. Upgrade to unlock this feature.", { v: PLAN_LABELS[tplEnt.requiredPlan] ?? T("Starter") }),
           limitReached: true,
         };
       }
@@ -1864,7 +1865,7 @@ export default function ProductGeneratePage() {
                                 animated
                               />
                               <Text as="p" variant="bodySm" tone="subdued">
-                               {t("{v} — you can stay on this page", { v: isGeneratingVariants ? "20–40 seconds" : "10–30 seconds" })}
+                               {t("{v} — you can stay on this page", { v: isGeneratingVariants ? t("20–40 seconds") : t("10–30 seconds") })}
                               </Text>
                             </BlockStack>
                           </Box>

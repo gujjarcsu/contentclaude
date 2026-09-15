@@ -125,7 +125,7 @@ export default function ProofPage() {
                         {u.url.replace(/^https?:\/\/[^/]+/, "")}
                       </Text>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {t("changed {fmtDate} · {v}", { fmtDate: fmtDate(u.changedAt), v: u.firstCrawledAt ? `crawled ${fmtDate(u.firstCrawledAt)}` : "not crawled yet" })}
+                        {t("changed {fmtDate} · {v}", { fmtDate: fmtDate(u.changedAt), v: u.firstCrawledAt ? t("crawled {date}", { date: fmtDate(u.firstCrawledAt) }) : t("not crawled yet") })}
                       </Text>
                     </InlineStack>
                   ))}
