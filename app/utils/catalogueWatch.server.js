@@ -475,5 +475,15 @@ export async function maybeRunCatalogueWatch({ now = new Date(), run = runCatalo
     logger.warn({ err: err?.message }, "catalogue watch: could not claim the day, running anyway");
   }
   const result = await run({ now });
-  return { ran: true, day, ...result };
+  // Phase 11 Part A — after the walk, ask Shopify about every row the flag
+  // disagrees with. Dynamic import: installState imports installTracking,
+  // which this module must not pull in at load.
+  let reconcile = null;
+  try {
+    const { reconcileInstallState } = await import("./installState.server.js");
+    reconcile = await reconcileInstallState({ now });
+  } catch (err) {
+    logger.error({ err: err?.message }, "install reconcile threw (non-fatal)");
+  }
+  return { ran: true, day, ...result, reconcile };
 }

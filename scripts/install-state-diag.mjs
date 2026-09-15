@@ -36,6 +36,9 @@ const INSTALL_EVENTS = [
   "webhook_sweep_recovered",
   "shop_install_reconciled",
   "shop_redacted",
+  "redaction_unfinished",
+  "redaction_superseded",
+  "shop_redact_contradicted",
   "webhook_stale",
 ];
 
@@ -174,7 +177,41 @@ async function crossShop() {
   }
   const installed = await prisma.shop.count({ where: { uninstalledAt: null, redactedAt: null } });
   out.believedInstalled = installed;
-  out.verdict = out.answers > 0 ? `${out.answers} shop(s) the app believes uninstalled answer Shopify — DISAGREEMENT` : "no flagged shop with a live session answers";
+  // The other shape of the disagreement: a shop/redact audit row whose domain
+  // has a LIVE Shop row again (a reinstall after the redaction). Until Phase 11
+  // the sweep re-applied such a row to every new install of that domain.
+  const audits = await prisma.gDPRRequest.findMany({ where: { requestType: "shop_redact" }, select: { shop: true, processedAt: true, completedAt: true }, orderBy: { processedAt: "asc" } }).catch(() => []);
+  out.redactLoop = [];
+  for (const a of audits) {
+    const row = await prisma.shop.findUnique({ where: { shop: a.shop }, select: { installedAt: true, reinstalledAt: true, uninstalledAt: true, redactedAt: true } });
+    const sessions = await prisma.session.count({ where: { shop: a.shop } });
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [redactions, installs] = await Promise.all([
+      prisma.logEvent.count({ where: { shop: a.shop, event: "shop_redacted", createdAt: { gte: since } } }).catch(() => null),
+      prisma.logEvent.count({ where: { shop: a.shop, event: "shop_installed", createdAt: { gte: since } } }).catch(() => null),
+    ]);
+    out.redactLoop.push({
+      shop: a.shop,
+      auditProcessedAt: iso(a.processedAt),
+      auditCompletedAt: iso(a.completedAt ?? null),
+      liveRow: row ? { installedAt: iso(row.installedAt), reinstalledAt: iso(row.reinstalledAt), uninstalledAt: iso(row.uninstalledAt), redactedAt: iso(row.redactedAt) } : null,
+      sessions,
+      redactionsLast30d: redactions,
+      installsLast30d: installs,
+      looping: !!row && !row.redactedAt && (redactions ?? 0) > 1,
+    });
+  }
+  out.ghostRows = {
+    redacted: await prisma.shop.count({ where: { redactedAt: { not: null } } }),
+    redactedWhileInstalled: await prisma.shop.count({ where: { redactedAt: { not: null }, uninstalledAt: null } }),
+  };
+  const looping = out.redactLoop.filter((r) => r.looping).length;
+  const reinstalledAfterRedact = out.redactLoop.filter((r) => (r.installsLast30d ?? 0) > 0 && (r.redactionsLast30d ?? 0) > 0).length;
+  out.verdict = [
+    out.answers > 0 ? `${out.answers} shop(s) the app believes uninstalled answer Shopify` : "no flagged shop with a live session answers",
+    `${reinstalledAfterRedact} domain(s) installed again after a shop/redact in the last 30 days`,
+    `${looping} currently in the redact loop`,
+  ].join("; ");
   return out;
 }
 

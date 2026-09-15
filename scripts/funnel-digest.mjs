@@ -10,7 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import { computeFunnel, composeFunnelDigest, FUNNEL_SELECT } from "../app/utils/funnel.js";
 
 const p = new PrismaClient();
-const rows = await p.shop.findMany({ select: FUNNEL_SELECT });
+const rows = await p.shop.findMany({ where: { redactedAt: null }, select: FUNNEL_SELECT });
 await p.$disconnect();
 
 const f = computeFunnel(rows);
@@ -19,7 +19,7 @@ const digest = composeFunnelDigest(f, { now: new Date() });
 if ((process.env.FUNNEL_FORMAT || "md") === "json") {
   console.log(JSON.stringify({ generatedAt: new Date().toISOString(), ...f, wouldSend: digest !== null }, null, 2));
 } else if (!digest) {
-  console.log(`## Navaal funnel\n\nNo non-test shop yet (${f.excludedTestShops} test shop(s) excluded by name). The weekly digest would not send.`);
+  console.log(`## Navaal funnel\n\nNo real shop and nothing unclassified (${f.excludedTestShops} of ours / Shopify's excluded). The weekly digest would not send.`);
 } else {
   console.log(`## ${digest.subject}\n\n\`\`\`\n${digest.text}\n\`\`\``);
 }

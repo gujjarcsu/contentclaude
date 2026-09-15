@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 
 const { db } = vi.hoisted(() => ({
   db: {
-    gDPRRequest: { findMany: vi.fn(), create: vi.fn() },
+    gDPRRequest: { findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
     shop: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
     session: { count: vi.fn(async () => 0), findMany: vi.fn(async () => []), deleteMany: vi.fn() },
     generationJob: { updateMany: vi.fn(async () => ({ count: 0 })) },
@@ -40,10 +40,16 @@ vi.mock("../../app/utils/logger.server.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 vi.mock("../../app/utils/plans.server.js", () => ({ captureUsageCarryover: vi.fn(async () => {}) }));
+const { probe, restore } = vi.hoisted(() => ({
+  probe: vi.fn(async () => ({ installed: null, reason: "no_offline_session" })),
+  restore: vi.fn(async () => 1),
+}));
 vi.mock("../../app/utils/installTracking.server.js", () => ({
   markShopUninstalled: vi.fn(async () => 1),
   redactShopRecord: vi.fn(async () => ({ count: 1 })),
+  restoreInstalledState: restore,
 }));
+vi.mock("../../app/utils/installState.server.js", () => ({ probeInstalled: probe }));
 
 const {
   finishAfterResponse,
@@ -64,6 +70,7 @@ beforeEach(() => {
   db.gDPRRequest.findMany.mockResolvedValue([]);
   db.shop.findMany.mockResolvedValue([]);
   db.session.count.mockResolvedValue(0);
+  probe.mockResolvedValue({ installed: null, reason: "no_offline_session" });
 });
 
 describe("the handler answers before the work runs", () => {
@@ -121,22 +128,56 @@ describe("shutdown waits for work that is still running", () => {
 });
 
 describe("the sweep finishes work that was acknowledged but never completed", () => {
-  it("finishes a redaction whose Shop row was never anonymised", async () => {
-    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP }]);
-    db.shop.findUnique.mockResolvedValue({ redactedAt: null });
+  const T_REQUEST = new Date("2026-09-12T04:25:04.000Z");
+
+  it("finishes a redaction whose Shop row was never anonymised — and consumes the request", async () => {
+    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP, processedAt: T_REQUEST }]);
+    db.shop.findUnique.mockResolvedValue({ redactedAt: null, installedAt: new Date("2026-09-01T00:00:00Z"), reinstalledAt: null });
 
     const result = await sweepUnfinishedWebhookWork();
 
     expect(result.redactions).toBe(1);
     expect(redactShopRecord).toHaveBeenCalledWith(expect.anything(), SHOP);
+    expect(db.gDPRRequest.updateMany).toHaveBeenCalledWith({ where: { shop: SHOP, requestType: "shop_redact", completedAt: null }, data: { completedAt: expect.any(Date) } });
+    expect(db.gDPRRequest.findMany.mock.calls[0][0].where).toMatchObject({ requestType: "shop_redact", completedAt: null });
   });
 
-  it("leaves a redaction that already completed alone", async () => {
-    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP }]);
-    db.shop.findUnique.mockResolvedValue({ redactedAt: new Date() });
+  it("leaves a redaction that already completed alone, and consumes the request so it is never looked at again", async () => {
+    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP, processedAt: T_REQUEST }]);
+    db.shop.findUnique.mockResolvedValue({ redactedAt: new Date(), installedAt: new Date("2026-09-01T00:00:00Z") });
 
     expect((await sweepUnfinishedWebhookWork()).redactions).toBe(0);
     expect(redactShopRecord).not.toHaveBeenCalled();
+    expect(db.gDPRRequest.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("Phase 11 Part A — a request OLDER than the current install is a different install of the same domain: not owed, consumed, logged, nothing deleted", async () => {
+    // navaal-qa-fresh: redacted 12 Sep (correctly); reinstalled 14 Sep; the
+    // sweep found the 12 Sep request, matched the new row by domain, and
+    // anonymised it minutes after every install — five times on the 14th.
+    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP, processedAt: T_REQUEST }]);
+    db.shop.findUnique.mockResolvedValue({ redactedAt: null, installedAt: new Date("2026-09-14T07:39:26.000Z"), reinstalledAt: null });
+
+    const result = await sweepUnfinishedWebhookWork();
+
+    expect(result.redactions).toBe(0);
+    expect(redactShopRecord).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.gDPRRequest.updateMany).toHaveBeenCalledWith({ where: { shop: SHOP, requestType: "shop_redact", completedAt: null }, data: { completedAt: expect.any(Date) } });
+  });
+
+  it("Phase 11 Part A — a reinstall after the request is judged on reinstalledAt, and one domain is judged once per sweep", async () => {
+    db.gDPRRequest.findMany.mockResolvedValue([{ shop: SHOP, processedAt: T_REQUEST }, { shop: SHOP, processedAt: new Date("2026-09-13T00:00:00Z") }]);
+    db.shop.findUnique.mockResolvedValue({ redactedAt: null, installedAt: new Date("2026-09-01T00:00:00Z"), reinstalledAt: new Date("2026-09-14T07:39:26.000Z") });
+
+    expect((await sweepUnfinishedWebhookWork()).redactions).toBe(0);
+    expect(db.shop.findUnique).toHaveBeenCalledTimes(1);
+    expect(redactShopRecord).not.toHaveBeenCalled();
+  });
+
+  it("finishShopRedaction consumes the request after anonymising", async () => {
+    await finishShopRedaction(SHOP);
+    expect(db.gDPRRequest.updateMany).toHaveBeenCalledWith({ where: { shop: SHOP, requestType: "shop_redact", completedAt: null }, data: { completedAt: expect.any(Date) } });
   });
 
   it("treats a missing Shop row as already done, not as owed", async () => {
@@ -154,6 +195,27 @@ describe("the sweep finishes work that was acknowledged but never completed", ()
 
     expect((await sweepUnfinishedWebhookWork()).uninstalls).toBe(1);
     expect(db.$transaction).toHaveBeenCalled();
+  });
+
+  it("Phase 11 Part A — a flagged row whose token Shopify still honours is RESTORED, and nothing is deleted", async () => {
+    db.shop.findMany.mockResolvedValue([{ shop: SHOP }]);
+    db.session.count.mockResolvedValue(1); // the session an installed shop leaves on every visit
+    probe.mockResolvedValue({ installed: true, status: 200 });
+    const out = await sweepUnfinishedWebhookWork({ now: 1_700_000_000_000 });
+    expect(out).toMatchObject({ uninstalls: 0, reconciled: 1 });
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(restore).toHaveBeenCalledWith(SHOP, { source: "sweep_reconcile", now: new Date(1_700_000_000_000) });
+  });
+
+  it("Phase 11 Part A — a flagged row whose token is refused is finished as before; an undecided probe also finishes (the old behaviour)", async () => {
+    db.shop.findMany.mockResolvedValue([{ shop: SHOP }]);
+    db.session.count.mockResolvedValue(1);
+    probe.mockResolvedValue({ installed: false, status: 401 });
+    expect((await sweepUnfinishedWebhookWork()).uninstalls).toBe(1);
+    expect(restore).not.toHaveBeenCalled();
+    db.$transaction.mockClear();
+    probe.mockResolvedValue({ installed: null });
+    expect((await sweepUnfinishedWebhookWork()).uninstalls).toBe(1);
   });
 
   it("leaves an uninstall whose deletion completed alone", async () => {

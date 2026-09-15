@@ -15,7 +15,7 @@
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { Page, Card, Text, BlockStack, InlineStack, Badge, Button, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
-import { KIND_LABEL, SURFACE_LABEL, parseAttention, parseFindings, homeAttentionLines } from "../utils/catalogueWatch.js";
+import { KIND_LABEL, SURFACE_LABEL, VARIANT_BARCODE_SAMPLE, parseAttention, parseFindings, homeAttentionLines } from "../utils/catalogueWatch.js";
 import { CRAWLERS, CRAWLER_NOTE } from "../utils/crawlerAccess.js";
 import { GSC_ANSWER, GSC_LABEL, GSC_TONE, GSC_SETTINGS_URL, GSC_RECHECK_DAYS } from "../utils/gscAiControl.js";
 import { PAGE_SAMPLE } from "../utils/indexability.js";
@@ -363,8 +363,8 @@ export default function AttentionPage() {
 
         <Text as="p" variant="bodySm" tone="subdued">
           Method: a daily read of every product in your catalogue — title, description, vendor,
-          product type, featured image and its alt text, URL handle, first-variant barcode and option
-          names. Each product is compared with the previous day, and measured against the fields the
+          product type, featured image and its alt text, URL handle, the barcodes of up to {VARIANT_BARCODE_SAMPLE}{" "}
+          variants when the first has none, and option names. Each product is compared with the previous day, and measured against the fields the
           OpenAI product feed and Google Search ask for. Blocking means a surface cannot list the
           product without it; degrading means listed, but worse; Shopify's own fields are never
           called either. Drafts are not graded. Indexing is read from your storefront the way a

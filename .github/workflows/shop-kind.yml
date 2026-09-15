@@ -1,0 +1,40 @@
+name: Shop kind (classify shops)
+
+# Phase 11 Part B — who a shop is: ours / shopify / real / unclassified.
+# With `kinds` empty it only lists every shop with its stored and effective
+# kind. With `kinds` set it writes Shop.kind for exactly those domains and
+# refuses anything that is not a myshopify domain, not one of the four kinds,
+# or "real" on one of our own handles. Nothing else is written.
+on:
+  workflow_dispatch:
+    inputs:
+      kinds:
+        description: "Space-separated domain=kind pairs, e.g. a.myshopify.com=real b.myshopify.com=shopify — empty to list only"
+        required: false
+        type: string
+
+jobs:
+  run:
+    name: Classify (or list) shops
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          KINDS: ${{ inputs.kinds }}
+        run: |
+          set -euo pipefail
+          # Only domains, '=', kinds, spaces and commas may reach the shell on a production machine.
+          if ! printf '%s' "$KINDS" | grep -Eq '^[A-Za-z0-9.=, -]*$'; then
+            echo "::error::kinds may contain only domains, '=', kinds, spaces and commas"; exit 1
+          fi
+          flyctl ssh console --app contentclaude \
+            -C "sh -c 'KINDS=\"${KINDS}\" node /app/scripts/shop-kind--writes-classification.mjs'" | tee kinds.json
+          {
+            echo '## Shop kinds'
+            echo ''
+            echo '```json'
+            cat kinds.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

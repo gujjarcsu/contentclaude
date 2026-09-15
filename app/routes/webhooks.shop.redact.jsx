@@ -18,7 +18,8 @@
 import { verifyShopifyWebhook, releaseWebhookDelivery } from "../utils/webhookAuth.server.js";
 import db from "../db.server.js";
 import logger from "../utils/logger.server.js";
-import { finishAfterResponse, finishShopRedaction } from "../utils/webhookWork.server.js";
+import { finishAfterResponse, finishShopRedaction, completeRedactRequests } from "../utils/webhookWork.server.js";
+import { probeInstalled } from "../utils/installState.server.js";
 
 export const action = async ({ request }) => {
   const { payload, shop, webhookId, triggeredAt, duplicate } = await verifyShopifyWebhook(request);
@@ -48,6 +49,18 @@ export const action = async ({ request }) => {
   }
 
   // Everything below is recoverable from the row just written.
+  // Phase 11 Part A — shop/redact arrives 48 hours after an uninstall. If the
+  // merchant reinstalled inside those 48 hours, Shopify still sends it, and
+  // the app it now serves would lose every row. A token that answers means
+  // the shop is installed: the request is recorded (above, always) and marked
+  // complete, and nothing is deleted — the data goes when the shop actually
+  // uninstalls, at uninstall time, as it always has.
+  const probe = await probeInstalled(shop);
+  if (probe.installed === true) {
+    logger.warn({ shop, triggeredAt, event: "shop_redact_contradicted" }, "shop/redact for a shop whose token Shopify still honours — recorded, not executed");
+    finishAfterResponse("shop_redact_deferred", { shop, webhookId }, () => completeRedactRequests(shop, "shop_installed"));
+    return new Response(null, { status: 200 });
+  }
   finishAfterResponse("shop_redact_deferred", { shop, webhookId }, () => finishShopRedaction(shop));
 
   return new Response(null, { status: 200 });

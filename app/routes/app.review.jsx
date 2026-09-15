@@ -122,9 +122,16 @@ export const loader = async ({ request }) => {
   // is ignored and the page shows every draft.
   const productParam = String(url.searchParams.get("product") ?? "").trim();
   const scopedTo = /^\d+$/.test(productParam) ? `${PRODUCT_GID_PREFIX}${productParam}` : null;
+  // Phase 11 Part C — a GID (gid://shopify/Product/123) or anything else that
+  // is not the numeric id used to fall through to "every draft", which looks
+  // like it works. It is refused with a message and NO drafts, so a wrong
+  // link never passes for a right one.
+  const scopeRefused = productParam !== "" && scopedTo === null;
   const draftWhere = scopedTo
     ? { shop, status: "draft", productId: scopedTo }
-    : { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
+    : scopeRefused
+      ? { shop, status: "draft", productId: "__refused__" }
+      : { shop, status: "draft", productId: { startsWith: PRODUCT_GID_PREFIX } };
 
   // Page by DISTINCT product: order rows by recency, derive the ordered
   // distinct product list, slice the page, then fetch that page's full rows.
@@ -244,6 +251,7 @@ export const loader = async ({ request }) => {
     embedConfirmed,
     shopDomain: shop,
     scopedTo,
+    scopeRefused,
   });
 };
 
@@ -658,7 +666,7 @@ function NeedsCheckBanner({ items, navigate }) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
-  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain, scopedTo } = useLoaderData();
+  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain, scopedTo, scopeRefused } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -843,6 +851,14 @@ export default function ReviewPage() {
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
+        {scopeRefused && (
+          <Banner tone="critical" title="That product reference isn't valid" action={{ content: "Show all drafts", onAction: () => navigate("/app/review") }}>
+            <Text as="p" variant="bodySm">
+              Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Nothing is shown for a
+              reference we cannot read, so a wrong link never looks like it worked.
+            </Text>
+          </Banner>
+        )}
         {scopedTo && (
           <Banner tone="info" title="Showing one product" action={{ content: "Show all drafts", onAction: () => navigate("/app/review") }}>
             <Text as="p" variant="bodySm">

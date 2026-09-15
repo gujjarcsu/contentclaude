@@ -172,10 +172,16 @@ model GDPRRequest {
   requestType String // "customer_data_request" | "customer_redact" | "shop_redact"
   payload     String // raw JSON of the webhook payload
   processedAt DateTime @default(now())
+  /// Phase 11 Part A — when the work this request asked for was actually done
+  /// (or found not to apply). The sweep re-applied an unconsumed shop_redact
+  /// to every later install of the same domain; a completed request is never
+  /// owed again.
+  completedAt DateTime?
 
   @@index([shop])
   @@index([requestType])
   @@index([processedAt])
+  @@index([requestType, completedAt])
 }
 
 // P6.2 — a merchant's question, recorded BEFORE it is emailed.
@@ -403,6 +409,10 @@ model Shop {
   // installed → first screen → first draft → first approve → first publish →
   // returned on a later day → (uninstalled). No PII, no content, nothing a
   // merchant sees; the weekly digest to the owner is counts and medians.
+  // Phase 11 Part B — who this shop is: ours | shopify | real | unclassified.
+  // Set by the Shop kind workflow from the ledger; every new install starts
+  // unclassified and is never counted as a merchant until somebody says so.
+  kind                    String    @default("unclassified")
   firstScreenAt           DateTime? // first authenticated dashboard render
   firstApproveAt          DateTime? // first Review submission with ≥1 product approved
   returnedAt              DateTime? // first dashboard render on a calendar day after the install day

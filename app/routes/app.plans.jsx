@@ -52,7 +52,7 @@ import { formatPrice, annualSavingPct } from "../utils/billing-config.js";
 // "the plans page and the quota surfaces show these numbers". It did not: the
 // page was written before B1 and still described a flat one-per-generation
 // model. Derived now, so the cost a merchant reads is the cost the gate charges.
-import { CREDIT_WEIGHTS, CREDIT_RESET_SENTENCE } from "../utils/credits.js";
+import { CREDIT_WEIGHTS, CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE } from "../utils/credits.js";
 import {
   getOrCreatePlan,
   getMonthlyUsageCount,
@@ -458,7 +458,7 @@ const FEATURE_TABLE = [
 const FAQ_ITEMS = [
   {
     q: "When do my credits reset?",
-    a: `${CREDIT_RESET_SENTENCE} Unused credits don't roll over.`,
+    a: `${CREDIT_RESET_SENTENCE} ${CREDIT_ROLLOVER_SENTENCE}`,
   },
   {
     q: "Can I upgrade or downgrade at any time?",

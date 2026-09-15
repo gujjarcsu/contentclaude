@@ -75,9 +75,12 @@ vi.mock("../../app/utils/webhookAuth.server.js", () => ({
   verifyShopifyWebhook: webhook,
   releaseWebhookDelivery: vi.fn(async () => {}),
 }));
-vi.mock("../../app/utils/logger.server.js", () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+const { log } = vi.hoisted(() => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock("../../app/utils/logger.server.js", () => ({ default: log }));
+// Phase 11 Part A — the webhook asks Shopify before it believes the delivery.
+// Undecided by default, so every case above this line behaves as before.
+const { probe } = vi.hoisted(() => ({ probe: vi.fn(async () => ({ installed: null, reason: "no_offline_session" })) }));
+vi.mock("../../app/utils/installState.server.js", () => ({ probeInstalled: probe, UNINSTALL_RECHECK_DELAY_MS: 0 }));
 
 const { drainWebhookWork } = await import("../../app/utils/webhookWork.server.js");
 
@@ -98,6 +101,9 @@ async function run(loader, url, headers) {
 beforeEach(() => {
   db.shop.updateMany.mockClear();
   tx.shop.updateMany.mockClear();
+  probe.mockReset();
+  probe.mockResolvedValue({ installed: null, reason: "no_offline_session" });
+  for (const f of Object.values(log)) f.mockClear();
 });
 
 describe("app root preserves App Store install attribution", () => {
@@ -250,6 +256,94 @@ describe("app/uninstalled — stale delivery guard", () => {
     expect(carry).toBeTruthy();
     expect(carry[0].data.usageCarryover).toBe(9);
     expect(carry[0].data.usageMonth).toBe(new Date().toISOString().slice(0, 7));
+  });
+});
+
+describe("app/uninstalled — the delivery that arrives AFTER the reinstall it never knew about (Phase 11 Part A)", () => {
+  // navaal-qa-fresh: uninstalled 10 Sep, the webhook never arrived; reinstalled
+  // 14 Sep, so the row had no reinstalledAt for the timestamp guard to use;
+  // the late delivery then stamped an installed shop and the sweep deleted
+  // its rows on every visit. The token is the fact: Shopify revokes it at
+  // uninstall, so a token that answers means this delivery is history.
+  const post = () => new Request("https://app.navaal.ai/webhooks/app/uninstalled", { method: "POST" });
+
+  it("a delivery for a shop whose token still answers is acknowledged and NOT acted on — no stamp, no deletion, logged", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-10T04:21:00.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: null }); // the reinstall was never recorded
+    probe.mockResolvedValue({ installed: true, status: 200 });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    const res = await action({ request: post() });
+    expect(res.status).toBe(200);
+    await drainWebhookWork();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(false);
+    expect(log.warn.mock.calls.some((c) => c[0]?.event === "uninstall_delivery_contradicted")).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(2); // the second look, after the 200
+    expect(log.info.mock.calls.some((c) => c[0]?.event === "uninstall_recheck_still_installed")).toBe(true);
+  });
+
+  it("a delivery with NO triggered-at header gets the same protection (the old guard could not help it)", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: null });
+    probe.mockResolvedValue({ installed: true, status: 200 });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    expect((await action({ request: post() })).status).toBe(200);
+    await drainWebhookWork();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(false);
+  });
+
+  it("when the second look finds the token refused, the uninstall proceeds — revocation was only slower than the webhook", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-15T04:21:00.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: null });
+    probe.mockResolvedValueOnce({ installed: true, status: 200 }).mockResolvedValueOnce({ installed: false, status: 401 });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    expect((await action({ request: post() })).status).toBe(200);
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(false); // nothing before the 200
+    await drainWebhookWork();
+    expect(log.warn.mock.calls.some((c) => c[0]?.event === "uninstall_recheck_confirmed")).toBe(true);
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(true);
+    expect(db.$transaction).toHaveBeenCalled();
+  });
+
+  it("a delivery for a shop whose token is refused is processed exactly as before", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-15T04:21:00.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: null });
+    probe.mockResolvedValue({ installed: false, status: 401 });
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    expect((await action({ request: post() })).status).toBe(200);
+    expect(db.shop.updateMany.mock.calls.some(([a]) => a?.data?.uninstalledAt)).toBe(true); // stamped BEFORE the 200, as always
+    await drainWebhookWork();
+    expect(db.$transaction).toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it("the stale-timestamp guard still runs first and needs no probe", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "APP_UNINSTALLED", payload: {}, triggeredAt: "2026-09-10T04:21:00.000Z" });
+    db.shop.findUnique.mockResolvedValueOnce({ reinstalledAt: new Date("2026-09-14T04:00:00.000Z") });
+    const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
+    expect((await action({ request: post() })).status).toBe(200);
+    expect(probe).not.toHaveBeenCalled();
+  });
+});
+
+describe("shop/redact — for a shop whose token Shopify still honours (Phase 11 Part A)", () => {
+  it("is recorded, marked complete, and NOT executed — the app it serves keeps its rows", async () => {
+    webhook.mockResolvedValue({ shop: SHOP, topic: "SHOP_REDACT", payload: { shop_id: 1, shop_domain: SHOP }, webhookId: "w1", triggeredAt: "2026-09-16T04:00:00.000Z" });
+    probe.mockResolvedValue({ installed: true, status: 200 });
+    db.gDPRRequest.updateMany = vi.fn(async () => ({ count: 1 }));
+    db.$transaction.mockClear();
+    const { action } = await import("../../app/routes/webhooks.shop.redact.jsx");
+    expect((await action({ request: new Request("https://app.navaal.ai/webhooks/shop/redact", { method: "POST" }) })).status).toBe(200);
+    expect(db.gDPRRequest.create).toHaveBeenCalled(); // the audit row is always written
+    await drainWebhookWork();
+    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(tx.shop.updateMany).not.toHaveBeenCalled();
+    expect(db.gDPRRequest.updateMany).toHaveBeenCalledWith({ where: { shop: SHOP, requestType: "shop_redact", completedAt: null }, data: { completedAt: expect.any(Date) } });
+    expect(log.warn.mock.calls.some((c) => c[0]?.event === "shop_redact_contradicted")).toBe(true);
   });
 });
 

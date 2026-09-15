@@ -16,7 +16,7 @@
  * app by one who has. App Store submission requires both.
  */
 
-import { CREDIT_RESET_SENTENCE } from "./credits.js";
+import { CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE } from "./credits.js";
 
 export const COMPANY = "Navaal";
 export const APP_NAME = "Navaal: AI SEO, AEO & GEO";
@@ -175,7 +175,7 @@ export const TERMS_SECTIONS = [
     p: [
       "Billing runs through Shopify. We never see your card.",
       "A <b>credit</b> is one generation. A product description, a meta title and description, or FAQ content each cost 1 credit. Image alt text costs nothing. A blog post costs 3. If you select several content types in one run, you are charged the most expensive one, not the sum.",
-      `${CREDIT_RESET_SENTENCE} Unused credits do not roll over.`,
+      `${CREDIT_RESET_SENTENCE} ${CREDIT_ROLLOVER_SENTENCE}`,
       "Paid plans include a 14-day free trial with 250 credits, once per store.",
       "On the Professional plan you may use your own AI key. Generations that use it do not consume credits, because you are paying your provider directly.",
       "Cancel any time from the Plans page. Shopify prorates.",

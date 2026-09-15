@@ -154,7 +154,13 @@ function attributionFields(sig) {
 // DB entirely. `freshAuth`: shops for which the library's afterAuth hook just
 // fired (a NEW session was created: install, reinstall, or token re-exchange) —
 // consumed by the very next trackShopAuth for that shop so it always checks DB.
-const seen = new Set();
+// Phase 11 Part A — the hot-path cache is per PROCESS, and there are two web
+// machines. An uninstall stamped by a webhook on one machine cleared only that
+// machine's cache; the other kept answering "known shop, nothing to learn" and
+// never re-read the row. Entries now expire, so a flag flipped elsewhere is
+// re-read within SEEN_TTL_MS at the cost of one findUnique per shop per TTL.
+export const SEEN_TTL_MS = 10 * 60 * 1000;
+const seen = new Map(); // shop -> last time the row was read on this process
 const freshAuth = new Set();
 
 /** Called from shopifyApp({ hooks: { afterAuth } }). */
@@ -219,6 +225,54 @@ async function createShopRow(shop, sig) {
 // first-install attribution. The write is conditional on uninstalledAt still
 // being set, so the two parallel loaders of the same document request (or two
 // machines) can both reach here and exactly one increments; the other re-reads.
+/**
+ * A reinstall is a new activation clock: the uninstall deleted the content, so
+ * every "first" is first again. Review-ask fields are NOT reset: "never retry
+ * within the cooldown" survives reinstall. The Phase 10 funnel stamps are in
+ * the list — a "returned on a later day" from a previous install is not a
+ * return to this one.
+ */
+export const REINSTALL_RESET = Object.freeze({
+  productCountAtFirstLoad: null,
+  quickStartStartedAt: null,
+  quickStartDraftCount: 0,
+  firstDraftSeenAt: null,
+  firstDraftSource: null,
+  firstPublishAt: null,
+  firstPublishSource: null,
+  firstScreenAt: null,
+  firstApproveAt: null,
+  returnedAt: null,
+});
+
+/**
+ * Phase 11 Part A — the row says uninstalled; Shopify says the token is
+ * honoured. Shopify is the fact. Clears the flag the way a reinstall would
+ * (it IS a reinstall the app failed to notice, or an uninstall it invented),
+ * records the source, and clears this process's cache so the next request
+ * re-reads the row. Returns the number of rows changed (0 or 1).
+ */
+export async function restoreInstalledState(shop, { source = "reconciled", now = new Date() } = {}) {
+  seen.delete(shop);
+  try {
+    const before = await prisma.shop.findUnique({ where: { shop }, select: { uninstalledAt: true, reinstalledAt: true, installCount: true } });
+    const r = await prisma.shop.updateMany({
+      where: { shop, uninstalledAt: { not: null } },
+      data: { uninstalledAt: null, reinstalledAt: now, installCount: { increment: 1 }, reinstallSource: source, ...REINSTALL_RESET },
+    });
+    if (r.count > 0) {
+      logger.warn(
+        { shop, event: "shop_install_reconciled", source, hadUninstalledAt: before?.uninstalledAt ?? null, hadReinstalledAt: before?.reinstalledAt ?? null, installCount: (before?.installCount ?? 0) + 1 },
+        "Shop was flagged uninstalled but Shopify honours its token — flag cleared",
+      );
+    }
+    return r.count;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "could not restore install state (non-fatal)");
+    return 0;
+  }
+}
+
 async function recordReinstall(existing, sig) {
   logger.info(
     { shop: existing.shop, event: "ttv_reset_on_reinstall", firstDraftSeenAt: existing.firstDraftSeenAt ?? null, firstPublishAt: existing.firstPublishAt ?? null, quickStartDraftCount: existing.quickStartDraftCount ?? 0, productCountAtFirstLoad: existing.productCountAtFirstLoad ?? null },
@@ -232,15 +286,7 @@ async function recordReinstall(existing, sig) {
       installCount: { increment: 1 },
       reinstallSource: classifyInstallSource(sig),
       reinstallReferer: sig.referer,
-      // A reinstall is a new activation clock (the uninstall deleted the content).
-      // Review-ask fields are NOT reset: "never retry within the cooldown" survives reinstall.
-      productCountAtFirstLoad: null,
-      quickStartStartedAt: null,
-      quickStartDraftCount: 0,
-      firstDraftSeenAt: null,
-      firstDraftSource: null,
-      firstPublishAt: null,
-      firstPublishSource: null,
+      ...REINSTALL_RESET,
     },
   });
   const row = await prisma.shop.findUnique({ where: { shop: existing.shop } });
@@ -271,17 +317,18 @@ export async function trackShopAuth(request, shop) {
   if (!shop) return null;
   try {
     const fresh = freshAuth.delete(shop);
-    // Hot path: a known shop on an ordinary request — nothing to learn.
-    if (!fresh && seen.has(shop)) return null;
+    // Hot path: a known shop on an ordinary request, read recently — nothing to learn.
+    const seenAt = seen.get(shop);
+    if (!fresh && seenAt !== undefined && Date.now() - seenAt < SEEN_TTL_MS) return null;
 
     const sig = extractInstallSignals(request);
     const existing = await prisma.shop.findUnique({ where: { shop } });
     if (!existing) {
       const created = await createShopRow(shop, sig);
-      seen.add(shop);
+      seen.set(shop, Date.now());
       return created;
     }
-    seen.add(shop);
+    seen.set(shop, Date.now());
     if (existing.uninstalledAt) return await recordReinstall(existing, sig);
     return existing;
   } catch (err) {

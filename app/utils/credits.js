@@ -38,6 +38,9 @@
  * 04-DECISIONS.md: the code resets by calendar month whatever the billing
  * date (merchant-favourable), and the copy states the consequence.
  */
+/** The one sentence about unused credits, on every surface that mentions them (Phase 11 Part C). */
+export const CREDIT_ROLLOVER_SENTENCE = "Unused credits do not roll over.";
+
 export const CREDIT_RESET_SENTENCE =
   "Credits reset on the first of each calendar month, whatever your billing date. Your first, partial month carries a full allowance.";
 

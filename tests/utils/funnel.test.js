@@ -16,7 +16,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { code } from "../helpers/code.js";
-import { computeFunnel, composeFunnelDigest, isTestShop, median, STAGES, FUNNEL_SELECT } from "../../app/utils/funnel.js";
+import { computeFunnel, composeFunnelDigest, median, STAGES, FUNNEL_SELECT } from "../../app/utils/funnel.js";
+import { kindOf } from "../../app/utils/shopKind.js";
 
 const src = (p) => code(readFileSync(p, "utf8"));
 
@@ -49,7 +50,8 @@ const notify = await import("../../app/utils/notify.server.js");
 const H = 3_600_000;
 const T0 = Date.UTC(2026, 8, 1, 0, 0, 0); // 2026-09-01T00:00Z
 const at = (h) => new Date(T0 + h * H);
-const row = (shop, o = {}) => ({ shop, installedAt: at(0), reinstalledAt: null, uninstalledAt: null, firstScreenAt: null, firstDraftSeenAt: null, firstApproveAt: null, firstPublishAt: null, returnedAt: null, ...o });
+// Phase 11 Part B — a row is REAL only by classification; a test row says so.
+const row = (shop, o = {}) => ({ shop, kind: "real", installedAt: at(0), reinstalledAt: null, uninstalledAt: null, firstScreenAt: null, firstDraftSeenAt: null, firstApproveAt: null, firstPublishAt: null, returnedAt: null, ...o });
 
 beforeEach(() => {
   for (const f of Object.values(db.shop)) f.mockReset();
@@ -70,11 +72,19 @@ describe("the arithmetic", () => {
     expect(median([2, NaN, 1])).toBe(1.5);
   });
 
-  it("test shops are out: the reset workflow's pattern and the two named dev stores", () => {
-    for (const s of ["navaal-ttv-02.myshopify.com", "navaal-ttv-03.myshopify.com", "navaal-qa-fresh.myshopify.com", "navaal-shape-b2b.myshopify.com", "contentpilot-dev2.myshopify.com", "contentpilot-dev.myshopify.com", " NAVAAL-TTV-9.myshopify.com "]) {
-      expect(isTestShop(s), s).toBe(true);
+  it("who counts is a classification: ours and Shopify's are out, unclassified is out AND counted, and only a stored 'real' is real", () => {
+    for (const s of ["navaal-ttv-02.myshopify.com", "navaal-qa-fresh.myshopify.com", "navaal-shape-b2b.myshopify.com", "contentpilot-dev2.myshopify.com", "contentpilot-test.myshopify.com", " NAVAAL-TTV-9.myshopify.com "]) {
+      expect(kindOf({ shop: s, kind: "real" }), s).toBe("ours"); // our own handle can never be real
     }
-    for (const s of ["a-real-store.myshopify.com", "navaal-shapes.myshopify.com", "ttv-02.myshopify.com", "", null]) expect(isTestShop(s), String(s)).toBe(false);
+    expect(kindOf({ shop: "a-real-store.myshopify.com", kind: "unclassified" })).toBe("unclassified");
+    expect(kindOf({ shop: "a-real-store.myshopify.com" })).toBe("unclassified");
+    expect(kindOf({ shop: "a-real-store.myshopify.com", kind: "real" })).toBe("real");
+    expect(kindOf({ shop: "app-review-1.myshopify.com", kind: "shopify" })).toBe("shopify");
+    const f = computeFunnel([row("m.myshopify.com"), row("navaal-ttv-02.myshopify.com", { kind: "real" }), row("rev.myshopify.com", { kind: "shopify" }), row("new.myshopify.com", { kind: "unclassified" }), row("old.myshopify.com", { kind: undefined })]);
+    expect(f.shops).toBe(1);
+    expect(f.kinds).toEqual({ ours: 1, shopify: 1, real: 1, unclassified: 2 });
+    expect(f.unclassified).toBe(2);
+    expect(f.excludedTestShops).toBe(2);
   });
 
   it("counts each stage over non-test shops; medians over the shops with both ends of a pair", () => {
@@ -88,6 +98,7 @@ describe("the arithmetic", () => {
     const f = computeFunnel(rows);
     expect(f.shops).toBe(3);
     expect(f.excludedTestShops).toBe(2);
+    expect(f.unclassified).toBe(0);
     expect(f.counts).toEqual({ installed: 3, firstScreen: 2, firstDraft: 3, firstApprove: 1, firstPublish: 2, returned: 1 });
     expect(f.uninstalled).toBe(1);
     expect(f.medianHours["installed→firstScreen"]).toBeCloseTo(0.3, 5); // median of 0.1 and 0.5
@@ -109,23 +120,29 @@ describe("the arithmetic", () => {
   });
 
   it("reads only the funnel columns — no name, no email, no content", () => {
-    expect(Object.keys(FUNNEL_SELECT).sort()).toEqual(["firstApproveAt", "firstDraftSeenAt", "firstPublishAt", "firstScreenAt", "installedAt", "reinstalledAt", "returnedAt", "shop", "uninstalledAt"]);
+    expect(Object.keys(FUNNEL_SELECT).sort()).toEqual(["firstApproveAt", "firstDraftSeenAt", "firstPublishAt", "firstScreenAt", "installedAt", "kind", "reinstalledAt", "returnedAt", "shop", "uninstalledAt"]);
     expect(STAGES.map((s) => s.key)).toEqual(["installed", "firstScreen", "firstDraft", "firstApprove", "firstPublish", "returned"]);
   });
 });
 
 describe("the digest", () => {
-  it("is null when there is no non-test shop", () => {
+  it("is null when there is no real shop and nothing unclassified; an unclassified shop alone still produces the ask", () => {
     expect(composeFunnelDigest(computeFunnel([]))).toBe(null);
     expect(composeFunnelDigest(computeFunnel([row("navaal-ttv-02.myshopify.com", { firstPublishAt: at(1) })]))).toBe(null);
+    expect(composeFunnelDigest(computeFunnel([row("rev.myshopify.com", { kind: "shopify" })]))).toBe(null);
+    const d = composeFunnelDigest(computeFunnel([row("new.myshopify.com", { kind: "unclassified" })]));
+    expect(d.subject).toBe("Funnel: 0 real installed · 0 published · 0 returned · 1 unclassified");
+    expect(d.text).toMatch(/0 real shop\(s\) counted; 0 of ours and 0 of Shopify's excluded\. 1 unclassified — not counted, waiting for you or CW/);
+    expect(d.text).not.toMatch(/myshopify/);
   });
 
   it("is counts and medians only: no shop domain, no name, every stage on its own line", () => {
     const rows = [row("secret-merchant.myshopify.com", { firstScreenAt: at(0.25), firstDraftSeenAt: at(1), firstPublishAt: at(50), returnedAt: at(100) }), row("another-real.myshopify.com", { firstScreenAt: at(0.5) })];
     const d = composeFunnelDigest(computeFunnel(rows), { now: at(200) });
-    expect(d.subject).toBe("Funnel: 2 installed · 1 published · 1 returned");
+    expect(d.subject).toBe("Funnel: 2 real installed · 1 published · 1 returned");
     expect(d.text).not.toMatch(/myshopify\.com|secret-merchant|another-real/);
-    expect(d.text).toMatch(/2 real shop\(s\); 0 test shop\(s\) excluded/);
+    expect(d.text).toMatch(/2 real shop\(s\) counted; 0 of ours and 0 of Shopify's excluded\./);
+    expect(d.text).not.toMatch(/unclassified/);
     for (const st of STAGES) expect(d.text).toMatch(new RegExp(`^${st.label}\\s+\\d+\\s+\\(\\d+%\\)`, "m"));
     expect(d.text).toMatch(/Installed\s+2\s+\(100%\)/);
     expect(d.text).toMatch(/First screen rendered\s+2\s+\(100%\)\s+median from installed: 23 min \(n=2\)/);
@@ -141,24 +158,24 @@ describe("the send", () => {
     db.shop.findMany.mockResolvedValue([row("real.myshopify.com", { firstScreenAt: at(1) }), row("navaal-ttv-02.myshopify.com", { firstPublishAt: at(1) })]);
     const r = await funnelServer.sendFunnelDigest({ now: at(48) });
     expect(r.sent).toBe(true);
-    expect(db.shop.findMany).toHaveBeenCalledWith({ select: FUNNEL_SELECT });
+    expect(db.shop.findMany).toHaveBeenCalledWith({ where: { redactedAt: null }, select: FUNNEL_SELECT }); // an anonymised row is a ghost, never a shop
     expect(emails).toHaveLength(1);
-    expect(emails[0].subject).toBe("Funnel: 1 installed · 0 published · 0 returned");
+    expect(emails[0].subject).toBe("Funnel: 1 real installed · 0 published · 0 returned");
     expect(emails[0].text).not.toMatch(/myshopify/);
     const logged = log.info.mock.calls.find((c) => c[0]?.event === "funnel_digest");
-    expect(logged[0]).toEqual({ event: "funnel_digest", sent: true, shops: 1, installed: 1, published: 0, returned: 0 });
+    expect(logged[0]).toEqual({ event: "funnel_digest", sent: true, shops: 1, unclassified: 0, installed: 1, published: 0, returned: 0 });
     expect(JSON.stringify(log.info.mock.calls)).not.toMatch(/myshopify/);
   });
 
   it("sends nothing when every shop is a test shop; a dry run sends nothing either", async () => {
     db.shop.findMany.mockResolvedValue([row("navaal-ttv-02.myshopify.com", { firstPublishAt: at(1) }), row("contentpilot-dev2.myshopify.com")]);
     const r = await funnelServer.sendFunnelDigest({ now: at(48) });
-    expect(r).toMatchObject({ sent: false, reason: "no non-test shop" });
+    expect(r).toMatchObject({ sent: false, reason: "no real shop" });
     expect(notify.sendOperatorEmail).not.toHaveBeenCalled();
     db.shop.findMany.mockResolvedValue([row("real.myshopify.com")]);
     const dry = await funnelServer.sendFunnelDigest({ now: at(48), dryRun: true });
     expect(dry).toMatchObject({ sent: false, reason: "dry run" });
-    expect(dry.digest.subject).toMatch(/^Funnel: 1 installed/);
+    expect(dry.digest.subject).toMatch(/^Funnel: 1 real installed/);
     expect(notify.sendOperatorEmail).not.toHaveBeenCalled();
   });
 });

@@ -30,7 +30,7 @@ describe("A1 — credits reset on the calendar month, said the same way in both 
 
   it("the plans page carries it from the same constant, never a retyped copy", () => {
     const plans = code(readFileSync("app/routes/app.plans.jsx", "utf8"));
-    expect(plans).toMatch(/import \{ CREDIT_WEIGHTS, CREDIT_RESET_SENTENCE \} from "\.\.\/utils\/credits\.js"/);
+    expect(plans).toMatch(/import \{ CREDIT_WEIGHTS, CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE \} from "\.\.\/utils\/credits\.js"/); // Phase 11 Part C: the rollover sentence is a constant too
     expect(plans).toMatch(/a: `\$\{CREDIT_RESET_SENTENCE\}/);
     expect(plans).not.toMatch(/reset on the 1st of each/);
     expect(plans).not.toMatch(/every 30 days/);

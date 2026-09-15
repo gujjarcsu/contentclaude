@@ -38,7 +38,8 @@
 import db from "../db.server.js";
 import logger from "./logger.server.js";
 import { chunkDelete, GDPR_SHOP_MODELS } from "./gdpr.server.js";
-import { markShopUninstalled, redactShopRecord } from "./installTracking.server.js";
+import { markShopUninstalled, redactShopRecord, restoreInstalledState } from "./installTracking.server.js";
+import { probeInstalled } from "./installState.server.js";
 import { captureUsageCarryover } from "./plans.server.js";
 
 /**
@@ -173,7 +174,25 @@ export async function finishShopRedaction(shop) {
     },
     { timeout: 60_000 },
   );
+  await completeRedactRequests(shop, "redacted");
   logger.info({ shop, event: "shop_redacted" }, "Shop redacted");
+}
+
+/**
+ * Phase 11 Part A — consume the shop_redact audit row(s) for a domain. The
+ * audit row itself is kept (it is the record that the request was received);
+ * completedAt is what stops the sweep owing it to every later install of the
+ * same domain. Never throws.
+ */
+export async function completeRedactRequests(shop, reason) {
+  try {
+    const r = await db.gDPRRequest.updateMany({ where: { shop, requestType: "shop_redact", completedAt: null }, data: { completedAt: new Date() } });
+    if (r.count > 0) logger.info({ shop, reason, count: r.count, event: "shop_redact_completed" }, "shop/redact request(s) marked complete");
+    return r.count;
+  } catch (err) {
+    logger.warn({ shop, err: err?.message }, "could not mark shop/redact complete (non-fatal)");
+    return 0;
+  }
 }
 
 /** Don't sweep work that started seconds ago and is very likely still running. */
@@ -189,23 +208,42 @@ export const SWEEP_GRACE_MS = 5 * 60 * 1000;
  */
 export async function sweepUnfinishedWebhookWork({ now = Date.now() } = {}) {
   const cutoff = new Date(now - SWEEP_GRACE_MS);
-  const result = { redactions: 0, uninstalls: 0 };
+  const result = { redactions: 0, uninstalls: 0, reconciled: 0 };
 
   // ── Owed redactions: an audit row exists, the Shop row is not anonymised.
   // `redactedAt: null` is the marker; redactShopRecord sets it in the same
   // transaction that deletes the data.
   try {
+    // Phase 11 Part A — only UNCONSUMED requests are owed. Before this, an
+    // audit row from 12 Sep was found on every sweep, its domain matched the
+    // NEW Shop row navaal-qa-fresh created on every reinstall, and that row
+    // was anonymised and its data deleted minutes after every install — five
+    // times on 14 Sep alone. The domain is not the shop; the install is.
     const asked = await db.gDPRRequest.findMany({
-      where: { requestType: "shop_redact", processedAt: { lt: cutoff } },
-      select: { shop: true },
-      distinct: ["shop"],
+      where: { requestType: "shop_redact", processedAt: { lt: cutoff }, completedAt: null },
+      select: { shop: true, processedAt: true },
+      orderBy: { processedAt: "asc" },
       take: 200,
     });
-    for (const { shop } of asked) {
-      const row = await db.shop.findUnique({ where: { shop }, select: { redactedAt: true } });
+    const seen = new Set();
+    for (const { shop, processedAt } of asked) {
+      if (seen.has(shop)) continue;
+      seen.add(shop);
+      const row = await db.shop.findUnique({ where: { shop }, select: { redactedAt: true, installedAt: true, reinstalledAt: true } });
       // No row at all means it was already anonymised (the domain is rewritten
-      // to redacted:<hash>) — nothing owed.
-      if (!row || row.redactedAt) continue;
+      // to redacted:<hash>) — nothing owed; consume the request.
+      if (!row || row.redactedAt) {
+        await completeRedactRequests(shop, row ? "already_redacted" : "row_anonymised");
+        continue;
+      }
+      // A row whose install is NEWER than the request is a different install
+      // of the same domain. The request was for the one before it.
+      const installAt = row.reinstalledAt ?? row.installedAt ?? null;
+      if (installAt && processedAt && new Date(installAt).getTime() > new Date(processedAt).getTime()) {
+        logger.warn({ shop, requestedAt: processedAt, installedAt: installAt, event: "redaction_superseded" }, "shop/redact request predates the current install — not owed; consumed");
+        await completeRedactRequests(shop, "superseded_by_reinstall");
+        continue;
+      }
       logger.warn({ shop, event: "redaction_unfinished" }, "Redaction owed but incomplete — finishing");
       await finishShopRedaction(shop);
       result.redactions += 1;
@@ -226,8 +264,18 @@ export async function sweepUnfinishedWebhookWork({ now = Date.now() } = {}) {
     for (const { shop } of uninstalled) {
       const leftovers = await db.session.count({ where: { shop } });
       if (leftovers === 0) continue;
+      // Phase 11 Part A — a Session on a flagged row is NOT proof of an
+      // unfinished uninstall. It is what an INSTALLED shop leaves behind on
+      // every visit. Ask Shopify before deleting anything: a token that
+      // answers means the flag is wrong, and the row is restored instead.
+      const probe = await probeInstalled(shop);
+      if (probe.installed === true) {
+        await restoreInstalledState(shop, { source: "sweep_reconcile", now: new Date(now) });
+        result.reconciled += 1;
+        continue;
+      }
       logger.warn(
-        { shop, leftovers, event: "uninstall_cleanup_unfinished" },
+        { shop, leftovers, probe: probe.installed, event: "uninstall_cleanup_unfinished" },
         "Uninstall deletion incomplete — finishing",
       );
       await db.$transaction(async (tx) => deleteShopData(tx, shop), { timeout: 60_000 });
@@ -237,7 +285,7 @@ export async function sweepUnfinishedWebhookWork({ now = Date.now() } = {}) {
     logger.error({ err: err?.message, event: "uninstall_sweep_failed" }, "Uninstall sweep failed");
   }
 
-  if (result.redactions || result.uninstalls) {
+  if (result.redactions || result.uninstalls || result.reconciled) {
     logger.info({ ...result, event: "webhook_sweep_recovered" }, "Webhook sweep recovered owed work");
   }
   return result;

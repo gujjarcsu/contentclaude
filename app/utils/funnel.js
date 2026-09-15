@@ -8,11 +8,12 @@
  *   installed → first screen rendered → first draft seen → first approve →
  *   first publish → returned on a later day → (uninstalled)
  *
- * — and, across every NON-TEST shop, the count at each stage and the median
+ * — and, across every REAL shop, the count at each stage and the median
  * hours between consecutive stages. Nothing here reaches a merchant screen;
  * nothing here is a statistic for the listing; no shop domain appears in the
- * digest. Test shops are excluded by the same name pattern the reset
- * workflow uses, plus the two named dev stores.
+ * digest. Who is real is a classification (shopKind.js), not a pattern: ours
+ * and Shopify's own stores are excluded, and an UNCLASSIFIED shop is excluded
+ * AND reported as a count — nobody's silence ever makes it a merchant.
  *
  * Stages are counted independently, not as a strict chain: firstScreenAt and
  * firstApproveAt were added on 15 Sep 2026, so a shop that installed before
@@ -21,6 +22,8 @@
  *
  * PURE. Reading the rows and sending the email live in funnel.server.js.
  */
+
+import { isRealShop, tallyKinds } from "./shopKind.js";
 
 export const STAGES = Object.freeze([
   { key: "installed", label: "Installed", field: null },
@@ -34,6 +37,7 @@ export const STAGES = Object.freeze([
 /** The columns the funnel reads — and all it reads. No name, no content, no email. */
 export const FUNNEL_SELECT = Object.freeze({
   shop: true,
+  kind: true,
   installedAt: true,
   reinstalledAt: true,
   uninstalledAt: true,
@@ -43,15 +47,6 @@ export const FUNNEL_SELECT = Object.freeze({
   firstPublishAt: true,
   returnedAt: true,
 });
-
-/** The reset workflow's guard, and the two dev stores by name. */
-export const TEST_SHOP_PATTERN = /^(navaal-ttv-\d+|navaal-qa-[a-z0-9-]+|navaal-shape-[a-z0-9-]+|contentpilot-dev\d*)\.myshopify\.com$/;
-export const TEST_SHOPS = Object.freeze(["contentpilot-dev2.myshopify.com", "navaal-qa-fresh.myshopify.com"]);
-
-export function isTestShop(shop) {
-  const s = String(shop ?? "").trim().toLowerCase();
-  return TEST_SHOP_PATTERN.test(s) || TEST_SHOPS.includes(s);
-}
 
 export function installAtOf(row) {
   return row?.reinstalledAt ?? row?.installedAt ?? null;
@@ -74,7 +69,8 @@ const hoursBetween = (a, b) => (a && b ? (new Date(b).getTime() - new Date(a).ge
  * @returns {{shops: number, excludedTestShops: number, counts: Record<string, number>, medianHours: Record<string, number|null>, pairN: Record<string, number>, uninstalled: number}}
  */
 export function computeFunnel(rows) {
-  const real = (rows ?? []).filter((r) => !isTestShop(r.shop));
+  const real = (rows ?? []).filter(isRealShop);
+  const kinds = tallyKinds(rows);
   const counts = {};
   const gaps = {};
   let uninstalled = 0;
@@ -97,19 +93,22 @@ export function computeFunnel(rows) {
     medianHours[k] = median(gaps[k] ?? []);
     pairN[k] = (gaps[k] ?? []).length;
   }
-  return { shops: real.length, excludedTestShops: (rows ?? []).length - real.length, counts, medianHours, pairN, uninstalled };
+  return { shops: real.length, kinds, excludedTestShops: kinds.ours + kinds.shopify, unclassified: kinds.unclassified, counts, medianHours, pairN, uninstalled };
 }
 
 export const fmtHours = (h) => (h === null || h === undefined ? "—" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`);
 
 /**
  * The owner's weekly digest, counts and medians only. Null when there is
- * not one non-test shop to report — a digest about nothing teaches the
- * reader to stop opening them.
+ * neither a real shop to report nor an unclassified one to classify — a
+ * digest about nothing teaches the reader to stop opening them. An
+ * unclassified shop is never counted; it is the digest's one ask.
  */
 export function composeFunnelDigest(f, { now = new Date() } = {}) {
-  if (!f || f.shops === 0) return null;
-  const lines = [`Navaal funnel — week to ${now.toISOString().slice(0, 10)}`, "", `${f.shops} real shop(s); ${f.excludedTestShops} test shop(s) excluded by name.`, ""];
+  if (!f || (f.shops === 0 && !(f.unclassified > 0))) return null;
+  const k = f.kinds ?? { ours: 0, shopify: 0, real: f.shops, unclassified: f.unclassified ?? 0 };
+  const waiting = k.unclassified > 0 ? ` ${k.unclassified} unclassified — not counted, waiting for you or CW to say ours / shopify / real (Shop kind workflow).` : "";
+  const lines = [`Navaal funnel — week to ${now.toISOString().slice(0, 10)}`, "", `${f.shops} real shop(s) counted; ${k.ours} of ours and ${k.shopify} of Shopify's excluded.${waiting}`, ""];
   let prev = null;
   for (const st of STAGES) {
     const n = f.counts[st.key];
@@ -123,5 +122,6 @@ export function composeFunnelDigest(f, { now = new Date() } = {}) {
   lines.push("");
   lines.push("Timestamps only, one row per shop, no names. First screen and first approve are stamped from 15 Sep 2026; shops installed before then have no such stamp, which is why those counts can sit below the stages after them.");
   lines.push("The stage where the count drops is the conversation to have before the next outreach call.");
-  return { subject: `Funnel: ${f.counts.installed} installed · ${f.counts.firstPublish} published · ${f.counts.returned} returned`, text: lines.join("\n") };
+  const ask = k.unclassified > 0 ? ` · ${k.unclassified} unclassified` : "";
+  return { subject: `Funnel: ${f.counts.installed} real installed · ${f.counts.firstPublish} published · ${f.counts.returned} returned${ask}`, text: lines.join("\n") };
 }

@@ -19,7 +19,8 @@ export const FUNNEL_MINUTE_MIN = 30; // after the 08:00 support digest
 const FUNNEL_KEY = "cc:funnel-digest:week";
 
 export async function funnelRows(db = prisma) {
-  return db.shop.findMany({ select: FUNNEL_SELECT });
+  // Phase 11 — an anonymised row is a ghost of a past install, not a shop.
+  return db.shop.findMany({ where: { redactedAt: null }, select: FUNNEL_SELECT });
 }
 
 /** Compute and (unless dryRun) send. Returns the summary and whether it went. */
@@ -28,12 +29,12 @@ export async function sendFunnelDigest({ now = new Date(), dryRun = false } = {}
   const f = computeFunnel(rows);
   const digest = composeFunnelDigest(f, { now });
   if (!digest) {
-    logger.info({ event: "funnel_digest_quiet", shops: f.shops }, "funnel digest: no non-test shop, nothing sent");
-    return { sent: false, reason: "no non-test shop", funnel: f };
+    logger.info({ event: "funnel_digest_quiet", shops: f.shops, unclassified: f.unclassified }, "funnel digest: no real shop and nothing unclassified, nothing sent");
+    return { sent: false, reason: "no real shop", funnel: f };
   }
   if (dryRun) return { sent: false, reason: "dry run", funnel: f, digest };
   const r = await sendOperatorEmail({ subject: digest.subject, text: digest.text });
-  logger.info({ event: "funnel_digest", sent: r?.sent === true, shops: f.shops, installed: f.counts.installed, published: f.counts.firstPublish, returned: f.counts.returned }, "funnel digest");
+  logger.info({ event: "funnel_digest", sent: r?.sent === true, shops: f.shops, unclassified: f.unclassified, installed: f.counts.installed, published: f.counts.firstPublish, returned: f.counts.returned }, "funnel digest");
   return { sent: r?.sent === true, reason: r?.sent ? null : r?.reason ?? "not sent", funnel: f, digest };
 }
 
