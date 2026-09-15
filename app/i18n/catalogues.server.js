@@ -14,13 +14,15 @@
 import de from "./locales/de.json";
 import fr from "./locales/fr.json";
 import es from "./locales/es.json";
+import it from "./locales/it.json";
 import polarisDe from "@shopify/polaris/locales/de.json";
 import polarisFr from "@shopify/polaris/locales/fr.json";
 import polarisEs from "@shopify/polaris/locales/es.json";
+import polarisIt from "@shopify/polaris/locales/it.json";
 import { registerCatalogue, registerPolaris, LIVE_UI_LOCALES, DEFAULT_UI_LOCALE } from "./index.js";
 
-export const SERVER_CATALOGUES = Object.freeze({ de, fr, es });
-export const SERVER_POLARIS = Object.freeze({ de: polarisDe, fr: polarisFr, es: polarisEs });
+export const SERVER_CATALOGUES = Object.freeze({ de, fr, es, it });
+export const SERVER_POLARIS = Object.freeze({ de: polarisDe, fr: polarisFr, es: polarisEs, it: polarisIt });
 
 for (const [loc, table] of Object.entries(SERVER_CATALOGUES)) registerCatalogue(loc, table);
 for (const [loc, table] of Object.entries(SERVER_POLARIS)) registerPolaris(loc, table);

@@ -37,7 +37,7 @@ const FORBIDDEN = {
 /** What the credit unit reads as, by language (the listing's word). */
 const CREDIT = { de: /\bCredits?\b/, fr: /\bcrédits?\b/i, es: /\bcréditos?\b/i, it: /\bcredit[io]\b/i, "pt-BR": /\bcréditos?\b/i, ja: /クレジット/ };
 /** Keys allowed to equal their English (brand line, placeholder-only strings, loanwords). */
-const SAME_ALLOWED = new Set(["AI SEO, AEO & GEO", "FAQ (Navaal)", "{surface} · {field}", "SEO {before} → {after}", "+{delta} {sincePhrase}", " · {elapsedTime}", "Keywords (optional)", "Instagram", "Facebook", "TikTok", "FAQ", "Blog", "Meta", "Meta Desc:", "Meta Title:"]);
+const SAME_ALLOWED = new Set(["AI SEO, AEO & GEO", "FAQ (Navaal)", "Sydney, Australia", "{surface} · {field}", "SEO {before} → {after}", "+{delta} {sincePhrase}", " · {elapsedTime}", "Keywords (optional)", "Instagram", "Facebook", "TikTok", "FAQ", "Blog", "Meta", "Meta Desc:", "Meta Title:"]);
 const SAME_SHORT = /^([A-Z][A-Za-z]*|[^A-Za-z]*|.{0,12})$/;
 
 const reported = { status: "reported", reportedAt: "2026-09-14T00:00:00Z", seed: 7, summary: { enough: true, favourable: true, diffHours: 31, lo: 9, hi: 52, submit: { n: 6, crawled: 6, medianHours: 4, censored: 0 }, hold: { n: 6, crawled: 6, medianHours: 35, censored: 0 } } };

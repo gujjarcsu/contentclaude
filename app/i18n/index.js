@@ -50,8 +50,9 @@ export const DEFAULT_UI_LOCALE = "en";
  *   D1  de  2026-09-15
  *   D2  fr  2026-09-15
  *   D3  es  2026-09-15
+ *   D4  it  2026-09-15
  */
-export const LIVE_UI_LOCALES = Object.freeze(["en", "de", "fr", "es"]);
+export const LIVE_UI_LOCALES = Object.freeze(["en", "de", "fr", "es", "it"]);
 
 /** Shopify's `locale` param ("fr-FR", "pt-BR", "de") → one of ours, or the default. */
 export function normaliseUiLocale(raw) {
