@@ -35,8 +35,15 @@ export function quotaResetDate(now = new Date()) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 }
 
-export const fmtDay = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }); // "1 October"
-export const fmtMonth = (d) => new Date(d).toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" }); // "September"
+/**
+ * D3 - the quota month and its reset day travel as ISO instants (`monthAt`,
+ * `resetAt`) and are formatted where they are shown, in the merchant's
+ * language (`quotaMonthLabel`, `quotaResetLabel` in UpgradePrompt.jsx). The
+ * English-only `fmtDay`/`fmtMonth` that used to live here put "September"
+ * on a French screen; a loader ships data, never a sentence.
+ */
+export const QUOTA_MONTH_FORMAT = Object.freeze({ month: "long", timeZone: "UTC" });
+export const QUOTA_RESET_FORMAT = Object.freeze({ day: "numeric", month: "long", timeZone: "UTC" });
 
 /** The exact title line the brief asks for. Pure. */
 export function quotaGapTitle({ n, truncated = false, fit }) {

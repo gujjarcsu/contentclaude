@@ -151,6 +151,25 @@ describe("every shipped locale is complete", () => {
     expect(readFileSync("app/i18n/index.js", "utf8")).not.toMatch(/^import .*locales\//m);
   });
 
+  it("no screen formats a date in a fixed English locale, and the quota month travels as an instant (D3)", () => {
+    // Found on the French read-back: the usage card said "September" because
+    // planFit.js formatted it with "en-GB" in the loader. A loader ships data;
+    // the screen formats it with t.date in ITS locale.
+    const fixed = /toLocale(?:Date|Time)?String\(\s*["'](?:en(?:-[A-Z]{2})?|default)["']/;
+    const offenders = [...walk("app/routes"), ...walk("app/components"), ...walk("app/utils")]
+      .filter((f) => fixed.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+    for (const f of ["app/utils/quotaSurfaces.server.js", "app/utils/upgradePrompts.server.js"]) {
+      const src = readFileSync(f, "utf8");
+      expect(src, f).toMatch(/monthAt: new Date\(now\)\.toISOString\(\)/);
+      expect(src, f).toMatch(/resetAt: quotaResetDate\(now\)\.toISOString\(\)/);
+      expect(src, f).not.toMatch(/fmtDay|fmtMonth|monthName:|resetDate:/);
+    }
+    const prompt = readFileSync("app/components/UpgradePrompt.jsx", "utf8");
+    expect(prompt).toMatch(/t\.date\(iso, QUOTA_MONTH_FORMAT\)/);
+    expect(prompt).toMatch(/t\.date\(iso, QUOTA_RESET_FORMAT\)/);
+  });
+
   it("the browser loads the document's locale before hydrating, and the document carries the locale", () => {
     const entry = readFileSync("app/entry.client.jsx", "utf8");
     expect(entry).toMatch(/documentElement\.getAttribute\("lang"\)/);

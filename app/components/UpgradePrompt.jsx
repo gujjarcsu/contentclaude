@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "../i18n/react.jsx";
 import { useFetcher, useNavigate } from "react-router";
 import { Button, Banner, Card, Text, InlineStack, BlockStack } from "@shopify/polaris";
-import { quotaGapTitle, N_DEFINITION_COPY } from "../utils/planFit.js";
+import { quotaGapTitle, N_DEFINITION_COPY, QUOTA_MONTH_FORMAT, QUOTA_RESET_FORMAT } from "../utils/planFit.js";
+
+/** D3 - the quota month ("September") and its reset day ("1 October") in the screen's language, from the ISO instants the loader ships. */
+const quotaMonthLabel = (t, iso) => (iso ? t.date(iso, QUOTA_MONTH_FORMAT) : "");
+const quotaResetLabel = (t, iso) => (iso ? t.date(iso, QUOTA_RESET_FORMAT) : "");
 
 /**
  * Contextual upgrade prompt — appears anywhere usage limits are relevant.
@@ -126,7 +130,7 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <div data-quota-prompt="neutral">
         <Banner tone="warning">
           <Text as="p" variant="bodyMd">
-           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}. They reset on {resetDate}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName, resetDate: upsell.resetDate })}
+           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}. They reset on {resetDate}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: quotaMonthLabel(t, upsell.monthAt), resetDate: quotaResetLabel(t, upsell.resetAt) })}
           </Text>
         </Banner>
       </div>
@@ -169,10 +173,10 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <Banner tone="warning" title={title} onDismiss={dismiss}>
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
-           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}.{v} {label} covers {monthlyCredits1}/month for {priceLabel} {clause}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName, v: " ", label: fit.label, monthlyCredits1: fit.monthlyCredits, priceLabel: fit.priceLabel, clause })}
+           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}.{v} {label} covers {monthlyCredits1}/month for {priceLabel} {clause}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: quotaMonthLabel(t, upsell.monthAt), v: " ", label: fit.label, monthlyCredits1: fit.monthlyCredits, priceLabel: fit.priceLabel, clause })}
           </Text>
           <Text as="p" variant="bodyMd">
-           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: upsell.resetDate })}
+           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: quotaResetLabel(t, upsell.resetAt) })}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
             {definition}
@@ -229,7 +233,8 @@ export function QuotaWarningBanner({ warning }) {
 
   if (!warning || dismissed) return null;
 
-  const { usageCount, monthlyCredits, planLabel, fit, resetDate, from } = warning;
+  const { usageCount, monthlyCredits, planLabel, fit, resetAt, from } = warning;
+  const resetDate = quotaResetLabel(t, resetAt);
 
   const goPlans = () => {
     post("cta_clicked");
@@ -323,7 +328,7 @@ export function QuotaReachedCard({ upsell, surface = "" }) {
       <Card>
         <BlockStack gap="300">
           <Text as="h3" variant="headingMd">
-            {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName })}
+            {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: quotaMonthLabel(t, upsell.monthAt) })}
           </Text>
           {fit && (
             <Text as="p" variant="bodyMd">
@@ -331,7 +336,7 @@ export function QuotaReachedCard({ upsell, surface = "" }) {
             </Text>
           )}
           <Text as="p" variant="bodyMd">
-           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: upsell.resetDate })}
+           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: quotaResetLabel(t, upsell.resetAt) })}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
            {t("You can still run an audit, and review, edit and publish the drafts you already have.")}

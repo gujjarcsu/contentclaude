@@ -472,12 +472,13 @@ describe("planFit", () => {
     expect(planFit.fitPlanFor({ n: 0, currentPlan: "free" })).toBeNull();
   });
 
-  it("quotaResetDate crosses the year boundary in UTC; fmtDay/fmtMonth", () => {
+  it("quotaResetDate crosses the year boundary in UTC; the month and reset formats are UTC so the label matches the quota key", () => {
     expect(planFit.quotaResetDate(new Date("2026-12-15T10:00:00Z")).toISOString()).toBe(
       "2027-01-01T00:00:00.000Z",
     );
-    expect(planFit.fmtDay(planFit.quotaResetDate(new Date("2026-09-09T00:00:00Z")))).toBe("1 October");
-    expect(planFit.fmtMonth(new Date("2026-09-09T00:00:00Z"))).toBe("September");
+    expect(planFit.QUOTA_MONTH_FORMAT.timeZone).toBe("UTC");
+    expect(planFit.QUOTA_RESET_FORMAT.timeZone).toBe("UTC");
+    expect(planFit.fmtDay).toBeUndefined(); // D3: English-only formatters are gone; the screen formats in its language
   });
 
   it("quotaGapTitle is the exact line from the brief", () => {
@@ -525,8 +526,8 @@ describe("upgradePrompts", () => {
       neutral: true,
       fit: null,
       promptId: null,
-      resetDate: expect.any(String),
-      monthName: expect.any(String),
+      resetAt: expect.stringMatching(/^\d{4}-\d{2}-01T00:00:00\.000Z$/),
+      monthAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(db.upgradePrompt.upsert).not.toHaveBeenCalled();
     db.upgradePrompt.upsert.mockResolvedValue({ id: "up_1" });

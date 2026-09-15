@@ -177,7 +177,7 @@ describe("the banner tells the whole truth", () => {
     expect(w.fit.monthlyCredits).toBeGreaterThan(freePlan.monthlyCredits);
     // Without the reset date the only way out of the banner is to pay, which
     // is untrue: waiting works.
-    expect(w.resetDate).toBeTruthy();
+    expect(w.resetAt).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/); // an instant; the screen names the day in its language
     expect(w.planLabel).toBe("Free");
     expect(w.usageCount).toBe(22);
     expect(w.monthlyCredits).toBe(25);

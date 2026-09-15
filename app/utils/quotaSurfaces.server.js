@@ -28,7 +28,7 @@
  */
 import logger from "./logger.server.js";
 import prisma from "../db.server.js";
-import { fitPlanFor, PLAN_LABELS, quotaResetDate, fmtDay, fmtMonth } from "./planFit.js";
+import { fitPlanFor, PLAN_LABELS, quotaResetDate } from "./planFit.js";
 import { monthKey, recordPromptCondition } from "./upgradePrompts.server.js";
 import { quotaLevel, quotaPct, dismissalActive } from "./quota.js";
 
@@ -102,8 +102,8 @@ export async function getQuotaWarning({ shop, plan, usageCount, surface, now = n
       pct: quotaPct(usageCount, monthlyCredits),
       planName,
       planLabel: PLAN_LABELS[planName] ?? planName,
-      monthName: fmtMonth(now),
-      resetDate: fmtDay(quotaResetDate(now)),
+      monthAt: new Date(now).toISOString(),
+      resetAt: quotaResetDate(now).toISOString(),
       fit,
     };
   } catch (err) {

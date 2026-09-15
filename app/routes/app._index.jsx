@@ -5,7 +5,7 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, EmbedLaterNote, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import { FirstRunFindingsCard } from "../components/FirstRunFindingsCard.jsx";
-import { changeWindowFor, autopilotBannerTitle, windowLabel } from "../utils/homeCopy.js";
+import { changeWindowFor, autopilotBannerTitle, windowLabel, sinceLabelFor } from "../utils/homeCopy.js";
 import { StartState } from "../components/StartState.jsx";
 import { scoreTone } from "../utils/scoreBands.js";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
@@ -411,10 +411,8 @@ function StoreScoreCard({ score }) {
   // installed weeks before this feature existed, "since you installed" is
   // simply false. Naming the date is true in both cases and no less
   // persuasive — and a merchant can check it.
-  const sinceLabel = score.since
-    ? new Date(score.since).toLocaleDateString("en-US", { day: "numeric", month: "long" })
-    : null;
-  const sincePhrase = sinceLabel ? `since ${sinceLabel}` : "since we first scored your store";
+  const sinceLabel = sinceLabelFor(score.since, t);
+  const sincePhrase = sinceLabel ? t("since {date}", { date: sinceLabel }) : t("since we first scored your store");
   const delta = hasBaseline ? score.current - score.atInstall : null;
   const improved = delta != null && delta > 0;
 

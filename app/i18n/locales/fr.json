@@ -1006,6 +1006,7 @@
   "Showing part of your collections": "Une partie de vos collections est affichée",
   "since {date}": "depuis le {date}",
   "since the last check": "depuis la dernière vérification",
+  "since we first scored your store": "depuis notre première évaluation de votre boutique",
   "Sitemap checked for {sitemapKnown} products; {checked} product pages fetched so far ({nightly} more each night on your plan, products needing attention first). {cannotIndex} cannot be indexed as they stand.": "Sitemap vérifié pour {sitemapKnown} produits ; {checked} pages produit récupérées jusqu'ici ({nightly} de plus chaque nuit avec votre plan, produits à traiter en premier). {cannotIndex} ne peuvent pas être indexées en l'état.",
   "Social Media Content": "Contenu pour les réseaux sociaux",
   "Something not working?": "Quelque chose ne fonctionne pas ?",

@@ -77,7 +77,7 @@ export const loader = async ({ request }) => {
   // for the full billing.check duration.)
   const [plan, usageCount] = await Promise.all([getOrCreatePlan(shop), getMonthlyUsageCount(shop)]);
 
-  const currentMonth = new Date().toLocaleString("default", { month: "long", year: "numeric" });
+  const monthAt = new Date().toISOString(); // D3 - formatted where shown, in the merchant's language
 
   // Notice from the billing return callback (see routes/billing.callback.jsx):
   // upgraded=1 on a successful approval, declined=1 when the charge was
@@ -115,7 +115,7 @@ export const loader = async ({ request }) => {
       currentPeriodEnd: plan.currentPeriodEnd?.toISOString() ?? null,
     },
     usageCount,
-    currentMonth,
+    monthAt,
     billingNotice,
   };
 };
@@ -651,7 +651,7 @@ function PlanCard({
 
 export default function PlansPage() {
   const t = useT();
-  const { plan, usageCount, currentMonth, billingNotice, promptId } = useLoaderData();
+  const { plan, usageCount, monthAt, billingNotice, promptId } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -758,12 +758,12 @@ export default function PlansPage() {
                 </Badge>
                 {plan.currentPeriodEnd && (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {t("Renews")} {new Date(plan.currentPeriodEnd).toLocaleDateString()}
+                    {t("Renews")} {t.date(plan.currentPeriodEnd, { day: "numeric", month: "long", year: "numeric" })}
                   </Text>
                 )}
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                {currentMonth}
+                {t.date(monthAt, { month: "long", year: "numeric" })}
               </Text>
             </BlockStack>
 

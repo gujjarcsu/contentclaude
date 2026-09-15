@@ -14,7 +14,7 @@
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { scanCatalogGaps } from "./catalogGaps.server.js";
-import { fitPlanFor, PLAN_LABELS, quotaResetDate, fmtDay, fmtMonth } from "./planFit.js";
+import { fitPlanFor, PLAN_LABELS, quotaResetDate } from "./planFit.js";
 
 const D = 24 * 3_600_000;
 export const CLICK_WINDOW_MS = 7 * D;
@@ -62,7 +62,7 @@ export async function getUpsell({ admin, shop, plan, usageCount, surface, nDefin
     const base = {
       n, truncated: trunc, scanned, nDefinition, remaining: 0,
       monthlyCredits: plan.monthlyCredits, planName: plan.planName, planLabel: PLAN_LABELS[plan.planName] ?? plan.planName,
-      monthName: fmtMonth(now), resetDate: fmtDay(quotaResetDate(now)),
+      monthAt: new Date(now).toISOString(), resetAt: quotaResetDate(now).toISOString(),
     };
     if (n === 0 || !fit) return { ...base, neutral: true, fit: null, promptId: null };
     const row = await recordPromptCondition({

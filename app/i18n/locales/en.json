@@ -1006,6 +1006,7 @@
   "Showing part of your collections": "Showing part of your collections",
   "since {date}": "since {date}",
   "since the last check": "since the last check",
+  "since we first scored your store": "since we first scored your store",
   "Sitemap checked for {sitemapKnown} products; {checked} product pages fetched so far ({nightly} more each night on your plan, products needing attention first). {cannotIndex} cannot be indexed as they stand.": "Sitemap checked for {sitemapKnown} products; {checked} product pages fetched so far ({nightly} more each night on your plan, products needing attention first). {cannotIndex} cannot be indexed as they stand.",
   "Social Media Content": "Social Media Content",
   "Something not working?": "Something not working?",
