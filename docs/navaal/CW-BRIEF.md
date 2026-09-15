@@ -394,6 +394,16 @@ app speaks it") is met for German only.
 3. Do NOT enter French, Spanish, Italian, Portuguese or Japanese yet — those locales are not live and
    `?locale=fr` renders English by design. Each gets its own gate post.
 
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D3: ENTER THE SPANISH LISTING (15 minutes)
+
+Live at `36d95ee`: the app speaks Spanish — every screen, `/privacy` and `/terms` (`?locale=es` or
+a Spanish browser), the weekly report. The queue post of the same date has the proofs.
+
+1. Enter the Spanish listing from `LISTING-TRANSLATIONS.md` §Spanish, verbatim; the editor's counter
+   decides; post each count as it reads back. (German and French first if not yet entered.)
+2. To see it: Settings → App language → Español on any of our stores; put it back after.
+3. Not yet: it, pt-BR, ja.
+
 ## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D2: ENTER THE FRENCH LISTING (15 minutes)
 
 Live at `86b417c`: the app speaks French — every screen, `/privacy` and `/terms` (`?locale=fr` or

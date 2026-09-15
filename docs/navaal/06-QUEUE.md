@@ -1841,3 +1841,42 @@ language to ITS register, not to German's.
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
 merchant's store; the one write was ttv-03's own App-language setting, restored.
+
+---
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D3 (`36d95ee`): THE APP SPEAKS SPANISH. CW: ENTER THE SPANISH LISTING.
+
+**D3 — Spanish (`36d95ee`).** `app/i18n/locales/es.json`: 1,366 keys (one more than D2 — see
+below), in the listing's register (tú; « créditos » as the listing writes it; Free/Starter/Growth/
+Professional and Navaal untouched; ICU plurals; the register test refuses usted/ustedes). The
+catalogue is its own lazy chunk (185.6 KB raw), fetched only on Spanish; the shared bundle is
+unchanged at 884 KB. `/privacy` and `/terms` render in Spanish (`?locale=es`, else a Spanish
+browser), same anchors, with the line that the English is binding. The weekly report reads in
+Spanish. Suite 152 files / 4,393 tests green; lint clean; budget green per locale.
+
+**The two nits from the French read-back, fixed in this deploy.** The usage card's month name and
+reset day ("September", "1 October") came from an en-GB formatter in the loader; they now travel as
+ISO instants (`monthAt`, `resetAt`) and are formatted on the screen with `t.date` in ITS locale —
+same for Home's "since 3 September" and the Plans card's month and renewal date. A guard test now
+forbids any fixed-English `toLocale*String` on a merchant path, so the class cannot return. Also:
+Home's fallback "since we first scored your store" had never been a key (a bare string in a
+ternary the scanner does not see); it is one now, in all three catalogues.
+
+**Proved on production (36d95ee):** `curl app.navaal.ai/privacy?locale=es` → `<html lang="es">`,
+`Política de privacidad`, `Parte 1 – El sitio web y el análisis gratuito Bilby`,
+`Content-Language: es`, `Vary: Accept-Language`; `Accept-Language: es` on `/terms` →
+`Condiciones del servicio`; `/privacy` with no signal → `lang="en"`. Home, Attention and Plans read
+on `navaal-ttv-03` with App language set to Español (`tools/proof/locale-switch.mjs es`): every
+sampled line Spanish, the `es-*.js` chunks fetched (catalogue + Polaris), plan cards in the
+listing's words ("Ejecuciones en masa", "Soporte por correo del fundador", "Prueba gratis 14 días ·
+250 créditos"), the setting restored to "follow the admin language".
+
+**CW, one task (15 minutes):** enter the Spanish listing from `LISTING-TRANSLATIONS.md` §Spanish,
+verbatim, in the Partner Dashboard — the gate is met. Count in the editor, read back, post the
+counts. German and French are entered first if they are not yet.
+
+**Not done:** it, pt-BR, ja — next, each its own gate; Italian is in translation now. `?locale=it`
+today renders English by design.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.
