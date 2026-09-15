@@ -181,18 +181,14 @@ Files under `docs/history/recordings/`, names stating the store and the sha.
 
 ---
 
-## TASK 9 — H16 AND H18, THE TWO GOOGLE ONES (15 minutes)
+## TASK 9 — H16, THE GMAIL FORWARD (5 minutes)
 
 **H16 — UptimeRobot second contact.** `LOGIN NEEDED: Gmail gujjarcsu@`. Add `hello@navaal.ai` as
 a forwarding address; Google emails a confirmation code to `hello@` — the owner reads it out; you
 enter it; create the filter *from UptimeRobot → forward*. If `hello@` and `gujjarcsu@` turn out to
 be the same inbox, say so and close H16 as moot.
 
-**H18 — Search Console for `askebs.com.au`.** `LOGIN NEEDED: Google navaal.aiiii@gmail.com`. Add
-a **Domain** property `askebs.com.au`. Verification is a DNS TXT record — `LOGIN NEEDED: <the DNS
-provider for askebs.com.au>` (the owner names it). Add the TXT, verify. **This touches DNS, not
-the store**; it is the one EBS-adjacent write in this file and it is read-only for the catalogue.
-If the DNS provider cannot be reached today, skip and say so.
+**H18 is closed, not skipped:** `askebs.com.au` is a WordPress site; the Shopify EBS store is not live. Nothing to verify. It returns only when a real merchant connects their own Search Console.
 
 ---
 
