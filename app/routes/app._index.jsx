@@ -1,4 +1,5 @@
 import { Suspense, useState } from "react";
+import { useT } from "../i18n/react.jsx";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
@@ -399,6 +400,7 @@ export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
  * comparison appears when it has something to say.
  */
 function StoreScoreCard({ score }) {
+  const t = useT();
   if (!score?.available || !Number.isFinite(score.current)) return null;
 
   // A baseline captured on THIS very load is not a comparison. Treating it as
@@ -429,9 +431,9 @@ function StoreScoreCard({ score }) {
       <BlockStack gap="200">
         <InlineStack gap="300" blockAlign="center" wrap>
           <Text as="h2" variant="headingMd">
-            Store SEO score
+            {t("Store SEO score")}
           </Text>
-          {improved && <Badge tone="success">{`+${delta} ${sincePhrase}`}</Badge>}
+          {improved && <Badge tone="success">{t("+{delta} {sincePhrase}", { delta, sincePhrase })}</Badge>}
         </InlineStack>
 
         <InlineStack gap="200" blockAlign="baseline" wrap>
@@ -465,7 +467,7 @@ function StoreScoreCard({ score }) {
           */}
           {Number.isFinite(score.scanned) && score.scanned > 0 ? (
             <Text as="span" variant="bodyMd" tone="subdued">
-              {`across ${score.scanned} product${score.scanned === 1 ? "" : "s"} sampled`}
+              {t("across {scanned} product{v} sampled", { scanned: score.scanned, v: score.scanned === 1 ? "" : "s" })}
             </Text>
           ) : null}
         </InlineStack>
@@ -473,15 +475,7 @@ function StoreScoreCard({ score }) {
         <Text as="p" variant="bodySm" tone="subdued">
           {/* "sampled", not "scanned": 30 of 1,350 active products is a sample,
               and Group 2.1's rule is that a number states its population. */}
-          {baselineIsToday && delta === 0
-            ? `Your starting score, across the ${score.scanned} products we sampled.`
-            : improved
-              ? `Up ${delta} points ${sincePhrase}, across the ${score.scanned} products we sampled.`
-              : hasBaseline && delta === 0
-                ? `Unchanged ${sincePhrase}, across the ${score.scanned} products we sampled.`
-                : hasBaseline && delta < 0
-                  ? `Down ${Math.abs(delta)} points ${sincePhrase}, across the ${score.scanned} products we sampled.`
-                  : `Across the ${score.scanned} products we sampled. We will show the change once there is one.`}
+          {baselineIsToday && delta === 0 ? t("Your starting score, across the {scanned} products we sampled.", { scanned: score.scanned }) : improved ? t("Up {delta} points {sincePhrase}, across the {scanned} products we sampled.", { delta, sincePhrase, scanned: score.scanned }) : hasBaseline && delta === 0 ? t("Unchanged {sincePhrase}, across the {scanned} products we sampled.", { sincePhrase, scanned: score.scanned }) : hasBaseline && delta < 0 ? t("Down {v} points {sincePhrase}, across the {scanned} products we sampled.", { v: Math.abs(delta), sincePhrase, scanned: score.scanned }) : t("Across the {scanned} products we sampled. We will show the change once there is one.", { scanned: score.scanned })}
         </Text>
 
         {/* P1.3 - the same rubric, on the surface EVERY merchant sees. StartState
@@ -492,7 +486,7 @@ function StoreScoreCard({ score }) {
         {/* Group 6.1 — the OTHER score, named, so the two are never mistaken for
             one number disagreeing with itself. */}
         <Text as="p" variant="bodySm" tone="subdued">
-          This is a sample. The SEO Audit scores more of your catalog and lists what to fix.
+          {t("This is a sample. The SEO Audit scores more of your catalog and lists what to fix.")}
         </Text>
       </BlockStack>
     </Card>
@@ -525,6 +519,7 @@ function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
 }
 
 function OnboardingStep({ number, title, description, done, actionLabel, onAction }) {
+  const t = useT();
   return (
     <Box
       padding="400"
@@ -559,7 +554,7 @@ function OnboardingStep({ number, title, description, done, actionLabel, onActio
           </BlockStack>
         </InlineStack>
         {done ? (
-          <Badge tone="success">Done</Badge>
+          <Badge tone="success">{t("Done")}</Badge>
         ) : (
           <Button size="slim" onClick={onAction}>
             {actionLabel}
@@ -593,6 +588,7 @@ function BelowFoldUnavailable() {
 }
 
 function RecentActivityCard({ items, navigate }) {
+  const t = useT();
   return (
     <Card>
       <BlockStack gap="400">
@@ -600,7 +596,7 @@ function RecentActivityCard({ items, navigate }) {
           <InlineStack gap="200" blockAlign="center">
             <Icon source={ChartHistogramGrowthIcon} tone="info" />
             <Text as="h2" variant="headingMd">
-              Recent Activity
+              {t("Recent Activity")}
             </Text>
           </InlineStack>
         </InlineStack>
@@ -628,7 +624,7 @@ function RecentActivityCard({ items, navigate }) {
                     </Text>
                   </BlockStack>
                   <Button size="slim" onClick={() => navigate(target)}>
-                    View
+                    {t("View")}
                   </Button>
                 </InlineStack>
               </Box>
@@ -670,6 +666,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Dashboard() {
+  const t = useT();
   const {
     totalProducts,
     generatedCount,
@@ -720,7 +717,7 @@ export default function Dashboard() {
   const revalidator = useRevalidator();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) {
-    return <AppSkeleton title="Dashboard" sections={3} layout="full" />;
+    return <AppSkeleton title={t("Dashboard")} sections={3} layout="full" />;
   }
 
   // Phase 3 items 3.1/3.2 — the first run IS Home. While this shop has never
@@ -767,12 +764,12 @@ export default function Dashboard() {
   const primaryAction =
     draftCount > 0
       ? {
-          content: `Review ${draftCount} draft${draftCount === 1 ? "" : "s"}`,
+          content: t("Review {draftCount} draft{v}", { draftCount, v: draftCount === 1 ? "" : "s" }),
           onAction: () => navigate("/app/review"),
         }
       : notOptimizedCount > 0
         ? {
-            content: `Optimize ${notOptimizedCount} product${notOptimizedCount === 1 ? "" : "s"}`,
+            content: t("Optimize {notOptimizedCount} product{v}", { notOptimizedCount, v: notOptimizedCount === 1 ? "" : "s" }),
             // A3.2 — this went to /app/optimize while the identically-labelled
             // primary on Products opened a modal. Same label, same intent, two
             // different next steps, and a merchant who used both would not know
@@ -784,13 +781,13 @@ export default function Dashboard() {
             // (A3.1). The Optimize SCREEN keeps its own job: enhance mode.
             onAction: () => navigate("/app/products?optimize=1"),
           }
-        : { content: "Run audit", onAction: () => navigate("/app/seo-audit") };
+        : { content: t("Run audit"), onAction: () => navigate("/app/seo-audit") };
 
   // Never a disabled primary: when there is nothing to review and nothing to
   // generate, the primary becomes the audit and this becomes the second option.
   const secondaryActions =
     draftCount === 0 && notOptimizedCount === 0
-      ? [{ content: "Write a blog post", onAction: () => navigate("/app/blog") }]
+      ? [{ content: t("Write a blog post"), onAction: () => navigate("/app/blog") }]
       : undefined;
 
   return (
@@ -810,11 +807,10 @@ export default function Dashboard() {
           <Banner
             tone="info"
             title={autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel })}
-            action={{ content: "Review the drafts", onAction: () => navigate("/app/review") }}
+            action={{ content: t("Review the drafts"), onAction: () => navigate("/app/review") }}
           >
             <p>
-              New products get content written for them automatically. Anything the quality check flagged is
-              waiting as a draft rather than going live.
+              {t("New products get content written for them automatically. Anything the quality check flagged is waiting as a draft rather than going live.")}
             </p>
           </Banner>
         )}
@@ -826,8 +822,8 @@ export default function Dashboard() {
         {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
           <Banner
             tone="success"
-            title={`Bulk job complete — ${recentlyCompletedJob.completedProducts} product${recentlyCompletedJob.completedProducts !== 1 ? "s" : ""} generated`}
-            action={{ content: "Review drafts", onAction: () => navigate("/app/review") }}
+            title={t("Bulk job complete — {completedProducts} product{v} generated", { completedProducts: recentlyCompletedJob.completedProducts, v: recentlyCompletedJob.completedProducts !== 1 ? "s" : "" })}
+            action={{ content: t("Review drafts"), onAction: () => navigate("/app/review") }}
             onDismiss={() => {
               setJobBannerDismissed(true);
               try {
@@ -837,7 +833,7 @@ export default function Dashboard() {
               }
             }}
           >
-            <p>Your AI content is ready to review. Check drafts, make edits, and publish with one click.</p>
+            <p>{t("Your AI content is ready to review. Check drafts, make edits, and publish with one click.")}</p>
           </Banner>
         )}
 
@@ -845,10 +841,10 @@ export default function Dashboard() {
         {activeJobCount > 0 && (
           <Banner
             tone="info"
-            title={`${activeJobCount} bulk job${activeJobCount > 1 ? "s" : ""} generating in the background`}
-            action={{ content: "View progress", onAction: () => navigate("/app/jobs") }}
+            title={t("{activeJobCount} bulk job{v} generating in the background", { activeJobCount, v: activeJobCount > 1 ? "s" : "" })}
+            action={{ content: t("View progress"), onAction: () => navigate("/app/jobs") }}
           >
-            <p>You can navigate freely — writing continues without this tab open.</p>
+            <p>{t("You can navigate freely — writing continues without this tab open.")}</p>
           </Banner>
         )}
 
@@ -882,12 +878,11 @@ export default function Dashboard() {
         {!geoNoteDismissed && (
           <Banner
             tone="info"
-            title="Written for Google and for AI search"
+            title={t("Written for Google and for AI search")}
             onDismiss={() => dismissGeoNote.submit({ actionType: "dismissGeoNote" }, { method: "POST" })}
           >
             <Text as="p" variant="bodyMd">
-              Your product content is written to rank in search and to be quoted by AI assistants, with FAQ
-              content published as real page copy.
+              {t("Your product content is written to rank in search and to be quoted by AI assistants, with FAQ content published as real page copy.")}
             </Text>
           </Banner>
         )}
@@ -904,41 +899,41 @@ export default function Dashboard() {
               <InlineStack gap="200" blockAlign="center">
                 <Icon source={MagicIcon} tone="info" />
                 <Text as="h2" variant="headingLg">
-                  Get started in 4 steps
+                  {t("Get started in 4 steps")}
                 </Text>
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Complete these steps to generate content that converts.
+                {t("Complete these steps to generate content that converts.")}
               </Text>
               <BlockStack gap="200">
                 <OnboardingStep
                   number="1"
-                  title="Configure your brand voice"
-                  description="Set your tone, audience, and differentiators so AI writes in your exact voice."
+                  title={t("Configure your brand voice")}
+                  description={t("Set your tone, audience, and differentiators so AI writes in your exact voice.")}
                   done={hasBrandVoice}
                   actionLabel="Set up now"
                   onAction={() => navigate("/app/settings")}
                 />
                 <OnboardingStep
                   number="2"
-                  title="Generate your first product description"
-                  description="Pick any product and get an AI description, meta title, and FAQ in under 30 seconds."
+                  title={t("Generate your first product description")}
+                  description={t("Pick any product and get an AI description, meta title, and FAQ in under 30 seconds.")}
                   done={generatedCount + draftCount > 0}
                   actionLabel="Choose a product"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
                   number="3"
-                  title="Review and publish"
-                  description="Read the draft, make edits, and publish with one click to your Shopify store."
+                  title={t("Review and publish")}
+                  description={t("Read the draft, make edits, and publish with one click to your Shopify store.")}
                   done={generatedCount > 0}
                   actionLabel="View products"
                   onAction={() => navigate("/app/products")}
                 />
                 <OnboardingStep
                   number="4"
-                  title="Show your FAQ content on your product pages"
-                  description="Add the &quot;FAQ (Navaal)&quot; block to your product template so shoppers can read the answers. The optional FAQ-schema app embed lives in the same theme editor."
+                  title={t("Show your FAQ content on your product pages")}
+                  description={t("Add the \"FAQ (Navaal)\" block to your product template so shoppers can read the answers. The optional FAQ-schema app embed lives in the same theme editor.")}
                   done={embedConfirmed}
                   actionLabel="Open theme editor"
                   onAction={() => window.open(embedDeepLink(shopDomain), "_top")}
@@ -957,7 +952,7 @@ export default function Dashboard() {
           <Banner
             tone={attention.crawler?.blocked?.length ? "critical" : "warning"}
             title={homeAttentionLines(attention)[0]}
-            action={{ content: "See what changed", onAction: () => navigate("/app/attention") }}
+            action={{ content: t("See what changed"), onAction: () => navigate("/app/attention") }}
           >
             <BlockStack gap="100">
               {homeAttentionLines(attention)
@@ -968,9 +963,7 @@ export default function Dashboard() {
                   </Text>
                 ))}
               <Text as="p" variant="bodySm" tone="subdued">
-                {attention.partial
-                  ? "From the products we could reach in one check — the daily check covers the rest."
-                  : "Checked daily against yesterday’s snapshot of your catalogue and what each AI surface asks for."}
+                {attention.partial ? t("From the products we could reach in one check — the daily check covers the rest.") : t("Checked daily against yesterday’s snapshot of your catalogue and what each AI surface asks for.")}
               </Text>
             </BlockStack>
           </Banner>
@@ -983,10 +976,10 @@ export default function Dashboard() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center" wrap>
                 <Text as="h2" variant="headingSm">
-                  Proof
+                  {t("Proof")}
                 </Text>
                 <Button size="slim" onClick={() => navigate("/app/proof")}>
-                  See both arms
+                  {t("See both arms")}
                 </Button>
               </InlineStack>
               {proofCardLines(proof).map((line) => (
@@ -1003,7 +996,7 @@ export default function Dashboard() {
             <StatCard
               icon={ProductIcon}
               iconTone="subdued"
-              label="Total Products"
+              label={t("Total Products")}
               value={totalProducts === null ? "—" : totalProducts}
               subtext={
                 /* Group 1.5 + 2.1 — the total is true and stays true; the
@@ -1041,7 +1034,7 @@ export default function Dashboard() {
             <StatCard
               icon={CheckCircleIcon}
               iconTone="success"
-              label="AI Content Published"
+              label={t("AI Content Published")}
               value={generatedCount}
               subtext={publishedSubtext({
                 ok: catalogueOk,
@@ -1057,7 +1050,7 @@ export default function Dashboard() {
             <StatCard
               icon={ClockIcon}
               iconTone="caution"
-              label="Drafts Pending Review"
+              label={t("Drafts Pending Review")}
               value={draftCount}
               subtext={
                 draftCount > 0
@@ -1077,10 +1070,10 @@ export default function Dashboard() {
               <InlineStack gap="200" blockAlign="center">
                 <Icon source={PlanIcon} tone={usagePct >= 60 ? "caution" : "success"} />
                 <Text as="h2" variant="headingMd">
-                  Monthly credits
+                  {t("Monthly credits")}
                 </Text>
                 <Badge tone={plan.planName === "free" ? "attention" : "success"}>
-                  {planLabels[plan.planName] ?? plan.planName} Plan
+                  {planLabels[plan.planName] ?? plan.planName} {t("Plan")}
                 </Badge>
               </InlineStack>
               {/* Group 6.4 — this said "2 / 25 used · 23 remaining" directly
@@ -1089,7 +1082,7 @@ export default function Dashboard() {
                   proportion; this shows the count; the line under the bar is
                   the one that carries the reset date. */}
               <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
-                {usageCount} / {plan.monthlyCredits} used
+                {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits: plan.monthlyCredits })}
               </Text>
             </InlineStack>
 
@@ -1101,9 +1094,7 @@ export default function Dashboard() {
                 path is the banner above, which appears once and can be
                 dismissed for a week. */}
             <Text as="p" variant="bodySm" tone="subdued">
-              {remaining === 0
-                ? `You've used all ${plan.monthlyCredits} credits for this month. They reset on the 1st.`
-                : `${remaining} of ${plan.monthlyCredits} left this month.`}
+              {remaining === 0 ? t("You've used all {monthlyCredits} credits for this month. They reset on the 1st.", { monthlyCredits: plan.monthlyCredits }) : t("{remaining} of {monthlyCredits} left this month.", { remaining, monthlyCredits: plan.monthlyCredits })}
             </Text>
           </BlockStack>
         </Box>
@@ -1128,7 +1119,7 @@ export default function Dashboard() {
                 <InlineStack gap="200" blockAlign="center">
                   <Icon source={MagicIcon} tone="subdued" />
                   <Text as="h2" variant="headingLg">
-                    Optimize your store
+                    {t("Optimize your store")}
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
@@ -1136,13 +1127,12 @@ export default function Dashboard() {
                       but the action targets every product WE have not written
                       for, which on a store with its own copy is a very
                       different set and a much larger number. */}
-                  Write content for the products we have not optimized yet — one click, runs in the
-                  background.
+                  {t("Write content for the products we have not optimized yet — one click, runs in the background.")}
                 </Text>
               </BlockStack>
               {/* A3.2 — the third surface with this label. Same destination as
                   the primary above, for the same reason. */}
-              <Button onClick={() => navigate("/app/products?optimize=1")}>Optimize store</Button>
+              <Button onClick={() => navigate("/app/products?optimize=1")}>{t("Optimize store")}</Button>
             </InlineStack>
           </Box>
         )}
@@ -1159,7 +1149,7 @@ export default function Dashboard() {
                 <InlineStack gap="200" blockAlign="center">
                   <Icon source={SearchIcon} tone="info" />
                   <Text as="h2" variant="headingMd">
-                    SEO Audit
+                    {t("SEO Audit")}
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
@@ -1167,10 +1157,9 @@ export default function Dashboard() {
                       itself reports "500 products analyzed · partial scan" on a
                       3,148-product store. One of the two was wrong, and it was
                       this one. */}
-                  Check your catalog for missing descriptions, meta tags and alt text — and see exactly
-                  which products to fix first.
+                  {t("Check your catalog for missing descriptions, meta tags and alt text — and see exactly which products to fix first.")}
                 </Text>
-                <Button onClick={() => navigate("/app/seo-audit")}>Run audit</Button>
+                <Button onClick={() => navigate("/app/seo-audit")}>{t("Run audit")}</Button>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -1180,11 +1169,11 @@ export default function Dashboard() {
                 <InlineStack gap="200" blockAlign="center">
                   <Icon source={BlogIcon} tone="info" />
                   <Text as="h2" variant="headingMd">
-                    Blog
+                    {t("Blog")}
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Write SEO-optimized blog posts in your brand voice in under 60 seconds.
+                  {t("Write SEO-optimized blog posts in your brand voice in under 60 seconds.")}
                 </Text>
                 {/* Same streamed promise as Recent Activity. "Write a post" is
                     there from the first paint; only the counts wait. */}
@@ -1193,21 +1182,21 @@ export default function Dashboard() {
                     {({ blogsTotal, blogsPublished, blogsDraft }) =>
                       blogsTotal > 0 && (
                         <InlineStack gap="200">
-                          <Badge tone="success">{blogsPublished} published</Badge>
-                          {blogsDraft > 0 && <Badge tone="info">{blogsDraft} draft</Badge>}
+                          <Badge tone="success">{t("{blogsPublished} published", { blogsPublished })}</Badge>
+                          {blogsDraft > 0 && <Badge tone="info">{t("{blogsDraft} draft", { blogsDraft })}</Badge>}
                         </InlineStack>
                       )
                     }
                   </Await>
                 </Suspense>
                 <InlineStack gap="200">
-                  <Button onClick={() => navigate("/app/blog")}>Write a post</Button>
+                  <Button onClick={() => navigate("/app/blog")}>{t("Write a post")}</Button>
                   <Suspense fallback={<SkeletonBodyText lines={1} />}>
                     <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
                       {({ blogsTotal }) =>
                         blogsTotal > 0 && (
                           <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                            View all ({blogsTotal})
+                            {t("View all ({blogsTotal})", { blogsTotal })}
                           </Button>
                         )
                       }

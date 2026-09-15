@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import { Await, useLoaderData, useNavigate, useNavigation, useRevalidator } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
@@ -78,6 +80,7 @@ const AUDIT_PAGE_QUERY = `query getProducts($cursor: String, $scoped: String) {
 }`;
 
 export const loader = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const { calculateSeoScore } = await import("../utils/seo.server.js");
   const { calculateGeoScore } = await import("../utils/geo.server.js");
@@ -106,7 +109,7 @@ export const loader = async ({ request }) => {
         { cursor, scoped: scoped || null },
         {
           shop,
-          label: "audit page",
+          label: t("audit page"),
         },
       );
       if (!r.ok) throw new Error(r.error ?? "audit page unavailable");
@@ -263,6 +266,7 @@ export const loader = async ({ request }) => {
  * but each now carries its own name and its own N, and each points at the other.
  */
 function ScoreRing({ score, scanned }) {
+  const t = useT();
   // Unified color rule: >=70 green, 40–69 amber (highlight), <40 red.
   const tone = scoreTone(score);
   return (
@@ -288,8 +292,7 @@ function ScoreRing({ score, scanned }) {
           The only honest difference left is HOW MANY products each one reads, so
           that is what it now says.
         */}
-        Scored the same way as the Store SEO score on Home. Home samples up to 30 products; this
-        page reads as much of your catalogue as it can, so the two can differ on a large store.
+        {t("Scored the same way as the Store SEO score on Home. Home samples up to 30 products; this page reads as much of your catalogue as it can, so the two can differ on a large store.")}
       </Text>
       <ProgressBar progress={score} tone={tone} size="medium" />
     </BlockStack>
@@ -297,15 +300,16 @@ function ScoreRing({ score, scanned }) {
 }
 
 function CheckIcon({ pass, label }) {
+  const t = useT();
   // Phase 2 items 2.5 and 2.12 — these were bare glyphs with no text and no
   // accessibilityLabel, rendered in four of six columns. On a 100-product store
   // that is roughly 400 of them, and a screen reader announced the raw
   // character. Polaris Badge carries real words; the tone is the decoration,
   // not the message.
   return pass ? (
-    <Badge tone="success">{`${label}: yes`}</Badge>
+    <Badge tone="success">{t("{label}: yes", { label })}</Badge>
   ) : (
-    <Badge tone="critical">{`${label}: no`}</Badge>
+    <Badge tone="critical">{t("{label}: no", { label })}</Badge>
   );
 }
 
@@ -319,11 +323,12 @@ function CheckIcon({ pass, label }) {
  * they do.
  */
 export default function SeoAuditPage() {
+  const t = useT();
   const data = useLoaderData();
   const loadingThisRoute = useRouteLoading();
 
   if (loadingThisRoute) {
-    return <AppSkeleton title="SEO Audit" sections={2} layout="full" />;
+    return <AppSkeleton title={t("SEO Audit")} sections={2} layout="full" />;
   }
 
   return (
@@ -338,6 +343,7 @@ export default function SeoAuditPage() {
 }
 
 function AuditBody({ data, pending = false, scanFailed = false }) {
+  const t = useT();
   const {
     products,
     totalScore,
@@ -359,20 +365,20 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
       <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>
         {p.title}
       </Button>
-      {p.isStale && <Badge tone="attention">Stale</Badge>}
+      {p.isStale && <Badge tone="attention">{t("Stale")}</Badge>}
     </InlineStack>,
     <Text key={`${p.id}-score`} as="span" fontWeight="bold" tone={scoreTone(p.score)}>
       {p.score}
     </Text>,
-    <CheckIcon label="Description" key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
-    <CheckIcon label="Page title" key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
-    <CheckIcon label="Search description" key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
+    <CheckIcon label={t("Description")} key={`${p.id}-desc`} pass={p.checks.hasDescription} />,
+    <CheckIcon label={t("Page title")} key={`${p.id}-meta`} pass={p.checks.hasMetaTitle} />,
+    <CheckIcon label={t("Search description")} key={`${p.id}-metadesc`} pass={p.checks.hasMetaDesc} />,
     p.checks.noImages ? (
       <Badge key={`${p.id}-alt`} tone="subdued">
-        No images
+        {t("No images")}
       </Badge>
     ) : (
-      <CheckIcon label="Alt text" key={`${p.id}-alt`} pass={p.checks.hasAltText} />
+      <CheckIcon label={t("Alt text")} key={`${p.id}-alt`} pass={p.checks.hasAltText} />
     ),
   ]);
 
@@ -382,16 +388,16 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
 
   return (
     <Page
-      title="SEO Audit"
+      title={t("SEO Audit")}
       subtitle={subtitle}
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
       primaryAction={{
-        content: "Optimize store",
+        content: t("Optimize store"),
         onAction: () => navigate("/app/optimize"),
       }}
       secondaryActions={[
         {
-          content: isLoading ? "Scanning..." : "Refresh Audit",
+          content: isLoading ? t("Scanning...") : t("Refresh Audit"),
           onAction: () => revalidator.revalidate(),
           loading: isLoading,
           disabled: isLoading,
@@ -400,20 +406,16 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
     >
       <BlockStack gap="500">
         {scanFailed && (
-          <Banner tone="warning" title="This is a partial audit">
+          <Banner tone="warning" title={t("This is a partial audit")}>
             <p>
-              {`Shopify stopped answering while the rest of your catalog was being read, so only the first ${scannedCount} product${scannedCount !== 1 ? "s" : ""} (sorted by title) were analyzed. Scores and counts below cover only that portion — refresh to try the rest again.`}
+              {t("Shopify stopped answering while the rest of your catalog was being read, so only the first {scannedCount} product{v} (sorted by title) were analyzed. Scores and counts below cover only that portion — refresh to try the rest again.", { scannedCount, v: scannedCount !== 1 ? "s" : "" })}
             </p>
           </Banner>
         )}
         {truncatedReason && (
-          <Banner tone="warning" title="This is a partial audit">
+          <Banner tone="warning" title={t("This is a partial audit")}>
             <p>
-              {truncatedReason === "timeout"
-                ? `The scan hit its time limit after ${scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.`
-                : truncatedReason === "error"
-                  ? `Shopify stopped answering after ${scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Refresh to try the rest again.`
-                  : `Your store has more than ${scannedCount} products — only the first ${scannedCount} (sorted by title) were analyzed. Scores and counts below cover only the scanned portion.`}
+              {truncatedReason === "timeout" ? t("The scan hit its time limit after {scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Try refreshing during a quieter period, or audit sections of your catalog from the Products page.", { scannedCount }) : truncatedReason === "error" ? t("Shopify stopped answering after {scannedCount} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Refresh to try the rest again.", { scannedCount }) : t("Your store has more than {scannedCount} products — only the first {scannedCount1} (sorted by title) were analyzed. Scores and counts below cover only the scanned portion.", { scannedCount, scannedCount1: scannedCount })}
             </p>
           </Banner>
         )}
@@ -422,7 +424,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
             <InlineStack gap="200" blockAlign="center">
               <Spinner size="small" />
               <Text as="p" variant="bodyMd">
-                Scanning your catalog... This may take a moment for large stores.
+                {t("Scanning your catalog... This may take a moment for large stores.")}
               </Text>
             </InlineStack>
           </Banner>
@@ -431,11 +433,11 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
         {staleCount > 0 && (
           <Banner
             tone="warning"
-            title={`${staleCount} product${staleCount !== 1 ? "s have" : " has"} content older than 6 months`}
+            title={t("{staleCount} product{v} content older than 6 months", { staleCount, v: staleCount !== 1 ? "s have" : " has" })}
           >
-            <p>These descriptions were written more than six months ago.</p>
+            <p>{t("These descriptions were written more than six months ago.")}</p>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/optimize")}>Optimize store</Button>
+              <Button onClick={() => navigate("/app/optimize")}>{t("Optimize store")}</Button>
             </Box>
           </Banner>
         )}
@@ -449,8 +451,8 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
             Two screens, one empty store, opposite verdicts. */}
         {products.length === 0 ? (
           <Card>
-            <EmptyState heading="Nothing to audit yet" image="/empty-seo.svg">
-              <p>Add products to your store, and this is where you see what needs attention.</p>
+            <EmptyState heading={t("Nothing to audit yet")} image="/empty-seo.svg">
+              <p>{t("Add products to your store, and this is where you see what needs attention.")}</p>
             </EmptyState>
           </Card>
         ) : (
@@ -464,7 +466,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">
-                    Issues Found
+                    {t("Issues Found")}
                   </Text>
                   <InlineStack gap="400" wrap>
                     <BlockStack gap="100">
@@ -472,7 +474,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
                         {missingDesc}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Missing descriptions
+                        {t("Missing descriptions")}
                       </Text>
                     </BlockStack>
                     <BlockStack gap="100">
@@ -480,7 +482,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
                         {missingMeta}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Missing meta titles
+                        {t("Missing meta titles")}
                       </Text>
                     </BlockStack>
                     <BlockStack gap="100">
@@ -488,7 +490,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
                         {noImages}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        No product images
+                        {t("No product images")}
                       </Text>
                     </BlockStack>
                     <BlockStack gap="100">
@@ -496,7 +498,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
                         {missingAltText}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Images missing alt text
+                        {t("Images missing alt text")}
                       </Text>
                     </BlockStack>
                     {staleCount > 0 && (
@@ -505,14 +507,13 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
                           {staleCount}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Content &gt;6 months old
+                          {t("Content >6 months old")}
                         </Text>
                       </BlockStack>
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) ·
-                    Has Images (10pts) · Alt Text (10pts)
+                    {t("SEO score breakdown: Description (30pts) · Meta Title (25pts) · Meta Description (25pts) · Has Images (10pts) · Alt Text (10pts)")}
                   </Text>
                 </BlockStack>
               </Card>
@@ -528,7 +529,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
             <Card>
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">
-                  Product breakdown
+                  {t("Product breakdown")}
                 </Text>
                 <SkeletonBodyText lines={12} />
               </BlockStack>

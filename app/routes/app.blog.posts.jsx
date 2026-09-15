@@ -1,4 +1,6 @@
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -49,6 +51,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -56,12 +59,12 @@ export const action = async ({ request }) => {
 
   if (actionType === "deletePost") {
     const id = formData.get("postId");
-    if (!id) return Response.json({ error: "Missing postId." }, { status: 400 });
+    if (!id) return Response.json({ error: t("Missing postId.") }, { status: 400 });
     await prisma.blogPost.deleteMany({ where: { id, shop } });
     return Response.json({ success: true });
   }
 
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
 function timeAgo(isoString) {
@@ -73,6 +76,7 @@ function timeAgo(isoString) {
 }
 
 function PostCard({ post, onView }) {
+  const t = useT();
   const fetcher = useFetcher();
   const isDraft = post.status === "draft";
   const isDeleting = fetcher.state !== "idle";
@@ -100,7 +104,7 @@ function PostCard({ post, onView }) {
               <InlineStack gap="300" blockAlign="center">
                 {post.topic && (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Topic: {post.topic}
+                    {t("Topic: {topic}", { topic: post.topic })}
                   </Text>
                 )}
                 {post.wordCount > 0 && (
@@ -142,9 +146,9 @@ function PostCard({ post, onView }) {
             </BlockStack>
           </InlineStack>
           <InlineStack gap="200" blockAlign="center">
-            <Badge tone={isDraft ? "info" : "success"}>{isDraft ? "Draft" : "Published"}</Badge>
+            <Badge tone={isDraft ? "info" : "success"}>{isDraft ? t("Draft") : t("Published")}</Badge>
             <Button size="slim" onClick={() => onView(post)}>
-              {isDraft ? "Edit / Publish" : "View"}
+              {isDraft ? t("Edit / Publish") : t("View")}
             </Button>
             <fetcher.Form method="post">
               <input type="hidden" name="actionType" value="deletePost" />
@@ -156,7 +160,7 @@ function PostCard({ post, onView }) {
                 icon={DeleteIcon}
                 loading={isDeleting}
                 submit
-                accessibilityLabel="Delete post"
+                accessibilityLabel={t("Delete post")}
               />
             </fetcher.Form>
           </InlineStack>
@@ -172,6 +176,7 @@ function PostCard({ post, onView }) {
 }
 
 export default function BlogPosts() {
+  const t = useT();
   const { posts } = useLoaderData();
   const navigate = useNavigate();
 
@@ -179,7 +184,7 @@ export default function BlogPosts() {
 
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) {
-    return <AppSkeleton title="Blog Posts" sections={2} layout="twoThird" />;
+    return <AppSkeleton title={t("Blog Posts")} sections={2} layout="twoThird" />;
   }
   const drafts = posts.filter((p) => p.status === "draft");
 
@@ -189,13 +194,13 @@ export default function BlogPosts() {
 
   return (
     <Page
-      title="Blog Posts"
-      subtitle={`${posts.length} post${posts.length !== 1 ? "s" : ""} generated`}
+      title={t("Blog Posts")}
+      subtitle={t("{length} post{v} generated", { length: posts.length, v: posts.length !== 1 ? "s" : "" })}
       primaryAction={{
-        content: "Write New Post",
+        content: t("Write New Post"),
         onAction: () => navigate("/app/blog"),
       }}
-      backAction={{ content: "Blog", onAction: () => navigate("/app/blog") }}
+      backAction={{ content: t("Blog"), onAction: () => navigate("/app/blog") }}
     >
       <Layout>
         <Layout.Section>
@@ -203,11 +208,11 @@ export default function BlogPosts() {
             {posts.length === 0 ? (
               <Card>
                 <EmptyState
-                  heading="No blog posts yet"
-                  action={{ content: "Write Your First Post", onAction: () => navigate("/app/blog") }}
+                  heading={t("No blog posts yet")}
+                  action={{ content: t("Write Your First Post"), onAction: () => navigate("/app/blog") }}
                   image="/empty-blog.svg"
                 >
-                  <p>Generate SEO-optimized blog posts in your brand voice in under 60 seconds.</p>
+                  <p>{t("Generate SEO-optimized blog posts in your brand voice in under 60 seconds.")}</p>
                 </EmptyState>
               </Card>
             ) : (
@@ -218,7 +223,7 @@ export default function BlogPosts() {
                       <InlineStack gap="200" blockAlign="center">
                         <Icon source={EditIcon} tone="subdued" />
                         <Text as="h2" variant="headingMd">
-                          Drafts
+                          {t("Drafts")}
                         </Text>
                         <Badge tone="info">{drafts.length}</Badge>
                       </InlineStack>
@@ -237,7 +242,7 @@ export default function BlogPosts() {
                       <InlineStack gap="200" blockAlign="center">
                         <Icon source={GlobeIcon} tone="success" />
                         <Text as="h2" variant="headingMd">
-                          Published
+                          {t("Published")}
                         </Text>
                         <Badge tone="success">{published.length}</Badge>
                       </InlineStack>
@@ -261,13 +266,13 @@ export default function BlogPosts() {
                 <InlineStack gap="200" blockAlign="center">
                   <Icon source={BlogIcon} tone="info" />
                   <Text as="h2" variant="headingMd">
-                    Blog Stats
+                    {t("Blog Stats")}
                   </Text>
                 </InlineStack>
                 <Divider />
                 <InlineStack align="space-between">
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Total posts
+                    {t("Total posts")}
                   </Text>
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
                     {posts.length}
@@ -275,7 +280,7 @@ export default function BlogPosts() {
                 </InlineStack>
                 <InlineStack align="space-between">
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Published
+                    {t("Published")}
                   </Text>
                   <Text as="p" variant="bodyMd" fontWeight="semibold" tone="success">
                     {published.length}
@@ -283,7 +288,7 @@ export default function BlogPosts() {
                 </InlineStack>
                 <InlineStack align="space-between">
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Drafts
+                    {t("Drafts")}
                   </Text>
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
                     {drafts.length}
@@ -294,7 +299,7 @@ export default function BlogPosts() {
                     <Divider />
                     <InlineStack align="space-between">
                       <Text as="p" variant="bodyMd" tone="subdued">
-                        Total words
+                        {t("Total words")}
                       </Text>
                       <Text as="p" variant="bodyMd" fontWeight="semibold">
                         {posts.reduce((sum, p) => sum + p.wordCount, 0).toLocaleString()}
@@ -308,7 +313,7 @@ export default function BlogPosts() {
             <Card>
               <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">
-                  Tips
+                  {t("Tips")}
                 </Text>
                 <Divider />
                 <BlockStack gap="200">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../i18n/react.jsx";
 import { useFetcher, useNavigate } from "react-router";
 import { Button, Banner, Card, Text, InlineStack, BlockStack } from "@shopify/polaris";
 import { quotaGapTitle, N_DEFINITION_COPY } from "../utils/planFit.js";
@@ -39,11 +40,12 @@ export function UpgradePrompt({
   tone = "info",
   compact = false,
 }) {
+  const t = useT();
   const heading = title || "Ready to scale?";
 
   if (compact) {
     return (
-      <Banner tone={tone} title={message ? `${heading} — ${message}` : heading}>
+      <Banner tone={tone} title={message ? t("{heading} — {message}", { heading, message }) : heading}>
         <InlineStack gap="300" blockAlign="center" wrap>
           <Button onClick={onUpgrade}>{ctaLabel}</Button>
         </InlineStack>
@@ -80,9 +82,10 @@ export function UpgradePrompt({
  * Copy (exact — locked by tests):
  *   title  `{N} products still need content · {Fit} covers {limit}/month`  (`At least ` when truncated)
  *   body   `You've used all {limit} {Plan} generations for {month}. {Fit} covers {fitLimit}/month for {price}{clause}.`
- *   reset  `Or wait — your {Plan} generations reset on {date}.`
+ *   reset  `Or wait — your {Plan} credits reset on {date}.`
  */
 export function QuotaUpgradePrompt({ upsell, surface = "" }) {
+  const t = useT();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shownFor = useRef(null);
@@ -123,8 +126,7 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <div data-quota-prompt="neutral">
         <Banner tone="warning">
           <Text as="p" variant="bodyMd">
-            You&apos;ve used all {upsell.monthlyCredits} {planLabel} generations for {upsell.monthName}. They
-            reset on {upsell.resetDate}.
+           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}. They reset on {resetDate}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName, resetDate: upsell.resetDate })}
           </Text>
         </Banner>
       </div>
@@ -167,20 +169,18 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
       <Banner tone="warning" title={title} onDismiss={dismiss}>
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
-            You&apos;ve used all {upsell.monthlyCredits} {planLabel} generations for {upsell.monthName}.{" "}
-            {fit.label} covers {fit.monthlyCredits}/month for {fit.priceLabel}
-            {clause}.
+           {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}.{v} {label} covers {monthlyCredits1}/month for {priceLabel} {clause}.", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName, v: " ", label: fit.label, monthlyCredits1: fit.monthlyCredits, priceLabel: fit.priceLabel, clause })}
           </Text>
           <Text as="p" variant="bodyMd">
-            Or wait — your {planLabel} generations reset on {upsell.resetDate}.
+           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: upsell.resetDate })}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
             {definition}
           </Text>
           <InlineStack gap="300" blockAlign="center" wrap>
-            <Button onClick={() => goPlans(true)} variant="primary">{`See ${fit.label} plan`}</Button>
+            <Button onClick={() => goPlans(true)} variant="primary">{t("See {label} plan", { label: fit.label })}</Button>
             <Button onClick={() => goPlans(false)} variant="plain">
-              Compare all plans
+             {t("Compare all plans")}
             </Button>
           </InlineStack>
         </BlockStack>
@@ -205,6 +205,7 @@ export function QuotaUpgradePrompt({ upsell, surface = "" }) {
  * clearing site data.
  */
 export function QuotaWarningBanner({ warning }) {
+  const t = useT();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shownFor = useRef(null);
@@ -247,18 +248,18 @@ export function QuotaWarningBanner({ warning }) {
     <div data-quota-prompt="warn">
       <Banner
         tone="info"
-        title={`${usageCount} of ${monthlyCredits} ${planLabel} credits used`}
+        title={t("{usageCount} of {monthlyCredits} {planLabel} credits used", { usageCount, monthlyCredits, planLabel })}
         onDismiss={dismiss}
       >
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
-            {fit.label} includes {fit.monthlyCredits}/month for {fit.priceLabel}.
+           {t("{label} includes {monthlyCredits}/month for {priceLabel}.", { label: fit.label, monthlyCredits: fit.monthlyCredits, priceLabel: fit.priceLabel })}
           </Text>
           <Text as="p" variant="bodyMd">
-            Or wait — your {planLabel} generations reset on {resetDate}.
+           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate })}
           </Text>
           <InlineStack>
-            <Button onClick={goPlans}>{`See ${fit.label} plan`}</Button>
+            <Button onClick={goPlans}>{t("See {label} plan", { label: fit.label })}</Button>
           </InlineStack>
         </BlockStack>
       </Banner>
@@ -283,6 +284,7 @@ export function QuotaWarningBanner({ warning }) {
  * renders the reset line alone.
  */
 export function QuotaReachedCard({ upsell, surface = "" }) {
+  const t = useT();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shownFor = useRef(null);
@@ -321,22 +323,22 @@ export function QuotaReachedCard({ upsell, surface = "" }) {
       <Card>
         <BlockStack gap="300">
           <Text as="h3" variant="headingMd">
-            {`You've used all ${upsell.monthlyCredits} ${planLabel} credits for ${upsell.monthName}`}
+            {t("You've used all {monthlyCredits} {planLabel} credits for {monthName}", { monthlyCredits: upsell.monthlyCredits, planLabel, monthName: upsell.monthName })}
           </Text>
           {fit && (
             <Text as="p" variant="bodyMd">
-              {fit.label} includes {fit.monthlyCredits}/month for {fit.priceLabel}.
+             {t("{label} includes {monthlyCredits}/month for {priceLabel}.", { label: fit.label, monthlyCredits: fit.monthlyCredits, priceLabel: fit.priceLabel })}
             </Text>
           )}
           <Text as="p" variant="bodyMd">
-            Or wait — your {planLabel} generations reset on {upsell.resetDate}.
+           {t("Or wait — your {planLabel} credits reset on {resetDate}.", { planLabel, resetDate: upsell.resetDate })}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
-            You can still run an audit, and review, edit and publish the drafts you already have.
+           {t("You can still run an audit, and review, edit and publish the drafts you already have.")}
           </Text>
           {fit && (
             <InlineStack>
-              <Button variant="primary" onClick={goPlans}>{`See ${fit.label} plan`}</Button>
+              <Button variant="primary" onClick={goPlans}>{t("See {label} plan", { label: fit.label })}</Button>
             </InlineStack>
           )}
         </BlockStack>

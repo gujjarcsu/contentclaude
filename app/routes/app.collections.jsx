@@ -1,4 +1,6 @@
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest, T } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -33,6 +35,7 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
@@ -62,7 +65,7 @@ export const loader = async ({ request }) => {
         }
       }`,
       { n: COLLECTION_PAGE },
-      { shop, label: "collections page" },
+      { shop, label: t("collections page") },
     ),
     getCollectionCandidateCounts(admin, shop),
   ]);
@@ -125,6 +128,7 @@ export const loader = async ({ request }) => {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -150,7 +154,7 @@ export const action = async ({ request }) => {
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
       return Response.json({
-        error: "You're generating too fast. Please wait a moment before trying again.",
+        error: t("You're generating too fast. Please wait a moment before trying again."),
       });
     }
 
@@ -175,20 +179,20 @@ export const action = async ({ request }) => {
       );
     } catch (err) {
       return Response.json(
-        { error: `We couldn't write this collection: ${err.message}. No credit was used.` },
+        { error: t("We couldn't write this collection: {message}. No credit was used.", { message: err.message }) },
         { status: 502 },
       );
     }
     if (!outcome.allowed) {
       return Response.json({
-        error: "You've used all your credits for this month. Upgrade your plan to continue.",
+        error: t("You've used all your credits for this month. Upgrade your plan to continue."),
         limitReached: true,
       });
     }
     if (outcome.refunded) {
       return Response.json(
         {
-          error: "The AI returned nothing for this collection. Please retry — no credit was used.",
+          error: t("The AI returned nothing for this collection. Please retry — no credit was used."),
         },
         { status: 502 },
       );
@@ -283,24 +287,25 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, savedVoice: true, collectionId });
   }
 
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const TONE_OPTIONS = [
-  { label: "Store Default", value: "" },
-  { label: "Professional & Trustworthy", value: "professional" },
-  { label: "Friendly & Conversational", value: "friendly" },
-  { label: "Premium & Luxurious", value: "premium" },
-  { label: "Bold & Energetic", value: "bold" },
-  { label: "Scientific & Technical", value: "scientific" },
-  { label: "Warm & Nurturing", value: "warm" },
-  { label: "Minimalist & Clean", value: "minimalist" },
-  { label: "Fun & Playful", value: "playful" },
+  { label: T("Store Default"), value: "" },
+  { label: T("Professional & Trustworthy"), value: "professional" },
+  { label: T("Friendly & Conversational"), value: "friendly" },
+  { label: T("Premium & Luxurious"), value: "premium" },
+  { label: T("Bold & Energetic"), value: "bold" },
+  { label: T("Scientific & Technical"), value: "scientific" },
+  { label: T("Warm & Nurturing"), value: "warm" },
+  { label: T("Minimalist & Clean"), value: "minimalist" },
+  { label: T("Fun & Playful"), value: "playful" },
 ];
 
 export default function CollectionsPage() {
+  const t = useT();
   const { collections, statusMap, voiceMap, catalogError, total, totalExact, truncated } =
     useLoaderData();
   const navigate = useNavigate();
@@ -444,14 +449,14 @@ export default function CollectionsPage() {
   // Instant feedback during client-side navigation into this route — prevents
   // the blank-pane stall while the loader fetches collections from Shopify.
   if (loadingThisRoute) {
-    return <AppSkeleton title="Collections" sections={3} layout="full" />;
+    return <AppSkeleton title={t("Collections")} sections={3} layout="full" />;
   }
 
   if (collections.length === 0) {
     return (
-      <Page title="Collections" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
-        <EmptyState heading="No collections found" image="/empty-collections.svg">
-          <p>Create collections in your Shopify admin, then come back to generate descriptions.</p>
+      <Page title={t("Collections")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
+        <EmptyState heading={t("No collections found")} image="/empty-collections.svg">
+          <p>{t("Create collections in your Shopify admin, then come back to generate descriptions.")}</p>
         </EmptyState>
       </Page>
     );
@@ -459,16 +464,16 @@ export default function CollectionsPage() {
 
   return (
     <Page
-      title="Collections"
+      title={t("Collections")}
       subtitle={collectionsSubtitle}
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
         {/* Group 2.1 — a throttled or failed read used to render an empty list
             silently, so "you have no collections" and "Shopify would not answer"
             looked identical. */}
         {catalogError && (
-          <Banner tone="warning" title="This list may be incomplete">
+          <Banner tone="warning" title={t("This list may be incomplete")}>
             <p>{catalogError}</p>
           </Banner>
         )}
@@ -476,9 +481,9 @@ export default function CollectionsPage() {
             is missing, how much, and what to do about it, instead of showing 250
             of 395 as though that were the whole store. */}
         {truncated && (
-          <Banner tone="info" title="Showing part of your collections">
+          <Banner tone="info" title={t("Showing part of your collections")}>
             <p>
-              {`Your store has ${totalExact ? total : `more than ${total}`} collections and this page shows the first ${collections.length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.`}
+              {t("Your store has {v} collections and this page shows the first {length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.", { v: totalExact ? total : `more than ${total}`, length: collections.length })}
             </p>
           </Banner>
         )}
@@ -488,8 +493,8 @@ export default function CollectionsPage() {
           </Banner>
         )}
         {fetcherData?.success && fetcherData?.published && (
-          <Banner tone="success" title="Published!">
-            <p>Collection content published to your Shopify store.</p>
+          <Banner tone="success" title={t("Published!")}>
+            <p>{t("Collection content published to your Shopify store.")}</p>
           </Banner>
         )}
 
@@ -514,22 +519,22 @@ export default function CollectionsPage() {
                         {collection.title}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        {collection.productsCount} product{collection.productsCount !== 1 ? "s" : ""}
+                       {t("{productsCount} product{v}", { productsCount: collection.productsCount, v: collection.productsCount !== 1 ? "s" : "" })}
                       </Text>
                     </BlockStack>
                   </InlineStack>
                   <InlineStack gap="200" blockAlign="center">
                     {status === "published" ? (
-                      <Badge tone="success">Content Published</Badge>
+                      <Badge tone="success">{t("Content Published")}</Badge>
                     ) : status === "draft" ? (
-                      <Badge tone="info">Draft Ready</Badge>
+                      <Badge tone="info">{t("Draft Ready")}</Badge>
                     ) : collection.hasOwnContent ? (
                       /* Group 4.3 — 21 of 30 sampled collections carried
                          hand-written copy naming certifications, the trade
                          counter and 25 years of trading. Offering "Generate"
                          over that, with no indication it exists, is how an app
                          deletes a merchant's best writing. */
-                      <Badge tone="info">Your description</Badge>
+                      <Badge tone="info">{t("Your description")}</Badge>
                     ) : null}
                     {/* Group 7.4 — several EMPTY collections legitimately carry
                         hand-written copy, because the merchant wrote for ranges
@@ -537,7 +542,7 @@ export default function CollectionsPage() {
                         block: the count is already shown, and this says why it
                         matters without deciding for them. */}
                     {collection.productsCount === 0 && (
-                      <Badge tone="attention">No products</Badge>
+                      <Badge tone="attention">{t("No products")}</Badge>
                     )}
                     <Button
                       size="slim"
@@ -545,7 +550,7 @@ export default function CollectionsPage() {
                       loading={isGenerating && fetcher.formData?.get("collectionId") === collection.id}
                       disabled={isGenerating}
                     >
-                      {status ? "Regenerate" : collection.hasOwnContent ? "Enhance" : "Generate"}
+                      {status ? t("Regenerate") : collection.hasOwnContent ? t("Enhance") : t("Generate")}
                     </Button>
                   </InlineStack>
                 </InlineStack>
@@ -556,10 +561,10 @@ export default function CollectionsPage() {
                       <Layout.Section>
                         <BlockStack gap="200">
                           <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            Generated Description
+                           {t("Generated Description")}
                           </Text>
                           <TextField
-                            label="Collection description"
+                            label={t("Collection description")}
                             labelHidden
                             value={edited.description ?? generated.description ?? ""}
                             onChange={(v) => updateEdit(collection.id, "description", v)}
@@ -571,18 +576,18 @@ export default function CollectionsPage() {
                       <Layout.Section variant="oneThird">
                         <BlockStack gap="200">
                           <TextField
-                            label="Meta Title"
+                            label={t("Meta Title")}
                             value={edited.metaTitle ?? generated.metaTitle ?? ""}
                             onChange={(v) => updateEdit(collection.id, "metaTitle", v)}
-                            helpText={`${(edited.metaTitle ?? generated.metaTitle ?? "").length}/60`}
+                            helpText={t("{length}/60", { length: (edited.metaTitle ?? generated.metaTitle ?? "").length })}
                             autoComplete="off"
                           />
                           <TextField
-                            label="Meta Description"
+                            label={t("Meta Description")}
                             value={edited.metaDescription ?? generated.metaDescription ?? ""}
                             onChange={(v) => updateEdit(collection.id, "metaDescription", v)}
                             multiline={2}
-                            helpText={`${(edited.metaDescription ?? generated.metaDescription ?? "").length}/155`}
+                            helpText={t("{length}/155", { length: (edited.metaDescription ?? generated.metaDescription ?? "").length })}
                             autoComplete="off"
                           />
                         </BlockStack>
@@ -593,7 +598,7 @@ export default function CollectionsPage() {
                         onClick={() => handlePublish(collection.id)}
                         loading={isPublishing && fetcher.formData?.get("collectionId") === collection.id}
                       >
-                        Publish to Shopify
+                       {t("Publish to Shopify")}
                       </Button>
                     </InlineStack>
                   </BlockStack>
@@ -603,7 +608,7 @@ export default function CollectionsPage() {
                   <InlineStack gap="200" blockAlign="center">
                     <Spinner size="small" />
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Generating collection content...
+                     {t("Generating collection content...")}
                     </Text>
                   </InlineStack>
                 )}
@@ -611,7 +616,7 @@ export default function CollectionsPage() {
                 <Divider />
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" fontWeight="semibold">
-                    Voice Override
+                   {t("Voice Override")}
                   </Text>
                   <Button
                     variant="plain"
@@ -620,44 +625,40 @@ export default function CollectionsPage() {
                       setVoiceOpen((prev) => ({ ...prev, [collection.id]: !prev[collection.id] }))
                     }
                   >
-                    {voiceOpen[collection.id]
-                      ? "Hide"
-                      : voiceMap[collection.id]
-                        ? "Edit Override"
-                        : "Set Override"}
+                    {voiceOpen[collection.id] ? t("Hide") : voiceMap[collection.id] ? t("Edit Override") : t("Set Override")}
                   </Button>
                 </InlineStack>
 
                 {voiceOpen[collection.id] && (
                   <BlockStack gap="300">
                     <Checkbox
-                      label="Use store defaults (no override)"
+                      label={t("Use store defaults (no override)")}
                       checked={!!voiceForms[collection.id]?.useDefaults}
                       onChange={(v) => updateVoiceForm(collection.id, "useDefaults", v)}
                     />
                     {!voiceForms[collection.id]?.useDefaults && (
                       <BlockStack gap="200">
                         <Select
-                          label="Brand Tone"
-                          options={TONE_OPTIONS}
+                          label={t("Brand Tone")}
+                          options={TONE_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
                           value={voiceForms[collection.id]?.brandTone || ""}
                           onChange={(v) => updateVoiceForm(collection.id, "brandTone", v)}
-                          helpText="Overrides the store-level tone for this collection only"
+                          helpText={t("Overrides the store-level tone for this collection only")}
                         />
                         <TextField
-                          label="Target Audience"
+                          label={t("Target Audience")}
                           value={voiceForms[collection.id]?.targetAudience || ""}
                           onChange={(v) => updateVoiceForm(collection.id, "targetAudience", v)}
                           multiline={2}
-                          placeholder="e.g., Interior designers aged 30-50 seeking luxury finishes"
+                          placeholder={t("e.g., Interior designers aged 30-50 seeking luxury finishes")}
                           autoComplete="off"
                         />
                         <TextField
-                          label="Keywords"
+                          label={t("Keywords")}
                           value={voiceForms[collection.id]?.keywords || ""}
                           onChange={(v) => updateVoiceForm(collection.id, "keywords", v)}
-                          placeholder="e.g., luxury bathroom vanities, designer fittings"
-                          helpText="Comma-separated. Overrides store keywords for this collection."
+                          placeholder={t("e.g., luxury bathroom vanities, designer fittings")}
+                          helpText={t("Comma-separated. Overrides store keywords for this collection.")}
                           autoComplete="off"
                         />
                       </BlockStack>
@@ -671,11 +672,11 @@ export default function CollectionsPage() {
                           voiceFetcher.formData?.get("collectionId") === collection.id
                         }
                       >
-                        Save Voice Override
+                       {t("Save Voice Override")}
                       </Button>
                     </InlineStack>
                     {voiceFetcher.data?.savedVoice && voiceFetcher.data?.collectionId === collection.id && (
-                      <Banner tone="success" title="Voice override saved" />
+                      <Banner tone="success" title={t("Voice override saved")} />
                     )}
                   </BlockStack>
                 )}

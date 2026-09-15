@@ -1,4 +1,6 @@
 import { useLoaderData, useFetcher, useNavigate, useRevalidator } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -205,6 +207,7 @@ export async function loader({ request, params }) {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export async function action({ request, params }) {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const productId = `gid://shopify/Product/${params.id}`;
@@ -229,12 +232,12 @@ export async function action({ request, params }) {
     if (actionType === "enhance") {
       const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
       if (!rl.allowed) {
-        return { error: "You're generating too fast. Please wait a moment before trying again." };
+        return { error: t("You're generating too fast. Please wait a moment before trying again.") };
       }
       const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
         (t) => formData.get(`gen_${t}`) === "true",
       );
-      if (contentTypes.length === 0) return { error: "Select at least one content type to enhance." };
+      if (contentTypes.length === 0) return { error: t("Select at least one content type to enhance.") };
 
       const targetKeywords = (formData.get("targetKeywords") || "").slice(0, 500).trim();
 
@@ -283,12 +286,12 @@ export async function action({ request, params }) {
 
       if (!enhanceOutcome.allowed) {
         return {
-          error: "You've used all your credits for this month. Upgrade your plan to continue.",
+          error: t("You've used all your credits for this month. Upgrade your plan to continue."),
           limitReached: true,
         };
       }
       if (enhanceOutcome.refunded) {
-        return { error: "The AI returned nothing to enhance. Please retry — no credit was used." };
+        return { error: t("The AI returned nothing to enhance. Please retry — no credit was used.") };
       }
       const { p, generated } = enhanceOutcome.result;
 
@@ -317,7 +320,7 @@ export async function action({ request, params }) {
       return {
         success: true,
         generated,
-        message: "Existing content enhanced — review and publish when ready.",
+        message: t("Existing content enhanced — review and publish when ready."),
       };
     }
 
@@ -325,7 +328,7 @@ export async function action({ request, params }) {
     if (actionType === "generate") {
       const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
       if (!rl.allowed) {
-        return { error: "You're generating too fast. Please wait a moment before trying again." };
+        return { error: t("You're generating too fast. Please wait a moment before trying again.") };
       }
 
       const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
@@ -340,14 +343,14 @@ export async function action({ request, params }) {
         : "standard";
 
       if (contentTypes.length === 0 && !doAltText) {
-        return { error: "Select at least one content type to generate." };
+        return { error: t("Select at least one content type to generate.") };
       }
 
       const primaryContentType = contentTypes[0] ?? "altText";
       const gate = await tryConsumeGeneration(shop, primaryContentType, productId);
       if (!gate.allowed) {
         return {
-          error: "You've used all your credits for this month. Upgrade your plan to continue.",
+          error: t("You've used all your credits for this month. Upgrade your plan to continue."),
           limitReached: true,
         };
       }
@@ -379,7 +382,7 @@ export async function action({ request, params }) {
         product = productData?.product;
         if (!product) {
           await refundThisGeneration();
-          return { error: "This product no longer exists in your store. No credit was used." };
+          return { error: t("This product no longer exists in your store. No credit was used.") };
         }
         productImages = mediaToImages(product.media);
 
@@ -431,7 +434,7 @@ export async function action({ request, params }) {
         // response and the merchant saw a "success" with no content.
         if (typesToSave.length === 0 && !doAltText) {
           await refundThisGeneration();
-          return { error: "The AI returned nothing usable. Please retry — no credit was used." };
+          return { error: t("The AI returned nothing usable. Please retry — no credit was used.") };
         }
 
         // Snapshot existing content into version history before overwriting
@@ -528,7 +531,7 @@ export async function action({ request, params }) {
               imageId: img.id,
               url: img.url,
               altText: "",
-              error: "Couldn't generate alt text for this image. Please try again.",
+              error: t("Couldn't generate alt text for this image. Please try again."),
             });
           }
         }
@@ -585,7 +588,7 @@ export async function action({ request, params }) {
                       imageId: g.mediaId,
                       url: g.url,
                       altText: g.altText,
-                      error: "Shopify couldn't apply this alt text. Please try again.",
+                      error: t("Shopify couldn't apply this alt text. Please try again."),
                     }
                   : { imageId: g.mediaId, url: g.url, altText: g.altText },
               );
@@ -625,7 +628,7 @@ export async function action({ request, params }) {
         await refundThisGeneration();
         return {
           error:
-            "Alt text could not be applied to any image. Please try again — no credit was used.",
+            t("Alt text could not be applied to any image. Please try again — no credit was used."),
           altTextResults,
         };
       }
@@ -672,7 +675,7 @@ export async function action({ request, params }) {
         altTextTruncated: doAltText && hasMoreImages,
         autoPublished: autoPublish && !autoPublishFailed,
         autoPublishFailed,
-        message: messageParts.join("") || "Done!",
+        message: messageParts.join("") || t("Done!"),
       };
     }
 
@@ -709,7 +712,7 @@ export async function action({ request, params }) {
           mutation.userErrors.length > 0
             ? mutation.errorMessages.join(";")
             : "Shopify couldn't apply the update. Please try again in a moment.";
-        return { error: `Publishing failed — ${msg} Nothing was published.` };
+        return { error: t("Publishing failed — {msg} Nothing was published.", { msg }) };
       }
 
       // Persist edited content + mark as published. The form fields carry
@@ -815,9 +818,7 @@ export async function action({ request, params }) {
         success: true,
         published: true,
         reviewAsk,
-        message: faqWarning
-          ? `Content published to your Shopify store \u2014 but the FAQ schema failed to publish (${faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.`
-          : `Content published to your Shopify store!${embedNotice}`,
+        message: faqWarning ? t("Content published to your Shopify store — but the FAQ schema failed to publish ({faqWarning}). Everything else went through; try publishing again to retry just the FAQ schema.", { faqWarning }) : t("Content published to your Shopify store!{embedNotice}", { embedNotice }),
       };
     }
 
@@ -828,7 +829,7 @@ export async function action({ request, params }) {
       // calls on any plan, from a button on the product page.
       const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
       if (!rl.allowed) {
-        return { error: "You're generating too fast. Please wait a moment before trying again." };
+        return { error: t("You're generating too fast. Please wait a moment before trying again.") };
       }
 
       const socialOutcome = await withGenerationCredit(
@@ -858,12 +859,12 @@ export async function action({ request, params }) {
 
       if (!socialOutcome.allowed) {
         return {
-          error: "You've used all your credits for this month. Upgrade your plan to continue.",
+          error: t("You've used all your credits for this month. Upgrade your plan to continue."),
           limitReached: true,
         };
       }
       if (socialOutcome.refunded) {
-        return { error: "The AI returned nothing. Please retry — no credit was used." };
+        return { error: t("The AI returned nothing. Please retry — no credit was used.") };
       }
       return { success: true, social: socialOutcome.result };
     }
@@ -874,7 +875,7 @@ export async function action({ request, params }) {
       const vhEnt = await checkEntitlement(shop, "versionHistory");
       if (!vhEnt.allowed) {
         return {
-          error: `Version history requires the ${vhEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+          error: t("Version history requires the {v} plan. Upgrade to unlock this feature.", { v: vhEnt.requiredPlan ?? "Starter" }),
           limitReached: true,
         };
       }
@@ -885,7 +886,7 @@ export async function action({ request, params }) {
         where: { id: versionId, shop, productId },
       });
       if (!ver) {
-        return { error: "Version not found." };
+        return { error: t("Version not found.") };
       }
       await prisma.generatedContent.upsert({
         where: { shop_productId_contentType: { shop, productId, contentType: ver.contentType } },
@@ -903,7 +904,7 @@ export async function action({ request, params }) {
         success: true,
         reverted: true,
         contentType: ver.contentType,
-        message: `${ver.contentType} restored to version ${ver.version}.`,
+        message: t("{contentType} restored to version {version}.", { contentType: ver.contentType, version: ver.version }),
       };
     }
 
@@ -913,26 +914,26 @@ export async function action({ request, params }) {
       const ent = await checkEntitlement(shop, "abVariants");
       if (!ent.allowed) {
         return {
-          error: `Comparing two options requires the ${ent.requiredPlan ?? "Growth"} plan. Upgrade to unlock this feature.`,
+          error: t("Comparing two options requires the {v} plan. Upgrade to unlock this feature.", { v: ent.requiredPlan ?? "Growth" }),
           limitReached: true,
         };
       }
 
       const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
       if (!rl.allowed) {
-        return { error: "You're generating too fast. Please wait a moment before trying again." };
+        return { error: t("You're generating too fast. Please wait a moment before trying again.") };
       }
       const contentTypes = ["description", "metaTitle", "metaDescription"].filter(
         (t) => formData.get(`gen_${t}`) === "true",
       );
       if (contentTypes.length === 0) {
-        return { error: "Select at least one content type to generate variants for." };
+        return { error: t("Select at least one content type to generate variants for.") };
       }
       // A/B makes 2 parallel AI calls — consume 2 credits (one per call).
       const gate1 = await tryConsumeGeneration(shop, contentTypes[0], productId);
       if (!gate1.allowed) {
         return {
-          error: "You've used all your credits for this month. Upgrade your plan to continue.",
+          error: t("You've used all your credits for this month. Upgrade your plan to continue."),
           limitReached: true,
         };
       }
@@ -942,7 +943,7 @@ export async function action({ request, params }) {
         // consumed so the merchant isn't charged for a generation that won't run.
         await refundGeneration(shop, { productId, contentType: contentTypes[0] });
         return {
-          error: "Only 1 credit left — comparing two options needs 2. Upgrade your plan to continue.",
+          error: t("Only 1 credit left — comparing two options needs 2. Upgrade your plan to continue."),
           limitReached: true,
         };
       }
@@ -975,7 +976,7 @@ export async function action({ request, params }) {
         const p = pd?.product;
         if (!p) {
           await refundBoth();
-          return { error: "This product no longer exists in your store. No credits were used." };
+          return { error: t("This product no longer exists in your store. No credits were used.") };
         }
         const targetKeywords = (formData.get("targetKeywords") || "").trim();
         const productData = {
@@ -1009,7 +1010,7 @@ export async function action({ request, params }) {
       const usable = (v) => v && contentTypes.some((t) => v[t]);
       if (!usable(variantA) && !usable(variantB)) {
         await refundBoth();
-        return { error: "The AI returned nothing usable. Please retry — no credits were used." };
+        return { error: t("The AI returned nothing usable. Please retry — no credits were used.") };
       }
 
       // Phase 2 item 2.12 - the variant preview is the one place model output
@@ -1027,12 +1028,12 @@ export async function action({ request, params }) {
       try {
         variantContent = JSON.parse(formData.get("variantContent") || "{}");
       } catch {
-        return { error: "Invalid variant data." };
+        return { error: t("Invalid variant data.") };
       }
       const typesToSave = Object.keys(variantContent).filter(
         (t) => ["description", "metaTitle", "metaDescription"].includes(t) && variantContent[t],
       );
-      if (typesToSave.length === 0) return { error: "No content to save." };
+      if (typesToSave.length === 0) return { error: t("No content to save.") };
 
       const existing = await prisma.generatedContent.findMany({
         where: { shop, productId, contentType: { in: typesToSave } },
@@ -1058,7 +1059,7 @@ export async function action({ request, params }) {
       return {
         success: true,
         generated: variantContent,
-        message: "Variant saved as draft — review and publish when ready.",
+        message: t("Variant saved as draft — review and publish when ready."),
       };
     }
 
@@ -1069,7 +1070,7 @@ export async function action({ request, params }) {
         where: { shop_productId_contentType: { shop, productId, contentType } },
       });
       if (!existing?.originalContent) {
-        return { error: "No original content saved to revert to." };
+        return { error: t("No original content saved to revert to.") };
       }
       await prisma.generatedContent.update({
         where: { shop_productId_contentType: { shop, productId, contentType } },
@@ -1079,7 +1080,7 @@ export async function action({ request, params }) {
         success: true,
         reverted: true,
         contentType,
-        message: `${contentType} reverted to original content.`,
+        message: t("{contentType} reverted to original content.", { contentType }),
       };
     }
 
@@ -1088,7 +1089,7 @@ export async function action({ request, params }) {
       const tplEnt = await checkEntitlement(shop, "contentTemplates");
       if (!tplEnt.allowed) {
         return {
-          error: `Content templates require the ${tplEnt.requiredPlan ?? "Starter"} plan. Upgrade to unlock this feature.`,
+          error: t("Content templates require the {v} plan. Upgrade to unlock this feature.", { v: tplEnt.requiredPlan ?? "Starter" }),
           limitReached: true,
         };
       }
@@ -1100,14 +1101,14 @@ export async function action({ request, params }) {
       await prisma.contentTemplate.create({
         data: { shop, name, contentTypes, contentLength: tplContentLength, keywords },
       });
-      return { success: true, message: "Template saved! Available in Advanced Options." };
+      return { success: true, message: t("Template saved! Available in Advanced Options.") };
     }
 
-    return { error: "Unknown action." };
+    return { error: t("Unknown action.") };
   } catch (err) {
     if (err instanceof Response) throw err;
     logger.error({ err, shop, actionType }, "Unhandled action error in products.$id");
-    return { error: "An unexpected error occurred. Please try again or contact support." };
+    return { error: t("An unexpected error occurred. Please try again or contact support.") };
   }
 }
 
@@ -1118,17 +1119,19 @@ export async function action({ request, params }) {
 // Used by both alt-text render blocks so the two can't diverge again (they did:
 // a hardcoded "Applied to Shopify" survived on the Alt Text tab).
 function AltTextBadge({ results }) {
+  const t = useT();
   if (!results?.length) return null;
   const applied = results.filter((r) => !r.error).length;
-  if (applied === results.length) return <Badge tone="success">Applied to Shopify</Badge>;
+  if (applied === results.length) return <Badge tone="success">{t("Applied to Shopify")}</Badge>;
   if (applied > 0)
-    return <Badge tone="attention">{`Partially applied — ${applied} of ${results.length}`}</Badge>;
-  return <Badge tone="critical">Not applied</Badge>;
+    return <Badge tone="attention">{t("Partially applied — {applied} of {length}", { applied, length: results.length })}</Badge>;
+  return <Badge tone="critical">{t("Not applied")}</Badge>;
 }
 
 // Per-image results list — honest error rendering (no raw GraphQL, no "Error:"
 // prefix leaking technical strings to the merchant).
 function AltTextResultList({ results }) {
+  const t = useT();
   if (!results?.length) return null;
   return (
     <BlockStack gap="300">
@@ -1147,7 +1150,7 @@ function AltTextResultList({ results }) {
                     {result.altText}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {result.altText.length} characters
+                   {t("{length} characters", { length: result.altText.length })}
                   </Text>
                 </>
               )}
@@ -1160,13 +1163,14 @@ function AltTextResultList({ results }) {
 }
 
 function VersionHistorySection({ versions, restoreFetcher }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   if (!versions || versions.length === 0) return null;
 
   return (
     <BlockStack gap="100">
       <Button variant="plain" size="slim" onClick={() => setOpen((v) => !v)}>
-        {open ? "Hide" : `History (${versions.length})`}
+        {open ? t("Hide") : t("History ({length})", { length: versions.length })}
       </Button>
       {open && (
         <BlockStack gap="200">
@@ -1192,7 +1196,7 @@ function VersionHistorySection({ versions, restoreFetcher }) {
                     }
                     submit
                   >
-                    Restore
+                   {t("Restore")}
                   </Button>
                 </restoreFetcher.Form>
               </InlineStack>
@@ -1205,6 +1209,7 @@ function VersionHistorySection({ versions, restoreFetcher }) {
 }
 
 function OriginalContentSection({ original, contentType, revertFetcher }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   if (!original) return null;
   const isReverting =
@@ -1213,13 +1218,13 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
   return (
     <BlockStack gap="200">
       <Button variant="plain" onClick={() => setExpanded((v) => !v)}>
-        {expanded ? "Hide original" : "Show original content"}
+        {expanded ? t("Hide original") : t("Show original content")}
       </Button>
       {expanded && (
         <Box padding="300" background="bg-surface-secondary" borderRadius="200">
           <BlockStack gap="200">
             <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
-              ORIGINAL (before AI):
+             {t("ORIGINAL (before AI):")}
             </Text>
             {contentType === "description" ? (
               <div dangerouslySetInnerHTML={{ __html: original || "(empty)" }} />
@@ -1233,7 +1238,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
                 <input type="hidden" name="actionType" value="revert" />
                 <input type="hidden" name="contentType" value={contentType} />
                 <Button variant="plain" tone="critical" size="slim" submit loading={isReverting}>
-                  Revert to this original
+                 {t("Revert to this original")}
                 </Button>
               </revertFetcher.Form>
             )}
@@ -1245,6 +1250,7 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
 }
 
 export default function ProductGeneratePage() {
+  const t = useT();
   const {
     product,
     existingContent,
@@ -1521,10 +1527,10 @@ export default function ProductGeneratePage() {
   // Tab state for right column
   const [selectedTab, setSelectedTab] = useState(0);
   const productDetailTabs = [
-    { id: "generate", content: "Generate" },
-    { id: "content", content: "Content" },
-    { id: "history", content: "History" },
-    { id: "images", content: "Alt Text" },
+    { id: "generate", content: t("Generate") },
+    { id: "content", content: t("Content") },
+    { id: "history", content: t("History") },
+    { id: "images", content: t("Alt Text") },
   ];
 
   // Auto-switch to Content tab when generation completes
@@ -1555,27 +1561,27 @@ export default function ProductGeneratePage() {
   }, [isLoading, noneSelected, handleGenerate]);
 
   const lengthOptions = [
-    { label: "Short (~100-150 words) — simple products", value: "short" },
-    { label: "Standard (~200-300 words) — default", value: "standard" },
-    { label: "Detailed (~400-500 words) — complex/high-value products", value: "detailed" },
+    { label: t("Short (~100-150 words) — simple products"), value: "short" },
+    { label: t("Standard (~200-300 words) — default"), value: "standard" },
+    { label: t("Detailed (~400-500 words) — complex/high-value products"), value: "detailed" },
   ];
 
   return loadingThisRoute ? (
-    <AppSkeleton title="Product" sections={3} layout="full" />
+    <AppSkeleton title={t("Product")} sections={3} layout="full" />
   ) : (
     <Page
       title={product.title}
-      backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
+      backAction={{ content: t("Products"), onAction: () => navigate("/app/products") }}
     >
       <BlockStack gap="500">
         <ReviewRequest ask={reviewAsk} />
         {actionData?.error && (
-          <Banner tone="critical" title="Error">
+          <Banner tone="critical" title={t("Error")}>
             <p>{actionData.error}</p>
             {actionData.limitReached && (
               <Box paddingBlockStart="200">
                 <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                  View Plans & Billing
+                 {t("View Plans & Billing")}
                 </Button>
               </Box>
             )}
@@ -1589,9 +1595,9 @@ export default function ProductGeneratePage() {
         {!hasBrandVoice && (
           <Banner tone="warning">
             <p>
-              No brand voice configured — content will use a default tone.{""}
+             {t("No brand voice configured — content will use a default tone.{v}", { v: "" })}
               <Button variant="plain" onClick={() => navigate("/app/settings")}>
-                Set up brand voice
+               {t("Set up brand voice")}
               </Button>
             </p>
           </Banner>
@@ -1618,7 +1624,7 @@ export default function ProductGeneratePage() {
                   </Text>
                   {product.tags.length > 0 && (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Tags: {product.tags.join(",")}
+                     {t("Tags:")} {product.tags.join(",")}
                     </Text>
                   )}
                 </BlockStack>
@@ -1628,7 +1634,7 @@ export default function ProductGeneratePage() {
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Generate Content
+                     {t("Generate Content")}
                     </Text>
                     {qualityScore.score > 0 && (
                       <Badge
@@ -1642,48 +1648,44 @@ export default function ProductGeneratePage() {
                                 : "critical"
                         }
                       >
-                        {`Content quality: ${qualityScore.grade} · ${qualityScore.score}/100`}
+                        {t("Content quality: {grade} · {score}/100", { grade: qualityScore.grade, score: qualityScore.score })}
                       </Badge>
                     )}
                   </InlineStack>
 
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Select what to generate:
+                   {t("Select what to generate:")}
                   </Text>
                   <Checkbox
-                    label="Product Description"
+                    label={t("Product Description")}
                     checked={genDescription}
                     onChange={setGenDescription}
-                    helpText="Answer-first & keyword-rich — so Google ranks it and AI engines can quote it."
+                    helpText={t("Answer-first & keyword-rich — so Google ranks it and AI engines can quote it.")}
                   />
                   <Checkbox
-                    label="Meta Title"
+                    label={t("Meta Title")}
                     checked={genMetaTitle}
                     onChange={setGenMetaTitle}
-                    helpText="≤60 chars, keyword front-loaded — wins the click in search results."
+                    helpText={t("≤60 chars, keyword front-loaded — wins the click in search results.")}
                   />
                   <Checkbox
-                    label="Meta Description"
+                    label={t("Meta Description")}
                     checked={genMetaDescription}
                     onChange={setGenMetaDescription}
-                    helpText="≤155 chars — lifts your click-through from search."
+                    helpText={t("≤155 chars — lifts your click-through from search.")}
                   />
                   <Checkbox
-                    label="FAQ Content"
+                    label={t("FAQ Content")}
                     checked={genFaq}
                     onChange={setGenFaq}
-                    helpText="Adds a question-and-answer section AI assistants can quote."
+                    helpText={t("Adds a question-and-answer section AI assistants can quote.")}
                   />
                   <Checkbox
-                    label="Image Alt Text"
+                    label={t("Image Alt Text")}
                     checked={genAltText}
                     onChange={setGenAltText}
                     disabled={noImages}
-                    helpText={
-                      noImages
-                        ? "No images on this product"
-                        : `Applied directly to ${product.images.length} image${product.images.length !== 1 ? "s" : ""}${product.hasMoreImages ? " (first 50)" : ""} — alt text costs no credits`
-                    }
+                    helpText={noImages ? t("No images on this product") : t("Applied directly to {length} image{v}{v1} — alt text costs no credits", { length: product.images.length, v: product.images.length !== 1 ? "s" : "", v1: product.hasMoreImages ? " (first 50)" : "" })}
                   />
 
                   <Divider />
@@ -1695,15 +1697,15 @@ export default function ProductGeneratePage() {
                     icon={advancedOpen ? ChevronUpIcon : ChevronDownIcon}
                     onClick={() => setAdvancedOpen((v) => !v)}
                   >
-                    Advanced Options
+                   {t("Advanced Options")}
                   </Button>
                   <Collapsible open={advancedOpen} id="advanced-options">
                     <BlockStack gap="300">
                       {entitlements?.contentTemplates && templates.length > 0 && (
                         <Select
-                          label="Apply Template"
+                          label={t("Apply Template")}
                           options={[
-                            { label: "— No template —", value: "" },
+                            { label: t("— No template —"), value: "" },
                             ...templates.map((t) => ({
                               label: t.name + (t.isDefault ? " (Default)" : ""),
                               value: t.id,
@@ -1711,21 +1713,21 @@ export default function ProductGeneratePage() {
                           ]}
                           value={selectedTemplate}
                           onChange={applyTemplate}
-                          helpText="Pre-fills the options below"
+                          helpText={t("Pre-fills the options below")}
                         />
                       )}
                       <Select
-                        label="Description Length"
+                        label={t("Description Length")}
                         options={lengthOptions}
                         value={contentLength}
                         onChange={setContentLength}
                       />
                       <TextField
-                        label="Target Keywords (optional)"
+                        label={t("Target Keywords (optional)")}
                         value={targetKeywords}
                         onChange={setTargetKeywords}
-                        placeholder="e.g., organic skincare Australia, Vitamin C"
-                        helpText="Overrides global keywords for this product"
+                        placeholder={t("e.g., organic skincare Australia, Vitamin C")}
+                        helpText={t("Overrides global keywords for this product")}
                         autoComplete="off"
                       />
                       {entitlements?.contentTemplates &&
@@ -1752,7 +1754,7 @@ export default function ProductGeneratePage() {
                               fetcher.submit(templateFd, { method: "POST" });
                             }}
                           >
-                            Save current settings as template
+                           {t("Save current settings as template")}
                           </Button>
                         )}
                     </BlockStack>
@@ -1777,7 +1779,7 @@ export default function ProductGeneratePage() {
                           animated
                         />
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Takes 10–30 seconds — you can stay on this page
+                         {t("Takes 10–30 seconds — you can stay on this page")}
                         </Text>
                       </BlockStack>
                     </Box>
@@ -1809,9 +1811,7 @@ export default function ProductGeneratePage() {
                           <InlineStack gap="200" blockAlign="center">
                             <Icon source={CheckCircleIcon} tone="success" />
                             <Text as="p" variant="headingSm" fontWeight="semibold">
-                              {actionData.autoPublished
-                                ? "Content published to your store!"
-                                : "Content generated — review & publish"}
+                              {actionData.autoPublished ? t("Content published to your store!") : t("Content generated — review & publish")}
                             </Text>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
@@ -1819,7 +1819,7 @@ export default function ProductGeneratePage() {
                           </Text>
                           {!actionData.autoPublished && (
                             <Button size="slim" onClick={() => setSelectedTab(1)}>
-                              Review Generated Content
+                             {t("Review Generated Content")}
                             </Button>
                           )}
                           {(actionData.autoPublished || actionData.published) &&
@@ -1832,7 +1832,7 @@ export default function ProductGeneratePage() {
                                 external
                                 target="_blank"
                               >
-                                Preview in store
+                               {t("Preview in store")}
                               </Button>
                             )}
                         </BlockStack>
@@ -1842,12 +1842,10 @@ export default function ProductGeneratePage() {
                     <Card>
                       <BlockStack gap="300">
                         <Text as="h2" variant="headingMd">
-                          {hasGeneratedContent ? "Regenerate Content" : "Ready to Generate"}
+                          {hasGeneratedContent ? t("Regenerate Content") : t("Ready to Generate")}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          {hasGeneratedContent
-                            ? "Your product already has AI content. Generate again to create a fresh version."
-                            : "Select your content types in the left panel, then click Generate Content."}
+                          {hasGeneratedContent ? t("Your product already has AI content. Generate again to create a fresh version.") : t("Select your content types in the left panel, then click Generate Content.")}
                         </Text>
 
                         {(isGenerating || isGeneratingVariants || isEnhancing) && (
@@ -1856,9 +1854,7 @@ export default function ProductGeneratePage() {
                               <InlineStack gap="200" blockAlign="center">
                                 <Spinner size="small" />
                                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                                  {isGeneratingVariants
-                                    ? "Writing 2 different versions..."
-                                    : loadingMessages[loadingMsgIdx]}
+                                  {isGeneratingVariants ? t("Writing 2 different versions...") : loadingMessages[loadingMsgIdx]}
                                 </Text>
                               </InlineStack>
                               <ProgressBar
@@ -1868,8 +1864,7 @@ export default function ProductGeneratePage() {
                                 animated
                               />
                               <Text as="p" variant="bodySm" tone="subdued">
-                                {isGeneratingVariants ? "20–40 seconds" : "10–30 seconds"} — you can stay on
-                                this page
+                               {t("{v} — you can stay on this page", { v: isGeneratingVariants ? "20–40 seconds" : "10–30 seconds" })}
                               </Text>
                             </BlockStack>
                           </Box>
@@ -1883,11 +1878,11 @@ export default function ProductGeneratePage() {
                           disabled={isLoading}
                           fullWidth
                         >
-                          {isGenerating ? "Generating..." : "Generate Content"}
+                          {isGenerating ? t("Generating...") : t("Generate Content")}
                         </Button>
                         {!isGenerating && !isEnhancing && (
                           <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                            Tip: press Cmd+Enter (Mac) or Ctrl+Enter (Windows) to generate
+                           {t("Tip: press Cmd+Enter (Mac) or Ctrl+Enter (Windows) to generate")}
                           </Text>
                         )}
                         {(product.descriptionHtml || product.seoTitle) && (
@@ -1903,11 +1898,10 @@ export default function ProductGeneratePage() {
                               }
                               fullWidth
                             >
-                              {isEnhancing ? "Enhancing..." : "Enhance Existing Content"}
+                              {isEnhancing ? t("Enhancing...") : t("Enhance Existing Content")}
                             </Button>
                             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                              Improves what&apos;s already there — structure, SEO keywords, and AI-search
-                              readiness — without losing your facts or voice
+                             {t("Improves what's already there — structure, SEO keywords, and AI-search readiness — without losing your facts or voice")}
                             </Text>
                           </BlockStack>
                         )}
@@ -1919,16 +1913,14 @@ export default function ProductGeneratePage() {
                             disabled={isLoading || isGeneratingVariants || noneSelected}
                             fullWidth
                           >
-                            {isGeneratingVariants
-                              ? "Generating 2 options..."
-                              : "Generate two options to compare"}
+                            {isGeneratingVariants ? t("Generating 2 options...") : t("Generate two options to compare")}
                           </Button>
                         ) : (
                           // NOT disabled — a disabled Polaris button never fires
                           // onClick, which made this upsell a dead control. It
                           // looks locked but genuinely navigates to Plans.
                           <Button size="large" fullWidth onClick={() => navigate("/app/plans")}>
-                            Two options to compare — upgrade to Growth
+                           {t("Two options to compare — upgrade to Growth")}
                           </Button>
                         )}
 
@@ -1943,15 +1935,15 @@ export default function ProductGeneratePage() {
                 {/* ── A/B Variant comparison ── */}
                 {selectedTab === 0 && variants && (
                   <BlockStack gap="400">
-                    <Banner tone="info" title="2 Options Generated">
-                      Compare both versions and click "Use This One" to save your favorite as a draft.
+                    <Banner tone="info" title={t("2 Options Generated")}>
+                     {t("Compare both versions and click \"Use This One\" to save your favorite as a draft.")}
                     </Banner>
                     {variants.map((v, idx) => (
                       <Card key={idx}>
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h3" variant="headingMd">
-                              Option {idx === 0 ? "A" : "B"}
+                             {t("Option {v}", { v: idx === 0 ? "A" : "B" })}
                             </Text>
                             <Button
                               size="slim"
@@ -1959,7 +1951,7 @@ export default function ProductGeneratePage() {
                               loading={isLoading}
                               disabled={isLoading}
                             >
-                              Use This One
+                             {t("Use This One")}
                             </Button>
                           </InlineStack>
                           {v.description && (
@@ -1980,12 +1972,12 @@ export default function ProductGeneratePage() {
                           )}
                           {v.metaTitle && (
                             <Text as="p" variant="bodySm">
-                              <strong>Meta Title:</strong> {v.metaTitle}
+                              <strong>{t("Meta Title:")}</strong> {v.metaTitle}
                             </Text>
                           )}
                           {v.metaDescription && (
                             <Text as="p" variant="bodySm">
-                              <strong>Meta Desc:</strong> {v.metaDescription}
+                              <strong>{t("Meta Desc:")}</strong> {v.metaDescription}
                             </Text>
                           )}
                         </BlockStack>
@@ -2005,8 +1997,7 @@ export default function ProductGeneratePage() {
                         The banner now says what is actually true: the proposals
                         are ours, and what sits under CURRENT is theirs. */}
                     <Banner tone="info">
-                      The <strong>proposed</strong> content on this page was written by AI. Anything shown under
-                      &ldquo;Currently on your store&rdquo; is your own copy and is not changed until you publish.
+                     {t("The")} <strong>proposed</strong> {t("content on this page was written by AI. Anything shown under “Currently on your store” is your own copy and is not changed until you publish.")}
                     </Banner>
 
                     {/* Description */}
@@ -2014,7 +2005,7 @@ export default function ProductGeneratePage() {
                       <BlockStack gap="300">
                         <InlineStack align="space-between" blockAlign="center">
                           <Text as="h2" variant="headingMd">
-                            Product Description
+                           {t("Product Description")}
                           </Text>
                           {rawDescription && (
                             <Button
@@ -2023,7 +2014,7 @@ export default function ProductGeneratePage() {
                               onClick={() => handleRegenerateSection("description")}
                               loading={isGenerating}
                             >
-                              Regenerate
+                             {t("Regenerate")}
                             </Button>
                           )}
                         </InlineStack>
@@ -2034,7 +2025,7 @@ export default function ProductGeneratePage() {
                                 copy this is, which is what let the banner above
                                 read as a claim over it. */}
                             <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
-                              Currently on your store
+                             {t("Currently on your store")}
                             </Text>
                             {product.descriptionHtml ? (
                               <span
@@ -2047,7 +2038,7 @@ export default function ProductGeneratePage() {
                                  there genuinely is none, which is exactly this
                                  branch, so the wording stays. */
                               <Text as="p" tone="critical">
-                                No description yet — nothing is on your store for this product.
+                               {t("No description yet — nothing is on your store for this product.")}
                               </Text>
                             )}
                           </BlockStack>
@@ -2058,7 +2049,7 @@ export default function ProductGeneratePage() {
                             <InlineStack align="center" gap="200">
                               <Spinner size="small" />
                               <Text as="p" variant="bodyMd">
-                                Generating... this takes 10–20 seconds
+                               {t("Generating... this takes 10–20 seconds")}
                               </Text>
                             </InlineStack>
                           </Box>
@@ -2068,38 +2059,33 @@ export default function ProductGeneratePage() {
                           <BlockStack gap="200">
                             <InlineStack align="space-between">
                               <Text as="p" variant="bodySm" fontWeight="bold" tone="success">
-                                AI-GENERATED (editable):
+                               {t("AI-GENERATED (editable):")}
                               </Text>
                               <Badge
                                 tone={
                                   existingContent.description?.status === "published" ? "success" : "info"
                                 }
                               >
-                                {existingContent.description?.status === "published" ? (String(product.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "Published" : `Published · product is a Shopify ${String(product.status).toLowerCase()}, not on your storefront`) : "Draft"}
+                                {existingContent.description?.status === "published" ? String(product.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? t("Published") : t("Published · product is a Shopify {v}, not on your storefront", { v: String(product.status).toLowerCase() }) : t("Draft")}
                               </Badge>
                             </InlineStack>
                             <TextField
-                              label="Product description"
+                              label={t("Product description")}
                               labelHidden
                               value={editedDescription}
                               onChange={setEditedDescription}
                               multiline={8}
-                              helpText="Edit the HTML directly — changes are saved when you click Publish"
+                              helpText={t("Edit the HTML directly — changes are saved when you click Publish")}
                               autoComplete="off"
                             />
                             {editedDescription && (
                               <InlineStack align="space-between">
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  {
-                                    editedDescription
+                                 {t("{length}{v} words {v1} {length1} characters", { length: editedDescription
                                       .replace(/<[^>]+>/g, "")
                                       .trim()
                                       .split(/\s+/)
-                                      .filter(Boolean).length
-                                  }{" "}
-                                  words
-                                  {" ·"}
-                                  {editedDescription.replace(/<[^>]+>/g, "").length} characters
+                                      .filter(Boolean).length, v: " ", v1: " ·", length1: editedDescription.replace(/<[^>]+>/g, "").length })}
                                 </Text>
                                 <Button
                                   size="slim"
@@ -2109,7 +2095,7 @@ export default function ProductGeneratePage() {
                                     window.shopify?.toast?.show("Copied!", { duration: 1500 });
                                   }}
                                 >
-                                  Copy text
+                                 {t("Copy text")}
                                 </Button>
                               </InlineStack>
                             )}
@@ -2118,7 +2104,7 @@ export default function ProductGeneratePage() {
 
                         {!rawDescription && !isGenerating && (
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Click "Generate Content" to create an AI-optimized description.
+                           {t("Click \"Generate Content\" to create an AI-optimized description.")}
                           </Text>
                         )}
 
@@ -2148,7 +2134,7 @@ export default function ProductGeneratePage() {
                         <BlockStack gap="200">
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h2" variant="headingMd">
-                              Meta Title
+                             {t("Meta Title")}
                             </Text>
                             <InlineStack gap="200">
                               {rawMetaTitle && (
@@ -2160,7 +2146,7 @@ export default function ProductGeneratePage() {
                                     window.shopify?.toast?.show("Copied!", { duration: 1500 });
                                   }}
                                 >
-                                  Copy
+                                 {t("Copy")}
                                 </Button>
                               )}
                               {rawMetaTitle && (
@@ -2170,26 +2156,22 @@ export default function ProductGeneratePage() {
                                   onClick={() => handleRegenerateSection("metaTitle")}
                                   loading={isGenerating}
                                 >
-                                  Regenerate
+                                 {t("Regenerate")}
                                 </Button>
                               )}
                             </InlineStack>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Current: {product.seoTitle || "(using product title)"}
+                           {t("Current:")} {product.seoTitle || "(using product title)"}
                           </Text>
                           {rawMetaTitle && (
                             <BlockStack gap="100">
                               <TextField
-                                label="Page title"
+                                label={t("Page title")}
                                 labelHidden
                                 value={editedMetaTitle}
                                 onChange={setEditedMetaTitle}
-                                error={
-                                  editedMetaTitle.length > 60
-                                    ? "Over 60 characters — shorten before publishing"
-                                    : ""
-                                }
+                                error={editedMetaTitle.length > 60 ? t("Over 60 characters — shorten before publishing") : ""}
                                 autoComplete="off"
                               />
                               <InlineStack align="space-between">
@@ -2198,7 +2180,7 @@ export default function ProductGeneratePage() {
                                   variant="bodySm"
                                   tone={editedMetaTitle.length > 60 ? "critical" : "subdued"}
                                 >
-                                  {editedMetaTitle.length}/60 characters
+                                 {t("{length}/60 characters", { length: editedMetaTitle.length })}
                                 </Text>
                               </InlineStack>
                               <ProgressBar
@@ -2241,7 +2223,7 @@ export default function ProductGeneratePage() {
                         <BlockStack gap="200">
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h2" variant="headingMd">
-                              Meta Description
+                             {t("Meta Description")}
                             </Text>
                             <InlineStack gap="200">
                               {rawMetaDescription && (
@@ -2253,7 +2235,7 @@ export default function ProductGeneratePage() {
                                     window.shopify?.toast?.show("Copied!", { duration: 1500 });
                                   }}
                                 >
-                                  Copy
+                                 {t("Copy")}
                                 </Button>
                               )}
                               {rawMetaDescription && (
@@ -2263,27 +2245,23 @@ export default function ProductGeneratePage() {
                                   onClick={() => handleRegenerateSection("metaDescription")}
                                   loading={isGenerating}
                                 >
-                                  Regenerate
+                                 {t("Regenerate")}
                                 </Button>
                               )}
                             </InlineStack>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Current: {product.seoDescription || "(none set)"}
+                           {t("Current:")} {product.seoDescription || "(none set)"}
                           </Text>
                           {rawMetaDescription && (
                             <BlockStack gap="100">
                               <TextField
-                                label="Search description"
+                                label={t("Search description")}
                                 labelHidden
                                 value={editedMetaDescription}
                                 onChange={setEditedMetaDescription}
                                 multiline={2}
-                                error={
-                                  editedMetaDescription.length > 155
-                                    ? "Over 155 characters — shorten before publishing"
-                                    : ""
-                                }
+                                error={editedMetaDescription.length > 155 ? t("Over 155 characters — shorten before publishing") : ""}
                                 autoComplete="off"
                               />
                               <InlineStack align="space-between">
@@ -2292,7 +2270,7 @@ export default function ProductGeneratePage() {
                                   variant="bodySm"
                                   tone={editedMetaDescription.length > 155 ? "critical" : "subdued"}
                                 >
-                                  {editedMetaDescription.length}/155 characters
+                                 {t("{length}/155 characters", { length: editedMetaDescription.length })}
                                 </Text>
                               </InlineStack>
                               <ProgressBar
@@ -2338,7 +2316,7 @@ export default function ProductGeneratePage() {
                         <BlockStack gap="200">
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h2" variant="headingMd">
-                              FAQ Content
+                             {t("FAQ Content")}
                             </Text>
                             <Button
                               size="slim"
@@ -2346,7 +2324,7 @@ export default function ProductGeneratePage() {
                               onClick={() => handleRegenerateSection("faq")}
                               loading={isGenerating}
                             >
-                              Regenerate
+                             {t("Regenerate")}
                             </Button>
                           </InlineStack>
                           <Box padding="200" background="bg-surface-success" borderRadius="200">
@@ -2376,16 +2354,14 @@ export default function ProductGeneratePage() {
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h2" variant="headingMd">
-                              Image Alt Text
+                             {t("Image Alt Text")}
                             </Text>
                             <AltTextBadge results={altTextResults} />
                           </InlineStack>
                           {actionData?.altTextTruncated && (
                             <Banner tone="info">
                               <p>
-                                This product has more images than one run covers — the first{" "}
-                                {altTextResults.length} were processed. Run again after reviewing to cover the
-                                rest, or edit the remaining images in Shopify admin.
+                               {t("This product has more images than one run covers — the first{v} {length} were processed. Run again after reviewing to cover the rest, or edit the remaining images in Shopify admin.", { v: " ", length: altTextResults.length })}
                               </p>
                             </Banner>
                           )}
@@ -2393,15 +2369,14 @@ export default function ProductGeneratePage() {
                             <InlineStack gap="200">
                               <Spinner size="small" />
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Generating alt text for {product.images.length} image
-                                {product.images.length !== 1 ? "s" : ""}...
+                               {t("Generating alt text for {length} image {v}...", { length: product.images.length, v: product.images.length !== 1 ? "s" : "" })}
                               </Text>
                             </InlineStack>
                           )}
                           <AltTextResultList results={altTextResults} />
                           {!altTextResults.length && !isGenerating && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Check "Image Alt Text" and click Generate to create alt text for all images.
+                             {t("Check \"Image Alt Text\" and click Generate to create alt text for all images.")}
                             </Text>
                           )}
                         </BlockStack>
@@ -2413,10 +2388,10 @@ export default function ProductGeneratePage() {
                       <Card>
                         <BlockStack gap="200">
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Content generated by AI • Review before publishing
+                           {t("Content generated by AI • Review before publishing")}
                           </Text>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Your edits above will be published — not the original AI output.
+                           {t("Your edits above will be published — not the original AI output.")}
                           </Text>
                           <Button
                             variant="primary"
@@ -2426,7 +2401,7 @@ export default function ProductGeneratePage() {
                             disabled={isLoading}
                             fullWidth
                           >
-                            {isPublishing ? "Publishing..." : "Publish to Store"}
+                            {isPublishing ? t("Publishing...") : t("Publish to Store")}
                           </Button>
                         </BlockStack>
                       </Card>
@@ -2437,7 +2412,7 @@ export default function ProductGeneratePage() {
                       <BlockStack gap="300">
                         <InlineStack align="space-between" blockAlign="center">
                           <Text as="h2" variant="headingMd">
-                            Social Media Content
+                           {t("Social Media Content")}
                           </Text>
                           <Button
                             size="slim"
@@ -2448,18 +2423,18 @@ export default function ProductGeneratePage() {
                               socialFetcher.submit(fd, { method: "POST" });
                             }}
                           >
-                            Generate
+                           {t("Generate")}
                           </Button>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Ready-to-post captions for Instagram, Facebook, and TikTok.
+                         {t("Ready-to-post captions for Instagram, Facebook, and TikTok.")}
                         </Text>
                         {socialFetcher.data?.social && (
                           <BlockStack gap="300">
                             {[
-                              { key: "instagram", label: "Instagram" },
-                              { key: "facebook", label: "Facebook" },
-                              { key: "tiktok", label: "TikTok" },
+                              { key: "instagram", label: t("Instagram") },
+                              { key: "facebook", label: t("Facebook") },
+                              { key: "tiktok", label: t("TikTok") },
                             ].map(({ key, label }) =>
                               socialFetcher.data.social[key] ? (
                                 <Box
@@ -2485,7 +2460,7 @@ export default function ProductGeneratePage() {
                                           }
                                         }}
                                       >
-                                        Copy
+                                       {t("Copy")}
                                       </Button>
                                     </InlineStack>
                                     <Text as="p" variant="bodySm">
@@ -2512,22 +2487,16 @@ export default function ProductGeneratePage() {
                   <Card>
                     <BlockStack gap="400">
                       <Text as="h2" variant="headingMd">
-                        Version History
+                       {t("Version History")}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Previous versions of your generated content. Click Restore to roll back.
+                       {t("Previous versions of your generated content. Click Restore to roll back.")}
                       </Text>
                       {["description", "metaTitle", "metaDescription", "faq"].map((type) =>
                         versionsByType[type]?.length > 0 ? (
                           <BlockStack key={type} gap="200">
                             <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                              {type === "description"
-                                ? "Description"
-                                : type === "metaTitle"
-                                  ? "Meta Title"
-                                  : type === "metaDescription"
-                                    ? "Meta Description"
-                                    : "FAQ"}
+                              {type === "description" ? t("Description") : type === "metaTitle" ? t("Meta Title") : type === "metaDescription" ? t("Meta Description") : "FAQ"}
                             </Text>
                             {entitlements?.versionHistory && (
                               <VersionHistorySection
@@ -2541,7 +2510,7 @@ export default function ProductGeneratePage() {
                       )}
                       {Object.values(versionsByType).every((v) => !v?.length) && (
                         <Text as="p" variant="bodySm" tone="subdued">
-                          No version history yet. Generate content to start building history.
+                         {t("No version history yet. Generate content to start building history.")}
                         </Text>
                       )}
                     </BlockStack>
@@ -2554,12 +2523,12 @@ export default function ProductGeneratePage() {
                     <BlockStack gap="300">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="h2" variant="headingMd">
-                          Image Alt Text
+                         {t("Image Alt Text")}
                         </Text>
                         <AltTextBadge results={altTextResults} />
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        AI-generated accessibility descriptions applied directly to your product images.
+                       {t("AI-generated accessibility descriptions applied directly to your product images.")}
                       </Text>
                       {product.images.length > 0 && (
                         <Button
@@ -2576,8 +2545,7 @@ export default function ProductGeneratePage() {
                           loading={isGenerating && genAltText}
                           disabled={isLoading}
                         >
-                          Generate Alt Text for {product.images.length} Image
-                          {product.images.length !== 1 ? "s" : ""}
+                         {t("Generate Alt Text for {length} Image {v}", { length: product.images.length, v: product.images.length !== 1 ? "s" : "" })}
                         </Button>
                       )}
                       <AltTextResultList results={altTextResults} />
@@ -2589,7 +2557,7 @@ export default function ProductGeneratePage() {
                         <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                           <BlockStack gap="150">
                             <Text as="p" variant="bodySm" fontWeight="semibold">
-                              Currently on Shopify
+                             {t("Currently on Shopify")}
                             </Text>
                             {product.images
                               .filter((img) => img.altText)
@@ -2606,7 +2574,7 @@ export default function ProductGeneratePage() {
                       )}
                       {!altTextResults.length && !isGenerating && (
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Click Generate Alt Text to create accessibility descriptions for all product images.
+                         {t("Click Generate Alt Text to create accessibility descriptions for all product images.")}
                         </Text>
                       )}
                     </BlockStack>
@@ -2621,21 +2589,20 @@ export default function ProductGeneratePage() {
       <Modal
         open={showAutoPublishConfirm}
         onClose={() => setShowAutoPublishConfirm(false)}
-        title="Publish without review is on"
+        title={t("Publish without review is on")}
         primaryAction={{
-          content: "Generate and publish",
+          content: t("Generate and publish"),
           destructive: true,
           onAction: () => {
             setShowAutoPublishConfirm(false);
             doGenerate(pendingGenerateTypes);
           },
         }}
-        secondaryActions={[{ content: "Cancel", onAction: () => setShowAutoPublishConfirm(false) }]}
+        secondaryActions={[{ content: t("Cancel"), onAction: () => setShowAutoPublishConfirm(false) }]}
       >
         <Modal.Section>
           <Text as="p" variant="bodyMd">
-            This will publish straight to your live storefront without a review step. You can turn this off in
-            Settings.
+           {t("This will publish straight to your live storefront without a review step. You can turn this off in Settings.")}
           </Text>
         </Modal.Section>
       </Modal>

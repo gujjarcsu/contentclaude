@@ -57,7 +57,7 @@ describe("where it is spoken", () => {
     const proof = src("app/routes/app.proof.jsx");
     expect(proof.indexOf("{plainSentence(s)}")).toBeGreaterThan(0);
     expect(proof.indexOf("{plainSentence(s)}")).toBeLessThan(proof.indexOf("{verdictSentence(s)}"));
-    expect(proof).toMatch(/<Badge>\{`seed \$\{e\.seed\}`\}<\/Badge>/); // the seed stays on the screen
+    expect(proof).toMatch(/<Badge>seed \{seed\}<\/Badge>/); // the seed stays on the screen
     expect(proofCardLines({ enabled: true, lockConfigured: true, latest: { status: "reported", summary: summary(), startedAt: "2026-09-15T00:00:00Z" } })[0]).toMatch(/^Pages we submitted were crawled a median 31 hours sooner/);
     expect(proofCardLines({ enabled: true, lockConfigured: true, latest: { status: "reported", summary: summary(), startedAt: "2026-09-15T00:00:00Z" } })[1]).toBe(verdictSentence(summary()));
     const weekly = src("app/utils/weeklyReport.server.js");

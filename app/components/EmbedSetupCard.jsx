@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../i18n/react.jsx";
 import { useFetcher } from "react-router";
 import { Banner, BlockStack, Text, InlineStack, Button, List } from "@shopify/polaris";
 
@@ -84,6 +85,7 @@ export function visibleBlockDeepLink(shopDomain) {
  * `visibleBlockDeepLink` above for which one won.
  */
 export function EmbedSetupCard({ shopDomain, confirmed }) {
+  const t = useT();
   const fetcher = useFetcher();
   // Optimistic: hide as soon as the confirm post is in flight
   if (confirmed || fetcher.formData?.get("actionType") === "confirm") return null;
@@ -101,36 +103,29 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
   };
 
   return (
-    <Banner tone="warning" title="One-time setup: put your FAQ content on your product pages">
+    <Banner tone="warning" title={t("One-time setup: put your FAQ content on your product pages")}>
       <BlockStack gap="300">
         <Text as="p" variant="bodyMd">
-          The FAQ answers this app writes are stored on your products, but nothing shows them until you add
-          them to your theme. Publishing alone doesn&apos;t make them live.
+          {t("The FAQ answers this app writes are stored on your products, but nothing shows them until you add them to your theme. Publishing alone doesn't make them live.")}
         </Text>
 
         <Text as="p" variant="bodyMd">
-          <strong>1. Show the FAQ to shoppers</strong> — this is the part that does the work. The button
-          below opens your theme editor with the <strong>FAQ (Navaal)</strong> block ready to add to your
-          product template; click <strong>Save</strong> there. Your questions and answers become real page
-          content that shoppers, and anything else reading the page, can see.
+          <strong>{t("1. Show the FAQ to shoppers")}</strong> {t("— this is the part that does the work. The button below opens your theme editor with the")} <strong>{t("FAQ (Navaal)")}</strong> {t("block ready to add to your product template; click")} <strong>{t("Save")}</strong> {t("there. Your questions and answers become real page content that shoppers, and anything else reading the page, can see.")}
         </Text>
 
         <Text as="p" variant="bodyMd">
-          <strong>2. Add the FAQ structured data</strong> (optional). The button below turns on the{" "}
-          <strong>AI-search FAQ schema</strong> app embed, which adds machine-readable FAQ markup to the page.
-          Worth knowing: Google retired FAQ rich results in May 2026, so this will not change how your
-          pages look in Google Search. It costs nothing, and some non-Google readers of structured data
-          still use it.
+          <strong>{t("2. Add the FAQ structured data")}</strong> {t("(optional). The button below turns on the{v}", { v: " " })}
+          <strong>{t("AI-search FAQ schema")}</strong> {t("app embed, which adds machine-readable FAQ markup to the page. Worth knowing: Google retired FAQ rich results in May 2026, so this will not change how your pages look in Google Search. It costs nothing, and some non-Google readers of structured data still use it.")}
         </Text>
 
         <List type="number">
           <List.Item>
-            Press a button below — each one opens your theme editor with that piece ready to add.
+            {t("Press a button below — each one opens your theme editor with that piece ready to add.")}
           </List.Item>
           <List.Item>
-            Click <strong>Save</strong> in the theme editor.
+            {t("Click")} <strong>{t("Save")}</strong> {t("in the theme editor.")}
           </List.Item>
-          <List.Item>Come back here and click &quot;I&apos;ve enabled it&quot;.</List.Item>
+          <List.Item>{t("Come back here and click \"I've enabled it\".")}</List.Item>
         </List>
         <InlineStack gap="300">
           {/*
@@ -141,15 +136,15 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
             comes first because it is the half that does the work.
           */}
           <Button onClick={openVisibleBlock}>
-            Add the FAQ to my product pages
+            {t("Add the FAQ to my product pages")}
           </Button>
           <Button onClick={openEditor}>
-            Turn on the FAQ schema
+            {t("Turn on the FAQ schema")}
           </Button>
           <fetcher.Form method="post" action="/app/embed-status">
             <input type="hidden" name="actionType" value="confirm" />
             <Button submit loading={fetcher.state !== "idle"}>
-              I&apos;ve enabled it
+              {t("I've enabled it")}
             </Button>
           </fetcher.Form>
         </InlineStack>
@@ -164,13 +159,13 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
  * dismissible for this visit; the full card takes over after the first publish.
  */
 export function EmbedLaterNote({ confirmed }) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
   if (confirmed || dismissed) return null;
   return (
     <Banner tone="info" onDismiss={() => setDismissed(true)}>
       <Text as="p" variant="bodySm">
-        Later, once you publish: a two-minute theme step puts the FAQ answers on your product pages. We will show it here
-        when there is something to show.
+        {t("Later, once you publish: a two-minute theme step puts the FAQ answers on your product pages. We will show it here when there is something to show.")}
       </Text>
     </Banner>
   );

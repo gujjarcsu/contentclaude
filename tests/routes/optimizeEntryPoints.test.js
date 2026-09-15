@@ -25,11 +25,12 @@
  * false, would pass. L15 says that needs a browser; queued for a human.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-const home = strip(readFileSync("app/routes/app._index.jsx", "utf8"));
-const products = strip(readFileSync("app/routes/app.products.jsx", "utf8"));
+const home = strip(unwrapT(readFileSync("app/routes/app._index.jsx", "utf8")));
+const products = strip(unwrapT(readFileSync("app/routes/app.products.jsx", "utf8")));
 
 describe("every Optimize entry point goes to the same place", () => {
   it("found the sources — a guard over nothing passes", () => {
@@ -71,7 +72,7 @@ describe("the label still tells the truth before the click", () => {
     // came from. Unifying the destination must not lose that.
     // A5/FR10 (Phase 8): the plan is still named before the click — on the SECONDARY action, with "needs",
     // because a primary that reads "· Starter" on a Free store reads as the plan you are on.
-    expect(products).toMatch(/Optimize all \$\{notOptimized\} at once · needs Starter/);
+    expect(products).toMatch(/Optimize all \{notOptimized\} at once · needs Starter/);
   });
 });
 

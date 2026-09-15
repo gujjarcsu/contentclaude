@@ -10,6 +10,8 @@
  * Not in the sidebar (five items). Reached from the attention page.
  */
 import { useState } from "react";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Checkbox, TextField, Banner, Badge, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
@@ -45,6 +47,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const fd = await request.formData();
@@ -66,26 +69,27 @@ export const action = async ({ request }) => {
     if (intent === "start_descriptions") return Response.json({ intent, ...(await r.startContentJob(shop, items.map((i) => i.productId), FIX.DESCRIPTION)) });
   } catch (err) {
     if (err?.name === "RemediationLocked") return Response.json({ intent, locked: true, error: err.message }, { status: 403 });
-    return Response.json({ intent, error: err?.message?.startsWith("You already have jobs") ? err.message : "Could not apply that. Please try again." }, { status: 500 });
+    return Response.json({ intent, error: err?.message?.startsWith("You already have jobs") ? err.message : t("Could not apply that. Please try again.") }, { status: 500 });
   }
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
 function ResultBanner({ data }) {
+  const t = useT();
   if (!data) return null;
   if (data.error) return <Banner tone="critical" title={data.error} />;
   if (data.jobId || data.queued !== undefined) {
     return (
-      <Banner tone="success" title={`${data.queued} queued for review${data.quotaSkipped ? ` — ${data.quotaSkipped} left out, past this month's credits` : ""}.`}>
+      <Banner tone="success" title={t("{queued} queued for review{v}.", { queued: data.queued, v: data.quotaSkipped ? ` — ${data.quotaSkipped} left out, past this month's credits` : "" })}>
         <Text as="p" variant="bodySm">
-          Drafts appear on the Review page as they are written. Nothing is published until you approve it.
+          {t("Drafts appear on the Review page as they are written. Nothing is published until you approve it.")}
         </Text>
       </Banner>
     );
   }
   const failed = data.failed ?? [];
   return (
-    <Banner tone={failed.length ? "warning" : "success"} title={`${data.applied ?? 0} applied${failed.length ? `, ${failed.length} not` : ""}.`}>
+    <Banner tone={failed.length ? "warning" : "success"} title={t("{v} applied{v1}.", { v: data.applied ?? 0, v1: failed.length ? `, ${failed.length} not` : "" })}>
       {failed.slice(0, 5).map((f) => (
         <Text key={f.productId} as="p" variant="bodySm">
           {f.error}
@@ -100,6 +104,7 @@ function ResultBanner({ data }) {
  * goes with the row. `shared` is one text box for the whole section.
  */
 function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, locked, credits, remaining, storeHandle }) {
+  const t = useT();
   const meta = FIX_LABEL[fix];
   const [ticked, setTicked] = useState(() => new Set(rows.filter((r) => !r.disabled).map((r) => r.key)));
   const [values, setValues] = useState(() => Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""])));
@@ -123,7 +128,7 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
           <Text as="h2" variant="headingSm">
             {meta.title} · {rows.length}
           </Text>
-          <Badge tone={credits === 0 ? "success" : "info"}>{credits === 0 ? "no credits" : `${credits} credit each`}</Badge>
+          <Badge tone={credits === 0 ? "success" : "info"}>{credits === 0 ? t("no credits") : t("{credits} credit each", { credits })}</Badge>
         </InlineStack>
         <Text as="p" variant="bodySm">
           {meta.how}
@@ -131,7 +136,7 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
         {shared && <TextField label={shared} value={sharedValue} onChange={setSharedValue} autoComplete="off" />}
         <InlineStack gap="200">
           <Button size="slim" onClick={() => setTicked(allOn ? new Set() : new Set(rows.filter((r) => !r.disabled).map((r) => r.key)))}>
-            {allOn ? "Untick all" : "Tick all"}
+            {allOn ? t("Untick all") : t("Tick all")}
           </Button>
         </InlineStack>
         <BlockStack gap="200">
@@ -149,14 +154,14 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
                 </div>
               )}
               <Link url={`https://admin.shopify.com/store/${storeHandle}/products/${String(r.productId).split("/").pop()}`} target="_blank">
-                Shopify admin
+                {t("Shopify admin")}
               </Link>
             </InlineStack>
           ))}
         </BlockStack>
         {overQuota && (
           <Text as="p" variant="bodySm" tone="critical">
-            {cost} credits for {selected.length} products; {remaining} left this month. The first {remaining} will run and the rest are disclosed, not silently dropped.
+            {t("{cost} credits for {length} products; {remaining} left this month. The first {remaining1} will run and the rest are disclosed, not silently dropped.", { cost, length: selected.length, remaining, remaining1: remaining })}
           </Text>
         )}
         <InlineStack gap="200" blockAlign="center">
@@ -171,12 +176,11 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
               )
             }
           >
-            {meta.title} for {selected.length}
-            {credits > 0 ? ` (${cost} credit${cost === 1 ? "" : "s"})` : ""}
+            {t("{title} for {length} {v}", { title: meta.title, length: selected.length, v: credits > 0 ? ` (${cost} credit${cost === 1 ? "" : "s"})` : "" })}
           </Button>
           {locked && (
             <Text as="span" variant="bodySm" tone="subdued">
-              This store is monitored only; nothing is written from here.
+              {t("This store is monitored only; nothing is written from here.")}
             </Text>
           )}
         </InlineStack>
@@ -186,6 +190,7 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
 }
 
 export default function FixPage() {
+  const t = useT();
   const { shopDomain, locked, remaining, vendorProposal, candidates, options, variants } = useLoaderData();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -205,7 +210,7 @@ export default function FixPage() {
     key: o.optionId,
     productId: o.productId,
     title: o.title,
-    hint: `values: ${(o.values ?? []).slice(0, 4).join(", ")}${(o.values ?? []).length > 4 ? "…" : ""}`,
+    hint: t("values: {v}{v1}", { v: (o.values ?? []).slice(0, 4).join(", "), v1: (o.values ?? []).length > 4 ? "…" : "" }),
     value: o.proposed ?? "",
     valueKey: "name",
     payload: { productId: o.productId, optionId: o.optionId },
@@ -215,7 +220,7 @@ export default function FixPage() {
     productId: v.productId,
     title: v.title,
     disabled: !v.singleVariant || !v.variantId,
-    hint: v.singleVariant ? undefined : "several variants: add barcodes in Shopify admin",
+    hint: v.singleVariant ? undefined : t("several variants: add barcodes in Shopify admin"),
     value: "",
     valueKey: "barcode",
     payload: { productId: v.productId, variantId: v.variantId },
@@ -223,12 +228,12 @@ export default function FixPage() {
   const total = Object.values(candidates).reduce((n, l) => n + l.length, 0);
 
   return (
-    <Page title="Fix in bulk" subtitle="Each fix is reviewed before it is written; generated content waits on the Review page." backAction={{ content: "Needs attention", onAction: () => navigate("/app/attention") }}>
+    <Page title={t("Fix in bulk")} subtitle={t("Each fix is reviewed before it is written; generated content waits on the Review page.")} backAction={{ content: t("Needs attention"), onAction: () => navigate("/app/attention") }}>
       <BlockStack gap="400">
         <ResultBanner data={fetcher.data} />
         {total === 0 && (
           <Card>
-            <Text as="p">Nothing to fix from here right now. The daily check keeps looking.</Text>
+            <Text as="p">{t("Nothing to fix from here right now. The daily check keeps looking.")}</Text>
           </Card>
         )}
         <FixSection fix={FIX.VENDOR} rows={simple(candidates[FIX.VENDOR])} shared="Brand name to apply" sharedDefault={vendorProposal} submit={post("apply_vendor")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
@@ -241,7 +246,7 @@ export default function FixPage() {
         <Card>
           <BlockStack gap="200">
             <Text as="h2" variant="headingSm">
-              Not fixable from here, and why
+              {t("Not fixable from here, and why")}
             </Text>
             {SKIPPED.map((s) => (
               <BlockStack key={s.what} gap="050">
@@ -257,7 +262,7 @@ export default function FixPage() {
         </Card>
 
         <Text as="p" variant="bodySm" tone="subdued">
-          Method: every change is sent to Shopify one product at a time and checked against the value Shopify returns; a mismatch is reported, never assumed. Generated content is never published from this page. Findings update the moment a fix is confirmed.
+          {t("Method: every change is sent to Shopify one product at a time and checked against the value Shopify returns; a mismatch is reported, never assumed. Generated content is never published from this page. Findings update the moment a fix is confirmed.")}
         </Text>
       </BlockStack>
     </Page>

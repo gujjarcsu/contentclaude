@@ -284,6 +284,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "Shop.surfaceType",
   "Shop.trialCreditsUsed",
   "Shop.trialUsedAt",
+  "Shop.uiLocale",
   "Shop.uninstalledAt",
   "Shop.updatedAt",
   "Shop.upgradePromptSource",

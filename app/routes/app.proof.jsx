@@ -10,6 +10,7 @@
  * weekly report.
  */
 import { useLoaderData, useNavigate } from "react-router";
+import { useT } from "../i18n/react.jsx";
 import { Page, Card, Text, BlockStack, InlineStack, Badge, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import { verdictSentence, plainSentence, formatHours, MIN_PER_ARM, CENSOR_DAYS } from "../utils/crawlHoldout.js";
@@ -29,21 +30,20 @@ export const loader = async ({ request }) => {
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : "—");
 
 export default function ProofPage() {
+  const t = useT();
   const { experiments, bing, lockConfigured } = useLoaderData();
   const navigate = useNavigate();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) return <AppSkeleton />;
 
   return (
-    <Page title="Proof" subtitle="A causal result about your own store: does submitting changed pages to Bing get them crawled sooner?" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
+    <Page title={t("Proof")} subtitle={t("A causal result about your own store: does submitting changed pages to Bing get them crawled sooner?")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
       <BlockStack gap="400">
         {!bing.enabled && (
           <Card>
-            <EmptyState heading="Turn on Bing measurement to start" image="" action={{ content: "Open Settings", onAction: () => navigate("/app/settings") }}>
+            <EmptyState heading={t("Turn on Bing measurement to start")} image="" action={{ content: t("Open Settings"), onAction: () => navigate("/app/settings") }}>
               <p>
-                Add your Bing Webmaster Tools API key in Settings and switch measurement on. From then, each batch of product pages
-                we publish is split at random: half submitted to Bing, half withheld, and the time to Bing's first crawl recorded
-                for both. The first result usually reads out inside 72 hours.
+                {t("Add your Bing Webmaster Tools API key in Settings and switch measurement on. From then, each batch of product pages we publish is split at random: half submitted to Bing, half withheld, and the time to Bing's first crawl recorded for both. The first result usually reads out inside 72 hours.")}
               </p>
             </EmptyState>
           </Card>
@@ -52,8 +52,7 @@ export default function ProofPage() {
         {bing.enabled && !lockConfigured && (
           <Card>
             <Text as="p" variant="bodySm" tone="subdued">
-              Measurement is switched on but nothing is being submitted yet: the operator has not finished configuring this
-              deployment. Nothing is sent to Bing until that is done.
+              {t("Measurement is switched on but nothing is being submitted yet: the operator has not finished configuring this deployment. Nothing is sent to Bing until that is done.")}
             </Text>
           </Card>
         )}
@@ -61,7 +60,7 @@ export default function ProofPage() {
         {bing.enabled && experiments.length === 0 && (
           <Card>
             <Text as="p">
-              Nothing to measure yet. The next time you publish content for two or more products, a batch starts that night.
+              {t("Nothing to measure yet. The next time you publish content for two or more products, a batch starts that night.")}
             </Text>
           </Card>
         )}
@@ -73,13 +72,13 @@ export default function ProofPage() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center" wrap>
                   <Text as="h2" variant="headingMd">
-                    Batch started {fmtDate(e.startedAt)}
+                    {t("Batch started {fmtDate}", { fmtDate: fmtDate(e.startedAt) })}
                   </Text>
                   <InlineStack gap="200">
                     <Badge tone={e.status === "reported" ? (s.favourable ? "success" : "info") : "attention"}>
-                      {e.status === "reported" ? (s.enough ? "Reported" : "Reported — too few") : `Day ${s.dayOf} of ${CENSOR_DAYS}`}
+                      {e.status === "reported" ? s.enough ? t("Reported") : t("Reported — too few") : t("Day {dayOf} of {CENSOR_DAYS}", { dayOf: s.dayOf, CENSOR_DAYS })}
                     </Badge>
-                    <Badge>{`seed ${e.seed}`}</Badge>
+                    <Badge>{t("seed {seed}", { seed: e.seed })}</Badge>
                   </InlineStack>
                 </InlineStack>
 
@@ -89,7 +88,7 @@ export default function ProofPage() {
                       {formatHours(s.submit.medianHours)}
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Submitted — median time to first crawl ({s.submit.crawled} of {s.submit.n} crawled)
+                      {t("Submitted — median time to first crawl ({crawled} of {n} crawled)", { crawled: s.submit.crawled, n: s.submit.n })}
                     </Text>
                   </BlockStack>
                   <BlockStack gap="050">
@@ -97,15 +96,15 @@ export default function ProofPage() {
                       {formatHours(s.hold.medianHours)}
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Withheld — median time to first crawl ({s.hold.crawled} of {s.hold.n} crawled)
+                      {t("Withheld — median time to first crawl ({crawled} of {n} crawled)", { crawled: s.hold.crawled, n: s.hold.n })}
                     </Text>
                   </BlockStack>
                   <BlockStack gap="050">
                     <Text as="p" variant="headingLg">
-                      {s.enough ? `${formatHours(s.lo)} to ${formatHours(s.hi)}` : "—"}
+                      {s.enough ? t("{formatHours} to {formatHours1}", { formatHours: formatHours(s.lo), formatHours1: formatHours(s.hi) }) : "—"}
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      95% interval on the difference (withheld minus submitted)
+                      {t("95% interval on the difference (withheld minus submitted)")}
                     </Text>
                   </BlockStack>
                 </InlineStack>
@@ -126,7 +125,7 @@ export default function ProofPage() {
                         {u.url.replace(/^https?:\/\/[^/]+/, "")}
                       </Text>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        changed {fmtDate(u.changedAt)} · {u.firstCrawledAt ? `crawled ${fmtDate(u.firstCrawledAt)}` : "not crawled yet"}
+                        {t("changed {fmtDate} · {v}", { fmtDate: fmtDate(u.changedAt), v: u.firstCrawledAt ? `crawled ${fmtDate(u.firstCrawledAt)}` : "not crawled yet" })}
                       </Text>
                     </InlineStack>
                   ))}
@@ -137,17 +136,10 @@ export default function ProofPage() {
         })}
 
         <Text as="p" variant="bodySm" tone="subdued">
-          Method: when we publish content for a batch of product pages, a seeded random half is submitted to Bing through your own
-          Bing Webmaster API key (Bing's URL Submission API — the same crawl scheduler IndexNow feeds; a Shopify store cannot host
-          an IndexNow key file at its root, so that channel is not available to an app) and the other half is withheld. Each day we
-          ask Bing when it last crawled each page; the first crawl after the change is the page's time. Both arms are shown with
-          their medians, and the difference carries a 95% bootstrap interval — a batch under {MIN_PER_ARM} pages per arm gets no
-          verdict. A page not crawled by day {CENSOR_DAYS} is counted at {CENSOR_DAYS} days and the sentence says so. The seed is
-          stored so the split can be reproduced. Crawl timing is not ranking; nothing here is a ranking claim.
+          {t("Method: when we publish content for a batch of product pages, a seeded random half is submitted to Bing through your own Bing Webmaster API key (Bing's URL Submission API — the same crawl scheduler IndexNow feeds; a Shopify store cannot host an IndexNow key file at its root, so that channel is not available to an app) and the other half is withheld. Each day we ask Bing when it last crawled each page; the first crawl after the change is the page's time. Both arms are shown with their medians, and the difference carries a 95% bootstrap interval — a batch under {MIN_PER_ARM} pages per arm gets no verdict. A page not crawled by day {CENSOR_DAYS} is counted at {CENSOR_DAYS1} days and the sentence says so. The seed is stored so the split can be reproduced. Crawl timing is not ranking; nothing here is a ranking claim.", { MIN_PER_ARM, CENSOR_DAYS, CENSOR_DAYS1: CENSOR_DAYS })}
         </Text>
         <Text as="p" variant="bodySm" tone="subdued">
-          The two AI-visibility reports that have no API — Google&apos;s generative-AI report and Bing&apos;s AI Performance — are
-          taught, not scraped: <Link url="/app/ai-reports">the two reports you read yourself</Link>.
+          {t("The two AI-visibility reports that have no API — Google's generative-AI report and Bing's AI Performance — are taught, not scraped:")} <Link url="/app/ai-reports">{t("the two reports you read yourself")}</Link>.
         </Text>
       </BlockStack>
     </Page>

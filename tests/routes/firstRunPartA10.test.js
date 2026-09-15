@@ -58,7 +58,7 @@ describe("FR8 — the row's number is that product's", () => {
 
   it("the row badge renders target.scoreBefore and never the store score", () => {
     const src = code(readFileSync("app/components/StartState.jsx", "utf8"));
-    expect(src).toMatch(/This product: \$\{target\.scoreBefore\}\/100/);
+    expect(src).toMatch(/This product: \{scoreBefore\}\/100/);
     expect(src).not.toMatch(/This product: \$\{scan\.storeScore\}/);
     expect(readFileSync("app/utils/startState.server.js", "utf8")).toMatch(/scoreBefore: p\.scores\.combined/);
   });

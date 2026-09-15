@@ -21,10 +21,11 @@
  * branch.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 const code = (f) =>
-  readFileSync(f, "utf8")
+  unwrapT(readFileSync(f, "utf8"))
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^[ \t]*\/\/.*$/gm, "");
 

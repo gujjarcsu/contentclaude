@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../i18n/react.jsx";
 import { BlockStack, InlineStack, Text, Button, Badge, Collapsible, Divider } from "@shopify/polaris";
 import { GEO_RUBRIC } from "../utils/geoRubric.js";
 
@@ -26,6 +27,7 @@ import { GEO_RUBRIC } from "../utils/geoRubric.js";
  * to add a hook above its own early return.
  */
 export function GeoRubric() {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   return (
@@ -37,7 +39,7 @@ export function GeoRubric() {
         ariaExpanded={open}
         ariaControls="geo-rubric"
       >
-        {open ? "Hide how this is scored" : "How is this scored?"}
+        {open ? t("Hide how this is scored") : t("How is this scored?")}
       </Button>
       <Collapsible open={open} id="geo-rubric" transition={{ duration: "150ms" }}>
         <BlockStack gap="300">
@@ -48,8 +50,8 @@ export function GeoRubric() {
                 <Text as="h3" variant="headingSm">
                   {d.label}
                 </Text>
-                <Badge tone="info">{`${d.max} points`}</Badge>
-                {d.optional ? <Badge>Only when known</Badge> : null}
+                <Badge tone="info">{t("{max} points", { max: d.max })}</Badge>
+                {d.optional ? <Badge>{t("Only when known")}</Badge> : null}
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
                 {d.why}
@@ -58,8 +60,7 @@ export function GeoRubric() {
           ))}
           <Divider />
           <Text as="p" variant="bodySm" tone="subdued">
-            Anything we cannot measure is left out of the total rather than counted against you, so the
-            score is always out of what we could actually check.
+            {t("Anything we cannot measure is left out of the total rather than counted against you, so the score is always out of what we could actually check.")}
           </Text>
         </BlockStack>
       </Collapsible>

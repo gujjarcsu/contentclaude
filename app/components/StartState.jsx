@@ -28,6 +28,7 @@
  *    than a spinner that never resolves.
  */
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { useT } from "../i18n/react.jsx";
 import { Await, useFetcher } from "react-router";
 import { scoreTone } from "../utils/scoreBands.js";
 import { languageName, languageSourceLabel } from "../utils/language.js";
@@ -82,6 +83,7 @@ function ScanSkeleton() {
  * the card it belongs to.
  */
 function TargetCard({ target, autoStart, onDraft }) {
+  const t = useT();
   const fetcher = useFetcher();
   const fired = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -129,8 +131,8 @@ function TargetCard({ target, autoStart, onDraft }) {
             {target.title}
           </Text>
           <InlineStack gap="200">
-            <Badge tone={scoreTone(target.scoreBefore)}>{`This product: ${target.scoreBefore}/100`}</Badge>
-            {lift != null && lift > 0 && <Badge tone="success">{`+${lift}`}</Badge>}
+            <Badge tone={scoreTone(target.scoreBefore)}>{t("This product: {scoreBefore}/100", { scoreBefore: target.scoreBefore })}</Badge>
+            {lift != null && lift > 0 && <Badge tone="success">{t("+{lift}", { lift })}</Badge>}
           </InlineStack>
         </InlineStack>
 
@@ -157,9 +159,9 @@ function TargetCard({ target, autoStart, onDraft }) {
 
                 {busy && !timedOut ? (
                   <InlineStack gap="200" blockAlign="center">
-                    <Spinner size="small" accessibilityLabel="Writing a draft" />
+                    <Spinner size="small" accessibilityLabel={t("Writing a draft")} />
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Writing a draft from your product…
+                      {t("Writing a draft from your product…")}
                     </Text>
                   </InlineStack>
                 ) : after ? (
@@ -168,22 +170,20 @@ function TargetCard({ target, autoStart, onDraft }) {
                   </Text>
                 ) : data?.limitReached ? (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Saved for later — you are out of credits this month.
+                    {t("Saved for later — you are out of credits this month.")}
                   </Text>
                 ) : timedOut || data?.error || data?.inFlight ? (
                   <BlockStack gap="200">
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {timedOut
-                        ? "This one is taking longer than expected — no credit was used."
-                        : data?.error || "Still working on this one."}
+                      {timedOut ? t("This one is taking longer than expected — no credit was used.") : data?.error || t("Still working on this one.")}
                     </Text>
                     <InlineStack>
-                      <Button onClick={run}>Retry</Button>
+                      <Button onClick={run}>{t("Retry")}</Button>
                     </InlineStack>
                   </BlockStack>
                 ) : (
                   <InlineStack>
-                    <Button onClick={run}>Write a draft</Button>
+                    <Button onClick={run}>{t("Write a draft")}</Button>
                   </InlineStack>
                 )}
               </BlockStack>
@@ -196,14 +196,15 @@ function TargetCard({ target, autoStart, onDraft }) {
 }
 
 function ScanFailed({ onRetry }) {
+  const t = useT();
   return (
     <Card>
       <BlockStack gap="300">
         <Banner tone="warning">
-          <p>We couldn&apos;t read your catalogue just now. Nothing was generated and nothing was used.</p>
+          <p>{t("We couldn't read your catalogue just now. Nothing was generated and nothing was used.")}</p>
         </Banner>
         <InlineStack>
-          <Button onClick={onRetry}>Try again</Button>
+          <Button onClick={onRetry}>{t("Try again")}</Button>
         </InlineStack>
       </BlockStack>
     </Card>
@@ -211,6 +212,7 @@ function ScanFailed({ onRetry }) {
 }
 
 function StartBody({ scan, start, navigate, onRetry }) {
+  const t = useT();
   const [drafted, setDrafted] = useState(() => new Set());
   const onDraft = useCallback((id) => {
     setDrafted((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
@@ -229,20 +231,17 @@ function StartBody({ scan, start, navigate, onRetry }) {
     return (
       <Card>
         <EmptyState
-          heading="Your products aren't on your Online Store yet"
+          heading={t("Your products aren't on your Online Store yet")}
           image="/empty-products.svg"
           action={{
-            content: "Open products in Shopify",
+            content: t("Open products in Shopify"),
             url: "shopify://admin/products",
             target: "_blank",
           }}
-          secondaryAction={{ content: "I've published one — check again", onAction: onRetry }}
+          secondaryAction={{ content: t("I've published one — check again"), onAction: onRetry }}
         >
           <p>
-            Navaal scores and writes for products that are Active and available on the Online Store sales channel —
-            that is where AI search reads them. Your store has {n} product{n === 1 ? "" : "s"} and none is there
-            yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it
-            available to the Online Store, and check again.
+            {t("Navaal scores and writes for products that are Active and available on the Online Store sales channel — that is where AI search reads them. Your store has {n} product{v} and none is there yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it available to the Online Store, and check again.", { n, v: n === 1 ? "" : "s" })}
           </p>
         </EmptyState>
       </Card>
@@ -253,20 +252,17 @@ function StartBody({ scan, start, navigate, onRetry }) {
     return (
       <Card>
         <EmptyState
-          heading="Add a product and we'll get started"
+          heading={t("Add a product and we'll get started")}
           image="/empty-products.svg"
           action={{
-            content: "Add a product in Shopify",
+            content: t("Add a product in Shopify"),
             url: "shopify://admin/products/new",
             target: "_blank",
           }}
-          secondaryAction={{ content: "I've added one — check again", onAction: onRetry }}
+          secondaryAction={{ content: t("I've added one — check again"), onAction: onRetry }}
         >
           <p>
-            Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one,
-            we&apos;ll score it and write the first draft for you. Adding a product opens Shopify in a new
-            tab; come back to this one when it is saved and press check again — or just reopen the app,
-            we look every time.
+            {t("Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one, we'll score it and write the first draft for you. Adding a product opens Shopify in a new tab; come back to this one when it is saved and press check again — or just reopen the app, we look every time.")}
           </p>
         </EmptyState>
       </Card>
@@ -322,17 +318,17 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 below moves it. Traditional SEO is shown for comparison and
                 said to be excluded. */}
             <Text as="p" variant="bodySm" tone="subdued">
-              Your AI-search (GEO) score, from the products we scanned just now
+              {t("Your AI-search (GEO) score, from the products we scanned just now")}
             </Text>
             <Text as="h2" variant="heading2xl" fontWeight="bold">
               {scan.storeScore}/100
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              {`Most stores start here: the score measures what is on your product pages, and every draft below moves it. These ${Math.min(targets.length, start.targetCount)} products hurt it most; we scanned ${scan.totalScanned} of your products.`}
+              {t("Most stores start here: the score measures what is on your product pages, and every draft below moves it. These {v} products hurt it most; we scanned {totalScanned} of your products.", { v: Math.min(targets.length, start.targetCount), totalScanned: scan.totalScanned })}
             </Text>
             {scan.language?.code && (
               <Text as="p" variant="bodySm" tone="subdued">
-                {`Drafts are written in ${languageName(scan.language.code)} — ${languageSourceLabel(scan.language.source)}. Change it in Settings.`}
+                {t("Drafts are written in {languageName} — {languageSourceLabel}. Change it in Settings.", { languageName: languageName(scan.language.code), languageSourceLabel: languageSourceLabel(scan.language.source) })}
               </Text>
             )}
           </BlockStack>
@@ -343,7 +339,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 {scan.storeGeo}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                AI search (GEO) — the score above
+                {t("AI search (GEO) — the score above")}
               </Text>
             </BlockStack>
             <BlockStack gap="050">
@@ -351,14 +347,13 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 {scan.storeSeo}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Traditional SEO — for comparison, not part of the score
+                {t("Traditional SEO — for comparison, not part of the score")}
               </Text>
             </BlockStack>
           </InlineStack>
 
           <Text as="p" variant="bodySm" tone="subdued">
-            GEO scores what is on your product pages. It scores your content, not whether you were
-            cited — nothing inside an app can see that.
+            {t("GEO scores what is on your product pages. It scores your content, not whether you were cited — nothing inside an app can see that.")}
           </Text>
 
           <GeoRubric />
@@ -371,7 +366,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
         <Card>
           <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
-              {blockers.length === 1 ? "The one thing holding this store back" : `The ${blockers.length} things holding this store back`}
+              {blockers.length === 1 ? t("The one thing holding this store back") : t("The {length} things holding this store back", { length: blockers.length })}
             </Text>
             {blockers.map((b, i) => (
               <InlineStack key={b.key} align="space-between" blockAlign="center" wrap gap="300">
@@ -380,7 +375,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
                     {b.line}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {b.grade === "blocking" ? "A surface cannot list these as they stand." : "Listed, but shown worse."}
+                    {b.grade === "blocking" ? t("A surface cannot list these as they stand.") : t("Listed, but shown worse.")}
                   </Text>
                 </BlockStack>
                 {b.fix &&
@@ -396,8 +391,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
               </InlineStack>
             ))}
             <Text as="p" variant="bodySm" tone="subdued">
-              From the fields the OpenAI product feed and Google Search ask for, read from your own
-              catalogue just now. A description of what is missing, not a promise about results.
+              {t("From the fields the OpenAI product feed and Google Search ask for, read from your own catalogue just now. A description of what is missing, not a promise about results.")}
             </Text>
           </BlockStack>
         </Card>
@@ -435,14 +429,14 @@ function StartBody({ scan, start, navigate, onRetry }) {
           <InlineStack align="space-between" blockAlign="center" wrap gap="300">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                {`${done} draft${done === 1 ? "" : "s"} ready to review`}
+                {t("{done} draft{v} ready to review", { done, v: done === 1 ? "" : "s" })}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Read them, edit anything you want, then publish. Nothing is live until you say so.
+                {t("Read them, edit anything you want, then publish. Nothing is live until you say so.")}
               </Text>
             </BlockStack>
             <Button variant="primary" size="large" onClick={() => navigate("/app/review")}>
-              Review and publish
+              {t("Review and publish")}
             </Button>
           </InlineStack>
         </Card>
@@ -465,8 +459,9 @@ function StartBody({ scan, start, navigate, onRetry }) {
 }
 
 export function StartState({ start, navigate, onRetry }) {
+  const t = useT();
   return (
-    <Page title="Let's get your store found by AI">
+    <Page title={t("Let's get your store found by AI")}>
       <Suspense fallback={<ScanSkeleton />}>
         <Await resolve={start.scan} errorElement={<ScanFailed onRetry={onRetry} />}>
           {(scan) => <StartBody scan={scan} start={start} navigate={navigate} onRetry={onRetry} />}

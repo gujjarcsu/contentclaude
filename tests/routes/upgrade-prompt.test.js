@@ -5,6 +5,7 @@
  *   - shop-scoped write: a foreign promptId is a no-op; bad input is a 400
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 const { db, adminMock } = vi.hoisted(() => ({
@@ -78,8 +79,8 @@ describe("/app/upgrade-prompt", () => {
   });
 
   it("QuotaUpgradePrompt source: amber only, reset line unconditional, no dark-pattern copy", () => {
-    const src = readFileSync("app/components/UpgradePrompt.jsx", "utf8");
-    expect(src).toContain("Or wait — your {planLabel} generations reset on {upsell.resetDate}.");
+    const src = unwrapT(readFileSync("app/components/UpgradePrompt.jsx", "utf8"));
+    expect(src).toContain("Or wait — your {planLabel} credits reset on {resetDate}.");
     expect(src).not.toMatch(/tone="critical"/);
     expect(src).not.toMatch(/countdown|ends in|hurry|only .* left today|offer ends/i);
     expect(src).toContain("Compare all plans");

@@ -1,4 +1,6 @@
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
@@ -87,6 +89,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -98,7 +101,7 @@ export const action = async ({ request }) => {
     const length = formData.get("length") || "medium";
     const instructions = (formData.get("instructions") || "").slice(0, 1000).trim();
 
-    if (!topic) return Response.json({ error: "Topic is required." }, { status: 400 });
+    if (!topic) return Response.json({ error: t("Topic is required.") }, { status: 400 });
 
     // Phase 0 item 24 — blog generation is the most expensive single call in the
     // app and had no rate limit at all; the same 10/minute ceiling as every
@@ -107,7 +110,7 @@ export const action = async ({ request }) => {
     const rl = await checkRateLimit(shop, { maxPerMinute: 10 });
     if (!rl.allowed) {
       return Response.json(
-        { error: "You're generating too fast. Please wait a moment before trying again." },
+        { error: t("You're generating too fast. Please wait a moment before trying again.") },
         { status: 429 },
       );
     }
@@ -136,7 +139,7 @@ export const action = async ({ request }) => {
       );
     } catch (err) {
       return Response.json(
-        { error: `We couldn't write this post: ${err.message}. No credit was used.` },
+        { error: t("We couldn't write this post: {message}. No credit was used.", { message: err.message }) },
         { status: 502 },
       );
     }
@@ -144,7 +147,7 @@ export const action = async ({ request }) => {
     if (!outcome.allowed) {
       return Response.json(
         {
-          error: "You've used all your credits for this month. Upgrade your plan to continue.",
+          error: t("You've used all your credits for this month. Upgrade your plan to continue."),
           limitReached: true,
         },
         { status: 429 },
@@ -152,7 +155,7 @@ export const action = async ({ request }) => {
     }
     if (outcome.refunded) {
       return Response.json(
-        { error: "The AI returned an empty post. Please retry — no credit was used." },
+        { error: t("The AI returned an empty post. Please retry — no credit was used.") },
         { status: 502 },
       );
     }
@@ -188,7 +191,7 @@ export const action = async ({ request }) => {
     const savedPostId = formData.get("savedPostId") || null;
 
     if (!title || !content) {
-      return Response.json({ error: "Title and content are required to publish." }, { status: 400 });
+      return Response.json({ error: t("Title and content are required to publish.") }, { status: 400 });
     }
 
     // Publishing the same post twice must UPDATE the existing Shopify
@@ -214,7 +217,7 @@ export const action = async ({ request }) => {
       const updated = await readMutationResult(updateResult, "articleUpdate");
       if (!updated.ok) {
         return Response.json(
-          { error: `Could not update the published article: ${updated.errorMessages.join(";")}` },
+          { error: t("Could not update the published article: {v}", { v: updated.errorMessages.join(";") }) },
           { status: 422 },
         );
       }
@@ -257,7 +260,7 @@ export const action = async ({ request }) => {
         `mutation createBlog($blog: BlogCreateInput!) {
           blogCreate(blog: $blog) { blog { id } userErrors { message } }
         }`,
-        { variables: { blog: { title: "News" } } },
+        { variables: { blog: { title: t("News") } } },
       );
       const created = await readResult(createBlogResult, "blogCreate");
       blogId = created.payload?.blog?.id;
@@ -265,7 +268,7 @@ export const action = async ({ request }) => {
         // Surface the specific reason instead of a generic 500.
         const reason = created.errorMessages.length > 0 ? ` (${created.errorMessages.join(";")})` : "";
         return Response.json(
-          { error: `Could not find or create a blog to publish to${reason}.` },
+          { error: t("Could not find or create a blog to publish to{reason}.", { reason }) },
           { status: 500 },
         );
       }
@@ -300,7 +303,7 @@ export const action = async ({ request }) => {
         data: { status: "published", shopifyArticleId, title, content },
       });
       if (updated.count === 0) {
-        return Response.json({ error: "Post not found." }, { status: 404 });
+        return Response.json({ error: t("Post not found.") }, { status: 404 });
       }
     }
 
@@ -311,7 +314,7 @@ export const action = async ({ request }) => {
     });
   }
 
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
 const LOADING_MESSAGES = [
@@ -323,6 +326,7 @@ const LOADING_MESSAGES = [
 ];
 
 export default function BlogPage() {
+  const t = useT();
   const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell } =
     useLoaderData();
   const actionData = useActionData();
@@ -402,21 +406,21 @@ export default function BlogPage() {
   const isOutOfUsage = usageRemaining === 0;
 
   const lengthOptions = [
-    { label: "Short (~500 words)", value: "short" },
-    { label: "Medium (~1000 words)", value: "medium" },
-    { label: "Long (~2000 words)", value: "long" },
+    { label: t("Short (~500 words)"), value: "short" },
+    { label: t("Medium (~1000 words)"), value: "medium" },
+    { label: t("Long (~2000 words)"), value: "long" },
   ];
 
   return loadingThisRoute ? (
-    <AppSkeleton title="Blog Generator" sections={2} layout="twoThird" />
+    <AppSkeleton title={t("Blog Generator")} sections={2} layout="twoThird" />
   ) : (
     <Page
-      title="Blog Post Generator"
-      subtitle="Generate SEO-friendly blog posts in your brand voice"
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      title={t("Blog Post Generator")}
+      subtitle={t("Generate SEO-friendly blog posts in your brand voice")}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
       secondaryActions={[
         {
-          content: `My Blog Posts (${recentPosts.length})`,
+          content: t("My Blog Posts ({length})", { length: recentPosts.length }),
           onAction: () => navigate("/app/blog/posts"),
         },
       ]}
@@ -428,14 +432,14 @@ export default function BlogPage() {
           </Banner>
         )}
         {actionData?.published && (
-          <Banner tone="success" title="Blog Post Published!">
-            <p>Your blog post has been published to your Shopify store.</p>
+          <Banner tone="success" title={t("Blog Post Published!")}>
+            <p>{t("Your blog post has been published to your Shopify store.")}</p>
           </Banner>
         )}
         {actionData?.success && !actionData?.published && (
-          <Banner tone="success" title="Blog post generated!">
+          <Banner tone="success" title={t("Blog post generated!")}>
             <p>
-              Saved as a draft. Review and edit below, then publish when ready.
+             {t("Saved as a draft. Review and edit below, then publish when ready.")}
               {actionData.remaining !== undefined &&
                 ` · ${actionData.remaining} credits left this month.`}
             </p>
@@ -450,7 +454,7 @@ export default function BlogPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Generate a Blog Post
+                     {t("Generate a Blog Post")}
                     </Text>
                     <Icon source={BlogIcon} tone="info" />
                   </InlineStack>
@@ -463,47 +467,47 @@ export default function BlogPage() {
                       <BlockStack gap="300">
                         <TextField
                           name="topic"
-                          label="Blog Topic"
+                          label={t("Blog Topic")}
                           value={topic}
                           onChange={setTopic}
-                          placeholder="e.g., a how-to guide, buying tips, or a seasonal topic for your store"
-                          helpText="Be specific — a focused topic generates better content"
+                          placeholder={t("e.g., a how-to guide, buying tips, or a seasonal topic for your store")}
+                          helpText={t("Be specific — a focused topic generates better content")}
                           autoComplete="off"
                         />
                         <TextField
                           name="keywords"
-                          label="Target Keywords"
+                          label={t("Target Keywords")}
                           value={keywords}
                           onChange={setKeywords}
-                          placeholder="e.g., your main product keywords, comma-separated"
-                          helpText="Keywords to weave naturally into the post"
+                          placeholder={t("e.g., your main product keywords, comma-separated")}
+                          helpText={t("Keywords to weave naturally into the post")}
                           autoComplete="off"
                         />
                         <Select
                           name="length"
-                          label="Post Length"
+                          label={t("Post Length")}
                           options={lengthOptions}
                           value={length}
                           onChange={setLength}
                         />
                         <TextField
-                          label="Special instructions (optional)"
+                          label={t("Special instructions (optional)")}
                           value={instructions}
                           onChange={setInstructions}
                           multiline={3}
                           maxLength={1000}
-                          placeholder="e.g., mention our spring sale, compare our top 3 products, keep it beginner-friendly…"
-                          helpText="Anything you want included — promotions, angle, examples, structure."
+                          placeholder={t("e.g., mention our spring sale, compare our top 3 products, keep it beginner-friendly…")}
+                          helpText={t("Anything you want included — promotions, angle, examples, structure.")}
                           autoComplete="off"
                         />
                         <BlockStack gap="150">
                           <Checkbox
-                            label="Suggest where to add images & visuals"
+                            label={t("Suggest where to add images & visuals")}
                             checked={suggestVisuals}
                             onChange={setSuggestVisuals}
                           />
                           <Checkbox
-                            label="Add an FAQ section (great for AI search)"
+                            label={t("Add an FAQ section (great for AI search)")}
                             checked={addFaq}
                             onChange={setAddFaq}
                           />
@@ -527,7 +531,7 @@ export default function BlogPage() {
                                 animated
                               />
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Takes 20–40 seconds
+                               {t("Takes 20–40 seconds")}
                               </Text>
                             </BlockStack>
                           </Box>
@@ -540,7 +544,7 @@ export default function BlogPage() {
                           disabled={isGenerating}
                           fullWidth
                         >
-                          {isGenerating ? "Generating..." : "Generate Blog Post"}
+                          {isGenerating ? t("Generating...") : t("Generate Blog Post")}
                         </Button>
 
                         {actionData?.limitReached && <QuotaReachedCard upsell={upsell} surface="blog" />}
@@ -556,7 +560,7 @@ export default function BlogPage() {
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={LightbulbIcon} tone="info" />
                     <Text as="h2" variant="headingSm">
-                      Tips for great posts
+                     {t("Tips for great posts")}
                     </Text>
                   </InlineStack>
                   <BlockStack gap="100">
@@ -567,21 +571,19 @@ export default function BlogPage() {
                         written for somebody else. The rule it teaches is the same
                         one without naming anybody's products. */}
                     <Text as="p" variant="bodySm">
-                      • <strong>Be specific</strong> — a post answering one question a customer actually asks
-                      beats a post named after a product category.
+                      • <strong>{t("Be specific")}</strong> {t("— a post answering one question a customer actually asks beats a post named after a product category.")}
                     </Text>
                     <Text as="p" variant="bodySm">
-                      • Add <strong>target keywords</strong> your customers actually search.
+                     {t("• Add")} <strong>{t("target keywords")}</strong> {t("your customers actually search.")}
                     </Text>
                     <Text as="p" variant="bodySm">
-                      • Use <strong>special instructions</strong> to mention promos, comparisons, or your
-                      angle.
+                     {t("• Use")} <strong>{t("special instructions")}</strong> {t("to mention promos, comparisons, or your angle.")}
                     </Text>
                     <Text as="p" variant="bodySm">
-                      • <strong>Longer posts</strong> give the model more to work with.
+                      • <strong>{t("Longer posts")}</strong> {t("give the model more to work with.")}
                     </Text>
                     <Text as="p" variant="bodySm">
-                      • Turn on <strong>FAQ</strong> to add a question-and-answer section.
+                     {t("• Turn on")} <strong>FAQ</strong> {t("to add a question-and-answer section.")}
                     </Text>
                   </BlockStack>
                 </BlockStack>
@@ -593,7 +595,7 @@ export default function BlogPage() {
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
                       <Text as="p" variant="bodySm" fontWeight="semibold">
-                        Monthly credits
+                       {t("Monthly credits")}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         {usageCount}/{monthlyCredits}
@@ -614,10 +616,10 @@ export default function BlogPage() {
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
                       <Text as="h2" variant="headingMd">
-                        Recent Posts
+                       {t("Recent Posts")}
                       </Text>
                       <Button size="slim" variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                        View all
+                       {t("View all")}
                       </Button>
                     </InlineStack>
                     {recentPosts.map((post) => (
@@ -635,11 +637,11 @@ export default function BlogPage() {
                               {post.title || "(untitled)"}
                             </Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              {post.wordCount} words
+                             {t("{wordCount} words", { wordCount: post.wordCount })}
                             </Text>
                           </BlockStack>
                           <Badge tone={post.status === "published" ? "success" : "info"}>
-                            {post.status === "published" ? "Published" : "Draft"}
+                            {post.status === "published" ? t("Published") : t("Draft")}
                           </Badge>
                         </InlineStack>
                       </Box>
@@ -672,11 +674,10 @@ export default function BlogPage() {
                     <BlockStack gap="300" inlineAlign="center">
                       <Icon source={FileIcon} tone="subdued" />
                       <Text as="p" variant="headingMd" alignment="center" tone="subdued">
-                        No blog post yet
+                       {t("No blog post yet")}
                       </Text>
                       <Text as="p" variant="bodySm" alignment="center" tone="subdued">
-                        Enter a topic on the left and click Generate Blog Post to create SEO-friendly content
-                        in your brand voice.
+                       {t("Enter a topic on the left and click Generate Blog Post to create SEO-friendly content in your brand voice.")}
                       </Text>
                     </BlockStack>
                   </Box>
@@ -691,9 +692,7 @@ export default function BlogPage() {
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={CheckCircleIcon} tone="success" />
                     <Text as="p" variant="bodySm" fontWeight="semibold">
-                      {generated
-                        ? "Blog post generated and saved as draft — review and edit below"
-                        : `Editing draft: ${resumePost?.title || resumePost?.topic || "Untitled"}`}
+                      {generated ? t("Blog post generated and saved as draft — review and edit below") : t("Editing draft: {v}", { v: resumePost?.title || resumePost?.topic || "Untitled" })}
                     </Text>
                   </InlineStack>
                 </Box>
@@ -701,7 +700,7 @@ export default function BlogPage() {
                 <Card>
                   <BlockStack gap="400">
                     <TextField
-                      label="Title"
+                      label={t("Title")}
                       value={editedTitle}
                       onChange={setEditedTitle}
                       autoComplete="off"
@@ -712,20 +711,17 @@ export default function BlogPage() {
                     <InlineStack align="space-between" blockAlign="center" wrap>
                       <ButtonGroup variant="segmented">
                         <Button pressed={blogView === "preview"} onClick={() => setBlogView("preview")}>
-                          Preview
+                         {t("Preview")}
                         </Button>
                         <Button pressed={blogView === "html"} onClick={() => setBlogView("html")}>
-                          Edit HTML
+                         {t("Edit HTML")}
                         </Button>
                       </ButtonGroup>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {
-                          editedContent
+                       {t("{length}{v} words", { length: editedContent
                             .replace(/<[^>]+>/g, "")
                             .split(/\s+/)
-                            .filter(Boolean).length
-                        }{" "}
-                        words
+                            .filter(Boolean).length, v: " " })}
                       </Text>
                     </InlineStack>
 
@@ -744,12 +740,12 @@ export default function BlogPage() {
                       </Box>
                     ) : (
                       <TextField
-                        label="Content (HTML)"
+                        label={t("Content (HTML)")}
                         labelHidden
                         value={editedContent}
                         onChange={setEditedContent}
                         multiline={18}
-                        helpText="Edit the HTML directly. Switch back to Preview to see your changes."
+                        helpText={t("Edit the HTML directly. Switch back to Preview to see your changes.")}
                         autoComplete="off"
                       />
                     )}
@@ -768,7 +764,7 @@ export default function BlogPage() {
                     />
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">
-                        This will publish the post directly to your Shopify blog.
+                       {t("This will publish the post directly to your Shopify blog.")}
                       </Text>
                       <Button
                         variant="primary"
@@ -778,7 +774,7 @@ export default function BlogPage() {
                         disabled={isPublishing}
                         fullWidth
                       >
-                        {isPublishing ? "Publishing..." : "Publish to Shopify Blog"}
+                        {isPublishing ? t("Publishing...") : t("Publish to Shopify Blog")}
                       </Button>
                     </BlockStack>
                   </Form>

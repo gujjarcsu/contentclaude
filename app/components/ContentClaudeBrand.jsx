@@ -1,9 +1,11 @@
-export function ContentClaudeLogo({ size = "medium" }) {
+
+import { useT } from "../i18n/react.jsx";export function ContentClaudeLogo({ size = "medium" }) {
+  const t = useT();
   const dim = { small: 24, medium: 40, large: 64 }[size] ?? 40;
   return (
     <img
       src="/logos/contentclaude-icon-square.svg"
-      alt="Navaal"
+      alt={t("Navaal")}
       width={dim}
       height={dim}
       style={{ display: "block", aspectRatio: "1" }}
@@ -12,14 +14,15 @@ export function ContentClaudeLogo({ size = "medium" }) {
 }
 
 export function ContentClaudeBrand() {
+  const t = useT();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       <ContentClaudeLogo size="medium" />
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", lineHeight: 1.2 }}>
-          Nav<span style={{ color: "#0A84FF" }}>aal</span>
+          {t("Nav")}<span style={{ color: "#0A84FF" }}>aal</span>
         </div>
-        <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>AI SEO, AEO &amp; GEO</div>
+        <div style={{ fontSize: 12, color: "#666666", marginTop: 2 }}>{t("AI SEO, AEO & GEO")}</div>
       </div>
     </div>
   );

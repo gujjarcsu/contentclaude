@@ -7,6 +7,7 @@
  * page's Search Console card.
  */
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useT } from "../i18n/react.jsx";
 import { Page, Card, Text, BlockStack, InlineStack, Button, TextField, Link, Banner, List } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server.js";
@@ -41,6 +42,7 @@ export const action = async ({ request }) => {
 };
 
 function ReportCard({ report, readings }) {
+  const t = useT();
   const fetcher = useFetcher();
   const [values, setValues] = useState(() => Object.fromEntries(report.fields.map((f) => [f.key, ""])));
   const busy = fetcher.state !== "idle";
@@ -53,7 +55,7 @@ function ReportCard({ report, readings }) {
           {report.title}
         </Text>
         <Text as="p" variant="bodySm">
-          <b>Where:</b> {report.where}
+          <b>{t("Where:")}</b> {report.where}
         </Text>
         <List type="number">
           {report.steps.map((s) => (
@@ -61,13 +63,13 @@ function ReportCard({ report, readings }) {
           ))}
         </List>
         <Link url={report.url} target="_blank">
-          Open it in a new tab
+          {t("Open it in a new tab")}
         </Link>
         <Text as="p" variant="bodySm" tone="subdued">
           {report.caveat}
         </Text>
         {sentence && (
-          <Banner tone="info" title="What you read last time">
+          <Banner tone="info" title={t("What you read last time")}>
             <Text as="p" variant="bodySm">
               {sentence}
             </Text>
@@ -93,7 +95,7 @@ function ReportCard({ report, readings }) {
             </InlineStack>
             <InlineStack>
               <Button submit loading={busy}>
-                Save what I read
+                {t("Save what I read")}
               </Button>
             </InlineStack>
           </BlockStack>
@@ -104,20 +106,19 @@ function ReportCard({ report, readings }) {
 }
 
 export default function AiReportsPage() {
+  const t = useT();
   const { readings } = useLoaderData();
   const navigate = useNavigate();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) return <AppSkeleton />;
   return (
-    <Page title="The two AI reports you read yourself" subtitle="Neither has an API. We show you where they are and what they mean; what you read is yours." backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
+    <Page title={t("The two AI reports you read yourself")} subtitle={t("Neither has an API. We show you where they are and what they mean; what you read is yours.")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
       <BlockStack gap="400">
         {AI_REPORTS.map((r) => (
           <ReportCard key={r.key} report={r} readings={readings} />
         ))}
         <Text as="p" variant="bodySm" tone="subdued">
-          Method: none of ours. These two reports are read in Google's and Microsoft's own consoles, by you; no app can read
-          them, and this one does not try. A number you type here is stored with its date and shown back as your reading.
-          It is never combined with anything, never trended, and never leaves the app.
+          {t("Method: none of ours. These two reports are read in Google's and Microsoft's own consoles, by you; no app can read them, and this one does not try. A number you type here is stored with its date and shown back as your reading. It is never combined with anything, never trended, and never leaves the app.")}
         </Text>
       </BlockStack>
     </Page>

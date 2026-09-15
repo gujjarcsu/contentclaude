@@ -16,6 +16,7 @@
  * not on whether anyone remembered to be careful.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 /**
@@ -134,7 +135,7 @@ describe("secretBox — FAILS CLOSED", () => {
   });
 
   it("has no fallback key material anywhere in the source", async () => {
-    const src = code(readFileSync("app/utils/secretBox.server.js", "utf8"));
+    const src = code(unwrapT(readFileSync("app/utils/secretBox.server.js", "utf8")));
     expect(src).not.toMatch(/SHOPIFY_API_SECRET/);
     expect(src).not.toMatch(/\|\|\s*["'`][A-Za-z0-9+/=]{16,}/);
   });
@@ -149,7 +150,7 @@ describe("THE LEAK RULES — mechanical, not trusted", () => {
   ];
 
   it.each(FILES)("%s never logs key material", (file) => {
-    const src = code(readFileSync(file, "utf8"));
+    const src = code(unwrapT(readFileSync(file, "utf8")));
     // Any logger call that mentions a key-bearing identifier.
     const logCalls = src.match(/logger\.\w+\([\s\S]{0,400}?\)/g) ?? [];
     for (const call of logCalls) {
@@ -160,7 +161,7 @@ describe("THE LEAK RULES — mechanical, not trusted", () => {
   });
 
   it.each(FILES)("%s never takes a prefix, suffix or length of a key", (file) => {
-    const src = code(readFileSync(file, "utf8"));
+    const src = code(unwrapT(readFileSync(file, "utf8")));
     // "not the key, not a prefix, not a length" — these are the shapes that
     // produce one, and each looks perfectly reasonable in review.
     expect(src).not.toMatch(/\b(apiKey|aiKey|plaintext|merchantKey)\b[^\n]{0,40}\.(slice|substring|substr)\(/);
@@ -172,14 +173,14 @@ describe("THE LEAK RULES — mechanical, not trusted", () => {
     // The easiest place to break the rule while sounding reasonable: a last4
     // for a nicer Settings card would put a merchant's secret into every
     // backup, every logged row and every support screenshot.
-    const schema = code(readFileSync("prisma/schema.prisma", "utf8"));
+    const schema = code(unwrapT(readFileSync("prisma/schema.prisma", "utf8")));
     const shopModel = schema.slice(schema.indexOf("model Shop {"), schema.indexOf("model ProductScore"));
     expect(shopModel).toMatch(/aiKeyCiphertext/);
     expect(shopModel).not.toMatch(/aiKeyLast4|aiKeyPrefix|aiKeyLength|aiKeyPlain/i);
   });
 
   it("the Settings loader can only ever send booleans and a timestamp", () => {
-    const src = code(readFileSync("app/routes/app.settings.jsx", "utf8"));
+    const src = code(unwrapT(readFileSync("app/routes/app.settings.jsx", "utf8")));
     // keyStatusFor is the only reader, and it returns no key material at all —
     // so there is no branch in the route that COULD serialise one.
     expect(src).toMatch(/keyStatusFor/);
@@ -204,7 +205,7 @@ describe("THE LEAK RULES — mechanical, not trusted", () => {
   it("a validation failure carries a code, never Anthropic's own text", () => {
     // An upstream error body can echo the request, headers included. This is
     // the one string that reaches a merchant's screen.
-    const src = code(readFileSync("app/utils/merchantKey.server.js", "utf8"));
+    const src = code(unwrapT(readFileSync("app/utils/merchantKey.server.js", "utf8")));
     expect(src).not.toMatch(/reason:\s*(await )?res\.(text|statusText)/);
     expect(src).not.toMatch(/reason:\s*body/);
     expect(src).toMatch(/reason: "rejected"/);
@@ -366,7 +367,7 @@ describe("the key follows the async chain, because bulk runs concurrently", () =
   it("ai.server.js reads the key in ONE place, not six", async () => {
     // It was six copies of `process.env.ANTHROPIC_API_KEY`, each with its own
     // guard — the same shape P5.0 was spent removing one directory over.
-    const src = code(readFileSync("app/utils/ai.server.js", "utf8"));
+    const src = code(unwrapT(readFileSync("app/utils/ai.server.js", "utf8")));
     const reads = src.match(/process\.env\.ANTHROPIC_API_KEY/g) ?? [];
     expect(reads).toHaveLength(1);
     expect(src).toMatch(/function resolveApiKey\(\)/);
@@ -376,18 +377,18 @@ describe("the key follows the async chain, because bulk runs concurrently", () =
 
 describe("the billing rule a merchant can read", () => {
   it("the plan card says BYOK generations use no credits", () => {
-    const src = readFileSync("app/routes/app.plans.jsx", "utf8");
+    const src = unwrapT(readFileSync("app/routes/app.plans.jsx", "utf8"));
     expect(src).toMatch(/own AI key/i);
     expect(src).toMatch(/no credits/i);
   });
 
   it("the Settings card says it too, in bold, not in a help article", () => {
-    const src = readFileSync("app/routes/app.settings.jsx", "utf8");
-    expect(src).toMatch(/doesn&apos;t count against your monthly/i);
+    const src = unwrapT(readFileSync("app/routes/app.settings.jsx", "utf8"));
+    expect(src).toMatch(/doesn(&apos;|')t count against your monthly/i);
   });
 
   it("04-DECISIONS.md recorded the decision before the code", () => {
-    const src = readFileSync("docs/navaal/04-DECISIONS.md", "utf8");
+    const src = unwrapT(readFileSync("docs/navaal/04-DECISIONS.md", "utf8"));
     expect(src).toMatch(/BYO KEY — DECIDED/);
     expect(src).toMatch(/costs them ZERO credits/i);
   });

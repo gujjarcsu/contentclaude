@@ -17,9 +17,10 @@
  * test below drives the real loaders.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync, existsSync } from "node:fs";
 
-const read = (f) => readFileSync(f, "utf8");
+const read = (f) => unwrapT(readFileSync(f, "utf8"));
 const code = (f) =>
   read(f)
     .replace(/\/\*[\s\S]*?\*\//g, "")

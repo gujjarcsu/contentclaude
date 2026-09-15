@@ -112,7 +112,7 @@ describe("A5 — buttons do what they say", () => {
   });
 
   it("on Free the primary writes drafts through the per-product path; the bulk run is a secondary that names what it needs", () => {
-    expect(p).toMatch(/Write the next \$\{quickBatch\} draft/);
+    expect(p).toMatch(/Write the next \{quickBatch\} draft/);
     expect(p).toMatch(/actionType === "quickBatch"/);
     expect(p).toMatch(/runQuickStartOne\(\{ admin, shop, productId, mode: "generate" \}\)/);
     expect(p).toMatch(/needs Starter/);
@@ -138,7 +138,7 @@ describe("A6 — the score, labelled and not scary", () => {
   });
 
   it("a product row shows its own score, labelled as the product's", () => {
-    expect(src("app/components/StartState.jsx")).toMatch(/This product: \$\{target\.scoreBefore\}\/100/);
+    expect(src("app/components/StartState.jsx")).toMatch(/This product: \{scoreBefore\}\/100/);
   });
 
   it("spent credits never display as 0%", () => {

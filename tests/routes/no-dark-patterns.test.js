@@ -10,10 +10,11 @@
  *   - the free reset date is always beside the upgrade CTA.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const read = (f) => readFileSync(f, "utf8");
+const read = (f) => unwrapT(readFileSync(f, "utf8"));
 const allSources = () => {
   const out = [];
   for (const dir of ["app/routes", "app/components"]) {
@@ -94,7 +95,7 @@ describe("no dark patterns", () => {
   });
   it("the reset date is rendered unconditionally beside the upgrade CTA", () => {
     expect(read("app/components/UpgradePrompt.jsx")).toContain(
-      "Or wait — your {planLabel} generations reset on {upsell.resetDate}.",
+      "Or wait — your {planLabel} credits reset on {resetDate}.",
     );
   });
 });

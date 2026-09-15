@@ -11,6 +11,7 @@
  * whole design.
  */
 import { useState } from "react";
+import { useT } from "../i18n/react.jsx";
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
   Page,
@@ -77,6 +78,7 @@ export const action = async ({ request }) => {
 };
 
 export default function SupportPage() {
+  const t = useT();
   const { planName, supportEmail } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -92,13 +94,13 @@ export default function SupportPage() {
 
   return (
     <Page
-      title="Get help"
-      subtitle="A real person reads every one of these."
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      title={t("Get help")}
+      subtitle={t("A real person reads every one of these.")}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         {actionData?.error && (
-          <Banner tone="critical" title="That did not go through">
+          <Banner tone="critical" title={t("That did not go through")}>
             <Text as="p" variant="bodyMd">
               {actionData.error}
             </Text>
@@ -108,25 +110,16 @@ export default function SupportPage() {
         {actionData?.success && (
           <Banner
             tone="success"
-            title={
-              actionData.emailed
-                ? "Got it — your question is with us"
-                : "Got it — your question is saved"
-            }
+            title={actionData.emailed ? t("Got it — your question is with us") : t("Got it — your question is saved")}
           >
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd">
-                {actionData.emailed
-                  ? "We aim to reply within one business day, to the address you gave us."
-                  : /* The honest version. The question IS recorded; the email
-                       attempt did not succeed, and telling the merchant it did
-                       would be the exact failure this screen exists to avoid. */
-                    "We have saved it and it will be picked up. The email notification did not go " +
+                {actionData.emailed ? t("We aim to reply within one business day, to the address you gave us.") : "We have saved it and it will be picked up. The email notification did not go " +
                     "through on our side, so if you do not hear back within one business day, " +
                     `email ${supportEmail} and quote the reference below.`}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Reference: {actionData.reference}
+                {t("Reference: {reference}", { reference: actionData.reference })}
               </Text>
             </BlockStack>
           </Banner>
@@ -136,29 +129,29 @@ export default function SupportPage() {
           <BlockStack gap="400">
             <BlockStack gap="200">
               <Text as="h2" variant="headingMd">
-                Ask us anything about the app
+                {t("Ask us anything about the app")}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Questions are answered within one business day. You are on the{" "}
-                <b>{planName}</b> plan — we can see that, so you do not need to tell us.
+                {t("Questions are answered within one business day. You are on the{v}", { v: " " })}
+                <b>{planName}</b> {t("plan — we can see that, so you do not need to tell us.")}
               </Text>
             </BlockStack>
 
             <Form method="post">
               <BlockStack gap="400">
                 <TextField
-                  label="Your email"
+                  label={t("Your email")}
                   name="replyTo"
                   type="email"
                   value={replyTo}
                   onChange={setReplyTo}
                   autoComplete="email"
                   placeholder="you@yourstore.com"
-                  helpText="Where we reply. It does not have to be the address on your Shopify account."
+                  helpText={t("Where we reply. It does not have to be the address on your Shopify account.")}
                   requiredIndicator
                 />
                 <TextField
-                  label="Subject"
+                  label={t("Subject")}
                   name="subject"
                   value={subject}
                   onChange={setSubject}
@@ -168,7 +161,7 @@ export default function SupportPage() {
                   requiredIndicator
                 />
                 <TextField
-                  label="What is happening?"
+                  label={t("What is happening?")}
                   name="message"
                   value={message}
                   onChange={setMessage}
@@ -176,12 +169,12 @@ export default function SupportPage() {
                   autoComplete="off"
                   maxLength={MESSAGE_MAX}
                   showCharacterCount
-                  helpText="If something looks wrong, tell us which screen and what you expected to see — that usually saves a round trip."
+                  helpText={t("If something looks wrong, tell us which screen and what you expected to see — that usually saves a round trip.")}
                   requiredIndicator
                 />
                 <InlineStack gap="300">
                   <Button submit variant="primary" loading={isSubmitting}>
-                    Send question
+                    {t("Send question")}
                   </Button>
                 </InlineStack>
               </BlockStack>
@@ -192,22 +185,20 @@ export default function SupportPage() {
         <Card>
           <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
-              Other ways to reach us
+              {t("Other ways to reach us")}
             </Text>
             <List>
               <List.Item>
-                Email <Link url={`mailto:${supportEmail}`}>{supportEmail}</Link> directly — it reaches
-                the same inbox.
+                {t("Email")} <Link url={`mailto:${supportEmail}`}>{supportEmail}</Link> {t("directly — it reaches the same inbox.")}
               </List.Item>
               <List.Item>
                 <Link url="/privacy" target="_blank">
-                  Privacy policy
-                </Link>{" "}
-                — what we store and what we send to our AI provider.
+                  {t("Privacy policy")}
+                </Link>{t("{v} — what we store and what we send to our AI provider.", { v: " " })}
               </List.Item>
               <List.Item>
                 <Link url="/terms" target="_blank">
-                  Terms of service
+                  {t("Terms of service")}
                 </Link>
               </List.Item>
             </List>

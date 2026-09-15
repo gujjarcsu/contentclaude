@@ -6,6 +6,8 @@ import {
   useSubmit,
   useFetcher,
 } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest, T } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { scoreContent } from "../utils/contentScorer.server.js";
 import {
@@ -99,10 +101,10 @@ const CONTENT_TYPES = ["description", "metaTitle", "metaDescription", "faq"];
 // in the badges. One map, used by the badges, the section headings and the
 // editor's accessible label, so the wording can never drift apart again.
 const CONTENT_LABELS = {
-  description: "Description",
-  metaTitle: "Page title",
-  metaDescription: "Search description",
-  faq: "FAQ",
+  description: T("Description"),
+  metaTitle: T("Page title"),
+  metaDescription: T("Search description"),
+  faq: T("FAQ"),
 };
 
 // Stable DOM id for a product's Approve checkbox, so the keyboard handler can
@@ -110,6 +112,7 @@ const CONTENT_LABELS = {
 const approveCheckboxId = (productId) => `approve-${String(productId).replace(/\W+/g, "-")}`;
 
 export const loader = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
@@ -173,7 +176,7 @@ export const loader = async ({ request }) => {
       productId: r.productId,
       numericId: String(r.productId).split("/").pop(),
       productTitle: r.productTitle || "Untitled product",
-      note: r.verifyNote || "Shopify stored something different from what we sent.",
+      note: r.verifyNote || t("Shopify stored something different from what we sent."),
     });
   }
 
@@ -322,6 +325,7 @@ async function fetchProductsBatch(admin, productIds) {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -334,17 +338,17 @@ export const action = async ({ request }) => {
       approved = JSON.parse(formData.get("approved") || "[]");
       edits = JSON.parse(formData.get("edits") || "{}");
     } catch {
-      return Response.json({ error: "Invalid submission data." }, { status: 400 });
+      return Response.json({ error: t("Invalid submission data.") }, { status: 400 });
     }
     if (!Array.isArray(approved) || approved.length === 0) {
-      return Response.json({ error: "No products approved for publishing." }, { status: 400 });
+      return Response.json({ error: t("No products approved for publishing.") }, { status: 400 });
     }
     // Defence in depth: this action publishes via productUpdate, so drop any
     // non-Product GID (e.g. a Collection draft from a stale page) instead of
     // sending it to a mutation that can only ever reject it.
     approved = approved.filter((id) => typeof id === "string" && id.startsWith(PRODUCT_GID_PREFIX));
     if (approved.length === 0) {
-      return Response.json({ error: "No publishable products in the selection." }, { status: 400 });
+      return Response.json({ error: t("No publishable products in the selection.") }, { status: 400 });
     }
 
     // Fetch draft content for each approved product
@@ -553,7 +557,7 @@ export const action = async ({ request }) => {
     try {
       rejected = JSON.parse(formData.get("rejected") || "[]");
     } catch {
-      return Response.json({ error: "Invalid rejection data." }, { status: 400 });
+      return Response.json({ error: t("Invalid rejection data.") }, { status: 400 });
     }
     if (Array.isArray(rejected) && rejected.length > 0) {
       await prisma.generatedContent.updateMany({
@@ -561,7 +565,7 @@ export const action = async ({ request }) => {
         data: { status: "rejected" },
       });
     }
-    return Response.json({ success: true, message: `${rejected.length} product(s) marked as rejected.` });
+    return Response.json({ success: true, message: t("{length} product(s) marked as rejected.", { length: rejected.length }) });
   }
 
   // Persist one inline edit as the merchant makes it (fired on blur, not on
@@ -580,7 +584,7 @@ export const action = async ({ request }) => {
       !CONTENT_TYPES.includes(contentType) ||
       typeof content !== "string"
     ) {
-      return Response.json({ error: "Invalid edit." }, { status: 400 });
+      return Response.json({ error: t("Invalid edit.") }, { status: 400 });
     }
 
     const productTitle = formData.get("productTitle");
@@ -600,7 +604,7 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, saved: true, productId, contentType });
   }
 
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
 // A blur-save is a background write of text the page already has on screen.
@@ -625,20 +629,16 @@ export const shouldRevalidate = ({ formData, defaultShouldRevalidate }) => {
  * one banner in the app that says "your storefront may not say what you think".
  */
 function NeedsCheckBanner({ items, navigate }) {
+  const t = useT();
   if (!items || items.length === 0) return null;
   return (
     <Banner
       tone="warning"
-      title={
-        items.length === 1
-          ? "1 product went live, but Shopify stored something different"
-          : `${items.length} products went live, but Shopify stored something different`
-      }
+      title={items.length === 1 ? t("1 product went live, but Shopify stored something different") : t("{length} products went live, but Shopify stored something different", { length: items.length })}
     >
       <BlockStack gap="200">
         <Text as="p" variant="bodyMd">
-          These are on your storefront now. We checked what Shopify saved against what we sent, and they do
-          not match — usually because Shopify shortened something. Open one to compare.
+          {t("These are on your storefront now. We checked what Shopify saved against what we sent, and they do not match — usually because Shopify shortened something. Open one to compare.")}
         </Text>
         <BlockStack gap="100">
           {items.slice(0, 5).map((it) => (
@@ -647,13 +647,13 @@ function NeedsCheckBanner({ items, navigate }) {
                 <strong>{it.productTitle}</strong> — {it.note}
               </Text>
               <Button variant="plain" onClick={() => navigate(`/app/products/${it.numericId}`)}>
-                Open
+                {t("Open")}
               </Button>
             </InlineStack>
           ))}
           {items.length > 5 && (
             <Text as="p" variant="bodySm" tone="subdued">
-              {`and ${items.length - 5} more`}
+              {t("and {v} more", { v: items.length - 5 })}
             </Text>
           )}
         </BlockStack>
@@ -665,6 +665,7 @@ function NeedsCheckBanner({ items, navigate }) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ReviewPage() {
+  const t = useT();
   const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain, scopedTo, scopeRefused } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
@@ -825,51 +826,49 @@ export default function ReviewPage() {
 
   if (products.length === 0) {
     return (
-      <Page title="Review & Publish" backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}>
+      <Page title={t("Review & Publish")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
         {/* After publishing all drafts we land here with a success actionData —
             still the right moment to ask for a review. */}
         <ReviewRequest ask={actionData?.reviewAsk} />
         <EmptyState
-          heading="Nothing to review — you're all caught up"
+          heading={t("Nothing to review — you're all caught up")}
           image="/empty-review.svg"
-          action={{ content: "Go to Products", onAction: () => navigate("/app/products") }}
+          action={{ content: t("Go to Products"), onAction: () => navigate("/app/products") }}
         >
-          <p>Generate content from the Products page, then come back here to review and publish.</p>
+          <p>{t("Generate content from the Products page, then come back here to review and publish.")}</p>
         </EmptyState>
       </Page>
     );
   }
 
   return loadingThisRoute ? (
-    <AppSkeleton title="Review & Publish" sections={2} layout="full" />
+    <AppSkeleton title={t("Review & Publish")} sections={2} layout="full" />
   ) : (
     <Page
-      title="Review & Publish"
-      subtitle={`${products.length} product${products.length !== 1 ? "s" : ""} with draft content ready to review`}
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      title={t("Review & Publish")}
+      subtitle={t("{length} product{v} with draft content ready to review", { length: products.length, v: products.length !== 1 ? "s" : "" })}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
         {scopeRefused && (
-          <Banner tone="warning" title="That product link was malformed — showing all your drafts">
+          <Banner tone="warning" title={t("That product link was malformed — showing all your drafts")}>
             <Text as="p" variant="bodySm">
-              Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Every draft is listed
-              below, so nothing is hidden behind a wrong link.
+              {t("Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Every draft is listed below, so nothing is hidden behind a wrong link.")}
             </Text>
           </Banner>
         )}
         {scopedTo && (
-          <Banner tone="info" title="Showing one product" action={{ content: "Show all drafts", onAction: () => navigate("/app/review") }}>
+          <Banner tone="info" title={t("Showing one product")} action={{ content: t("Show all drafts"), onAction: () => navigate("/app/review") }}>
             <Text as="p" variant="bodySm">
-              Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.
+              {t("Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.")}
             </Text>
           </Banner>
         )}
         <NeedsCheckBanner items={needsCheck} navigate={navigate} />
         <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
         <Banner tone="info">
-          Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ
-          schema attached, in the structured format search engines and AI answer engines read and quote from.
+          {t("Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ schema attached, in the structured format search engines and AI answer engines read and quote from.")}
         </Banner>
 
         {actionData?.success && <PublishFailures errors={actionData.errors} />}
@@ -885,13 +884,13 @@ export default function ReviewPage() {
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="300" blockAlign="center">
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  {approvedCount} of {products.length} approved
+                  {t("{approvedCount} of {length} approved", { approvedCount, length: products.length })}
                 </Text>
                 <Button variant="plain" size="slim" onClick={approveAllOnPage}>
-                  Approve all on this page
+                  {t("Approve all on this page")}
                 </Button>
                 <Button variant="plain" size="slim" onClick={clearSelection}>
-                  Clear selection
+                  {t("Clear selection")}
                 </Button>
               </InlineStack>
               <ButtonGroup>
@@ -901,7 +900,7 @@ export default function ReviewPage() {
                   loading={isSubmitting && navigation.formData?.get("actionType") === "reject"}
                   disabled={isSubmitting || unapprovedIds.length === 0}
                 >
-                  {`Reject ${unapprovedIds.length} not approved`}
+                  {t("Reject {length} not approved", { length: unapprovedIds.length })}
                 </Button>
                 {/* No disabled primary: with nothing approved there is nothing
                     to publish, so the slot stays empty rather than dangling a
@@ -914,16 +913,16 @@ export default function ReviewPage() {
                     loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                     disabled={isSubmitting}
                   >
-                    Publish {approvedCount} approved
+                    {t("Publish {approvedCount} approved", { approvedCount })}
                   </Button>
                 )}
               </ButtonGroup>
             </InlineStack>
 
             <TextField
-              label="Search products"
+              label={t("Search products")}
               labelHidden
-              placeholder="Search products..."
+              placeholder={t("Search products...")}
               value={search}
               onChange={setSearch}
               clearButton
@@ -932,7 +931,7 @@ export default function ReviewPage() {
             />
 
             <Text as="p" variant="bodySm" tone="subdued">
-              Keyboard: press the right arrow key to step to the next product, Enter to approve it.
+              {t("Keyboard: press the right arrow key to step to the next product, Enter to approve it.")}
             </Text>
           </BlockStack>
         </Card>
@@ -962,13 +961,13 @@ export default function ReviewPage() {
           <Card>
             <InlineStack align="center" gap="400">
               <Button disabled={page <= 1} onClick={() => navigate(`/app/review?page=${page - 1}`)}>
-                Previous
+                {t("Previous")}
               </Button>
               <Text as="p" variant="bodySm" tone="subdued">
-                Page {page} of {totalPages}
+                {t("Page {page} of {totalPages}", { page, totalPages })}
               </Text>
               <Button disabled={page >= totalPages} onClick={() => navigate(`/app/review?page=${page + 1}`)}>
-                Next
+                {t("Next")}
               </Button>
             </InlineStack>
           </Card>
@@ -977,22 +976,21 @@ export default function ReviewPage() {
       <Modal
         open={confirmReject}
         onClose={() => setConfirmReject(false)}
-        title={`Reject ${unapprovedIds.length} draft${unapprovedIds.length === 1 ? "" : "s"}?`}
+        title={t("Reject {length} draft{v}?", { length: unapprovedIds.length, v: unapprovedIds.length === 1 ? "" : "s" })}
         primaryAction={{
-          content: "Reject them",
+          content: t("Reject them"),
           destructive: true,
           onAction: doRejectUnapproved,
         }}
-        secondaryActions={[{ content: "Cancel", onAction: () => setConfirmReject(false) }]}
+        secondaryActions={[{ content: t("Cancel"), onAction: () => setConfirmReject(false) }]}
       >
         <Modal.Section>
           <BlockStack gap="300">
             <Text as="p" variant="bodyMd">
-              Every draft on this page that you have not approved will be marked rejected and will leave this
-              queue. Your live storefront is not changed.
+              {t("Every draft on this page that you have not approved will be marked rejected and will leave this queue. Your live storefront is not changed.")}
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              You can generate fresh content for these products at any time.
+              {t("You can generate fresh content for these products at any time.")}
             </Text>
           </BlockStack>
         </Modal.Section>
@@ -1002,6 +1000,7 @@ export default function ReviewPage() {
 }
 
 function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit, onSaveEdit }) {
+  const t = useT();
   const [expanded, setExpanded] = useState({});
   const toggleExpand = (type) => setExpanded((prev) => ({ ...prev, [type]: !prev[type] }));
 
@@ -1036,7 +1035,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
                   // traditional SEO scores shown elsewhere). Unified colour rule:
                   // >=70 green, 40–69 amber, <40 red — a mid score is "work to do",
                   // not "broken", so it never shows alarming red.
-                  <Tooltip content="How complete this draft is, scored out of 100.">
+                  <Tooltip content={t("How complete this draft is, scored out of 100.")}>
                     <Badge
                       tone={
                         product.qualityScore >= 70
@@ -1046,7 +1045,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
                             : "critical"
                       }
                     >
-                      {`Content quality: ${product.qualityScore}/100`}
+                      {t("Content quality: {qualityScore}/100", { qualityScore: product.qualityScore })}
                     </Badge>
                   </Tooltip>
                 )}
@@ -1054,9 +1053,9 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
               <InlineStack gap="200">
                 {/* Merchant-facing names. These badges used to print the raw
                     storage keys — "metaTitle", "metaDescription". */}
-                {contentTypes.map((t) => (
-                  <Badge key={t} tone="info">
-                    {CONTENT_LABELS[t] || t}
+                {contentTypes.map((ct) => (
+                  <Badge key={ct} tone="info">
+                    {t(CONTENT_LABELS[ct] || ct)}
                   </Badge>
                 ))}
               </InlineStack>
@@ -1067,7 +1066,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
               on the page while actually meaning "un-approve". */}
           <Checkbox
             id={approveCheckboxId(product.productId)}
-            label="Approve"
+            label={t("Approve")}
             checked={isApproved}
             onChange={onToggle}
             onFocus={onFocusCard}
@@ -1102,6 +1101,7 @@ function previewText(type, value) {
 }
 
 function ContentSection({ type, content, currentValue, expanded, onToggle, onEdit, onSaveEdit }) {
+  const t = useT();
   const [editedValue, setEditedValue] = useState(content);
   const savedValue = useRef(content);
 
@@ -1121,7 +1121,7 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
     onSaveEdit(editedValue);
   }, [editedValue, onSaveEdit]);
 
-  const label = CONTENT_LABELS[type] || type;
+  const label = useT()(CONTENT_LABELS[type] || type);
   const preview = previewText(type, content);
   const currentPreview = previewText(type, currentValue || "");
 
@@ -1136,7 +1136,7 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
           {label}
         </Text>
         <Button variant="plain" size="slim" onClick={onToggle}>
-          {expanded ? "Collapse" : "Edit"}
+          {expanded ? t("Collapse") : t("Edit")}
         </Button>
       </InlineStack>
 
@@ -1145,7 +1145,7 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
       <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
         <BlockStack gap="100">
           <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
-            Current
+            {t("Current")}
           </Text>
           {currentPreview ? (
             <Text as="p" variant="bodySm">
@@ -1153,29 +1153,25 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
             </Text>
           ) : (
             <Text as="p" variant="bodySm" tone="subdued">
-              Nothing yet
+              {t("Nothing yet")}
             </Text>
           )}
         </BlockStack>
 
         <BlockStack gap="100">
           <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
-            Proposed
+            {t("Proposed")}
           </Text>
           {expanded ? (
             <TextField
-              label={`Proposed ${label}`}
+              label={t("Proposed {label}", { label })}
               labelHidden
               value={editedValue}
               onChange={handleChange}
               onBlur={handleBlur}
               multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-              helpText={
-                charLimit
-                  ? `${charCount}/${charLimit} characters${overLimit ? " — too long" : ""}`
-                  : "Edits are saved when you leave the field"
-              }
-              error={overLimit ? `Shorten to under ${charLimit} characters` : ""}
+              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? " — too long" : "" }) : t("Edits are saved when you leave the field")}
+              error={overLimit ? t("Shorten to under {charLimit} characters", { charLimit }) : ""}
               autoComplete="off"
             />
           ) : (
@@ -1192,12 +1188,13 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
 // The products that did not publish, named. Kept out of the main render so the
 // one publish primary is not buried in a list of failure rows.
 function PublishFailures({ errors }) {
+  const t = useT();
   if (!errors?.length) return null;
   return (
-    <Banner tone="warning" title="Published with some errors">
+    <Banner tone="warning" title={t("Published with some errors")}>
       {errors.map((e, i) => (
         <p key={i}>
-          Failed: {e.productTitle || "Untitled product"} — {e.error}
+          {t("Failed:")} {e.productTitle || "Untitled product"} — {e.error}
         </p>
       ))}
     </Banner>

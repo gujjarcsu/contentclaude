@@ -11,6 +11,7 @@
  * what it does NOT claim, and what an attribution refuses to invent.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync, readdirSync } from "node:fs";
 
 const { prisma, recordPromptCondition } = vi.hoisted(() => ({
@@ -246,7 +247,7 @@ describe("attribution refuses to invent anything", () => {
 
 describe("source guard — six surfaces really are gone", () => {
   const code = (f) =>
-    readFileSync(f, "utf8")
+    unwrapT(readFileSync(f, "utf8"))
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^[ \t]*\/\/.*$/gm, "");
 
@@ -311,6 +312,6 @@ describe("source guard — six surfaces really are gone", () => {
 
   it("a downgrade is a real button, not a dead end", () => {
     const src = code("app/routes/app.plans.jsx");
-    expect(src).toMatch(/Switch to \{displayPlan\.label\}/);
+    expect(src).toMatch(/Switch to \{label\}/);
   });
 });

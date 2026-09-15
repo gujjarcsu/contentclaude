@@ -17,10 +17,11 @@
  * is. Where a decision is computed, the computation is asserted instead.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT, stripComments } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync, readdirSync } from "node:fs";
 import { join, sep } from "node:path";
 
-const read = (f) => readFileSync(f, "utf8");
+const read = (f) => unwrapT(readFileSync(f, "utf8"));
 const code = (f) =>
   read(f)
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -79,11 +80,11 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
   const src = code("app/routes/app._index.jsx");
 
   it("drafts waiting beat everything else", () => {
-    expect(src).toMatch(/draftCount > 0[\s\S]{0,200}Review \$\{draftCount\}/);
+    expect(src).toMatch(/draftCount > 0[\s\S]{0,200}Review \{draftCount\}/);
   });
 
   it("then products with no content", () => {
-    expect(src).toMatch(/notOptimizedCount > 0[\s\S]{0,200}Optimize \$\{notOptimizedCount\}/);
+    expect(src).toMatch(/notOptimizedCount > 0[\s\S]{0,200}Optimize \{notOptimizedCount\}/);
   });
 
   it("and an audit when there is nothing else to do", () => {
@@ -95,8 +96,8 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
   });
 
   it("the label counts the actual work, so it is never a bare verb", () => {
-    expect(src).toMatch(/draftCount === 1 \? "" : "s"/);
-    expect(src).toMatch(/notOptimizedCount === 1 \? "" : "s"/);
+    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/draftCount === 1 \? "" : "s"/); // the plural expression lives in the t() vars, which the unwrap hides
+    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/notOptimizedCount === 1 \? "" : "s"/);
   });
 });
 

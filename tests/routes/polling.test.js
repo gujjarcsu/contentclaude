@@ -24,7 +24,7 @@ describe("the layout answers the question instead of making the browser ask", ()
   it("the loader reports whether a job is actually running", () => {
     expect(layout).toMatch(/activeJobCount = await prisma\.generationJob\.count/);
     expect(layout).toMatch(/status: \{ in: \["queued", "processing"\] \}/);
-    expect(layout).toMatch(/activeJobCount \}/);
+    expect(layout).toMatch(/activeJobCount, uiLocale \}/); // Phase 12 Part D: the display language rides with it
   });
 
   it("the ticker takes that count and the current path as input", () => {

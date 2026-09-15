@@ -158,7 +158,7 @@ describe("wiring — merchant-switched, lock-gated, never a locked shop, method 
     expect(page).toMatch(/Submitted — median time to first crawl/);
     expect(page).toMatch(/Withheld — median time to first crawl/);
     expect(page).toMatch(/95% interval on the difference/);
-    expect(page).toMatch(/seed \$\{e\.seed\}/);
+    expect(page).toMatch(/seed \{seed\}/);
     expect(page).toMatch(/Method:/);
     expect(page).toMatch(/cannot host\s+an IndexNow key file at its root/);
     expect(page).toMatch(/nothing here is a ranking claim/i);

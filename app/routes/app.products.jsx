@@ -6,6 +6,8 @@ import {
   redirect,
   useSearchParams,
 } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import {
   Page,
   Layout,
@@ -72,6 +74,7 @@ import { useRouteLoading } from "../utils/useRouteLoading.js";
 const PAGE_SIZE = 50;
 
 export const loader = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const url = new URL(request.url);
@@ -111,7 +114,7 @@ export const loader = async ({ request }) => {
   // now happen inside Promise.all.
   const [gqlData, plan, usageCount, metrics, candidateCounts, publishWithoutReview, remaining] =
     await Promise.all([
-    shopifyQuery(admin.graphql, gqlQuery, { cursor }, { shop, label: "products page" }),
+    shopifyQuery(admin.graphql, gqlQuery, { cursor }, { shop, label: t("products page") }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
     getContentMetrics(shop),
@@ -282,6 +285,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -294,7 +298,7 @@ export const action = async ({ request }) => {
   if (actionType === "restoreOriginal") {
     const productId = String(formData.get("productId") || "");
     if (!/^gid:\/\/shopify\/Product\/\d+$/.test(productId)) {
-      return { error: "Invalid product." };
+      return { error: t("Invalid product.") };
     }
     const row = await prisma.generatedContent.findUnique({
       where: { shop_productId_contentType: { shop, productId, contentType: "description" } },
@@ -303,7 +307,7 @@ export const action = async ({ request }) => {
     const original = String(row?.originalContent ?? "").trim();
     if (!original) {
       return {
-        error: "We do not have this product's original description saved, so there is nothing to put back.",
+        error: t("We do not have this product's original description saved, so there is nothing to put back."),
       };
     }
 
@@ -313,9 +317,7 @@ export const action = async ({ request }) => {
     });
     if (!pub.ok) {
       return {
-        error: pub.throttled
-          ? "Shopify is rate-limiting your store right now. Please try again in a minute."
-          : `Could not restore the original: ${pub.error}`,
+        error: pub.throttled ? t("Shopify is rate-limiting your store right now. Please try again in a minute.") : t("Could not restore the original: {error}", { error: pub.error }),
       };
     }
 
@@ -332,14 +334,14 @@ export const action = async ({ request }) => {
     return {
       success: true,
       restored: true,
-      message: `Your original description is live again for "${row?.productTitle || "this product"}". The AI version is saved as a draft.`,
+      message: t("Your original description is live again for \"{v}\". The AI version is saved as a draft.", { v: row?.productTitle || "this product" }),
     };
   }
 
   const contentTypes = ["description", "metaTitle", "metaDescription", "faq"].filter(
     (t) => formData.get(`bulk_${t}`) === "true",
   );
-  if (contentTypes.length === 0) return { error: "Select at least one content type." };
+  if (contentTypes.length === 0) return { error: t("Select at least one content type.") };
   // Phase 2 item 2.6 - read from Settings, never from the form. This panel
   // submitted with no confirmation at all.
   const autoPublish = await publishesWithoutReview(shop);
@@ -364,7 +366,7 @@ export const action = async ({ request }) => {
       ids = [];
     }
     ids = (Array.isArray(ids) ? ids : []).filter((id) => PRODUCT_GID_RE.test(String(id))).slice(0, 3);
-    if (ids.length === 0) return { error: "Nothing on this page needs a draft." };
+    if (ids.length === 0) return { error: t("Nothing on this page needs a draft.") };
     let ok = 0;
     let limitReached = false;
     for (const productId of ids) {
@@ -373,7 +375,7 @@ export const action = async ({ request }) => {
       if (r?.limitReached) limitReached = true;
     }
     if (ok > 0) return redirect("/app/review");
-    return { error: limitReached ? "You have no credits left this month." : "We couldn't write those drafts — no credit was used.", limitReached };
+    return { error: limitReached ? t("You have no credits left this month.") : t("We couldn't write those drafts — no credit was used."), limitReached };
   }
 
   if (actionType === "generateAll") {
@@ -398,18 +400,14 @@ export const action = async ({ request }) => {
             }
           }`,
         { cursor },
-        { shop, label: "enumerate products" },
+        { shop, label: t("enumerate products") },
       );
       const pageResult = productsPage(res);
       if (!pageResult.ok) {
         if (allIds.length > 0) break; // partial is better than nothing, and the
         // quota slice below reports what was actually enqueued
         return {
-          error: pageResult.throttled
-            ? "Shopify is rate-limiting your store right now. Please try again in a minute."
-            : pageResult.reason === "no_data" || pageResult.reason === "errors"
-              ? "Shopify returned an unexpected response. Please try again."
-              : "Could not fetch your product list from Shopify. Please try again.",
+          error: pageResult.throttled ? t("Shopify is rate-limiting your store right now. Please try again in a minute.") : pageResult.reason === "no_data" || pageResult.reason === "errors" ? t("Shopify returned an unexpected response. Please try again.") : t("Could not fetch your product list from Shopify. Please try again."),
         };
       }
       const { edges, pageInfo } = pageResult;
@@ -417,14 +415,14 @@ export const action = async ({ request }) => {
       hasNextPage = pageInfo.hasNextPage;
       cursor = pageInfo.endCursor;
     }
-    if (allIds.length === 0) return { error: "No products found in your store." };
+    if (allIds.length === 0) return { error: t("No products found in your store.") };
 
     // Phase 0 item 4 — enqueue only what the quota can pay for; record the rest.
     const remainingAll = await remainingGenerations(shop);
     const { targetIds: runAllIds, quotaSkipped: skippedAll } = sliceToQuota(allIds, remainingAll);
     if (runAllIds.length === 0) {
       return {
-        error: "You have no credits left this month, so there is nothing to run.",
+        error: t("You have no credits left this month, so there is nothing to run."),
         limitReached: true,
       };
     }
@@ -446,9 +444,7 @@ export const action = async ({ request }) => {
       // Concurrent-job cap (or enqueue failure) — show a banner, not the
       // full-page error boundary.
       return {
-        error: err.message?.startsWith("You already have jobs")
-          ? err.message
-          : "Could not start the bulk job. Please try again.",
+        error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the bulk job. Please try again."),
       };
     }
     return redirect("/app/jobs");
@@ -459,16 +455,16 @@ export const action = async ({ request }) => {
     selectedIds = JSON.parse(formData.get("selectedIds") || "[]");
     if (!Array.isArray(selectedIds)) selectedIds = [];
   } catch {
-    return { error: "Invalid selection data. Please refresh and try again." };
+    return { error: t("Invalid selection data. Please refresh and try again.") };
   }
-  if (selectedIds.length === 0) return { error: "No products selected." };
+  if (selectedIds.length === 0) return { error: t("No products selected.") };
 
   // Phase 0 item 4 — same rule for an explicit selection.
   const remainingSel = await remainingGenerations(shop);
   const { targetIds: runSelIds, quotaSkipped: skippedSel } = sliceToQuota(selectedIds, remainingSel);
   if (runSelIds.length === 0) {
     return {
-      error: "You have no credits left this month, so there is nothing to run.",
+      error: t("You have no credits left this month, so there is nothing to run."),
       limitReached: true,
     };
   }
@@ -488,9 +484,7 @@ export const action = async ({ request }) => {
     await enqueueGenerationJob(job.id);
   } catch (err) {
     return {
-      error: err.message?.startsWith("You already have jobs")
-        ? err.message
-        : "Could not start the bulk job. Please try again.",
+      error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the bulk job. Please try again."),
     };
   }
   return redirect("/app/jobs");
@@ -529,6 +523,7 @@ function ProductListSkeleton() {
 }
 
 export default function ProductsPage() {
+  const t = useT();
   const {
     products,
     contentMap,
@@ -715,12 +710,12 @@ export default function ProductsPage() {
       //
       // Both numbers were right. What was missing was the scope, so every
       // page-scoped label now carries "on this page" — a guard asserts it.
-      { id: "all", content: `All (${products.length} on page)`, panelID: "all" },
-      { id: "needsContent", content: `Not optimized on this page (${pageCounts.none})`, panelID: "needsContent" },
-      { id: "draft", content: `Draft on this page (${pageCounts.draft})`, panelID: "draft" },
-      { id: "published", content: `Published on this page (${pageCounts.published})`, panelID: "published" },
+      { id: "all", content: t("All ({length} on page)", { length: products.length }), panelID: "all" },
+      { id: "needsContent", content: t("Not optimized on this page ({none})", { none: pageCounts.none }), panelID: "needsContent" },
+      { id: "draft", content: t("Draft on this page ({draft})", { draft: pageCounts.draft }), panelID: "draft" },
+      { id: "published", content: t("Published on this page ({published})", { published: pageCounts.published }), panelID: "published" },
     ],
-    [products.length, pageCounts],
+    [products.length, pageCounts, t],
   );
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
@@ -769,7 +764,7 @@ export default function ProductsPage() {
       const shopifyStatus = String(statusById[productId] ?? "ACTIVE").toUpperCase();
       const notLive = (state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED) && shopifyStatus !== "ACTIVE";
       if (notLive) {
-        return <Badge tone="attention">{`${PRODUCT_STATE_LABEL[state]} · product is a Shopify ${shopifyStatus.toLowerCase()}, not on your storefront`}</Badge>;
+        return <Badge tone="attention">{t("{state} · product is a Shopify {v}, not on your storefront", { state: PRODUCT_STATE_LABEL[state], v: shopifyStatus.toLowerCase() })}</Badge>;
       }
       return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
     }
@@ -795,7 +790,7 @@ export default function ProductsPage() {
     if (!sc || !Number.isFinite(sc.delta) || sc.delta <= 0) return null;
     return (
       <Text as="span" variant="bodySm" tone="success">
-        SEO {sc.before} &rarr; {sc.after}
+        {t("SEO {before} → {after}", { before: sc.before, after: sc.after })}
       </Text>
     );
   }
@@ -816,8 +811,8 @@ export default function ProductsPage() {
   function getContentTypePills(productId) {
     const m = contentMap[productId] || {};
     const types = [
-      { key: "description", label: "Desc" },
-      { key: "metaTitle", label: "Meta" },
+      { key: "description", label: t("Desc") },
+      { key: "metaTitle", label: t("Meta") },
       { key: "faq", label: "FAQ" },
     ];
     return (
@@ -841,7 +836,7 @@ export default function ProductsPage() {
             return (
               <Box key={key} padding="100" background="bg-surface-info" borderRadius="100">
                 <Text as="span" variant="bodySm" tone="info">
-                  {label} · draft
+                  {t("{label} · draft", { label })}
                 </Text>
               </Box>
             );
@@ -904,9 +899,9 @@ export default function ProductsPage() {
 
   return (
     <Page
-      title="Products"
+      title={t("Products")}
       subtitle={subtitleText}
-      backAction={{ content: "Home", onAction: () => navigate("/app") }}
+      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
       /* Phase 2 item 2.3 — ONE bulk action, with ONE name.
          There were six labels for this job on this page alone: "Generate All
          (17)", "Quick Generate", "Generate {n} Products", "Generate for {n}
@@ -936,9 +931,9 @@ export default function ProductsPage() {
               // three credits, to Review. The bulk run is offered as a secondary
               // action that names what it needs, and the modal explains.
               ...(entitlements?.bulkJobs
-                ? { content: `Optimize store (${notOptimized})`, onAction: () => setGenerateAllModal(true) }
+                ? { content: t("Optimize store ({notOptimized})", { notOptimized }), onAction: () => setGenerateAllModal(true) }
                 : {
-                    content: quickBatch > 0 ? `Write the next ${quickBatch} draft${quickBatch === 1 ? "" : "s"}` : "Review your drafts",
+                    content: quickBatch > 0 ? t("Write the next {quickBatch} draft{v}", { quickBatch, v: quickBatch === 1 ? "" : "s" }) : t("Review your drafts"),
                     onAction: () => (quickBatch > 0 ? handleQuickBatch() : navigate("/app/review")),
                   }),
             }
@@ -946,25 +941,25 @@ export default function ProductsPage() {
       }
       secondaryActions={[
         ...(notOptimized > 0 && !entitlements?.bulkJobs
-          ? [{ content: `Optimize all ${notOptimized} at once · needs Starter`, onAction: () => setGenerateAllModal(true) }]
+          ? [{ content: t("Optimize all {notOptimized} at once · needs Starter", { notOptimized }), onAction: () => setGenerateAllModal(true) }]
           : []),
         ...(draftProducts > 0
-          ? [{ content: `Review ${draftProducts} drafts`, onAction: () => navigate("/app/review") }]
+          ? [{ content: t("Review {draftProducts} drafts", { draftProducts }), onAction: () => navigate("/app/review") }]
           : []),
         // Phase 2 item 2.2 — these left the sidebar, so they need a way back in
         // from the screen that absorbed them. Nothing became unreachable.
-        { content: "Collections", onAction: () => navigate("/app/collections") },
-        { content: "Activity", onAction: () => navigate("/app/jobs") },
+        { content: t("Collections"), onAction: () => navigate("/app/collections") },
+        { content: t("Activity"), onAction: () => navigate("/app/jobs") },
       ]}
     >
       <BlockStack gap="500">
         {actionData?.error && (
           <Banner
             tone={actionData.limitReached ? "warning" : "critical"}
-            title={actionData.limitReached ? "Plan upgrade required" : "Could not start writing"}
+            title={actionData.limitReached ? t("Plan upgrade required") : t("Could not start writing")}
             action={
               actionData.limitReached
-                ? { content: "View Plans", onAction: () => navigate("/app/plans") }
+                ? { content: t("View Plans"), onAction: () => navigate("/app/plans") }
                 : undefined
             }
           >
@@ -978,7 +973,7 @@ export default function ProductsPage() {
             reaching a quota is completion, not an error, and at 100% the
             message belongs where the action was, not at the top of the page. */}
         {catalogError && (
-          <Banner tone="warning" title="This list may be incomplete">
+          <Banner tone="warning" title={t("This list may be incomplete")}>
             <p>{catalogError}</p>
           </Banner>
         )}
@@ -996,7 +991,7 @@ export default function ProductsPage() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  AI Content Published
+                  {t("AI Content Published")}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   {publishedSubtext({
@@ -1020,7 +1015,7 @@ export default function ProductsPage() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Drafts to Review
+                  {t("Drafts to Review")}
                 </Text>
               </BlockStack>
             </Card>
@@ -1041,7 +1036,7 @@ export default function ProductsPage() {
                   </Text>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Not yet optimized
+                  {t("Not yet optimized")}
                 </Text>
               </BlockStack>
             </Card>
@@ -1054,11 +1049,11 @@ export default function ProductsPage() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                  Monthly credits
+                  {t("Monthly credits")}
                 </Text>
                 <InlineStack gap="200" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {usageCount} / {monthlyCredits} used
+                    {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits })}
                   </Text>
                 </InlineStack>
               </InlineStack>
@@ -1073,10 +1068,10 @@ export default function ProductsPage() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="h2" variant="headingMd">
-                  Optimize {selectedItems.length} selected product{selectedItems.length > 1 ? "s" : ""}
+                  {t("Optimize {length} selected product{v}", { length: selectedItems.length, v: selectedItems.length > 1 ? "s" : "" })}
                 </Text>
                 <Button variant="plain" tone="critical" onClick={() => setSelectedItems([])}>
-                  Clear selection
+                  {t("Clear selection")}
                 </Button>
               </InlineStack>
 
@@ -1092,11 +1087,8 @@ export default function ProductsPage() {
 
                   <Banner tone="warning">
                     <p>
-                      <strong>This will replace existing product descriptions entirely.</strong>
-                      {""}
-                      Original content is saved automatically and can be restored from each product&apos;s
-                      History tab. If a product has custom HTML, embedded videos, or widgets in its
-                      description, they will be removed.
+                      <strong>{t("This will replace existing product descriptions entirely.")}</strong>
+                      {t("{v} Original content is saved automatically and can be restored from each product's History tab. If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.", { v: "" })}
                     </p>
                   </Banner>
 
@@ -1104,36 +1096,36 @@ export default function ProductsPage() {
                   <BlockStack gap="200">
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
                       <Checkbox
-                        label="Description"
+                        label={t("Description")}
                         checked={bulkDesc}
                         onChange={setBulkDesc}
-                        helpText="Full product description"
+                        helpText={t("Full product description")}
                       />
                     </Box>
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
                       <Checkbox
-                        label="Meta Title & Description"
+                        label={t("Meta Title & Description")}
                         checked={bulkMeta}
                         onChange={setBulkMeta}
-                        helpText="SEO meta tags"
+                        helpText={t("SEO meta tags")}
                       />
                     </Box>
                     <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
                       <Checkbox
-                        label="FAQ Content"
+                        label={t("FAQ Content")}
                         checked={bulkFaq}
                         onChange={setBulkFaq}
-                        helpText="Q&A pairs"
+                        helpText={t("Q&A pairs")}
                       />
                     </Box>
                   </BlockStack>
 
                   <InlineStack gap="300" blockAlign="center">
                     <Button variant="primary" onClick={handleBulkGenerate}>
-                      Optimize {selectedItems.length} product{selectedItems.length > 1 ? "s" : ""}
+                      {t("Optimize {length} product{v}", { length: selectedItems.length, v: selectedItems.length > 1 ? "s" : "" })}
                     </Button>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} min estimated · runs in background
+                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} {t("min estimated · runs in background")}
                     </Text>
                   </InlineStack>
                 </>
@@ -1149,9 +1141,9 @@ export default function ProductsPage() {
         <Modal
           open={!!restoring}
           onClose={() => setRestoring(null)}
-          title="Put your original description back?"
+          title={t("Put your original description back?")}
           primaryAction={{
-            content: "Restore original",
+            content: t("Restore original"),
             onAction: () => {
               const fd = new FormData();
               fd.append("actionType", "restoreOriginal");
@@ -1160,16 +1152,15 @@ export default function ProductsPage() {
               setRestoring(null);
             },
           }}
-          secondaryActions={[{ content: "Cancel", onAction: () => setRestoring(null) }]}
+          secondaryActions={[{ content: t("Cancel"), onAction: () => setRestoring(null) }]}
         >
           <Modal.Section>
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd">
-                {`Your original description for "${restoring?.title ?? ""}" goes back on your storefront, replacing the AI version that is live now.`}
+                {t("Your original description for \"{v}\" goes back on your storefront, replacing the AI version that is live now.", { v: restoring?.title ?? "" })}
               </Text>
               <Text as="p" variant="bodyMd">
-                The AI version is kept as a draft, so you can publish it again whenever you want. Nothing is
-                deleted.
+                {t("The AI version is kept as a draft, so you can publish it again whenever you want. Nothing is deleted.")}
               </Text>
             </BlockStack>
           </Modal.Section>
@@ -1196,7 +1187,7 @@ export default function ProductsPage() {
             }
             promotedBulkActions={[
               {
-                content: `Optimize ${selectedItems.length} selected`,
+                content: t("Optimize {length} selected", { length: selectedItems.length }),
                 onAction: handleBulkGenerate,
               },
             ]}
@@ -1225,7 +1216,7 @@ export default function ProductsPage() {
                       // page, where a single generation is something every
                       // plan can do. One action, because the row itself
                       // already opens the same page.
-                      content: "Generate",
+                      content: t("Generate"),
                       onAction: () => navigate(`/app/products/${numericId}`),
                     },
                   ]}
@@ -1253,7 +1244,7 @@ export default function ProductsPage() {
                       <InlineStack gap="200">
                         {canRestore(id) && (
                           <Button size="slim" variant="plain" onClick={() => setRestoring({ id, title })}>
-                            Restore original
+                            {t("Restore original")}
                           </Button>
                         )}
                         {/* A4.2 / A4.3 — this said "Generate" on every row, including
@@ -1287,26 +1278,16 @@ export default function ProductsPage() {
             }}
             emptyState={
               <EmptyState
-                heading={
-                  statusFilter !== "all"
-                    ? "No products match this filter"
-                    : totalStoreProducts === 0
-                      ? "No products yet"
-                      : "Nothing on this page"
-                }
+                heading={statusFilter !== "all" ? t("No products match this filter") : totalStoreProducts === 0 ? t("No products yet") : t("Nothing on this page")}
                 image="/empty-products.svg"
                 action={
                   statusFilter !== "all"
-                    ? { content: "View all products", onAction: () => setSearchParams({}) }
-                    : { content: "Go to Dashboard", onAction: () => navigate("/app") }
+                    ? { content: t("View all products"), onAction: () => setSearchParams({}) }
+                    : { content: t("Go to Dashboard"), onAction: () => navigate("/app") }
                 }
               >
                 <p>
-                  {statusFilter !== "all"
-                    ? "Try another tab, or clear the filter."
-                    : totalStoreProducts === 0
-                      ? "Add products to your store, and this is where you generate content for them."
-                      : "Try clearing your search."}
+                  {statusFilter !== "all" ? t("Try another tab, or clear the filter.") : totalStoreProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Try clearing your search.")}
                 </p>
               </EmptyState>
             }
@@ -1320,10 +1301,10 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter })
                   }
                 >
-                  Previous
+                  {t("Previous")}
                 </Button>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Showing {filteredProducts.length} products
+                  {t("Showing {length} products", { length: filteredProducts.length })}
                 </Text>
                 <Button
                   disabled={!pageInfo.hasNextPage}
@@ -1331,7 +1312,7 @@ export default function ProductsPage() {
                     setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter })
                   }
                 >
-                  Next
+                  {t("Next")}
                 </Button>
               </InlineStack>
             </Box>
@@ -1342,15 +1323,13 @@ export default function ProductsPage() {
         <Modal
           open={generateAllModal}
           onClose={() => setGenerateAllModal(false)}
-          title={
-            entitlements?.bulkJobs ? `Optimize ${willProcessNow} products now?` : "Bulk optimize is on Starter"
-          }
+          title={entitlements?.bulkJobs ? t("Optimize {willProcessNow} products now?", { willProcessNow }) : t("Bulk optimize is on Starter")}
           primaryAction={
             entitlements?.bulkJobs
-              ? { content: "Optimize store", onAction: handleGenerateAll }
-              : { content: "See plans", onAction: () => navigate("/app/plans") }
+              ? { content: t("Optimize store"), onAction: handleGenerateAll }
+              : { content: t("See plans"), onAction: () => navigate("/app/plans") }
           }
-          secondaryActions={[{ content: "Cancel", onAction: () => setGenerateAllModal(false) }]}
+          secondaryActions={[{ content: t("Cancel"), onAction: () => setGenerateAllModal(false) }]}
         >
           <Modal.Section>
             <BlockStack gap="300">
@@ -1359,9 +1338,7 @@ export default function ProductsPage() {
                   they CAN do today stays available. */}
               {!entitlements?.bulkJobs && (
                 <Text as="p" variant="bodyMd">
-                  Bulk optimize writes content for every product in one background job. It is included from
-                  Starter. On your current plan you can still optimize products one at a time from the list
-                  below — nothing here is taken away.
+                  {t("Bulk optimize writes content for every product in one background job. It is included from Starter. On your current plan you can still optimize products one at a time from the list below — nothing here is taken away.")}
                 </Text>
               )}
               {entitlements?.bulkJobs && (
@@ -1371,24 +1348,21 @@ export default function ProductsPage() {
                       cut the run to whatever quota remained. The app knew before
                       the click and promised the whole catalogue anyway. */}
                   <Text as="p" variant="bodyMd">
-                    This starts a background job for {willProcessNow} of the {notOptimized} products not yet
-                    optimized. Estimated time: ~{Math.max(1, Math.ceil((willProcessNow * 3.5) / 60))} minutes.
+                    {t("This starts a background job for {willProcessNow} of the {notOptimized} products not yet optimized. Estimated time: ~", { willProcessNow, notOptimized })}{Math.max(1, Math.ceil((willProcessNow * 3.5) / 60))} minutes.
                   </Text>
                   {waitingForQuota > 0 && (
                     <Text as="p" variant="bodyMd" tone="subdued">
-                      The remaining {waitingForQuota} need more generations than your plan has left this month.
-                      They stay untouched — nothing is lost, and you can run this again after your quota
-                      resets or on a larger plan.
+                      {t("The remaining {waitingForQuota} need more generations than your plan has left this month. They stay untouched — nothing is lost, and you can run this again after your quota resets or on a larger plan.", { waitingForQuota })}
                     </Text>
                   )}
                 </>
               )}
               <Text as="p" variant="bodySm" fontWeight="semibold">
-                Content to generate:
+                {t("Content to generate:")}
               </Text>
-              <Checkbox label="Description" checked={bulkDesc} onChange={setBulkDesc} />
-              <Checkbox label="Meta Title & Description" checked={bulkMeta} onChange={setBulkMeta} />
-              <Checkbox label="FAQ Content" checked={bulkFaq} onChange={setBulkFaq} />
+              <Checkbox label={t("Description")} checked={bulkDesc} onChange={setBulkDesc} />
+              <Checkbox label={t("Meta Title & Description")} checked={bulkMeta} onChange={setBulkMeta} />
+              <Checkbox label={t("FAQ Content")} checked={bulkFaq} onChange={setBulkFaq} />
               {bulkError && (
                 <Banner tone="critical">
                   <p>{bulkError}</p>
@@ -1404,9 +1378,9 @@ export default function ProductsPage() {
         <Modal
           open={publishConfirm !== null}
           onClose={() => setPublishConfirm(null)}
-          title="Publish without review is on"
+          title={t("Publish without review is on")}
           primaryAction={{
-            content: "Generate and publish",
+            content: t("Generate and publish"),
             destructive: true,
             onAction: () => {
               const pending = publishConfirm;
@@ -1414,12 +1388,11 @@ export default function ProductsPage() {
               if (pending) submit(buildBulkFormData(pending.actionType, pending.ids), { method: "POST" });
             },
           }}
-          secondaryActions={[{ content: "Cancel", onAction: () => setPublishConfirm(null) }]}
+          secondaryActions={[{ content: t("Cancel"), onAction: () => setPublishConfirm(null) }]}
         >
           <Modal.Section>
             <Text as="p" variant="bodyMd">
-              This will publish straight to your live storefront without a review step. You can turn this off
-              in Settings.
+              {t("This will publish straight to your live storefront without a review step. You can turn this off in Settings.")}
             </Text>
           </Modal.Section>
         </Modal>

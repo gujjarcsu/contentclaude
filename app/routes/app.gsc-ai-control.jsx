@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server.js";
+import { tForRequest } from "../i18n/index.js";
 import prisma from "../db.server.js";
 import { isGscAnswer } from "../utils/gscAiControl.js";
 
@@ -7,6 +8,7 @@ import { isGscAnswer } from "../utils/gscAiControl.js";
 // for their site. Posted to from the attention page. No UI. The answer is
 // theirs; we store it with its date and never infer it from anything else.
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -31,5 +33,5 @@ export const action = async ({ request }) => {
     return Response.json({ success: true, answer });
   }
 
-  return Response.json({ error: "Unknown answer." }, { status: 400 });
+  return Response.json({ error: t("Unknown answer.") }, { status: 400 });
 };

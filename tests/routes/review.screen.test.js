@@ -18,9 +18,10 @@
  * was to un-approve.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
-const read = (f) => readFileSync(f, "utf8");
+const read = (f) => unwrapT(readFileSync(f, "utf8"));
 const SRC = read("app/routes/app.review.jsx");
 const code = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
@@ -54,7 +55,7 @@ describe("rejecting is confirmed, because emptying the approvals armed it", () =
 
   it("the confirm is destructive and counts what will be rejected", () => {
     expect(code).toMatch(/destructive: true/);
-    expect(code).toMatch(/Reject \$\{unapprovedIds\.length\} draft/);
+    expect(code).toMatch(/Reject \{length\} draft/);
   });
 
   it("it says the storefront is not touched, because it is not", () => {
@@ -62,7 +63,7 @@ describe("rejecting is confirmed, because emptying the approvals armed it", () =
   });
 
   it("the button counts too, so it is never a vague bulk action", () => {
-    expect(code).toMatch(/Reject \$\{unapprovedIds\.length\} not approved/);
+    expect(code).toMatch(/Reject \{length\} not approved/);
   });
 });
 

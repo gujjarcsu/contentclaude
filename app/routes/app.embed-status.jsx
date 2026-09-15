@@ -1,10 +1,12 @@
 import { authenticate } from "../shopify.server.js";
+import { tForRequest } from "../i18n/index.js";
 import prisma from "../db.server.js";
 
 // Resource route: persists whether the merchant has confirmed the
 // "AI-search FAQ schema" theme app embed is enabled. Posted to by
 // EmbedSetupCard. No UI.
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -28,5 +30,5 @@ export const action = async ({ request }) => {
     return Response.json({ success: true });
   }
 
-  return Response.json({ error: "Unknown action." }, { status: 400 });
+  return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };

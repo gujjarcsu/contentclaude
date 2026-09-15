@@ -27,13 +27,14 @@
  * is recorded as not proved.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-const settings = strip(readFileSync("app/routes/app.settings.jsx", "utf8"));
-const optimize = strip(readFileSync("app/routes/app.optimize.jsx", "utf8"));
-const products = strip(readFileSync("app/routes/app.products.jsx", "utf8"));
-const home = strip(readFileSync("app/routes/app._index.jsx", "utf8"));
+const settings = strip(unwrapT(readFileSync("app/routes/app.settings.jsx", "utf8")));
+const optimize = strip(unwrapT(readFileSync("app/routes/app.optimize.jsx", "utf8")));
+const products = strip(unwrapT(readFileSync("app/routes/app.products.jsx", "utf8")));
+const home = strip(unwrapT(readFileSync("app/routes/app._index.jsx", "utf8")));
 
 describe("a merchant can actually reach the drafts opt-in", () => {
   it("the source really is the Settings route — a guard over nothing passes", () => {

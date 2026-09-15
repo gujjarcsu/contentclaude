@@ -421,6 +421,9 @@ model Shop {
   // voice's default when the merchant has not chosen one.
   locale                  String?
   localeSource            String?
+  // Phase 12 Part D — the merchant's chosen display language for the app's
+  // own screens (null = follow the Shopify admin locale).
+  uiLocale                String?
   firstScreenAt           DateTime? // first authenticated dashboard render
   firstApproveAt          DateTime? // first Review submission with ≥1 product approved
   returnedAt              DateTime? // first dashboard render on a calendar day after the install day

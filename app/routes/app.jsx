@@ -1,9 +1,18 @@
 import { Outlet, useLoaderData, useRouteError, useNavigate, useFetcher, useLocation } from "react-router";
+import { useT } from "../i18n/react.jsx";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import { FooterHelp, Link, Banner, Box, ProgressBar } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
+import { I18nProvider } from "../i18n/react.jsx";
+import { normaliseUiLocale, createT } from "../i18n/index.js";
+
+// Phase 12 Part D — Polaris's own strings (pagination, modals, date pickers)
+// in the same locale as ours. One entry per LIVE locale, added the day the
+// locale goes live (tests/utils/i18nCatalogue.test.js holds the two lists
+// together); a locale that is not live never costs the bundle a byte.
+const POLARIS_I18N = { en: enTranslations };
 import { useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -23,8 +32,13 @@ export const loader = async ({ request }) => {
   const activeJobCount = await prisma.generationJob.count({
     where: { shop: session.shop, status: { in: ["queued", "processing"] } },
   });
+  // Phase 12 Part D — the display language: the merchant's Settings choice
+  // when they made one, else the locale Shopify's admin passes to the
+  // embedded app (`?locale=fr-FR`), normalised to one of ours, else English.
+  const shopRow = await prisma.shop.findUnique({ where: { shop: session.shop }, select: { uiLocale: true } }).catch(() => null);
+  const uiLocale = normaliseUiLocale(shopRow?.uiLocale || new URL(request.url).searchParams.get("locale"));
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", host, shopDomain: session.shop, activeJobCount };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", host, shopDomain: session.shop, activeJobCount, uiLocale };
 };
 
 // Keep the embedded context (host/shop/embedded) STICKY in the browser URL.
@@ -37,7 +51,7 @@ export const loader = async ({ request }) => {
 // on first load and re-append them (via history.replaceState, no navigation) on
 // every route change, so every URL always carries host/shop and a reload can
 // re-authenticate silently instead of dead-ending on the form.
-function useStickyEmbeddedParams(host, shopDomain) {
+function useStickyEmbeddedParams(host, shopDomain, uiLocale = "en") {
   const location = useLocation();
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -50,8 +64,13 @@ function useStickyEmbeddedParams(host, shopDomain) {
       // (The navaal_shop persistence cookie is set SERVER-SIDE in entry.server.jsx
       // with the Partitioned attribute — a client document.cookie write was
       // rejected by the browser in the embedded third-party context.)
-      if (h && !sp.get("host")) {
-        sp.set("host", h);
+      // Phase 12 Part D — the effective display language rides on every URL,
+      // so a form post or a fetcher (which carry the current search) resolves
+      // the same locale on the server as the screen that sent it.
+      const localeStale = uiLocale && sp.get("locale") !== uiLocale;
+      if (localeStale) sp.set("locale", uiLocale);
+      if ((h && !sp.get("host")) || localeStale) {
+        if (h && !sp.get("host")) sp.set("host", h);
         if (s && !sp.get("shop")) sp.set("shop", s);
         sp.set("embedded", "1");
         window.history.replaceState(
@@ -63,10 +82,11 @@ function useStickyEmbeddedParams(host, shopDomain) {
     } catch {
       /* sessionStorage / history unavailable — best-effort only */
     }
-  }, [location.pathname, location.search, host, shopDomain]);
+  }, [location.pathname, location.search, host, shopDomain, uiLocale]);
 }
 
 function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
+  const t = useT();
   const fetcher = useFetcher();
   const timerRef = useRef(null);
   const hasJobsRef = useRef(false);
@@ -146,12 +166,8 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
     <Box paddingBlockStart="200" paddingInlineStart="400" paddingInlineEnd="400">
       <Banner
         tone="info"
-        title={
-          totalProducts > 0
-            ? `Generating content — ${completedProducts} of ${totalProducts} products`
-            : "Generating content"
-        }
-        action={{ content: "View progress", onAction: () => navigate("/app/jobs") }}
+        title={totalProducts > 0 ? t("Generating content — {completedProducts} of {totalProducts} products", { completedProducts, totalProducts }) : t("Generating content")}
+        action={{ content: t("View progress"), onAction: () => navigate("/app/jobs") }}
       >
         <Box paddingBlockStart="200">
           <ProgressBar progress={pct} size="small" tone="primary" />
@@ -162,14 +178,17 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
 }
 
 export default function App() {
-  const { apiKey, host, shopDomain, activeJobCount = 0 } = useLoaderData();
+  const { apiKey, host, shopDomain, activeJobCount = 0, uiLocale = "en" } = useLoaderData();
   const navigate = useNavigate();
   const location = useLocation();
-  useStickyEmbeddedParams(host, shopDomain);
+  useStickyEmbeddedParams(host, shopDomain, uiLocale);
+  // this component renders the provider, so its own strings come straight from the locale
+  const t = createT(uiLocale);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <PolarisProvider i18n={enTranslations}>
+      <I18nProvider locale={uiLocale}>
+      <PolarisProvider i18n={POLARIS_I18N[uiLocale] ?? enTranslations}>
         <s-app-nav>
           <div slot="logo" style={{ padding: "8px 16px" }}>
             <ContentClaudeBrand />
@@ -193,12 +212,12 @@ export default function App() {
               points the app title at "/", and a bare "/" used to reach the login
               form (App Store rejection 2.1.1). */}
           <s-link href="/app" rel="home">
-            Home
+           {t("Home")}
           </s-link>
-          <s-link href="/app/products">Products</s-link>
-          <s-link href="/app/review">Review</s-link>
-          <s-link href="/app/blog">Blog</s-link>
-          <s-link href="/app/settings">Settings</s-link>
+          <s-link href="/app/products">{t("Products")}</s-link>
+          <s-link href="/app/review">{t("Review")}</s-link>
+          <s-link href="/app/blog">{t("Blog")}</s-link>
+          <s-link href="/app/settings">{t("Settings")}</s-link>
           {/* NO "Get help" here, deliberately. The sidebar is five items and
               every label is one plain word — a decision from an earlier phase
               that cut it from thirteen, and navigation.test.js enforces both.
@@ -232,21 +251,22 @@ export default function App() {
               because App Store submission requires them reachable from inside
               the app, not only from the listing. */}
           <FooterHelp>
-            Questions, bugs, or suggestions?{" "}
-            <Link url="/app/support">Get help</Link>
+            {t("Questions, bugs, or suggestions?{v}", { v: " " })}
+            <Link url="/app/support">{t("Get help")}</Link>
             {" · "}
             <Link url="mailto:hello@navaal.ai">hello@navaal.ai</Link>
             {" · "}
             <Link url="/privacy" target="_blank">
-              Privacy
+              {t("Privacy")}
             </Link>
             {" · "}
             <Link url="/terms" target="_blank">
-              Terms
+              {t("Terms")}
             </Link>
           </FooterHelp>
         </AppRenderBoundary>
       </PolarisProvider>
+      </I18nProvider>
     </AppProvider>
   );
 }

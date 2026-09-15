@@ -1,4 +1,6 @@
 import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import {
   EmptyState,
   Page,
@@ -98,6 +100,7 @@ export const loader = async ({ request }) => {
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -121,7 +124,7 @@ export const action = async ({ request }) => {
       ? ["description", "metaTitle", "metaDescription"]
       : ["description", "metaTitle", "metaDescription", "faq"];
   const contentTypes = allowedTypes.filter((t) => formData.get(t) === "true");
-  if (contentTypes.length === 0) return Response.json({ error: "Select at least one content type." });
+  if (contentTypes.length === 0) return Response.json({ error: t("Select at least one content type.") });
   // Phase 2 item 2.6 - read from Settings, never from the form.
   const autoPublish = await publishesWithoutReview(shop);
 
@@ -168,7 +171,7 @@ export const action = async ({ request }) => {
   const walk = await enumerateProductIds(admin.graphql, {
     shop,
     query: LIST_SCOPE_QUERY,
-    label: "optimize enumerate",
+    label: t("optimize enumerate"),
     select: (node) =>
       mode === "enhance" ? !!(node.description && node.description.trim()) : !existingIds.has(node.id),
   });
@@ -181,11 +184,7 @@ export const action = async ({ request }) => {
   if (targetIds.length === 0 && walk.truncated) {
     return Response.json(
       {
-        error: walk.throttled
-          ? "Shopify is rate-limiting your store right now. Please try again in a minute."
-          : walk.reason === "no_data" || walk.reason === "errors"
-            ? "Shopify returned an unexpected response. Please try again."
-            : "Could not fetch your product list from Shopify. Please try again.",
+        error: walk.throttled ? t("Shopify is rate-limiting your store right now. Please try again in a minute.") : walk.reason === "no_data" || walk.reason === "errors" ? t("Shopify returned an unexpected response. Please try again.") : t("Could not fetch your product list from Shopify. Please try again."),
       },
       { status: 503 },
     );
@@ -194,9 +193,7 @@ export const action = async ({ request }) => {
   if (targetIds.length === 0) {
     return Response.json({
       error:
-        mode === "enhance"
-          ? "No products with an existing description were found — use the optimize flow above to generate fresh content first."
-          : "All products already have AI content — nothing to optimize.",
+        mode === "enhance" ? t("No products with an existing description were found — use the optimize flow above to generate fresh content first.") : t("All products already have AI content — nothing to optimize."),
     });
   }
 
@@ -208,7 +205,7 @@ export const action = async ({ request }) => {
   const { targetIds: runIds, quotaSkipped } = sliceToQuota(targetIds, remaining);
   if (runIds.length === 0) {
     return Response.json({
-      error: `You have no credits left this month, so there is nothing to run. ${targetIds.length} product${targetIds.length === 1 ? "" : "s"} are waiting.`,
+      error: t("You have no credits left this month, so there is nothing to run. {length} product{v} are waiting.", { length: targetIds.length, v: targetIds.length === 1 ? "" : "s" }),
       limitReached: true,
     });
   }
@@ -231,9 +228,7 @@ export const action = async ({ request }) => {
   } catch (err) {
     // Concurrent-job cap or enqueue failure — banner, not the error boundary.
     return Response.json({
-      error: err.message?.startsWith("You already have jobs")
-        ? err.message
-        : "Could not start the bulk job. Please try again.",
+      error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the bulk job. Please try again."),
     });
   }
   // A2.3 — a redirect discards the action's return value, so a run that was
@@ -245,6 +240,7 @@ export const action = async ({ request }) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OptimizePage() {
+  const t = useT();
   const {
     totalProducts,
     publishedCount,
@@ -319,7 +315,7 @@ export default function OptimizePage() {
 
   if (loadingThisRoute) {
     return (
-      <SkeletonPage title="Optimize store" primaryAction>
+      <SkeletonPage title={t("Optimize store")} primaryAction>
         <BlockStack gap="400">
           <Card>
             <SkeletonDisplayText size="small" />
@@ -340,18 +336,18 @@ export default function OptimizePage() {
 
   return (
     <Page
-      title="Optimize store"
-      subtitle="Generate AI content for products missing a description — or improve the descriptions you already have"
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      title={t("Optimize store")}
+      subtitle={t("Generate AI content for products missing a description — or improve the descriptions you already have")}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         {actionData?.error && (
           <Banner
             tone={actionData?.limitReached ? "warning" : "critical"}
-            title={actionData?.limitReached ? "Plan upgrade required" : "Error"}
+            title={actionData?.limitReached ? t("Plan upgrade required") : t("Error")}
             action={
               actionData?.limitReached
-                ? { content: "View Plans", onAction: () => navigate("/app/plans") }
+                ? { content: t("View Plans"), onAction: () => navigate("/app/plans") }
                 : undefined
             }
           >
@@ -365,7 +361,7 @@ export default function OptimizePage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Content Coverage
+                 {t("Content Coverage")}
                 </Text>
                 <Text
                   as="p"
@@ -376,7 +372,7 @@ export default function OptimizePage() {
                   {coveragePct}%
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {publishedCount} of {totalProducts} products have a published description
+                 {t("{publishedCount} of {totalProducts} products have a published description", { publishedCount, totalProducts })}
                 </Text>
                 <ProgressBar
                   progress={coveragePct}
@@ -390,13 +386,13 @@ export default function OptimizePage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Not yet optimized
+                 {t("Not yet optimized")}
                 </Text>
                 <Text as="p" variant="heading2xl" fontWeight="bold">
                   {needsContent}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {candidateLabel ? `Of your ${candidateLabel}` : "Products we have not written for yet"}
+                  {candidateLabel ? t("Of your {candidateLabel}", { candidateLabel }) : t("Products we have not written for yet")}
                 </Text>
               </BlockStack>
             </Card>
@@ -405,7 +401,7 @@ export default function OptimizePage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Quota Available
+                 {t("Quota Available")}
                 </Text>
                 <Text
                   as="p"
@@ -416,7 +412,7 @@ export default function OptimizePage() {
                   {remaining}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Credits left this month
+                 {t("Credits left this month")}
                   <br />
                   <Badge tone={planName === "free" ? "attention" : "success"}>
                     {planLabels[planName] ?? planName} — {monthlyCredits}/mo
@@ -438,12 +434,12 @@ export default function OptimizePage() {
             and the page had no action anywhere, so the only way out was
             the back link. SEO Audit showed that same store a red 0/100. */}
         {totalProducts === 0 ? (
-          <EmptyState heading="No products yet" image="/empty-products.svg">
-            <p>Add products to your store, and this is where you generate content for them.</p>
+          <EmptyState heading={t("No products yet")} image="/empty-products.svg">
+            <p>{t("Add products to your store, and this is where you generate content for them.")}</p>
           </EmptyState>
         ) : needsContent === 0 ? (
-          <Banner tone="success" title="Every product has content">
-            <p>All {totalProducts} products have AI content. New products will appear here.</p>
+          <Banner tone="success" title={t("Every product has content")}>
+            <p>{t("All {totalProducts} products have AI content. New products will appear here.", { totalProducts })}</p>
           </Banner>
         ) : remaining === 0 ? (
           /* Phase 3 item 3.4, surface (b) — the optimise action is REPLACED by
@@ -456,21 +452,21 @@ export default function OptimizePage() {
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">
-                Optimize {canOptimize} product{canOptimize !== 1 ? "s" : ""}
+               {t("Optimize {canOptimize} product{v}", { canOptimize, v: canOptimize !== 1 ? "s" : "" })}
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                This will create a background bulk job for all {needsContent} products missing AI content.
+               {t("This will create a background bulk job for all {needsContent} products missing AI content.", { needsContent })}
                 {canOptimize < needsContent && ` Your quota covers ${canOptimize} of them this month.`}
                 {estMinutes > 0 && ` Estimated time: ~${estMinutes} minute${estMinutes !== 1 ? "s" : ""}.`}
               </Text>
 
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                  Content to generate:
+                 {t("Content to generate:")}
                 </Text>
                 <InlineStack gap="500" wrap>
-                  <Checkbox label="Description" checked={genDesc} onChange={setGenDesc} />
-                  <Checkbox label="Meta Title & Description" checked={genMeta} onChange={setGenMeta} />
+                  <Checkbox label={t("Description")} checked={genDesc} onChange={setGenDesc} />
+                  <Checkbox label={t("Meta Title & Description")} checked={genMeta} onChange={setGenMeta} />
                   <Checkbox label="FAQ" checked={genFaq} onChange={setGenFaq} />
                 </InlineStack>
               </BlockStack>
@@ -482,7 +478,7 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
               >
-                {isSubmitting ? "Starting job..." : `Optimize store (${canOptimize})`}
+                {isSubmitting ? t("Starting job...") : t("Optimize store ({canOptimize})", { canOptimize })}
               </Button>
             </BlockStack>
           </Card>
@@ -495,20 +491,19 @@ export default function OptimizePage() {
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">
-                Improve existing descriptions
+               {t("Improve existing descriptions")}
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved
-                as drafts for your review unless publish without review is turned on in Settings.
+               {t("Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved as drafts for your review unless publish without review is turned on in Settings.")}
               </Text>
 
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                  Content to enhance:
+                 {t("Content to enhance:")}
                 </Text>
                 <InlineStack gap="500" wrap>
-                  <Checkbox label="Description" checked={enhDesc} onChange={setEnhDesc} />
-                  <Checkbox label="Meta Title & Description" checked={enhMeta} onChange={setEnhMeta} />
+                  <Checkbox label={t("Description")} checked={enhDesc} onChange={setEnhDesc} />
+                  <Checkbox label={t("Meta Title & Description")} checked={enhMeta} onChange={setEnhMeta} />
                 </InlineStack>
               </BlockStack>
 
@@ -518,16 +513,16 @@ export default function OptimizePage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || (!enhDesc && !enhMeta)}
               >
-                {isSubmitting ? "Starting job..." : "Improve existing descriptions"}
+                {isSubmitting ? t("Starting job...") : t("Improve existing descriptions")}
               </Button>
             </BlockStack>
           </Card>
         )}
 
         {draftCount > 0 && (
-          <Banner tone="info" title={`${draftCount} draft${draftCount !== 1 ? "s" : ""} waiting for review`}>
+          <Banner tone="info" title={t("{draftCount} draft{v} waiting for review", { draftCount, v: draftCount !== 1 ? "s" : "" })}>
             <Box paddingBlockStart="200">
-              <Button onClick={() => navigate("/app/review")}>Review drafts</Button>
+              <Button onClick={() => navigate("/app/review")}>{t("Review drafts")}</Button>
             </Box>
           </Banner>
         )}
@@ -536,9 +531,9 @@ export default function OptimizePage() {
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Publish without review is on"
+        title={t("Publish without review is on")}
         primaryAction={{
-          content: "Generate and publish",
+          content: t("Generate and publish"),
           destructive: true,
           onAction: () => {
             setConfirmOpen(false);
@@ -546,46 +541,36 @@ export default function OptimizePage() {
             else doSubmit();
           },
         }}
-        secondaryActions={[{ content: "Cancel", onAction: () => setConfirmOpen(false) }]}
+        secondaryActions={[{ content: t("Cancel"), onAction: () => setConfirmOpen(false) }]}
       >
         <Modal.Section>
           <TextContainer>
             <Text as="p">
-              This will publish straight to your live storefront without a review step. You can turn this off
-              in Settings.
+             {t("This will publish straight to your live storefront without a review step. You can turn this off in Settings.")}
             </Text>
             <Banner tone="warning">
               <p>
                 {confirmMode === "enhance" ? (
                   <>
                     <strong>
-                      This will replace existing product descriptions with the enhanced versions.
+                     {t("This will replace existing product descriptions with the enhanced versions.")}
                     </strong>
-                    {""}
-                    The enhancement preserves your structure and facts, but the live HTML is still
-                    overwritten. Original content is saved automatically and can be restored from each
-                    product&apos;s History tab.
+                   {t("{v} The enhancement preserves your structure and facts, but the live HTML is still overwritten. Original content is saved automatically and can be restored from each product's History tab.", { v: "" })}
                   </>
                 ) : (
                   <>
-                    <strong>This will replace existing product descriptions entirely.</strong>
-                    {""}
-                    Original content is saved automatically and can be restored from each product&apos;s
-                    History tab. If a product has custom HTML, embedded videos, or widgets in its description,
-                    they will be removed.
+                    <strong>{t("This will replace existing product descriptions entirely.")}</strong>
+                   {t("{v} Original content is saved automatically and can be restored from each product's History tab. If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.", { v: "" })}
                   </>
                 )}
               </p>
             </Banner>
             <Text as="p">
-              The live product descriptions on your Shopify storefront will be overwritten for{" "}
-              {confirmMode === "enhance" ? "up to" : "all"}
-              {""}
+             {t("The live product descriptions on your Shopify storefront will be overwritten for{v} {v1} {v2}", { v: " ", v1: confirmMode === "enhance" ? "up to" : "all", v2: "" })}
               <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products.
             </Text>
             <Text as="p" tone="subdued">
-              This cannot be undone from Navaal. You can revert individual products via the product editor
-              after the job completes.
+             {t("This cannot be undone from Navaal. You can revert individual products via the product editor after the job completes.")}
             </Text>
           </TextContainer>
         </Modal.Section>

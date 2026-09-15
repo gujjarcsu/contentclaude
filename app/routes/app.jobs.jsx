@@ -1,4 +1,6 @@
 import { useLoaderData, useNavigate, useRevalidator, useFetcher, useSearchParams } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { tForRequest } from "../i18n/index.js";
 import {
   Page,
   Card,
@@ -55,6 +57,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  const t = tForRequest(request);
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
@@ -63,21 +66,21 @@ export const action = async ({ request }) => {
 
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
   if (!job || job.shop !== shop) {
-    return Response.json({ error: "Job not found." }, { status: 404 });
+    return Response.json({ error: t("Job not found.") }, { status: 404 });
   }
 
   let retryIds = [];
 
   if (actionType === "cancel") {
     if (!["queued", "processing"].includes(job.status)) {
-      return Response.json({ error: "Only queued or processing jobs can be cancelled." }, { status: 400 });
+      return Response.json({ error: t("Only queued or processing jobs can be cancelled.") }, { status: 400 });
     }
     await prisma.generationJob.update({
       where: { id: jobId },
       data: {
         status: "failed",
         completedAt: new Date(),
-        errorLog: JSON.stringify([{ productId: "N/A", error: "Cancelled by merchant." }]),
+        errorLog: JSON.stringify([{ productId: "N/A", error: t("Cancelled by merchant.") }]),
       },
     });
     return Response.json({ success: true });
@@ -107,7 +110,7 @@ export const action = async ({ request }) => {
   }
 
   if (retryIds.length === 0) {
-    return Response.json({ error: "No products to retry." }, { status: 400 });
+    return Response.json({ error: t("No products to retry.") }, { status: 400 });
   }
 
   const newJob = await prisma.generationJob.create({
@@ -127,9 +130,7 @@ export const action = async ({ request }) => {
   } catch (err) {
     return Response.json(
       {
-        error: err.message?.startsWith("You already have jobs")
-          ? err.message
-          : "Could not start the retry job. Please try again.",
+        error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the retry job. Please try again."),
       },
       { status: 409 },
     );
@@ -137,20 +138,20 @@ export const action = async ({ request }) => {
   return Response.json({ success: true, newJobId: newJob.id });
 };
 
-function statusBadge(status) {
+function statusBadge(t, status) {
   switch (status) {
     case "queued":
-      return <Badge tone="attention">Queued</Badge>;
+      return <Badge tone="attention">{t("Queued")}</Badge>;
     case "processing":
       return (
         <Badge tone="info" progress="incomplete">
-          Processing...
+         {t("Processing...")}
         </Badge>
       );
     case "complete":
-      return <Badge tone="success">Complete</Badge>;
+      return <Badge tone="success">{t("Complete")}</Badge>;
     case "failed":
-      return <Badge tone="critical">Failed</Badge>;
+      return <Badge tone="critical">{t("Failed")}</Badge>;
     default:
       return <Badge>{status}</Badge>;
   }
@@ -200,6 +201,7 @@ function formatDate(iso) {
 }
 
 export default function JobsPage() {
+  const t = useT();
   const { jobs } = useLoaderData();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -276,7 +278,7 @@ export default function JobsPage() {
   // Skeleton while navigating to this page — no blank flash
   if (loadingThisRoute) {
     return (
-      <SkeletonPage title="Bulk runs" primaryAction>
+      <SkeletonPage title={t("Bulk runs")} primaryAction>
         <BlockStack gap="400">
           <Card>
             <SkeletonDisplayText size="small" />
@@ -297,9 +299,9 @@ export default function JobsPage() {
 
   return (
     <Page
-      title="Bulk runs"
-      subtitle="Track the progress of all your bulk runs"
-      backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
+      title={t("Bulk runs")}
+      subtitle={t("Track the progress of all your bulk runs")}
+      backAction={{ content: t("Products"), onAction: () => navigate("/app/products") }}
       /* Group 3.4 — "Generate More" sat on the empty state, where there is
          nothing to generate more OF, and it duplicated the EmptyState's own
          action two lines below. Phase 2's rule is one primary chosen by state,
@@ -307,7 +309,7 @@ export default function JobsPage() {
       primaryAction={
         jobs.length > 0
           ? {
-              content: "Optimize store",
+              content: t("Optimize store"),
               onAction: () => navigate("/app/products"),
             }
           : undefined
@@ -319,34 +321,32 @@ export default function JobsPage() {
             discards the action's return value. The enumerator says why it
             stopped and the note travels in the URL. */}
         {partialNote && (
-          <Banner tone="warning" title="This run covers part of your catalog">
+          <Banner tone="warning" title={t("This run covers part of your catalog")}>
             <p>{partialNote}</p>
           </Banner>
         )}
         {hasActiveJobs && (
-          <Banner tone="info" title="Jobs are running">
-            <p>This page refreshes automatically. You can navigate away — jobs continue in the background.</p>
+          <Banner tone="info" title={t("Jobs are running")}>
+            <p>{t("This page refreshes automatically. You can navigate away — jobs continue in the background.")}</p>
           </Banner>
         )}
 
         {jobs.length === 0 ? (
           <Card>
             <EmptyState
-              heading="No bulk runs yet"
+              heading={t("No bulk runs yet")}
               image="/empty-jobs.svg"
               action={{
-                content: "Go to Products",
+                content: t("Go to Products"),
                 onAction: () => navigate("/app/products"),
               }}
               secondaryAction={{
-                content: "How bulk runs work",
+                content: t("How bulk runs work"),
                 onAction: () => navigate("/app/optimize"),
               }}
             >
               <p>
-                Generate content for multiple products at once — jobs run in the background so you can keep
-                working. Bulk runs are included from the Starter plan; on Free you can optimize products
-                one at a time from the Products page.
+               {t("Generate content for multiple products at once — jobs run in the background so you can keep working. Bulk runs are included from the Starter plan; on Free you can optimize products one at a time from the Products page.")}
               </p>
             </EmptyState>
           </Card>
@@ -380,9 +380,9 @@ export default function JobsPage() {
                       <BlockStack gap="200">
                         <InlineStack gap="200" blockAlign="center">
                           {statusIcon(job.status)}
-                          {statusBadge(job.status)}
+                          {statusBadge(t, job.status)}
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Started {formatDate(job.createdAt)}
+                           {t("Started {formatDate}", { formatDate: formatDate(job.createdAt) })}
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
@@ -391,7 +391,7 @@ export default function JobsPage() {
                         <InlineStack gap="300">
                           {elapsedTime && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              {elapsedTime} elapsed
+                             {t("{elapsedTime} elapsed", { elapsedTime })}
                             </Text>
                           )}
                           {eta && (
@@ -407,7 +407,7 @@ export default function JobsPage() {
                           {done}/{job.totalProducts}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          products done
+                         {t("products done")}
                         </Text>
                         <cancelFetcher.Form method="post">
                           <input type="hidden" name="jobId" value={job.id} />
@@ -422,7 +422,7 @@ export default function JobsPage() {
                               cancelFetcher.formData?.get("jobId") === job.id
                             }
                           >
-                            Cancel job
+                           {t("Cancel job")}
                           </Button>
                         </cancelFetcher.Form>
                       </BlockStack>
@@ -433,11 +433,11 @@ export default function JobsPage() {
                         <ProgressBar progress={progress} tone="highlight" size="large" animated />
                         <InlineStack align="space-between">
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {progress}% complete
+                           {t("{progress}% complete", { progress })}
                           </Text>
                           {job.failedProducts > 0 && (
                             <Text as="p" variant="bodySm" tone="critical">
-                              {job.failedProducts} failed
+                             {t("{failedProducts} failed", { failedProducts: job.failedProducts })}
                             </Text>
                           )}
                         </InlineStack>
@@ -475,15 +475,15 @@ export default function JobsPage() {
                       <BlockStack gap="200">
                         <InlineStack gap="200" blockAlign="center">
                           {statusIcon(job.status)}
-                          {statusBadge(job.status)}
+                          {statusBadge(t, job.status)}
                           <Text as="p" variant="bodySm" tone="subdued">
                             {formatDate(job.createdAt)}
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          {job.mode === "enhance" ? "Enhance · " : ""}
+                          {job.mode === "enhance" ? t("Enhance · ") : ""}
                           {contentTypesList}
-                          {elapsedTime ? ` · ${elapsedTime}` : ""}
+                          {elapsedTime ? t(" · {elapsedTime}", { elapsedTime }) : ""}
                         </Text>
                       </BlockStack>
 
@@ -492,7 +492,7 @@ export default function JobsPage() {
                           {done}/{job.totalProducts}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          products done
+                         {t("products done")}
                         </Text>
                       </BlockStack>
                     </InlineStack>
@@ -506,11 +506,11 @@ export default function JobsPage() {
                         />
                         <InlineStack align="space-between">
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {progress}% complete
+                           {t("{progress}% complete", { progress })}
                           </Text>
                           {job.failedProducts > 0 && (
                             <Text as="p" variant="bodySm" tone="critical">
-                              {job.failedProducts} failed
+                             {t("{failedProducts} failed", { failedProducts: job.failedProducts })}
                             </Text>
                           )}
                         </InlineStack>
@@ -522,7 +522,7 @@ export default function JobsPage() {
                         <Divider />
                         <BlockStack gap="200">
                           <Text as="p" variant="bodySm" fontWeight="bold" tone="critical">
-                            Errors ({job.errorLog.length})
+                           {t("Errors ({length})", { length: job.errorLog.length })}
                           </Text>
                           {job.errorLog.slice(0, 10).map((err, i) => {
                             // show first 10
@@ -543,7 +543,7 @@ export default function JobsPage() {
                                         size="slim"
                                         onClick={() => navigate(`/app/products/${numericId}`)}
                                       >
-                                        Open product
+                                       {t("Open product")}
                                       </Button>
                                     ) : (
                                       <strong>{err.productId || "Unknown"}</strong>
@@ -557,7 +557,7 @@ export default function JobsPage() {
                           })}
                           {job.errorLog.length > 10 && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              ...and {job.errorLog.length - 10} more errors
+                              ...and {job.errorLog.length - 10} {t("more errors")}
                             </Text>
                           )}
                         </BlockStack>
@@ -568,9 +568,9 @@ export default function JobsPage() {
                       <>
                         <Divider />
                         <InlineStack gap="300" blockAlign="center">
-                          <Button onClick={() => navigate("/app/review")}>Review drafts</Button>
+                          <Button onClick={() => navigate("/app/review")}>{t("Review drafts")}</Button>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {job.completedProducts} product{job.completedProducts !== 1 ? "s" : ""} ready
+                           {t("{completedProducts} product{v} ready", { completedProducts: job.completedProducts, v: job.completedProducts !== 1 ? "s" : "" })}
                           </Text>
                           {job.failedProducts > 0 && (
                             <retryFetcher.Form method="post">
@@ -584,7 +584,7 @@ export default function JobsPage() {
                                   retryFetcher.formData?.get("jobId") === job.id
                                 }
                               >
-                                Retry Failed ({job.failedProducts})
+                               {t("Retry Failed ({failedProducts})", { failedProducts: job.failedProducts })}
                               </Button>
                             </retryFetcher.Form>
                           )}
@@ -607,11 +607,11 @@ export default function JobsPage() {
                                 retryFetcher.formData?.get("jobId") === job.id
                               }
                             >
-                              Resume Job
+                             {t("Resume Job")}
                             </Button>
                           </retryFetcher.Form>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Re-queues unprocessed products from where the job crashed
+                           {t("Re-queues unprocessed products from where the job crashed")}
                           </Text>
                         </InlineStack>
                       </>

@@ -22,14 +22,15 @@
  * the label. Verified by doing it.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readFileSync } from "node:fs";
 
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-const products = strip(readFileSync("app/routes/app.products.jsx", "utf8"));
+const products = strip(unwrapT(readFileSync("app/routes/app.products.jsx", "utf8")));
 
 describe("page-scoped numbers say they are page-scoped", () => {
   /** Every tab label on the Products screen, as written. */
-  const tabLabels = [...products.matchAll(/\{\s*id:\s*"(\w+)",\s*content:\s*`([^`]+)`/g)].map((m) => ({
+  const tabLabels = [...products.matchAll(/\{\s*id:\s*"(\w+)",\s*content:\s*"([^"]+)"/g)].map((m) => ({
     id: m[1],
     label: m[2],
   }));

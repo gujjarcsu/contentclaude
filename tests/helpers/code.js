@@ -34,16 +34,38 @@
  *
  * (Writing this file taught the lesson once more: the first draft quoted the
  * comment delimiters literally in this very docstring and broke the parser.)
+ *
+ * Phase 12 Part D — merchant-visible strings are now the keys of t("…") calls
+ * (gettext style: the English IS the key). A guard written as
+ * `title="Showing one product"` or `>Review drafts<` must keep meaning what
+ * it meant, so this helper also sees THROUGH the wrapper: `{t("X")}` reads as
+ * `X`, `title={t("X")}` reads as `title="X"`, `t("X")` reads as `"X"`, and
+ * the same for the module-level marker `T("X")`. Placeholder keys keep their
+ * braces (`{n}`), which is what the catalogue holds.
  */
 
 /**
  * @param {string} src raw file contents
- * @returns {string} the same source with comments removed
+ * @returns {string} the same source with comments removed and t() unwrapped
  */
 export function code(src) {
+  return unwrapT(stripComments(src));
+}
+
+export function stripComments(src) {
   return String(src ?? "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .split("\n")
     .filter((l) => !/^\s*\/\//.test(l))
     .join("\n");
+}
+
+/** `{t("X")}` → `X` (JSX child) · `={t("X")}` → `="X"` (prop) · `t("X")` → `"X"` (expression). */
+export function unwrapT(src) {
+  const STR = '"((?:[^"\\\\]|\\\\.)*)"';
+  const CALL = `\\b[tT]\\(${STR}(?:,\\s*\\{[^{}]*\\})?\\)`;
+  return String(src ?? "")
+    .replace(new RegExp(`=\\{${CALL}\\}`, "g"), (m, s) => `="${s}"`)
+    .replace(new RegExp(`\\{${CALL}\\}`, "g"), (m, s) => s.replace(/\\"/g, '"'))
+    .replace(new RegExp(CALL, "g"), (m, s) => `"${s}"`);
 }

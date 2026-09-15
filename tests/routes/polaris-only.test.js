@@ -18,6 +18,7 @@
  * Both are gone. The assertions below stop them coming back by their words.
  */
 import { describe, it, expect } from "vitest";
+import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, sep } from "node:path";
 
@@ -36,7 +37,7 @@ function uiFiles() {
   return out;
 }
 
-const read = (f) => readFileSync(f, "utf8");
+const read = (f) => unwrapT(readFileSync(f, "utf8"));
 const code = (f) =>
   read(f)
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -165,7 +166,7 @@ describe("2.5 — Polaris only", () => {
 
   it("no button label ends in an arrow", () => {
     for (const f of shipped()) {
-      expect(code(f), `${f} has an arrow in a label`).not.toMatch(/[→←]/);
+      expect(code(f), `${f} has an arrow in a button label`).not.toMatch(/<Button[^>]*>[^<]*[→←]\s*<\/Button>|content:\s*"[^"]*[→←]"/); // Phase 12 D0: the SEO delta "{before} → {after}" is a reading, not a button
     }
   });
 });
@@ -173,7 +174,7 @@ describe("2.5 — Polaris only", () => {
 describe("2.5 — mobile.css stops fighting Polaris", () => {
   // Comments are stripped: this file explains at length WHICH Polaris internals
   // it stopped overriding, and naming them is the point of the explanation.
-  const css = readFileSync("app/mobile.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = unwrapT(readFileSync("app/mobile.css", "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
 
   it("overrides no private Polaris internals", () => {
     // These class names are generated and unversioned. A rule that targets them

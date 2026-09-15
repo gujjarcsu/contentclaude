@@ -1,4 +1,6 @@
 import { useRouteError, isRouteErrorResponse, useNavigate } from "react-router";
+import { useT } from "../i18n/react.jsx";
+import { I18nContext } from "../i18n/react.jsx";
 import { Component } from "react";
 import { Page, Banner, Text } from "@shopify/polaris";
 
@@ -8,6 +10,7 @@ import { Page, Banner, Text } from "@shopify/polaris";
  *   export { RouteError as ErrorBoundary } from "../components/RouteError.jsx";
  */
 export function RouteError() {
+  const t = useT();
   const error = useRouteError();
   const navigate = useNavigate();
 
@@ -28,20 +31,20 @@ export function RouteError() {
       : `Something went wrong on our end.${error?.message ? ` Details: ${error.message}` : ""} Please try refreshing the page.`;
 
   const action = is404
-    ? { content: "Back to Products", onAction: () => navigate("/app/products") }
+    ? { content: t("Back to Products"), onAction: () => navigate("/app/products") }
     : is401
       ? {
           // 2.1.1: never send an embedded merchant to the /auth/login form (a
           // dead-end inside the admin). Re-enter the app at /app with the current
           // embedded params — the app re-authenticates silently via token
           // exchange / the App Bridge bounce.
-          content: "Re-authenticate",
+          content: t("Re-authenticate"),
           onAction: () => {
             const search = typeof window !== "undefined" ? window.location.search : "";
             if (typeof window !== "undefined") window.location.href = `/app${search}`;
           },
         }
-      : { content: "Back to Dashboard", onAction: () => navigate("/app") };
+      : { content: t("Back to Dashboard"), onAction: () => navigate("/app") };
 
   return (
     <Page>
@@ -50,8 +53,7 @@ export function RouteError() {
           {message}
         </Text>
         <Text as="p" variant="bodySm" tone="subdued">
-          Still stuck? Email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> — include what you
-          were doing when this happened and we&apos;ll sort it out.
+          {t("Still stuck? Email us at")} <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> {t("— include what you were doing when this happened and we'll sort it out.")}
         </Text>
       </Banner>
     </Page>
@@ -78,22 +80,24 @@ export class AppRenderBoundary extends Component {
     this.setState({ hasError: false, error: null });
   }
 
+  static contextType = I18nContext;
+
   render() {
     if (!this.state.hasError) return this.props.children;
+    const t = this.context;
     return (
       <Page>
         <Banner
           tone="critical"
-          title="A component crashed unexpectedly"
-          action={{ content: "Reload page", onAction: () => window.location.reload() }}
-          secondaryAction={{ content: "Try again", onAction: this.reset }}
+          title={t("A component crashed unexpectedly")}
+          action={{ content: t("Reload page"), onAction: () => window.location.reload() }}
+          secondaryAction={{ content: t("Try again"), onAction: this.reset }}
         >
           <Text as="p" variant="bodyMd">
             {this.state.error?.message ?? "An unexpected rendering error occurred."}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
-            If this keeps happening, email us at <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> and
-            we&apos;ll fix it.
+            {t("If this keeps happening, email us at")} <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> {t("and we'll fix it.")}
           </Text>
         </Banner>
       </Page>

@@ -73,7 +73,7 @@ describe("A5 — the language a store speaks, without a scope", () => {
     expect(score).toMatch(/language: scan\.language\?\.code \?\? null/);
     expect(score).toMatch(/void stampShopLocale\(shop, scan\.language\)/);
     expect(src("app/utils/brandVoiceInfer.server.js")).toMatch(/create: \{ shop, storeName, sampleContent, keyDifferentiators, language: lang \}/);
-    expect(src("app/components/StartState.jsx")).toMatch(/Drafts are written in \$\{languageName\(scan\.language\.code\)\}/);
+    expect(src("app/components/StartState.jsx")).toMatch(/Drafts are written in \{languageName\} — \{languageSourceLabel\}\. Change it in Settings\./);
     expect(src("app/routes/app._index.jsx")).toMatch(/const adminLocale = new URL\(request\.url\)\.searchParams\.get\("locale"\)/);
     expect(readFileSync("prisma/schema.prisma", "utf8")).toMatch(/^\s*locale\s+String\?/m);
     expect(readFileSync("prisma/migrations/20260915150000_shop_locale/migration.sql", "utf8")).toMatch(/ADD COLUMN "locale" TEXT;/);
@@ -188,7 +188,7 @@ describe("A4 — the first screen is a result, never a task", () => {
     expect(e).toMatch(/export function EmbedLaterNote/);
     expect(e).toMatch(/onDismiss=\{\(\) => setDismissed\(true\)\}/);
     const c = src("app/components/FirstRunFindingsCard.jsx");
-    expect(c).toMatch(/This product: \$\{f\.scoreBefore\}\/100/); // FR8, durable
+    expect(c).toMatch(/This product: \{scoreBefore\}\/100/); // FR8, durable
     expect(c).toMatch(/navigate\(`\/app\/review\?product=\$\{numericId\(f\.productId\)\}`\)/);
     expect(src("app/utils/storeScore.server.js")).toMatch(/export async function firstRunFindings/);
   });
