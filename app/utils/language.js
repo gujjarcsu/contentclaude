@@ -17,6 +17,7 @@
  *
  * A merchant's Settings choice always wins over all three. PURE.
  */
+import { T } from "../i18n/index.js";
 
 /** The twelve languages the writer can be asked for, as Settings offers them. */
 export const SUPPORTED_LANGUAGES = Object.freeze(["en", "es", "fr", "de", "it", "pt", "ja", "zh", "ko", "ar", "hi", "nl"]);
@@ -133,11 +134,11 @@ export function defaultLanguageFor({ catalogueText = "", adminLocale = null, cou
 export function languageSourceLabel(source) {
   return (
     {
-      catalogue: "from the language your products are written in",
-      admin_locale: "from your Shopify admin language",
-      country: "from your store's country",
-      default: "the default",
-      setting: "your setting",
+      catalogue: T("from the language your products are written in"),
+      admin_locale: T("from your Shopify admin language"),
+      country: T("from your store's country"),
+      default: T("the default"),
+      setting: T("your setting"),
     }[source] ?? "the default"
   );
 }

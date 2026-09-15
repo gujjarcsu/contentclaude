@@ -164,7 +164,7 @@ export default function AttentionPage() {
   const storeHandle = String(shopDomain).split(".")[0];
   const crawler = summary.crawler ?? { available: false, blocked: [], newlyBlocked: [], checkedAt: null };
   const idx = summary.indexability ?? { checked: 0, sitemapKnown: 0, cannotIndex: 0, withFindings: 0 };
-  const lines = homeAttentionLines(summary);
+  const lines = homeAttentionLines(summary, t);
   const nothing =
     rows.length === 0 && gaps.length === 0 && indexability.length === 0 && crawler.blocked.length === 0 && !summary.gsc?.excluded;
 

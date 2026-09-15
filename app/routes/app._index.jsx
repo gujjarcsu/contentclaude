@@ -1,12 +1,11 @@
 import { Suspense, useState } from "react";
-import { tForRequest } from "../i18n/index.js";
 import { useT } from "../i18n/react.jsx";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { EmbedSetupCard, EmbedLaterNote, embedDeepLink } from "../components/EmbedSetupCard.jsx";
 import { FirstRunFindingsCard } from "../components/FirstRunFindingsCard.jsx";
-import { changeWindowFor, autopilotBannerTitle } from "../utils/homeCopy.js";
+import { changeWindowFor, autopilotBannerTitle, windowLabel } from "../utils/homeCopy.js";
 import { StartState } from "../components/StartState.jsx";
 import { scoreTone } from "../utils/scoreBands.js";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
@@ -65,7 +64,6 @@ const FIRST_VISIT_MS = 24 * 3600 * 1000;
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
-  const t = tForRequest(request);
   // Preserve all Shopify auth params so server-side redirects can re-authenticate.
   // Third-party cookies are blocked in embedded iframes, so we must carry id_token
   // and session through every redirect for the token exchange to succeed.
@@ -264,7 +262,7 @@ export const loader = async ({ request }) => {
   // "Autopilot optimized 15 new products in the last 24 hours" — two windows,
   // one screen. The autopilot recap now counts from the same moment and the
   // banner names the same date.
-  const changeWindow = changeWindowFor(storeScore, new Date(), t);
+  const changeWindow = changeWindowFor(storeScore);
   // Phase 4 item 5 — autopilot works while the merchant is not looking, so
   // the one place it must show up is the screen they open next.
   const autopilotRecap = await recentAutopilotWork(shop, { since: changeWindow.since });
@@ -283,7 +281,7 @@ export const loader = async ({ request }) => {
   // ProductScore) and the specific things the walk found. The theme step
   // waits until there is published content to show.
   const beforeFirstPublish = !!shopRow && !shopRow.firstPublishAt;
-  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop, { t }) : [];
+  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop) : [];
   const findings = beforeFirstPublish && !isFirstRun ? await firstRunFindings(shop) : [];
   // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
   const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
@@ -341,7 +339,7 @@ export const loader = async ({ request }) => {
     quotaWarning,
     storeScore,
     autopilotRecap,
-    changeWindowLabel: changeWindow.label,
+    changeWindow: { since: changeWindow.since, kind: changeWindow.kind },
     beforeFirstPublish,
     findings,
     blockers,
@@ -687,7 +685,7 @@ export default function Dashboard() {
     quotaWarning,
     storeScore,
     autopilotRecap,
-    changeWindowLabel,
+    changeWindow,
     beforeFirstPublish,
     findings,
     blockers,
@@ -703,6 +701,8 @@ export default function Dashboard() {
     geoNoteDismissed,
     belowFold,
   } = useLoaderData();
+  // D1 — the window's sentence is made here, in the merchant's language, from the loader's data
+  const changeWindowLabel = windowLabel(changeWindow, t);
   const navigate = useNavigate();
   const dismissGeoNote = useFetcher();
   // Banner dismissal must actually stick — keyed per job completion so a NEW

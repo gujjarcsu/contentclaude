@@ -1,4 +1,5 @@
 import { Card, BlockStack, InlineStack, Text, Button, Badge } from "@shopify/polaris";
+import { blockerLine } from "../utils/firstRun.js";
 import { useT } from "../i18n/react.jsx";
 
 /**
@@ -47,7 +48,7 @@ export function FirstRunFindingsCard({ findings = [], blockers = [], navigate })
           <BlockStack gap="150">
             {lines.map((b) => (
               <Text key={b.key} as="p" variant="bodySm">
-                {b.line}
+                {blockerLine(b, t)}
               </Text>
             ))}
           </BlockStack>

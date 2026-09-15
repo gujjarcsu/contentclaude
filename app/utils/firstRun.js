@@ -119,6 +119,18 @@ export function blockerLines(tally, { passwordProtected = false, max = 3, t = en
   return out;
 }
 
+/**
+ * D1 — the line for one blocker in a language, at render time. The loader's
+ * copy is English (and the start payload is cached), so a screen translates
+ * here from the blocker's key and count rather than trusting a stored line.
+ */
+export function blockerLine(b, t = enT) {
+  if (!b) return "";
+  if (b.key === PASSWORD_BLOCKER.key) return t(PASSWORD_BLOCKER.line);
+  const g = BLOCKER_GROUPS.find((x) => x.key === b.key);
+  return g ? g.line(Number(b.count) || 0, t) : (b.line ?? "");
+}
+
 /** The sentence that names the subscription. One place, so every screen agrees. */
 export const WATCH_FROM_HERE = Object.freeze({
   title: T("We'll watch it from here."),

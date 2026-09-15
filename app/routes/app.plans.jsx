@@ -258,17 +258,26 @@ export const action = async ({ request }) => {
  * So: no literal prices, no literal allowances, no literal trial length below.
  * `plansSurfaces.test.js` fails if one comes back.
  */
-const trialLine = `${TRIAL_DAYS}-day free trial · ${TRIAL_CREDITS} credits`;
+// D1 — a feature is a key, or { key, vars } for a line with a number in it; featureText() renders either in the merchant's language
+const trialLine = { key: T("{days}-day free trial · {credits} credits"), vars: { days: TRIAL_DAYS, credits: TRIAL_CREDITS } };
 
 /** "1,000 products" / "Unlimited products" — productLimit is a LOCKED axis and it appeared nowhere on this page. */
 function productLine(limit) {
-  return limit === null ? "Unlimited products" : `Up to ${limit.toLocaleString()} products`;
+  return limit === null ? T("Unlimited products") : { key: T("Up to {n} products"), vars: { n: limit } };
 }
 
 /** Credits, not "generations": a blog post costs 3 and alt text costs 0 (B1). */
 function creditLine(credits) {
-  return `${credits.toLocaleString()} credits / month`;
+  return { key: T("{n} credits / month"), vars: { n: credits } };
 }
+
+/** A feature line in a language: numbers formatted for the locale. */
+function featureText(f, t) {
+  if (f == null) return "";
+  if (typeof f === "string") return t(f);
+  return t(f.key, Object.fromEntries(Object.entries(f.vars ?? {}).map(([k, v]) => [k, typeof v === "number" ? t.number(v) : v])));
+}
+const featureKey = (f) => (typeof f === "string" ? f : f.key);
 
 const PLAN_DISPLAY = [
   {
@@ -276,7 +285,7 @@ const PLAN_DISPLAY = [
     label: T("Free"),
     tagline: T("Get started, no card needed"),
     price: formatPrice(FREE_PLAN.amount),
-    period: "forever",
+    period: T("forever"),
     monthlyCredits: FREE_PLAN.monthlyCredits,
     icon: PlanIcon,
     iconTone: "subdued",
@@ -285,11 +294,11 @@ const PLAN_DISPLAY = [
     features: [
       creditLine(FREE_PLAN.monthlyCredits),
       productLine(FREE_PLAN.productLimit),
-      "Product descriptions",
-      "Meta titles & descriptions",
-      "FAQ content",
-      "Image alt text",
-      "Brand voice settings",
+      T("Product descriptions"),
+      T("Meta titles & descriptions"),
+      T("FAQ content"),
+      T("Image alt text"),
+      T("Brand voice settings"),
     ],
   },
   {
@@ -297,7 +306,7 @@ const PLAN_DISPLAY = [
     label: T("Starter"),
     tagline: T("Perfect for small stores"),
     price: formatPrice(BILLING_PLANS.starter.amount),
-    period: "/ month",
+    period: T("/ month"),
     monthlyCredits: BILLING_PLANS.starter.monthlyCredits,
     icon: StarFilledIcon,
     iconTone: "info",
@@ -308,19 +317,19 @@ const PLAN_DISPLAY = [
     features: [
       creditLine(BILLING_PLANS.starter.monthlyCredits),
       productLine(BILLING_PLANS.starter.productLimit),
-      "Everything in Free",
+      T("Everything in Free"),
       trialLine,
       // B3 — bulk starts HERE, at $9.99, and this card did not say so. The
       // comparison table showed it as Growth-and-up while the code granted it,
       // so a Starter subscriber had no way to learn they were already paying
       // for the feature that saves them the time.
-      "Bulk runs",
-      "Content templates",
-      "Version history",
+      T("Bulk runs"),
+      T("Content templates"),
+      T("Version history"),
       // 12-OFFER.md 5.5 - "Priority support" is the same undefined-promise
       // class as "SLA support", which 6 bans by name: no defined priority,
       // no queue, no response commitment behind it.
-      "Email support from the founder",
+      T("Email support from the founder"),
     ],
   },
   {
@@ -328,7 +337,7 @@ const PLAN_DISPLAY = [
     label: T("Growth"),
     tagline: T("Most popular · scales with you"),
     price: formatPrice(BILLING_PLANS.growth.amount),
-    period: "/ month",
+    period: T("/ month"),
     monthlyCredits: BILLING_PLANS.growth.monthlyCredits,
     icon: ChartHistogramGrowthIcon,
     iconTone: "info",
@@ -339,16 +348,16 @@ const PLAN_DISPLAY = [
     features: [
       creditLine(BILLING_PLANS.growth.monthlyCredits),
       productLine(BILLING_PLANS.growth.productLimit),
-      "Everything in Starter",
+      T("Everything in Starter"),
       trialLine,
       `Blog posts (${CREDIT_WEIGHTS.blog} credits each)`,
-      "Autopilot mode",
+      T("Autopilot mode"),
       // 12-OFFER.md 5.5 - the feature generates two candidate texts for the
       // merchant to choose between. There is no traffic split and no winner
       // is measured, so "A/B testing" names a measurement we do not perform.
       // The product page already says it honestly ("Generate two options to
       // compare"); only the plan card overclaimed.
-      "Two description options to compare",
+      T("Two description options to compare"),
     ],
   },
   {
@@ -356,7 +365,7 @@ const PLAN_DISPLAY = [
     label: T("Professional"),
     tagline: T("For high-volume merchants"),
     price: formatPrice(BILLING_PLANS.pro.amount),
-    period: "/ month",
+    period: T("/ month"),
     monthlyCredits: BILLING_PLANS.pro.monthlyCredits,
     icon: OrganizationIcon,
     iconTone: "info",
@@ -367,21 +376,21 @@ const PLAN_DISPLAY = [
     features: [
       creditLine(BILLING_PLANS.pro.monthlyCredits),
       productLine(BILLING_PLANS.pro.productLimit),
-      "Everything in Growth",
+      T("Everything in Growth"),
       trialLine,
       // C0.7 — 04-DECISIONS.md requires the billing rule to be on the plan
       // card and the Settings card, not in a help article. A merchant
       // discovering how they are billed after the fact is the same class of
       // failure as the trial length.
-      "Your own AI key — no credits used",
+      T("Your own AI key — no credits used"),
       // P0.8 / 08-ECONOMICS.md guardrail 6 — the SERVICE stays, the two
       // undefined words go. "SLA" means a contractual guarantee with remedies;
       // saying it without one written is a promise we cannot keep, and at low
       // review volume one unmet promise halves the rating. Exact replacement
       // wording from 12-OFFER.md #6.
-      "Direct access to the founder",
-      "Setup call when you start",
-      "Every question answered within one business day",
+      T("Direct access to the founder"),
+      T("Setup call when you start"),
+      T("Every question answered within one business day"),
     ],
   },
 ];
@@ -493,7 +502,7 @@ function FeatureCell({ value }) {
   if (value === false) return <Icon source={XIcon} tone="subdued" accessibilityLabel={t("Not included")} />;
   return (
     <Text as="span" variant="bodySm" fontWeight="semibold">
-      {value}
+      {featureText(value, t)}
     </Text>
   );
 }
@@ -568,12 +577,12 @@ function PlanCard({
         {/* Features */}
         <BlockStack gap="200">
           {displayPlan.features.map((f) => (
-            <InlineStack key={f} gap="200" blockAlign="start" wrap={false}>
+            <InlineStack key={featureKey(f)} gap="200" blockAlign="start" wrap={false}>
               <Box minWidth="20px">
                 <Icon source={CheckIcon} tone="success" accessibilityLabel={t("Included")} />
               </Box>
               <Text as="span" variant="bodySm">
-                {f}
+                {featureText(f, t)}
               </Text>
             </InlineStack>
           ))}
@@ -631,7 +640,7 @@ function PlanCard({
           )}
           {displayPlan.planKey && !isCurrent && !isDowngrade && (
             <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-              {t("{trialLine} · Cancel anytime", { trialLine })}
+              {t("{trialLine} · Cancel anytime", { trialLine: featureText(trialLine, t) })}
             </Text>
           )}
         </BlockStack>
@@ -698,7 +707,7 @@ export default function PlansPage() {
   return (
     <Page
       title={t("Plans & Billing")}
-      subtitle={t("Upgrade anytime · {trialLine} on all paid plans · Cancel anytime", { trialLine })}
+      subtitle={t("Upgrade anytime · {trialLine} on all paid plans · Cancel anytime", { trialLine: featureText(trialLine, t) })}
       backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">

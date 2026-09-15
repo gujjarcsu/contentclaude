@@ -42,6 +42,12 @@ export function changeWindowFor(score, now = new Date(), t = enT) {
   return { since: new Date(now.getTime() - FALLBACK_WINDOW_MS), label: t("in the last 24 hours"), kind: "last24h" };
 }
 
+/** D1 — the window's label in a language, at render time (the loader ships `since` and `kind`, never a sentence). */
+export function windowLabel(window, t = enT) {
+  if (!window) return t("in the last 24 hours");
+  return window.kind === "baseline" ? t("since {date}", { date: sinceLabelFor(window.since, t) }) : t("in the last 24 hours");
+}
+
 /** The autopilot banner's title, from the same window. Null when there is nothing to say. */
 export function autopilotBannerTitle(recap, window, t = enT) {
   const n = Number(recap?.products) || 0;

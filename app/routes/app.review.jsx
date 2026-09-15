@@ -6,7 +6,6 @@ import {
   useSubmit,
   useFetcher,
 } from "react-router";
-import { storedTFor } from "../i18n/storedKeys.js";
 import { useT, useStoredT } from "../i18n/react.jsx";
 import { tForRequest, T } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
@@ -113,7 +112,6 @@ const CONTENT_LABELS = {
 const approveCheckboxId = (productId) => `approve-${String(productId).replace(/\W+/g, "-")}`;
 
 export const loader = async ({ request }) => {
-  const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
@@ -177,7 +175,8 @@ export const loader = async ({ request }) => {
       productId: r.productId,
       numericId: String(r.productId).split("/").pop(),
       productTitle: r.productTitle || "Untitled product",
-      note: storedTFor(t)(r.verifyNote) || t("Shopify stored something different from what we sent."),
+      // English here (a key or a stored English sentence); the screen translates it where it is shown
+      note: r.verifyNote || T("Shopify stored something different from what we sent."),
     });
   }
 
@@ -627,6 +626,7 @@ export const shouldRevalidate = ({ formData, defaultShouldRevalidate }) => {
  */
 function NeedsCheckBanner({ items, navigate }) {
   const t = useT();
+  const st = useStoredT();
   if (!items || items.length === 0) return null;
   return (
     <Banner
@@ -641,7 +641,7 @@ function NeedsCheckBanner({ items, navigate }) {
           {items.slice(0, 5).map((it) => (
             <InlineStack key={it.productId} align="space-between" blockAlign="center" wrap gap="200">
               <Text as="p" variant="bodySm">
-                <strong>{it.productTitle}</strong> — {it.note}
+                <strong>{it.productTitle}</strong> — {t(st(it.note))}
               </Text>
               <Button variant="plain" onClick={() => navigate(`/app/products/${it.numericId}`)}>
                 {t("Open")}

@@ -50,7 +50,7 @@ import {
   ProgressBar,
 } from "@shopify/polaris";
 import { GeoRubric } from "./GeoRubric.jsx";
-import { WATCH_FROM_HERE } from "../utils/firstRun.js";
+import { WATCH_FROM_HERE, blockerLine } from "../utils/firstRun.js";
 import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
@@ -142,10 +142,10 @@ function TargetCard({ target, autoStart, onDraft }) {
             <Box padding="400" background="bg-surface-secondary" borderRadius="200">
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  BEFORE
+                  {t("BEFORE")}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {target.beforeSnippet || "No description — invisible to AI answer engines."}
+                  {target.beforeSnippet || t("No description — invisible to AI answer engines.")}
                 </Text>
               </BlockStack>
             </Box>
@@ -155,7 +155,7 @@ function TargetCard({ target, autoStart, onDraft }) {
             <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">
-                  AFTER
+                  {t("AFTER")}
                 </Text>
 
                 {busy && !timedOut ? (
@@ -330,7 +330,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
             </Text>
             {scan.language?.code && (
               <Text as="p" variant="bodySm" tone="subdued">
-                {t("Drafts are written in {languageName} — {languageSourceLabel}. Change it in Settings.", { languageName: languageName(scan.language.code), languageSourceLabel: languageSourceLabel(scan.language.source) })}
+                {t("Drafts are written in {languageName} — {languageSourceLabel}. Change it in Settings.", { languageName: t(languageName(scan.language.code)), languageSourceLabel: t(languageSourceLabel(scan.language.source)) })}
               </Text>
             )}
           </BlockStack>
@@ -374,7 +374,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
               <InlineStack key={b.key} align="space-between" blockAlign="center" wrap gap="300">
                 <BlockStack gap="050">
                   <Text as="p" variant="bodyMd">
-                    {b.line}
+                    {blockerLine(b, t)}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     {b.grade === "blocking" ? t("A surface cannot list these as they stand.") : t("Listed, but shown worse.")}
@@ -383,11 +383,11 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 {b.fix &&
                   (b.fix.external ? (
                     <Button url={b.fix.to} target="_top" variant={i === 0 ? "primary" : undefined}>
-                      {b.fix.label}
+                      {t(b.fix.label)}
                     </Button>
                   ) : (
                     <Button variant={i === 0 ? "primary" : undefined} onClick={() => navigate(b.fix.to)}>
-                      {b.fix.label}
+                      {t(b.fix.label)}
                     </Button>
                   ))}
               </InlineStack>
