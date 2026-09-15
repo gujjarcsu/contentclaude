@@ -168,3 +168,20 @@ before it; and before anything is deleted or flagged, ask the system that actual
 token answers or it does not. The three integers that closed it: flagged-with-session 0 · believed
 installed 8 = Shopify's 8 · domains reinstalled after a redact in 30 days 1 (this one). No real
 merchant was in the loop; had Hoodify reinstalled, it would have been.
+
+## 7d. THE APP IN GERMAN — what the read-back found that the suite could not (2026-09-15)
+
+D1 shipped at `f2009c5` with 4,372 tests green, a complete 1,365-key catalogue and the German legal
+pages proved by curl. The first read of Home on `navaal-ttv-03` with App language = Deutsch showed
+German everywhere except five things: the three first-run blocker lines and their fix labels, the
+"written in English — from the language your products are written in" source label, the BEFORE/AFTER
+draft labels, the attention page's summary line, and the plan cards' feature lists. None was a missing
+translation. Three were sentences a **loader** had built with the request's locale: Shopify passes
+its own `locale=` (the admin user's language) on every document load and rewrites the app's query
+string, so the loader saw English while the screen's provider, decided from `Shop.uiLocale`, was
+German — and the start payload is cached for ten minutes on top. Two were strings in pure modules
+nobody had wrapped because the scanner reads JSX and object props, not arrays. `a9ffd38`: every
+sentence is made where it is shown, from data; the arrays are keys. Second read: all German, both
+`de-*.js` chunks fetched, setting restored. **The pattern:** a test that the catalogue is complete
+proves nothing about which code path built the sentence; only reading the screen in the language,
+on production, does.

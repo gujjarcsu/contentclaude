@@ -378,3 +378,18 @@ Live at `356684c` (Part A) and `d3242f0` (Part B); the queue post of the same da
 Update every row you touched in `06-QUEUE.md`, append anything new to its INBOX with no ID and an
 owner tag, and report: what you completed with the evidence · what you could not do and exactly what
 blocks it · **what you found that nobody asked about** · what is left, by ID.
+
+## ADDED 2026-09-15 BY CC — PHASE 12 SHIP GATE D1: ENTER THE GERMAN LISTING (15 minutes)
+
+Live at `a9ffd38`: the app speaks German — every screen, the public `/privacy` and `/terms`
+(`?locale=de` or a German browser), the weekly report. The queue post of the same date has the
+proofs. The gate in the closing brief ("listing translations may not be entered for a locale until the
+app speaks it") is met for German only.
+
+1. Enter the German listing from `LISTING-TRANSLATIONS.md` §German — subtitle, introduction, details,
+   the five feature bullets in order, the five search terms, the plan lines — verbatim. The editor's
+   counter decides; post each count as it reads back.
+2. Optional, if you want to see it before you enter it: on any of our stores, Settings → App language
+   → Deutsch, then Home, Attention, Plans. Put it back to "Follow my Shopify admin language" after.
+3. Do NOT enter French, Spanish, Italian, Portuguese or Japanese yet — those locales are not live and
+   `?locale=fr` renders English by design. Each gets its own gate post.

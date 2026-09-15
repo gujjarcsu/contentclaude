@@ -1765,3 +1765,49 @@ time restore needs the project's console; it is the owner's single step in `OWNE
 and written back before it counts. A5 needs the owner's phone.
 
 **Standing:** dev2 frozen until your `CAPTURE COMPLETE`. Nothing here touched a merchant's store.
+
+
+## POSTED 2026-09-15 BY CC — PHASE 12 SHIP GATE D0 (`1d9d8f7`) AND D1 (`f2009c5`, `a9ffd38`): THE APP SPEAKS GERMAN. CW: ENTER THE GERMAN LISTING.
+
+**D0 — the i18n layer (`1d9d8f7`).** Every merchant-visible string in the routes and components is
+the key of a `t()` call, gettext style, so English is unchanged by construction (locales/en.json is
+generated from the source and every value equals its key — asserted). The extractor that rewrote
+the JSX is also the scanner the suite runs; it fails on any hard-coded merchant literal, and now on a
+string concatenation or a `&&` fallback too. The locale comes from Shopify's admin param,
+normalised to one of seven, overridable in Settings ("App language"), sticky on every URL. Your
+English sweep proves English unchanged — nothing to re-read unless a screen looks different.
+
+**D1 — German (`f2009c5`, then `a9ffd38` after the read-back).** `app/i18n/locales/de.json`: 1,365
+keys, every one, in the listing's register (Sie; Credits, Free/Starter/Growth/Professional and
+Navaal untouched; a test holds each of those and refuses du/dein). ICU plurals where English used a
+suffix. The catalogue ships as a lazy chunk a merchant fetches only on German (188.8 KB raw, 61.8 KB
+gzip); the shared bundle is 880 KB and carries no catalogue. Polaris's own strings follow. `/privacy`
+and `/terms` render in German from the same constants (`?locale=de`, else the browser's
+Accept-Language), same anchors, with the line that the English is binding. The weekly report reads in
+the merchant's language. The sentences the app had STORED in English (a finding's note from the
+nightly walk, a job's error, a verification note, a fix error) are translated back on the screen by
+the key that produced them.
+
+**Proved on production (a9ffd38):** `curl app.navaal.ai/privacy?locale=de` → `<html lang="de">`,
+`Die Kurzfassung`, `Content-Language: de`; `Accept-Language: de` on `/terms` → German; `/privacy`
+with no signal → English, unchanged, no binding line. Home, Attention and Plans read on
+`navaal-ttv-03` with App language set to Deutsch (`tools/proof/_de-switch.mjs`, reads the screens
+and puts the setting back): every line German, the two `de-*.js` chunks fetched, the setting
+restored. **The first read-back found English on German screens** — the first-run blocker lines,
+their fix labels, the language-source label, the plan cards, the attention summary. Cause worth
+knowing: Shopify rewrites the embedded app's query string with ITS locale on every document load, so
+a sentence a LOADER makes is English on the first load (and the start payload is cached). `a9ffd38`
+makes those sentences where they are shown, from the loader's data. Rule for D2–D6: a loader ships
+data, never a sentence.
+
+**CW, one task (15 minutes):** enter the German listing from `LISTING-TRANSLATIONS.md` §German,
+verbatim, in the Partner Dashboard — the gate ("never for a locale the app does not speak") is met.
+Count in the editor, read back, post the counts. If you want to see it first: on any of our stores,
+Settings → App language → Deutsch, then Home. Put it back to "Follow my Shopify admin language"
+after.
+
+**Not done:** fr, es, it, pt-BR, ja — each is a catalogue of the same 1,365 keys, a ship gate, then
+its listing. `?locale=fr` today renders English (the locale is not live), by design.
+
+**Standing:** dev2 frozen until your `CAPTURE COMPLETE`; qa-fresh yours. Nothing here touched a
+merchant's store; the one write was ttv-03's own App-language setting, restored.
