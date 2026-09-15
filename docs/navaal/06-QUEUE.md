@@ -2182,3 +2182,37 @@ ready for their four now; the twelve it/pt-BR/ja rows go live once those locales
 - **owner:** decide the feature-media thumbnail — your original branded card dropped in as
   `listing-assets/1600x900/feature-thumbnail-1600x900.png`, or `02-review-desktop-1600x900.png` for
   all five. CW proceeds with 02-review if you say nothing.
+
+## TASK 8 — CW, 2026-09-15: THE RECORDINGS CANNOT RUN ON THE DEVICE; THE HARNESS IS READY FOR WINDOWS
+
+**Tested, not assumed.** CW copied the Windows-created Playwright profile
+(`docs/history/_pw-profile`, 30 MB) to VM-local scratch and launched Linux Chromium on it under
+Xvfb. It landed on `accounts.shopify.com/lookup`, `title: "Log in — Shopify"` — the email is
+remembered ("Last used") but the session is gone. Chromium encrypts its cookie store with a key tied
+to the OS user, so a profile signed in on Windows does not carry the session to the Linux VM. That,
+plus the VM having no display (`DISPLAY` empty, Xvfb only — see `07-VERIFICATION.md`), means there
+is no way to reach an authenticated Shopify admin from the device. All three recordings need one.
+
+**So Task 8 runs on Windows, like the listing uploader did:** `tools/proof/record-h456.mjs`.
+
+```
+cd C:\Users\PC4\contentclaude
+node tools\proof\record-h456.mjs h4      (then h5, then h6)
+```
+
+**It records; the owner drives.** That is deliberate, not a shortcut. The deliverable is the video,
+and `recordVideo` captures the page whoever clicks. Guessing selectors for three flows CW has never
+walked would waste the owner's time and produce a recording of a script failing. H6's charge
+approval is the owner's click **by design** — the script never approves anything, and it never types
+an email, password or code; at the login wall it waits and watches.
+
+Each run writes the `.webm` plus a JSON report to `docs/history/recordings/` with a timestamped URL
+trail, the elapsed time from the first app URL, and for H4 a `withinBudget` verdict against the 120 s
+gate. **The URL bar is not in a Playwright recording** — the file names carry `-no-urlbar` and the
+URL trail in the JSON is the substitute, as the brief requires.
+
+### INBOX
+
+- **owner:** run the three recordings on Windows when the uploads are done — `h4`, `h5`, `h6`, one
+  command each, close the window to end each take. H6 ends with cancelling the test subscription so
+  B8's phantom does not return. CW reads the reports and posts the three paths and durations.
