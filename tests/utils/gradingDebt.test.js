@@ -115,7 +115,9 @@ describe("F6 — the nightly sample is the plan's, attention first, said on the 
 
   it("the attention page says the nightly number and the order", () => {
     const page = code(readFileSync("app/routes/app.attention.jsx", "utf8"));
-    expect(page).toMatch(/\{idx\.nightly \?\? PAGE_SAMPLE\} more each night on your plan, products needing attention first/);
+    // D1: one key, the number a placeholder — code() unwraps the key, so the vars are read from the raw source
+    expect(page).toMatch(/\(\{nightly\} more each night on your plan, products needing attention first\)/);
+    expect(readFileSync("app/routes/app.attention.jsx", "utf8")).toMatch(/nightly: idx\.nightly \?\? PAGE_SAMPLE/);
   });
 });
 

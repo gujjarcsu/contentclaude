@@ -40,6 +40,34 @@ const PROP_ALLOW = new Set(["title", "content", "label", "heading", "helpText", 
 const PROP_DENY = new Set(["name", "value", "id", "key", "url", "href", "src", "target", "type", "variant", "tone", "size", "as", "className", "style", "role", "method", "action", "actionType", "encType", "rel", "lang", "dir", "align", "gap", "padding", "blockAlign", "inlineAlign", "background", "borderRadius", "width", "height", "image", "icon", "sortKey", "selected", "status", "data-testid"]);
 const SKIP_PARENT = new Set(["code", "pre", "script", "style"]);
 const ROOTS = ["app/routes", "app/components"];
+// D1 — pure modules whose merchant sentences are keys already (T() / t(…)):
+// their keys are catalogued, but the codemod's JSX rules do not apply to a
+// data module, so nothing in them is rewritten or flagged.
+const CATALOGUE_ONLY = [
+  "app/utils/legal.js",
+  "app/utils/catalogueWatch.js",
+  "app/utils/indexability.js",
+  "app/utils/firstRun.js",
+  "app/utils/startCopy.js",
+  "app/utils/crawlHoldout.js",
+  "app/utils/proofCard.js",
+  "app/utils/homeCopy.js",
+  "app/utils/aiReports.js",
+  "app/utils/gscAiControl.js",
+  "app/utils/crawlerAccess.js",
+  "app/utils/remediation.js",
+  "app/utils/publishVerify.js",
+  "app/utils/credits.js",
+  "app/utils/altText.js",
+  "app/utils/catalogueContent.js",
+  "app/utils/support.js",
+  "app/utils/jobMessages.js",
+  "app/utils/geoRubric.js",
+  "app/utils/productState.js",
+  "app/utils/weeklyReport.server.js",
+  "app/utils/support.server.js",
+  "app/utils/legalPage.server.js",
+];
 
 const walk = (dir, out = []) => {
   for (const name of readdirSync(dir)) {
@@ -89,6 +117,23 @@ const tCall = (key, vars = []) => {
   return `t(${k}, { ${vars.map(([n, e]) => (n === e ? n : `${n}: ${e}`)).join(", ")} })`;
 };
 
+/** A pure module: catalogue every t("…") / T("…") key, rewrite nothing, flag nothing. */
+function catalogueFile(file, catalogue) {
+  const src = readFileSync(file, "utf8");
+  const ast = parse(src, { sourceType: "module", plugins: ["jsx"], errorRecovery: true });
+  let n = 0;
+  traverse(ast, {
+    CallExpression(path) {
+      const c = path.node.callee;
+      if (c.type === "Identifier" && (c.name === "t" || c.name === "T") && path.node.arguments[0]?.type === "StringLiteral") {
+        catalogue.set(path.node.arguments[0].value, path.node.arguments[0].value);
+        n += 1;
+      }
+    },
+  });
+  return { file, wrapped: 0, unwrapped: [], moduleLevel: 0, catalogued: n };
+}
+
 function processFile(file, catalogue) {
   const src = readFileSync(file, "utf8");
   const ast = parse(src, { sourceType: "module", plugins: ["jsx"], errorRecovery: true });
@@ -111,6 +156,14 @@ function processFile(file, catalogue) {
     return component;
   };
 
+  /** A finding the codemod will not rewrite: counted as unwrapped so --check fails, and reported with the reason. */
+  const byHand = (path, r) => {
+    if (!r?.byHand) return false;
+    report.wrapped += 1;
+    report.unwrapped.push({ line: path.node.loc?.start.line, key: r.key.slice(0, 60), why: r.byHand });
+    return true;
+  };
+
   const alreadyWrapped = (path) => {
     // inside t("…") already, or inside a JSX element we skip
     let p = path.parentPath;
@@ -126,6 +179,7 @@ function processFile(file, catalogue) {
   };
 
   const record = (path, key, replacement, start, end) => {
+    if (replacement === null) return; // a by-hand finding is reported by its caller
     const fn = enclosingFunction(path);
     if (!fn) {
       // outside any function: mark with T() so the key is catalogued; the use
@@ -155,6 +209,31 @@ function processFile(file, catalogue) {
       const { key, vars } = templateToKey(node, src);
       if (!hasWords(key) || looksLikeCode(key)) return null;
       return { key, code: tCall(key, vars), keys: [key] };
+    }
+    if (node.type === "BinaryExpression" && node.operator === "+") {
+      // "text " + x + " more text" — merchant text built by concatenation
+      // cannot be translated as one sentence; it is flagged, never rewritten
+      const parts = [];
+      const collect = (n) => {
+        if (n.type === "BinaryExpression" && n.operator === "+") {
+          collect(n.left);
+          collect(n.right);
+        } else if (n.type === "StringLiteral") parts.push(n.value);
+        else if (n.type === "TemplateLiteral") parts.push(templateToKey(n, src).key);
+      };
+      collect(node);
+      // placeholders are not words: `${a}${b}` glued to a sentence carries no text of its own
+      const joined = parts.join("").replace(/\{\w+\}/g, "");
+      if (!hasWords(joined) || looksLikeCode(joined)) return null;
+      return { key: joined, code: null, keys: [], byHand: "string concatenation — one t() key with {placeholders}" };
+    }
+    if (node.type === "LogicalExpression" && node.operator === "&&") {
+      // {cond && "Merchant text"} — the right side is merchant-visible text
+      const b = stringExpr(node.right);
+      if (!b) return null;
+      if (b.byHand) return b;
+      const left = src.slice(node.left.start, node.left.end);
+      return { key: b.key, code: `${left} && ${b.code}`, keys: b.keys };
     }
     if (node.type === "LogicalExpression" && (node.operator === "||" || node.operator === "??")) {
       // {title || "Untitled product"} — the fallback is merchant-visible text
@@ -191,11 +270,13 @@ function processFile(file, catalogue) {
       if (v.type === "StringLiteral") {
         const r = stringExpr(v);
         if (!r || alreadyWrapped(path)) return;
+        if (byHand(path, r)) return;
         for (const k of r.keys) catalogue.set(k, k);
         record(path, r.key, `{${r.code}}`, v.start, v.end);
       } else if (v.type === "JSXExpressionContainer") {
         const r = stringExpr(v.expression);
         if (!r || alreadyWrapped(path)) return;
+        if (byHand(path, r)) return;
         for (const k of r.keys) catalogue.set(k, k);
         record(path, r.key, `{${r.code}}`, v.start, v.end);
       }
@@ -206,6 +287,7 @@ function processFile(file, catalogue) {
       if (!name || !PROP_ALLOW.has(name)) return;
       const r = stringExpr(path.node.value);
       if (!r || alreadyWrapped(path)) return;
+      if (byHand(path, r)) return;
       for (const kk of r.keys) catalogue.set(kk, kk);
       record(path, r.key, r.code, path.node.value.start, path.node.value.end);
     },
@@ -236,7 +318,7 @@ function processFile(file, catalogue) {
           continue;
         }
         const simple = e.type === "Identifier" || e.type === "MemberExpression" || (e.type === "CallExpression" && e.callee.type === "Identifier" && e.callee.name !== "t");
-        const stringy = e.type === "StringLiteral" || e.type === "TemplateLiteral" || e.type === "ConditionalExpression";
+        const stringy = e.type === "StringLiteral" || e.type === "TemplateLiteral" || e.type === "ConditionalExpression" || (e.type === "LogicalExpression" && e.operator === "&&") || (e.type === "BinaryExpression" && e.operator === "+");
         if (simple || stringy) run.push(c);
         else flush();
       } else flush();
@@ -254,6 +336,7 @@ function processFile(file, catalogue) {
         if (c.type !== "JSXExpressionContainer") continue;
         const r = stringExpr(c.expression);
         if (!r) continue;
+        if (byHand(path, r)) continue;
         for (const k of r.keys) catalogue.set(k, k);
         record(path, r.key, `{${r.code}}`, c.start, c.end);
       }
@@ -345,6 +428,7 @@ function processFile(file, catalogue) {
 const catalogue = new Map();
 const reports = [];
 for (const root of ROOTS) for (const f of walk(root)) reports.push(processFile(f, catalogue));
+for (const f of CATALOGUE_ONLY) reports.push(catalogueFile(f, catalogue));
 
 const totalWrapped = reports.reduce((n, r) => n + r.wrapped, 0);
 const totalModule = reports.reduce((n, r) => n + r.moduleLevel, 0);
@@ -361,16 +445,9 @@ console.log(`total: ${totalWrapped} strings, ${catalogue.size} distinct keys, ${
 for (const r of reports) for (const u of r.unwrapped) console.log(`  by hand: ${r.file}:${u.line} ${u.why} — ${u.key}`);
 if (APPLY) {
   mkdirSync("app/i18n/locales", { recursive: true });
-  const existing = (() => {
-    try {
-      return JSON.parse(readFileSync("app/i18n/locales/en.json", "utf8"));
-    } catch {
-      return {};
-    }
-  })();
-  const merged = { ...existing };
-  for (const [k] of catalogue) merged[k] = k;
-  const sorted = Object.fromEntries(Object.keys(merged).sort((a, b) => a.localeCompare(b)).map((k) => [k, merged[k]]));
+  // exactly the keys the source uses today — a key that left the source
+  // leaves the catalogue (tests/utils/i18nCatalogue.test.js holds the two equal)
+  const sorted = Object.fromEntries([...catalogue.keys()].sort((a, b) => a.localeCompare(b)).map((k) => [k, k]));
   writeFileSync("app/i18n/locales/en.json", JSON.stringify(sorted, null, 2) + "\n");
   console.log(`app/i18n/locales/en.json: ${Object.keys(sorted).length} keys`);
 }

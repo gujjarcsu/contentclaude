@@ -519,7 +519,7 @@ export default function CollectionsPage() {
                         {collection.title}
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                       {t("{productsCount} product{v}", { productsCount: collection.productsCount, v: collection.productsCount !== 1 ? "s" : "" })}
+                       {t("{n, plural, one {# product} other {# products}}", { n: collection.productsCount })}
                       </Text>
                     </BlockStack>
                   </InlineStack>

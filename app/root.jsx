@@ -1,4 +1,4 @@
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData, useMatches } from "react-router";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import mobileStyles from "./mobile.css?url";
 
@@ -31,9 +31,15 @@ export default function App() {
   // root loader's data may be absent, and destructuring undefined would take the
   // whole document down instead of showing the error.
   const { shopifyApiKey } = useRouteLoaderData("root") ?? {};
+  // Phase 12 Part D (D1) — the document's language is the app's display
+  // language (the app route's loader decides it). entry.client.jsx reads
+  // this attribute to load the locale's chunk before hydrating, and a screen
+  // reader announces the right language.
+  const matches = useMatches();
+  const uiLocale = matches.map((m) => m?.data?.uiLocale).find((v) => typeof v === "string") ?? "en";
 
   return (
-    <html lang="en">
+    <html lang={uiLocale}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />

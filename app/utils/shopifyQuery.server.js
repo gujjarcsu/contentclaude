@@ -26,6 +26,7 @@
  * show the merchant a partial catalogue and say so instead of a 500 page.
  */
 import logger from "./logger.server.js";
+import { SHOPIFY_THROTTLED } from "./jobMessages.js";
 
 export const QUERY_MAX_RETRIES = 3;
 export const QUERY_BACKOFF_BASE_MS = 1_000;
@@ -114,7 +115,7 @@ export async function shopifyQuery(graphql, query, variables = {}, opts = {}) {
         data: null,
         throttled: true,
         reason: "throttled",
-        error: "Shopify is rate-limiting this store right now.",
+        error: SHOPIFY_THROTTLED,
         attempts: attempt + 1,
       };
     }

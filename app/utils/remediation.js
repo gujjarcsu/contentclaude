@@ -37,6 +37,21 @@
  * PURE. No I/O.
  */
 
+import { T } from "../i18n/index.js";
+
+/** D1 — the sentences a fix can fail with, stored on the result and translated back on the screen (app/i18n/stored.js). */
+export const FIX_ERRORS = Object.freeze({
+  monitoredOnly: T("This store is monitored only. Changes to its catalogue are not made from here."),
+  noBrand: T("No brand name given."),
+  noOptionName: T("No option name given."),
+  noVariant: T("No variant to write to."),
+  invalidGtin: T("Not a valid GTIN (8, 12, 13 or 14 digits with a correct check digit)."),
+  vendorMismatch: T("Shopify accepted the update but returned a different vendor."),
+  optionMismatch: T("Shopify accepted the update but returned a different option name."),
+  barcodeMismatch: T("Shopify accepted the update but returned a different barcode."),
+});
+export const FIX_ERROR_KEYS = Object.freeze(Object.values(FIX_ERRORS));
+
 export const FIX = Object.freeze({
   ALT_TEXT: "alt_text",
   DESCRIPTION: "description",
@@ -49,56 +64,56 @@ export const FIX = Object.freeze({
 /** What each fix is, what it costs, and how it is done. Merchant-facing. */
 export const FIX_LABEL = Object.freeze({
   [FIX.ALT_TEXT]: {
-    title: "Write alt text",
+    title: T("Write alt text"),
     credits: 0,
     contentType: "altText",
-    how: "Generated from each image and its product, then waits on the Review page. Nothing is published until you approve it. Alt text costs no credits.",
+    how: T("Generated from each image and its product, then waits on the Review page. Nothing is published until you approve it. Alt text costs no credits."),
   },
   [FIX.DESCRIPTION]: {
-    title: "Write descriptions",
+    title: T("Write descriptions"),
     credits: 1,
     contentType: "description",
-    how: "Generated from the product's own data and your brand voice, then waits on the Review page. One credit per product; nothing is published until you approve it.",
+    how: T("Generated from the product's own data and your brand voice, then waits on the Review page. One credit per product; nothing is published until you approve it."),
   },
   [FIX.VENDOR]: {
-    title: "Set the brand",
+    title: T("Set the brand"),
     credits: 0,
-    how: "The OpenAI feed requires a brand and reads Shopify's vendor field. One name, applied to every product you tick, and checked in Shopify's reply. No AI, no credits.",
+    how: T("The OpenAI feed requires a brand and reads Shopify's vendor field. One name, applied to every product you tick, and checked in Shopify's reply. No AI, no credits."),
   },
   [FIX.OPTION_NAME]: {
-    title: "Name the option",
+    title: T("Name the option"),
     credits: 0,
-    how: "Variants whose option is still called “Title”. We suggest a name from the values (S, M, L reads as Size; Red, Blue as Colour); you can change it per row. Applied with Shopify's option update, no credits.",
+    how: T("Variants whose option is still called “Title”. We suggest a name from the values (S, M, L reads as Size; Red, Blue as Colour); you can change it per row. Applied with Shopify's option update, no credits."),
   },
   [FIX.GTIN_EXEMPT]: {
-    title: "No barcode by design",
+    title: T("No barcode by design"),
     credits: 0,
-    how: "Your own brand or handmade goods have no GTIN, and the feed does not expect one. Ticking a product records that and the finding stops. Nothing is written to Shopify.",
+    how: T("Your own brand or handmade goods have no GTIN, and the feed does not expect one. Ticking a product records that and the finding stops. Nothing is written to Shopify."),
   },
   [FIX.BARCODE]: {
-    title: "Add a barcode",
+    title: T("Add a barcode"),
     credits: 0,
-    how: "For products that do have a GTIN. Type it per product; we write it to the product's variant and check Shopify's reply. We never invent one.",
+    how: T("For products that do have a GTIN. Type it per product; we write it to the product's variant and check Shopify's reply. We never invent one."),
   },
 });
 
 /** The fixes the brief names that this app cannot make, and exactly why. */
 export const SKIPPED = Object.freeze([
   {
-    what: "Availability",
-    why: "Shopify supplies availability to every feed from your inventory. There is nothing to add here.",
+    what: T("Availability"),
+    why: T("Shopify supplies availability to every feed from your inventory. There is nothing to add here."),
   },
   {
-    what: "Online Store channel",
-    why: "Publishing a product to the Online Store needs the write_publications scope, which this app does not request. In Shopify admin, open the product and tick Online Store under Sales channels.",
+    what: T("Online Store channel"),
+    why: T("Publishing a product to the Online Store needs the write_publications scope, which this app does not request. In Shopify admin, open the product and tick Online Store under Sales channels."),
   },
   {
-    what: "Canonical address and redirects",
-    why: "On Shopify the canonical is set by your theme, not per product. After a handle change the right fix is a URL redirect, and creating one needs write_online_store_navigation, which this app does not request. Shopify offers to create the redirect when you change a handle.",
+    what: T("Canonical address and redirects"),
+    why: T("On Shopify the canonical is set by your theme, not per product. After a handle change the right fix is a URL redirect, and creating one needs write_online_store_navigation, which this app does not request. Shopify offers to create the redirect when you change a handle."),
   },
   {
-    what: "Policy pages",
-    why: "Reading your shop policies needs the read_legal_policies scope, which this app does not request. Settings, then Policies, in Shopify admin.",
+    what: T("Policy pages"),
+    why: T("Reading your shop policies needs the read_legal_policies scope, which this app does not request. Settings, then Policies, in Shopify admin."),
   },
 ]);
 

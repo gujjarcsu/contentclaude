@@ -11,6 +11,8 @@
  * PURE. The fetches live in crawlerAccess.server.js.
  */
 
+import { T } from "../i18n/index.js";
+
 /** The six the brief names. Order is display order. */
 export const CRAWLERS = Object.freeze([
   "OAI-SearchBot",
@@ -22,12 +24,12 @@ export const CRAWLERS = Object.freeze([
 ]);
 
 export const CRAWLER_NOTE = Object.freeze({
-  "OAI-SearchBot": "ChatGPT search. Blocked means the store will not appear in ChatGPT search answers.",
-  PerplexityBot: "Perplexity's answer engine. Blocked means Perplexity cannot cite the store in an answer.",
-  "Claude-SearchBot": "Claude's web search. Blocked means Claude cannot read or cite the store when it searches.",
-  bingbot: "Bing, and everything Copilot cites through it.",
-  Googlebot: "Google Search. Blocked here means blocked everywhere Google shows results, AI Overviews included.",
-  "Google-Extended": "Google's AI training and Gemini grounding control. Blocking it does NOT affect Search or AI Overviews.",
+  "OAI-SearchBot": T("ChatGPT search. Blocked means the store will not appear in ChatGPT search answers."),
+  PerplexityBot: T("Perplexity's answer engine. Blocked means Perplexity cannot cite the store in an answer."),
+  "Claude-SearchBot": T("Claude's web search. Blocked means Claude cannot read or cite the store when it searches."),
+  bingbot: T("Bing, and everything Copilot cites through it."),
+  Googlebot: T("Google Search. Blocked here means blocked everywhere Google shows results, AI Overviews included."),
+  "Google-Extended": T("Google's AI training and Gemini grounding control. Blocking it does NOT affect Search or AI Overviews."),
 });
 
 /**

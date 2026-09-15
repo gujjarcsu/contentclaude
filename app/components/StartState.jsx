@@ -28,7 +28,7 @@
  *    than a spinner that never resolves.
  */
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
-import { useT } from "../i18n/react.jsx";
+import { useT, useStoredT } from "../i18n/react.jsx";
 import { Await, useFetcher } from "react-router";
 import { scoreTone } from "../utils/scoreBands.js";
 import { languageName, languageSourceLabel } from "../utils/language.js";
@@ -84,6 +84,7 @@ function ScanSkeleton() {
  */
 function TargetCard({ target, autoStart, onDraft }) {
   const t = useT();
+  const st = useStoredT();
   const fetcher = useFetcher();
   const fired = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -175,7 +176,7 @@ function TargetCard({ target, autoStart, onDraft }) {
                 ) : timedOut || data?.error || data?.inFlight ? (
                   <BlockStack gap="200">
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {timedOut ? t("This one is taking longer than expected — no credit was used.") : data?.error || t("Still working on this one.")}
+                      {timedOut ? t("This one is taking longer than expected — no credit was used.") : st(data?.error) || t("Still working on this one.")}
                     </Text>
                     <InlineStack>
                       <Button onClick={run}>{t("Retry")}</Button>
@@ -241,7 +242,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
           secondaryAction={{ content: t("I've published one — check again"), onAction: onRetry }}
         >
           <p>
-            {t("Navaal scores and writes for products that are Active and available on the Online Store sales channel — that is where AI search reads them. Your store has {n} product{v} and none is there yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it available to the Online Store, and check again.", { n, v: n === 1 ? "" : "s" })}
+            {t("Navaal scores and writes for products that are Active and available on the Online Store sales channel — that is where AI search reads them. Your store has {n, plural, one {# product} other {# products}} and none is there yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it available to the Online Store, and check again.", { n })}
           </p>
         </EmptyState>
       </Card>
@@ -298,10 +299,11 @@ function StartBody({ scan, start, navigate, onRetry }) {
     monthlyCredits: start.monthlyCredits,
     planName: start.planName,
     alreadyDrafted,
+    t,
   });
   // FR8 (Phase 10) — on a uniform catalogue every product scores the same and
   // every row equals the store score by arithmetic; say so.
-  const uniformNote = uniformScoreNote(targets, scan.totalScanned);
+  const uniformNote = uniformScoreNote(targets, scan.totalScanned, t);
   const done = drafted.size;
   // P2.7 — the specific things holding this store back, from the first walk.
   const blockers = Array.isArray(start.blockers) ? start.blockers : [];
@@ -429,7 +431,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
           <InlineStack align="space-between" blockAlign="center" wrap gap="300">
             <BlockStack gap="100">
               <Text as="h2" variant="headingMd">
-                {t("{done} draft{v} ready to review", { done, v: done === 1 ? "" : "s" })}
+                {t("{n, plural, one {# draft} other {# drafts}} ready to review", { n: done })}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 {t("Read them, edit anything you want, then publish. Nothing is live until you say so.")}
@@ -447,10 +449,10 @@ function StartBody({ scan, start, navigate, onRetry }) {
       <Card>
         <BlockStack gap="200">
           <Text as="h2" variant="headingMd">
-            {WATCH_FROM_HERE.title}
+            {t(WATCH_FROM_HERE.title)}
           </Text>
           <Text as="p" variant="bodySm">
-            {WATCH_FROM_HERE.body}
+            {t(WATCH_FROM_HERE.body)}
           </Text>
         </BlockStack>
       </Card>

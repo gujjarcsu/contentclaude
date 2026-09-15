@@ -38,6 +38,9 @@ describe("2. Admin performance — the code-side budget", () => {
     expect(s).toMatch(/export const ROUTE_MAX = 64 \* 1024/);
     expect(s).toMatch(/export const SHARED_MAX = 256 \* 1024/);
     expect(s).toMatch(/export const TOTAL_MAX = 1024 \* 1024/);
+    // Phase 12 D1: a live locale is a lazy chunk pair only a merchant on that locale fetches — measured on its own line
+    expect(s).toMatch(/export const LOCALE_MAX = \d+ \* 1024/);
+    expect(s).toMatch(/export const LOCALE_CHUNK_RE = /);
     const ci = readFileSync(".github/workflows/ci.yml", "utf8");
     const build = ci.indexOf("run: npm run build");
     const budget = ci.indexOf("run: node scripts/check-bundle-budget.mjs");
@@ -46,9 +49,15 @@ describe("2. Admin performance — the code-side budget", () => {
   });
   it("a local build, when present, is inside the budget", () => {
     if (!existsSync("build/client/assets")) return; // CI runs the script itself, after the build
-    const files = readdirSync("build/client/assets").filter((f) => f.endsWith(".js"));
+    const all = readdirSync("build/client/assets").filter((f) => f.endsWith(".js"));
+    // Phase 12 D1: locale chunks (de-*.js …) are fetched only on that locale and are budgeted per locale in the script
+    const isLocale = (f) => /^(de|fr|es|it|pt-BR|ja)-[A-Za-z0-9_-]+\.js$/.test(f);
+    const files = all.filter((f) => !isLocale(f));
     const total = files.reduce((n, f) => n + statSync(join("build/client/assets", f)).size, 0);
     expect(total).toBeLessThanOrEqual(1024 * 1024);
+    const perLocale = {};
+    for (const f of all.filter(isLocale)) perLocale[f.split("-")[0]] = (perLocale[f.split("-")[0]] ?? 0) + statSync(join("build/client/assets", f)).size;
+    for (const [loc, bytes] of Object.entries(perLocale)) expect(bytes, `locale ${loc}`).toBeLessThanOrEqual(224 * 1024);
   });
 });
 

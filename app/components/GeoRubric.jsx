@@ -48,13 +48,13 @@ export function GeoRubric() {
             <BlockStack gap="100" key={d.key}>
               <InlineStack gap="200" blockAlign="center">
                 <Text as="h3" variant="headingSm">
-                  {d.label}
+                  {t(d.label)}
                 </Text>
                 <Badge tone="info">{t("{max} points", { max: d.max })}</Badge>
                 {d.optional ? <Badge>{t("Only when known")}</Badge> : null}
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                {d.why}
+                {t(d.why)}
               </Text>
             </BlockStack>
           ))}

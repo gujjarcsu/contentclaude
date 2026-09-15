@@ -67,7 +67,7 @@ describe("FR8 — the row's number is that product's", () => {
     expect(uniformScoreNote([{ scoreBefore: 21 }, { scoreBefore: 21 }, { scoreBefore: 21 }], 12)).toMatch(/^These 3 products all score 21: they are missing the same things, so each one's number is the same as the store's\./);
     expect(uniformScoreNote([{ scoreBefore: 21 }, { scoreBefore: 34 }], 12)).toBeNull();
     expect(uniformScoreNote([{ scoreBefore: 21 }], 12)).toBeNull();
-    expect(code(readFileSync("app/components/StartState.jsx", "utf8"))).toMatch(/uniformScoreNote\(targets, scan\.totalScanned\)/);
+    expect(code(readFileSync("app/components/StartState.jsx", "utf8"))).toMatch(/uniformScoreNote\(targets, scan\.totalScanned, t\)/); // D1: in the merchant\'s language
   });
 });
 

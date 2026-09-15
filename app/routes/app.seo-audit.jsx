@@ -408,7 +408,7 @@ function AuditBody({ data, pending = false, scanFailed = false }) {
         {scanFailed && (
           <Banner tone="warning" title={t("This is a partial audit")}>
             <p>
-              {t("Shopify stopped answering while the rest of your catalog was being read, so only the first {scannedCount} product{v} (sorted by title) were analyzed. Scores and counts below cover only that portion — refresh to try the rest again.", { scannedCount, v: scannedCount !== 1 ? "s" : "" })}
+              {t("Shopify stopped answering while the rest of your catalog was being read, so only the first {scannedCount, plural, one {# product} other {# products}} (sorted by title) were analyzed. Scores and counts below cover only that portion — refresh to try the rest again.", { scannedCount })}
             </p>
           </Banner>
         )}

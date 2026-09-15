@@ -25,13 +25,13 @@ describe("A1 — credits reset on the calendar month, said the same way in both 
     const billing = TERMS_SECTIONS.find((s) => /Plans, credits and billing/.test(s.h));
     expect(billing.p.join(" ")).toContain(CREDIT_RESET_SENTENCE);
     expect(await legalPage("terms").text()).toContain(CREDIT_RESET_SENTENCE);
-    expect(code(readFileSync("app/utils/legal.js", "utf8"))).toMatch(/\$\{CREDIT_RESET_SENTENCE\}/);
+    expect(code(readFileSync("app/utils/legal.js", "utf8"))).toMatch(/\[CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE\]/); // D1: one paragraph from the two keys
   });
 
   it("the plans page carries it from the same constant, never a retyped copy", () => {
     const plans = code(readFileSync("app/routes/app.plans.jsx", "utf8"));
     expect(plans).toMatch(/import \{ CREDIT_WEIGHTS, CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE \} from "\.\.\/utils\/credits\.js"/); // Phase 11 Part C: the rollover sentence is a constant too
-    expect(plans).toMatch(/a: `\$\{CREDIT_RESET_SENTENCE\}/);
+    expect(plans).toMatch(/a: \[CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE\]/); // D1: one answer from the two keys
     expect(plans).not.toMatch(/reset on the 1st of each/);
     expect(plans).not.toMatch(/every 30 days/);
   });

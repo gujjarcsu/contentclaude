@@ -170,9 +170,9 @@ describe("A3 — one change window on Home", () => {
     expect(db.generationJob.findMany.mock.calls[0][0].where.completedAt.gte).toEqual(baseline);
     // and both Home lines are built from the one window
     const h = src("app/routes/app._index.jsx");
-    expect(h).toMatch(/const changeWindow = changeWindowFor\(storeScore\);/);
+    expect(h).toMatch(/const changeWindow = changeWindowFor\(storeScore, new Date\(\), t\);/); // D1
     expect(h).toMatch(/recentAutopilotWork\(shop, \{ since: changeWindow\.since \}\)/);
-    expect(h).toMatch(/autopilotBannerTitle\(autopilotRecap, \{ label: changeWindowLabel \}\)/);
+    expect(h).toMatch(/autopilotBannerTitle\(autopilotRecap, \{ label: changeWindowLabel \}, t\)/);
     expect(h).not.toMatch(/in the last 24 hou/);
   });
 });

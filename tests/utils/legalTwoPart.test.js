@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { SITE_SUBPROCESSORS, SITE_PRIVACY_SECTIONS, SITE_TRANSFER_SECTION, PRIVACY_INTRO, PRIVACY_SECTIONS, TERMS_SECTIONS, CONTACT_EMAIL, LAST_UPDATED } from "../../app/utils/legal.js";
+import { SITE_SUBPROCESSORS, SITE_PRIVACY_SECTIONS, SITE_TRANSFER_SECTION, PRIVACY_INTRO, PRIVACY_SECTIONS, TERMS_SECTIONS, CONTACT_EMAIL, LAST_UPDATED, legalText } from "../../app/utils/legal.js";
 import { legalPage } from "../../app/utils/legalPage.server.js";
 
 describe("Part 1 as constants, with the app's own guard", () => {
@@ -30,7 +30,7 @@ describe("Part 1 as constants, with the app's own guard", () => {
   });
 
   it("the owner's sentences are present, not paraphrased", () => {
-    const text = SITE_PRIVACY_SECTIONS.flatMap((s) => s.p).join(" ");
+    const text = SITE_PRIVACY_SECTIONS.flatMap((s) => s.p).map((p) => legalText(p)).join(" "); // D1: keys with placeholders, rendered
     for (const sentence of [
       "The only measurement on this site is a small script we wrote ourselves, which sends a few facts about each page view to our own server.",
       "There is no cookie: the script keeps a random session id and any utm_ tags in your browser's session storage, which your browser discards when the tab closes.",
@@ -59,7 +59,7 @@ describe("Part 1 as constants, with the app's own guard", () => {
   });
 
   it("the intro says there are two parts, and the change is dated", () => {
-    expect(PRIVACY_INTRO.join(" ")).toMatch(/This policy has two parts\. <b>Part 1<\/b> covers the navaal\.ai website and the free Bilby store scan/);
+    expect(PRIVACY_INTRO.map((p) => legalText(p)).join(" ")).toMatch(/This policy has two parts\. <b>Part 1<\/b> covers the navaal\.ai website and the free Bilby store scan/);
     expect(LAST_UPDATED).toBe("15 September 2026");
     const changes = PRIVACY_SECTIONS.find((s) => s.h === "Changes").p.join(" ");
     expect(changes).toMatch(/15 September 2026: the website's Part 1/);

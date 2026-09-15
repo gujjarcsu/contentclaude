@@ -112,7 +112,7 @@ describe("A5 — buttons do what they say", () => {
   });
 
   it("on Free the primary writes drafts through the per-product path; the bulk run is a secondary that names what it needs", () => {
-    expect(p).toMatch(/Write the next \{quickBatch\} draft/);
+    expect(p).toMatch(/Write the next \{n, plural, one \{# draft\} other \{# drafts\}\}/); // D1: an ICU plural, one key
     expect(p).toMatch(/actionType === "quickBatch"/);
     expect(p).toMatch(/runQuickStartOne\(\{ admin, shop, productId, mode: "generate" \}\)/);
     expect(p).toMatch(/needs Starter/);

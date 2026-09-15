@@ -20,6 +20,9 @@ import { sendEmailTo } from "./notify.server.js";
 import { verdictSentence, plainSentence } from "./crawlHoldout.js";
 import { experimentsFor } from "./crawlHoldout.server.js";
 import { attentionList } from "./catalogueWatch.server.js";
+import { tFor } from "../i18n/index.js";
+// D1 — the worker process sends this email; it needs the catalogues too.
+import "../i18n/catalogues.server.js";
 
 export const REPORT_DAY_SYDNEY = 1; // Monday
 export const REPORT_HOUR_SYDNEY = 9;
@@ -30,27 +33,29 @@ export const APP_URL = process.env.SHOPIFY_APP_URL || "https://app.navaal.ai";
  * The report body for one shop, or null when there is nothing true to say.
  * Pure over its inputs so the decision can be tested without I/O.
  *
- * @param {{shop: string, storeHandle: string, experiments: Array<object>, sinceAt: Date|null, attentionCount: number}} input
+ * @param {{shop: string, storeHandle: string, experiments: Array<object>, sinceAt: Date|null, attentionCount: number, locale?: string}} input
+ *   `locale` (D1): the merchant's display language — the email reads in it.
  */
-export function composeWeeklyReport({ storeHandle, experiments, sinceAt, attentionCount = 0 }) {
+export function composeWeeklyReport({ storeHandle, experiments, sinceAt, attentionCount = 0, locale = "en" }) {
+  const t = tFor(locale);
   const since = sinceAt ? new Date(sinceAt).getTime() : 0;
   const reported = (experiments ?? []).filter((e) => e.status === "reported" && e.reportedAt && new Date(e.reportedAt).getTime() > since && e.summary?.enough);
   if (reported.length === 0) return null;
   const admin = `https://admin.shopify.com/store/${storeHandle}/apps/navaal-seo-geo-content`;
-  const lines = ["Your Navaal result this week", ""];
+  const lines = [t("Your Navaal result this week"), ""];
   for (const e of reported) {
-    lines.push(plainSentence(e.summary));
-    lines.push(verdictSentence(e.summary));
-    lines.push(`Method: a seeded random half of ${e.summary.submit.n + e.summary.hold.n} changed pages submitted to Bing, the other half withheld; time to Bing's first crawl after the change, both arms, 95% bootstrap interval on the difference of medians. Seed ${e.seed}, so the split can be reproduced.`);
-    lines.push(`See both arms: ${admin}/app/proof`);
+    lines.push(plainSentence(e.summary, t));
+    lines.push(verdictSentence(e.summary, t));
+    lines.push(t("Method: a seeded random half of {n} changed pages submitted to Bing, the other half withheld; time to Bing's first crawl after the change, both arms, 95% bootstrap interval on the difference of medians. Seed {seed}, so the split can be reproduced.", { n: e.summary.submit.n + e.summary.hold.n, seed: e.seed }));
+    lines.push(t("See both arms: {url}", { url: `${admin}/app/proof` }));
     lines.push("");
   }
   if (attentionCount > 0) {
-    lines.push(`${attentionCount} product${attentionCount === 1 ? "" : "s"} currently need${attentionCount === 1 ? "s" : ""} attention: ${admin}/app/attention`);
+    lines.push(t("{n, plural, one {# product currently needs} other {# products currently need}} attention: {url}", { n: attentionCount, url: `${admin}/app/attention` }));
     lines.push("");
   }
-  lines.push("You get one of these a week, and only in a week with a result. Reply to this email to reach us.");
-  return { subject: reported.length === 1 ? "Your crawl-time result is in" : `${reported.length} crawl-time results this week`, text: lines.join("\n") };
+  lines.push(t("You get one of these a week, and only in a week with a result. Reply to this email to reach us."));
+  return { subject: reported.length === 1 ? t("Your crawl-time result is in") : t("{n} crawl-time results this week", { n: reported.length }), text: lines.join("\n") };
 }
 
 async function shopEmail(graphql, shop) {
@@ -64,7 +69,7 @@ export async function sendWeeklyReports({ now = new Date() } = {}) {
   const out = { candidates: 0, sent: 0, quiet: 0, noEmail: 0, failed: 0 };
   const shops = await prisma.shop.findMany({
     where: { uninstalledAt: null, redactedAt: null, bingEnabledAt: { not: null } },
-    select: { shop: true, lastWeeklyReportAt: true },
+    select: { shop: true, lastWeeklyReportAt: true, uiLocale: true, locale: true },
   });
   out.candidates = shops.length;
   for (const row of shops) {
@@ -75,6 +80,8 @@ export async function sendWeeklyReports({ now = new Date() } = {}) {
         experiments,
         sinceAt: row.lastWeeklyReportAt,
         attentionCount: attention.length,
+        // D1 — the language the merchant chose for the app, else the store's own
+        locale: row.uiLocale || row.locale || "en",
       });
       if (!report) {
         out.quiet++;

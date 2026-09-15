@@ -6,8 +6,9 @@
 // is success-shaped. Post-fix entries always use MediaImage GIDs.
 export const LEGACY_ALT_ENTRY_MARKER = "gid://shopify/ProductImage/";
 
-export const LEGACY_ALT_ERROR =
-  "This earlier attempt never reached Shopify — generate again to apply alt text.";
+import { T } from "../i18n/index.js";
+
+export const LEGACY_ALT_ERROR = T("This earlier attempt never reached Shopify — generate again to apply alt text.");
 
 // Raw technical strings that must NEVER reach a merchant. Legacy rows stored
 // the dead mutation's GraphQL error verbatim in their `error` field, so honest

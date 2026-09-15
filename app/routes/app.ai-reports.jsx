@@ -7,6 +7,7 @@
  * page's Search Console card.
  */
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { tForRequest } from "../i18n/index.js";
 import { useT } from "../i18n/react.jsx";
 import { Page, Card, Text, BlockStack, InlineStack, Button, TextField, Link, Banner, List } from "@shopify/polaris";
 import { useState } from "react";
@@ -29,7 +30,7 @@ export const action = async ({ request }) => {
   const fd = await request.formData();
   const reportKey = String(fd.get("report") ?? "");
   const raw = Object.fromEntries([...fd.entries()].filter(([k]) => k.startsWith("f_")).map(([k, v]) => [k.slice(2), v]));
-  const v = validateReading(reportKey, raw);
+  const v = validateReading(reportKey, raw, tForRequest(request));
   if (!v.ok) return Response.json({ error: v.reason, report: reportKey }, { status: 400 });
   const gs = await prisma.growthState.findUnique({ where: { shop }, select: { aiReportReadings: true } }).catch(() => null);
   const next = withReading(parseReadings(gs?.aiReportReadings), reportKey, v.values);
@@ -46,27 +47,27 @@ function ReportCard({ report, readings }) {
   const fetcher = useFetcher();
   const [values, setValues] = useState(() => Object.fromEntries(report.fields.map((f) => [f.key, ""])));
   const busy = fetcher.state !== "idle";
-  const sentence = readingSentence(report.key, readings);
+  const sentence = readingSentence(report.key, readings, t);
   const err = fetcher.data?.error && fetcher.data?.report === report.key ? fetcher.data.error : null;
   return (
     <Card>
       <BlockStack gap="300">
         <Text as="h2" variant="headingMd">
-          {report.title}
+          {t(report.title)}
         </Text>
         <Text as="p" variant="bodySm">
-          <b>{t("Where:")}</b> {report.where}
+          <b>{t("Where:")}</b> {t(report.where)}
         </Text>
         <List type="number">
           {report.steps.map((s) => (
-            <List.Item key={s}>{s}</List.Item>
+            <List.Item key={s}>{t(s)}</List.Item>
           ))}
         </List>
         <Link url={report.url} target="_blank">
           {t("Open it in a new tab")}
         </Link>
         <Text as="p" variant="bodySm" tone="subdued">
-          {report.caveat}
+          {t(report.caveat)}
         </Text>
         {sentence && (
           <Banner tone="info" title={t("What you read last time")}>
@@ -83,7 +84,7 @@ function ReportCard({ report, readings }) {
               {report.fields.map((f) => (
                 <div key={f.key} style={{ minWidth: 220 }}>
                   <TextField
-                    label={f.label}
+                    label={t(f.label)}
                     name={`f_${f.key}`}
                     value={values[f.key]}
                     onChange={(v) => setValues((m) => ({ ...m, [f.key]: v }))}

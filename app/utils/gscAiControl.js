@@ -23,6 +23,8 @@
  * PURE.
  */
 
+import { T, enT } from "../i18n/index.js";
+
 export const GSC_ANSWER = Object.freeze({
   DEFAULT: "default", // the switch is off — the store is included (Google's default)
   EXCLUDED: "excluded", // the switch is on — the store is excluded from AI features
@@ -37,9 +39,9 @@ export const GSC_SETTINGS_URL = "https://search.google.com/search-console/settin
 export const GSC_RECHECK_DAYS = 90;
 
 export const GSC_LABEL = Object.freeze({
-  [GSC_ANSWER.DEFAULT]: "Included in Google's AI features",
-  [GSC_ANSWER.EXCLUDED]: "Excluded from Google's AI features",
-  [GSC_ANSWER.NO_GSC]: "No Search Console property",
+  [GSC_ANSWER.DEFAULT]: T("Included in Google's AI features"),
+  [GSC_ANSWER.EXCLUDED]: T("Excluded from Google's AI features"),
+  [GSC_ANSWER.NO_GSC]: T("No Search Console property"),
 });
 
 export const GSC_TONE = Object.freeze({
@@ -73,7 +75,7 @@ export function gscState({ answer = null, answeredAt = null } = {}, now = new Da
 }
 
 /** The Home line, or null. Says whose answer it is, because it is not ours. */
-export function gscLine(state) {
+export function gscLine(state, t = enT) {
   if (!state?.excluded) return null;
-  return "Your store is excluded from Google's AI features — your answer after checking Search Console.";
+  return t("Your store is excluded from Google's AI features — your answer after checking Search Console.");
 }

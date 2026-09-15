@@ -6,7 +6,8 @@ import {
   useSubmit,
   useFetcher,
 } from "react-router";
-import { useT } from "../i18n/react.jsx";
+import { storedTFor } from "../i18n/storedKeys.js";
+import { useT, useStoredT } from "../i18n/react.jsx";
 import { tForRequest, T } from "../i18n/index.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import { scoreContent } from "../utils/contentScorer.server.js";
@@ -176,7 +177,7 @@ export const loader = async ({ request }) => {
       productId: r.productId,
       numericId: String(r.productId).split("/").pop(),
       productTitle: r.productTitle || "Untitled product",
-      note: r.verifyNote || t("Shopify stored something different from what we sent."),
+      note: storedTFor(t)(r.verifyNote) || t("Shopify stored something different from what we sent."),
     });
   }
 
@@ -503,7 +504,7 @@ export const action = async ({ request }) => {
     const published = successfulProductIds.length;
     const faqWarning =
       faqFailedIds.length > 0
-        ? ` FAQ schema failed for ${faqFailedIds.length} product${faqFailedIds.length !== 1 ? "s" : ""} — it stays in drafts so you can retry.`
+        ? t(" FAQ schema failed for {n, plural, one {# product} other {# products}} — it stays in drafts so you can retry.", { n: faqFailedIds.length })
         : "";
 
     // If FAQ content just published but the theme app embed is still off, the
@@ -521,8 +522,7 @@ export const action = async ({ request }) => {
         // P1.2 — was: "your FAQ schema won't appear to search engines until
         // you enable the app embed". The schema is inert for Google since
         // 7 May 2026; the visible block is what a shopper actually sees.
-        embedNotice =
-          ' Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the "FAQ (Navaal)" block to your product template (see the setup card).';
+        embedNotice = t(' Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the "FAQ (Navaal)" block to your product template (see the setup card).');
       }
     }
 
@@ -543,11 +543,8 @@ export const action = async ({ request }) => {
       reviewAsk,
       unverified: unverified.length,
       message:
-        `Published content for ${published} product${published !== 1 ? "s" : ""}` +
-        `${failed > 0 ? `, ${failed} failed` : ""}.` +
-        (unverified.length > 0
-          ? ` ${unverified.length} went live but Shopify stored something different — check ${unverified.length === 1 ? "it" : "them"} below.`
-          : "") +
+        t("Published content for {n, plural, one {# product} other {# products}}{failed}.", { n: published, failed: failed > 0 ? t(", {m} failed", { m: failed }) : "" }) +
+        (unverified.length > 0 ? t(" {n, plural, one {# went live but Shopify stored something different — check it below.} other {# went live but Shopify stored something different — check them below.}}", { n: unverified.length }) : "") +
         `${faqWarning}${embedNotice}`,
     });
   }
@@ -846,7 +843,7 @@ export default function ReviewPage() {
   ) : (
     <Page
       title={t("Review & Publish")}
-      subtitle={t("{length} product{v} with draft content ready to review", { length: products.length, v: products.length !== 1 ? "s" : "" })}
+      subtitle={t("{n, plural, one {# product} other {# products}} with draft content ready to review", { n: products.length })}
       backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
@@ -976,7 +973,7 @@ export default function ReviewPage() {
       <Modal
         open={confirmReject}
         onClose={() => setConfirmReject(false)}
-        title={t("Reject {length} draft{v}?", { length: unapprovedIds.length, v: unapprovedIds.length === 1 ? "" : "s" })}
+        title={t("Reject {n, plural, one {# draft} other {# drafts}}?", { n: unapprovedIds.length })}
         primaryAction={{
           content: t("Reject them"),
           destructive: true,
@@ -1189,12 +1186,13 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
 // one publish primary is not buried in a list of failure rows.
 function PublishFailures({ errors }) {
   const t = useT();
+  const st = useStoredT();
   if (!errors?.length) return null;
   return (
     <Banner tone="warning" title={t("Published with some errors")}>
       {errors.map((e, i) => (
         <p key={i}>
-          {t("Failed:")} {e.productTitle || "Untitled product"} — {e.error}
+          {t("Failed:")} {e.productTitle || t("Untitled product")} — {st(e.error)}
         </p>
       ))}
     </Banner>

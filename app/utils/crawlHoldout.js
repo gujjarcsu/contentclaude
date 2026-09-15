@@ -32,6 +32,8 @@
  */
 
 /** Below this per arm, no verdict — the interval would be meaningless. */
+import { enT } from "../i18n/index.js";
+
 export const MIN_PER_ARM = 5;
 /** A page not crawled by then is right-censored at this value and said to be. */
 export const CENSOR_DAYS = 14;
@@ -180,38 +182,38 @@ export { fmt as formatHours };
  *   "Pages we submitted were crawled a median 31 hours sooner than pages we
  *    didn't — with this few pages the honest range is 9 to 52 hours."
  */
-export function plainSentence(s) {
+export function plainSentence(s, t = enT) {
   if (!s) return "";
   if (!s.enough) {
-    return `Not enough pages yet to say anything honest: ${s.submit.n} submitted and ${s.hold.n} withheld, and we need ${MIN_PER_ARM} of each. The next batch of changed pages adds to it.`;
+    return t("Not enough pages yet to say anything honest: {a} submitted and {b} withheld, and we need {min} of each. The next batch of changed pages adds to it.", { a: s.submit.n, b: s.hold.n, min: MIN_PER_ARM });
   }
   // Plain hours, whole numbers, no unit games: a merchant reads "31 hours",
   // not "1.3 d", and a range is two numbers of the same unit.
-  const hours = (h) => `${Math.round(Math.abs(h))} hour${Math.round(Math.abs(h)) === 1 ? "" : "s"}`;
-  const few = s.submit.n + s.hold.n < 40 ? "with this few pages " : "";
+  const hours = (h) => t("{h, plural, one {# hour} other {# hours}}", { h: Math.round(Math.abs(h)) });
+  const few = s.submit.n + s.hold.n < 40 ? t("with this few pages ") : "";
   const lo = Math.min(s.lo, s.hi);
   const hi = Math.max(s.lo, s.hi);
   if (s.favourable) {
-    return `Pages we submitted were crawled a median ${hours(s.diffHours)} sooner than pages we didn't — ${few}the honest range is ${Math.round(lo)} to ${hours(hi)}.`;
+    return t("Pages we submitted were crawled a median {median} sooner than pages we didn't — {few}the honest range is {lo} to {hi}.", { median: hours(s.diffHours), few, lo: Math.round(lo), hi: hours(hi) });
   }
   if (s.lo !== null && s.hi !== null && hi < 0) {
-    return `Pages we submitted were crawled a median ${hours(s.diffHours)} LATER than pages we didn't — ${few}the honest range is ${Math.round(Math.abs(hi))} to ${hours(lo)} later (both sides slower). Rare, and worth knowing.`;
+    return t("Pages we submitted were crawled a median {median} LATER than pages we didn't — {few}the honest range is {lo} to {hi} later (both sides slower). Rare, and worth knowing.", { median: hours(s.diffHours), few, lo: Math.round(Math.abs(hi)), hi: hours(lo) });
   }
-  return `We cannot tell the two halves apart this batch: submitted pages were crawled a median ${hours(s.diffHours)} ${s.diffHours >= 0 ? "sooner" : "later"}, but ${few}the honest range runs from ${hours(lo)} later to ${hours(hi)} sooner, which includes no difference at all.`;
+  return t("We cannot tell the two halves apart this batch: submitted pages were crawled a median {median} {direction}, but {few}the honest range runs from {lo} later to {hi} sooner, which includes no difference at all.", { median: hours(s.diffHours), direction: s.diffHours >= 0 ? t("sooner") : t("later"), few, lo: hours(lo), hi: hours(hi) });
 }
 
-export function verdictSentence(s) {
+export function verdictSentence(s, t = enT) {
   if (!s) return "";
   if (!s.enough) {
-    return `Too few pages to conclude: ${s.submit.n} submitted, ${s.hold.n} held (${MIN_PER_ARM} each is the minimum). The next batch of changed pages adds to it.`;
+    return t("Too few pages to conclude: {a} submitted, {b} held ({min} each is the minimum). The next batch of changed pages adds to it.", { a: s.submit.n, b: s.hold.n, min: MIN_PER_ARM });
   }
-  const arms = `Submitted pages: median ${fmt(s.submit.medianHours)} to first crawl (${s.submit.crawled} of ${s.submit.n} crawled). Withheld pages: median ${fmt(s.hold.medianHours)} (${s.hold.crawled} of ${s.hold.n} crawled).`;
-  const ci = `Difference ${fmt(s.diffHours)}, 95% interval ${fmt(s.lo)} to ${fmt(s.hi)}.`;
+  const arms = t("Submitted pages: median {m1} to first crawl ({c1} of {n1} crawled). Withheld pages: median {m2} ({c2} of {n2} crawled).", { m1: fmt(s.submit.medianHours), c1: s.submit.crawled, n1: s.submit.n, m2: fmt(s.hold.medianHours), c2: s.hold.crawled, n2: s.hold.n });
+  const ci = t("Difference {d}, 95% interval {lo} to {hi}.", { d: fmt(s.diffHours), lo: fmt(s.lo), hi: fmt(s.hi) });
   const read = s.favourable
-    ? "The interval is entirely above zero: submitting sped up crawling for this store."
+    ? t("The interval is entirely above zero: submitting sped up crawling for this store.")
     : s.lo !== null && s.hi !== null && s.hi < 0
-      ? "The interval is entirely below zero: submitted pages were crawled later — worth knowing, and rare."
-      : "The interval includes zero: no difference this batch can show.";
-  const censor = s.submit.censored + s.hold.censored > 0 ? ` ${s.submit.censored + s.hold.censored} page(s) not crawled by day ${CENSOR_DAYS} are counted at ${CENSOR_DAYS} days.` : "";
+      ? t("The interval is entirely below zero: submitted pages were crawled later — worth knowing, and rare.")
+      : t("The interval includes zero: no difference this batch can show.");
+  const censor = s.submit.censored + s.hold.censored > 0 ? t(" {c} page(s) not crawled by day {day} are counted at {day} days.", { c: s.submit.censored + s.hold.censored, day: CENSOR_DAYS }) : "";
   return `${arms} ${ci} ${read}${censor}`;
 }

@@ -1,4 +1,5 @@
 import { Suspense, useState } from "react";
+import { tForRequest } from "../i18n/index.js";
 import { useT } from "../i18n/react.jsx";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -64,6 +65,7 @@ const FIRST_VISIT_MS = 24 * 3600 * 1000;
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
+  const t = tForRequest(request);
   // Preserve all Shopify auth params so server-side redirects can re-authenticate.
   // Third-party cookies are blocked in embedded iframes, so we must carry id_token
   // and session through every redirect for the token exchange to succeed.
@@ -262,7 +264,7 @@ export const loader = async ({ request }) => {
   // "Autopilot optimized 15 new products in the last 24 hours" — two windows,
   // one screen. The autopilot recap now counts from the same moment and the
   // banner names the same date.
-  const changeWindow = changeWindowFor(storeScore);
+  const changeWindow = changeWindowFor(storeScore, new Date(), t);
   // Phase 4 item 5 — autopilot works while the merchant is not looking, so
   // the one place it must show up is the screen they open next.
   const autopilotRecap = await recentAutopilotWork(shop, { since: changeWindow.since });
@@ -281,7 +283,7 @@ export const loader = async ({ request }) => {
   // ProductScore) and the specific things the walk found. The theme step
   // waits until there is published content to show.
   const beforeFirstPublish = !!shopRow && !shopRow.firstPublishAt;
-  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop) : [];
+  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop, { t }) : [];
   const findings = beforeFirstPublish && !isFirstRun ? await firstRunFindings(shop) : [];
   // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
   const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
@@ -467,7 +469,7 @@ function StoreScoreCard({ score }) {
           */}
           {Number.isFinite(score.scanned) && score.scanned > 0 ? (
             <Text as="span" variant="bodyMd" tone="subdued">
-              {t("across {scanned} product{v} sampled", { scanned: score.scanned, v: score.scanned === 1 ? "" : "s" })}
+              {t("across {n, plural, one {# product} other {# products}} sampled", { n: score.scanned })}
             </Text>
           ) : null}
         </InlineStack>
@@ -764,12 +766,12 @@ export default function Dashboard() {
   const primaryAction =
     draftCount > 0
       ? {
-          content: t("Review {draftCount} draft{v}", { draftCount, v: draftCount === 1 ? "" : "s" }),
+          content: t("Review {n, plural, one {# draft} other {# drafts}}", { n: draftCount }),
           onAction: () => navigate("/app/review"),
         }
       : notOptimizedCount > 0
         ? {
-            content: t("Optimize {notOptimizedCount} product{v}", { notOptimizedCount, v: notOptimizedCount === 1 ? "" : "s" }),
+            content: t("Optimize {n, plural, one {# product} other {# products}}", { n: notOptimizedCount }),
             // A3.2 — this went to /app/optimize while the identically-labelled
             // primary on Products opened a modal. Same label, same intent, two
             // different next steps, and a merchant who used both would not know
@@ -803,10 +805,10 @@ export default function Dashboard() {
         {/* Phase 4 item 5 — what autopilot did while nobody was watching.
             Phase 12 A3 — counted over the score card's own window, and named
             with the same date, so the two lines can never disagree. */}
-        {autopilotRecap && autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }) && (
+        {autopilotRecap && autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }, t) && (
           <Banner
             tone="info"
-            title={autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel })}
+            title={autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }, t)}
             action={{ content: t("Review the drafts"), onAction: () => navigate("/app/review") }}
           >
             <p>
@@ -822,7 +824,7 @@ export default function Dashboard() {
         {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
           <Banner
             tone="success"
-            title={t("Bulk job complete — {completedProducts} product{v} generated", { completedProducts: recentlyCompletedJob.completedProducts, v: recentlyCompletedJob.completedProducts !== 1 ? "s" : "" })}
+            title={t("Bulk job complete — {n, plural, one {# product} other {# products}} generated", { n: recentlyCompletedJob.completedProducts })}
             action={{ content: t("Review drafts"), onAction: () => navigate("/app/review") }}
             onDismiss={() => {
               setJobBannerDismissed(true);
@@ -841,7 +843,7 @@ export default function Dashboard() {
         {activeJobCount > 0 && (
           <Banner
             tone="info"
-            title={t("{activeJobCount} bulk job{v} generating in the background", { activeJobCount, v: activeJobCount > 1 ? "s" : "" })}
+            title={t("{n, plural, one {# bulk job} other {# bulk jobs}} generating in the background", { n: activeJobCount })}
             action={{ content: t("View progress"), onAction: () => navigate("/app/jobs") }}
           >
             <p>{t("You can navigate freely — writing continues without this tab open.")}</p>
@@ -948,14 +950,14 @@ export default function Dashboard() {
             cannot list, then what changed), and a way in. Rendered only when
             there is something to say: an empty "nothing needs you" card on
             every load teaches a merchant to stop reading the card. */}
-        {attention?.available && homeAttentionLines(attention).length > 0 && (
+        {attention?.available && homeAttentionLines(attention, t).length > 0 && (
           <Banner
             tone={attention.crawler?.blocked?.length ? "critical" : "warning"}
-            title={homeAttentionLines(attention)[0]}
+            title={homeAttentionLines(attention, t)[0]}
             action={{ content: t("See what changed"), onAction: () => navigate("/app/attention") }}
           >
             <BlockStack gap="100">
-              {homeAttentionLines(attention)
+              {homeAttentionLines(attention, t)
                 .slice(1)
                 .map((line) => (
                   <Text key={line} as="p" variant="bodySm">
@@ -982,7 +984,7 @@ export default function Dashboard() {
                   {t("See both arms")}
                 </Button>
               </InlineStack>
-              {proofCardLines(proof).map((line) => (
+              {proofCardLines(proof, t).map((line) => (
                 <Text key={line} as="p" variant="bodySm">
                   {line}
                 </Text>
@@ -1042,7 +1044,7 @@ export default function Dashboard() {
                 candidateCount: candidateProducts,
                 candidateLabel,
                 record: recordPublished,
-              })}
+              }, t)}
               tone="success"
             />
           </Layout.Section>

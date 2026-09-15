@@ -28,7 +28,19 @@
 const GRADE = Object.freeze({ BLOCKING: "blocking", DEGRADING: "degrading" });
 
 /** Product pages sampled per shop per daily run on the Free plan. Oldest-checked first. */
+import { T, enT } from "../i18n/index.js";
+
 export const PAGE_SAMPLE = 20;
+
+/** D1 — the notes a row's indexability findings carry, as catalogue keys (see catalogueWatch.js GRADE_NOTES). */
+export const INDEXABILITY_NOTES = Object.freeze({
+  page: T("The product's page answers {status}. Nothing can index a page that is not there."),
+  noindex: T("The page tells search engines not to index it — a robots meta tag or header. Usually a theme setting, an app, or Shopify's own hide-from-search toggle on the product."),
+  sitemap: T("Not in your sitemap. Google can still reach it through links, but the sitemap is how it learns a page exists and when it changed."),
+  canonical: T("The page names a different address as the original: {canonical}. Search engines show that address instead of this one."),
+  redirects: T("Reaching this page takes {hops} redirects. One is fine; a chain costs crawl time and some of the signal passes are lost at each hop."),
+});
+export const INDEXABILITY_NOTE_KEYS = Object.freeze(Object.values(INDEXABILITY_NOTES));
 
 /**
  * F6 (Phase 9) — the nightly sample is the plan's. 20 a night meant a
@@ -136,7 +148,7 @@ export function sameUrl(a, b) {
  * Findings for one ProductWatch row's indexability columns. Nothing until
  * something was checked; nothing for a draft.
  */
-export function indexabilityFindings(row) {
+export function indexabilityFindings(row, t = enT) {
   const f = [];
   if (!row) return f;
   if (String(row.statusShop ?? "").toUpperCase() === "DRAFT") return f;
@@ -144,35 +156,19 @@ export function indexabilityFindings(row) {
   const add = (grade, field, note) => f.push({ surface: null, grade, field, note });
 
   if (checked && (row.pageStatus === 404 || row.pageStatus === 410)) {
-    add(GRADE.BLOCKING, "page", `The product's page answers ${row.pageStatus}. Nothing can index a page that is not there.`);
+    add(GRADE.BLOCKING, "page", t(INDEXABILITY_NOTES.page, { status: row.pageStatus }));
   }
   if (checked && row.noindex === true) {
-    add(
-      GRADE.BLOCKING,
-      "noindex",
-      "The page tells search engines not to index it — a robots meta tag or header. Usually a theme setting, an app, or Shopify's own hide-from-search toggle on the product.",
-    );
+    add(GRADE.BLOCKING, "noindex", t(INDEXABILITY_NOTES.noindex));
   }
   if (row.inSitemap === false) {
-    add(
-      GRADE.DEGRADING,
-      "sitemap",
-      "Not in your sitemap. Google can still reach it through links, but the sitemap is how it learns a page exists and when it changed.",
-    );
+    add(GRADE.DEGRADING, "sitemap", t(INDEXABILITY_NOTES.sitemap));
   }
   if (checked && row.canonical && row.pageFinalUrl && !sameUrl(row.canonical, row.pageFinalUrl)) {
-    add(
-      GRADE.DEGRADING,
-      "canonical",
-      `The page names a different address as the original: ${row.canonical}. Search engines show that address instead of this one.`,
-    );
+    add(GRADE.DEGRADING, "canonical", t(INDEXABILITY_NOTES.canonical, { canonical: row.canonical }));
   }
   if (checked && Number(row.pageHops ?? 0) >= 2) {
-    add(
-      GRADE.DEGRADING,
-      "redirects",
-      `Reaching this page takes ${row.pageHops} redirects. One is fine; a chain costs crawl time and some of the signal passes are lost at each hop.`,
-    );
+    add(GRADE.DEGRADING, "redirects", t(INDEXABILITY_NOTES.redirects, { hops: row.pageHops }));
   }
   return f;
 }
@@ -197,8 +193,8 @@ export function indexabilitySummary(rows) {
 }
 
 /** The Home line, or null. Only the blocking count earns a line. */
-export function indexabilityLine(s) {
+export function indexabilityLine(s, t = enT) {
   const n = Number(s?.cannotIndex ?? 0);
   if (!n) return null;
-  return `${n} product ${n === 1 ? "page cannot" : "pages cannot"} be indexed by search engines as ${n === 1 ? "it stands" : "they stand"}.`;
+  return t("{n, plural, one {# product page cannot be indexed by search engines as it stands.} other {# product pages cannot be indexed by search engines as they stand.}}", { n });
 }

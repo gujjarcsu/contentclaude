@@ -48,48 +48,50 @@
  * this" and "this is missing" are different findings and must never be
  * substituted for one another.
  */
+import { T } from "../i18n/index.js";
+
 export const GEO_RUBRIC = [
   {
     key: "contentDensity",
-    label: "Description depth and specifics",
+    label: T("Description depth and specifics"),
     max: 25,
-    why: "The most common gap in the market: 43.9% of Shopify stores have product descriptions under 120 characters. Length alone is not the point \u2014 concrete, checkable details are, so measurements, materials and figures count for more than words.",
+    why: T("The most common gap in the market: 43.9% of Shopify stores have product descriptions under 120 characters. Length alone is not the point \u2014 concrete, checkable details are, so measurements, materials and figures count for more than words."),
   },
   {
     key: "attributes",
-    label: "Product attributes",
+    label: T("Product attributes"),
     max: 20,
-    why: "The facts a shopper or an assistant needs to tell one product from another. Graded by how much each one actually matters, never as a flat checklist.",
+    why: T("The facts a shopper or an assistant needs to tell one product from another. Graded by how much each one actually matters, never as a flat checklist."),
   },
   {
     key: "answerFirst",
-    label: "Answer-first opening",
+    label: T("Answer-first opening"),
     max: 15,
-    why: "A first sentence that stands on its own and answers what the product is, rather than opening with a slogan.",
+    why: T("A first sentence that stands on its own and answers what the product is, rather than opening with a slogan."),
   },
   {
     key: "qa",
-    label: "Questions and answers",
+    label: T("Questions and answers"),
     max: 15,
-    why: "Real questions a customer asks, answered on the page. This is page content shoppers read, not markup.",
+    why: T("Real questions a customer asks, answered on the page. This is page content shoppers read, not markup."),
   },
   {
     key: "meta",
-    label: "Page title and description",
+    label: T("Page title and description"),
     max: 10,
-    why: "A title within 60 characters and a description within 160, so neither is cut off where they are shown.",
+    why: T("A title within 60 characters and a description within 160, so neither is cut off where they are shown."),
   },
   {
     key: "media",
-    label: "Image alt text",
+    label: T("Image alt text"),
     max: 10,
-    why: "Text describing each image. It is what a screen reader announces, and the only way anything that cannot see the picture knows what is in it.",
+    why: T("Text describing each image. It is what a screen reader announces, and the only way anything that cannot see the picture knows what is in it."),
   },
   {
     key: "freshness",
-    label: "Recently reviewed",
+    label: T("Recently reviewed"),
     max: 5,
-    why: "Content that has been touched in the last year. Skipped entirely when we do not know the date rather than counted against you.",
+    why: T("Content that has been touched in the last year. Skipped entirely when we do not know the date rather than counted against you."),
     optional: true,
   },
 ];

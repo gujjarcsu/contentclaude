@@ -6,6 +6,7 @@ import {
   redirect,
   useSearchParams,
 } from "react-router";
+import { storedTFor } from "../i18n/storedKeys.js";
 import { useT } from "../i18n/react.jsx";
 import { tForRequest } from "../i18n/index.js";
 import {
@@ -444,7 +445,7 @@ export const action = async ({ request }) => {
       // Concurrent-job cap (or enqueue failure) — show a banner, not the
       // full-page error boundary.
       return {
-        error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the bulk job. Please try again."),
+        error: err.message?.startsWith("You already have jobs") ? storedTFor(t)(err.message) : t("Could not start the bulk job. Please try again."),
       };
     }
     return redirect("/app/jobs");
@@ -484,7 +485,7 @@ export const action = async ({ request }) => {
     await enqueueGenerationJob(job.id);
   } catch (err) {
     return {
-      error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the bulk job. Please try again."),
+      error: err.message?.startsWith("You already have jobs") ? storedTFor(t)(err.message) : t("Could not start the bulk job. Please try again."),
     };
   }
   return redirect("/app/jobs");
@@ -764,9 +765,9 @@ export default function ProductsPage() {
       const shopifyStatus = String(statusById[productId] ?? "ACTIVE").toUpperCase();
       const notLive = (state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED) && shopifyStatus !== "ACTIVE";
       if (notLive) {
-        return <Badge tone="attention">{t("{state} · product is a Shopify {v}, not on your storefront", { state: PRODUCT_STATE_LABEL[state], v: shopifyStatus.toLowerCase() })}</Badge>;
+        return <Badge tone="attention">{t("{state} · product is a Shopify {v}, not on your storefront", { state: t(PRODUCT_STATE_LABEL[state]), v: shopifyStatus.toLowerCase() })}</Badge>;
       }
-      return <Badge tone={BADGE_TONE[state]}>{PRODUCT_STATE_LABEL[state]}</Badge>;
+      return <Badge tone={BADGE_TONE[state]}>{t(PRODUCT_STATE_LABEL[state])}</Badge>;
     }
     // Group 4.1 — NEEDS_CONTENT means "we hold nothing for this product". It
     // does NOT mean the product has no description: on a store where all 100
@@ -933,7 +934,7 @@ export default function ProductsPage() {
               ...(entitlements?.bulkJobs
                 ? { content: t("Optimize store ({notOptimized})", { notOptimized }), onAction: () => setGenerateAllModal(true) }
                 : {
-                    content: quickBatch > 0 ? t("Write the next {quickBatch} draft{v}", { quickBatch, v: quickBatch === 1 ? "" : "s" }) : t("Review your drafts"),
+                    content: quickBatch > 0 ? t("Write the next {n, plural, one {# draft} other {# drafts}}", { n: quickBatch }) : t("Review your drafts"),
                     onAction: () => (quickBatch > 0 ? handleQuickBatch() : navigate("/app/review")),
                   }),
             }
@@ -1000,7 +1001,7 @@ export default function ProductsPage() {
                     candidateCount: candidateProducts,
                     candidateLabel,
                     record: recordPublished,
-                  })}
+                  }, t)}
                 </Text>
               </BlockStack>
             </Card>
@@ -1068,7 +1069,7 @@ export default function ProductsPage() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="h2" variant="headingMd">
-                  {t("Optimize {length} selected product{v}", { length: selectedItems.length, v: selectedItems.length > 1 ? "s" : "" })}
+                  {t("Optimize {n, plural, one {# selected product} other {# selected products}}", { n: selectedItems.length })}
                 </Text>
                 <Button variant="plain" tone="critical" onClick={() => setSelectedItems([])}>
                   {t("Clear selection")}
@@ -1122,10 +1123,10 @@ export default function ProductsPage() {
 
                   <InlineStack gap="300" blockAlign="center">
                     <Button variant="primary" onClick={handleBulkGenerate}>
-                      {t("Optimize {length} product{v}", { length: selectedItems.length, v: selectedItems.length > 1 ? "s" : "" })}
+                      {t("Optimize {n, plural, one {# product} other {# products}}", { n: selectedItems.length })}
                     </Button>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      ~{Math.ceil((selectedItems.length * 3.5) / 60)} {t("min estimated · runs in background")}
+                      {t("~{minutes} min estimated · runs in background", { minutes: Math.ceil((selectedItems.length * 3.5) / 60) })}
                     </Text>
                   </InlineStack>
                 </>
@@ -1348,7 +1349,7 @@ export default function ProductsPage() {
                       cut the run to whatever quota remained. The app knew before
                       the click and promised the whole catalogue anyway. */}
                   <Text as="p" variant="bodyMd">
-                    {t("This starts a background job for {willProcessNow} of the {notOptimized} products not yet optimized. Estimated time: ~", { willProcessNow, notOptimized })}{Math.max(1, Math.ceil((willProcessNow * 3.5) / 60))} minutes.
+                    {t("This starts a background job for {willProcessNow} of the {notOptimized} products not yet optimized. Estimated time: ~{minutes} minutes.", { willProcessNow, notOptimized, minutes: Math.max(1, Math.ceil((willProcessNow * 3.5) / 60)) })}
                   </Text>
                   {waitingForQuota > 0 && (
                     <Text as="p" variant="bodyMd" tone="subdued">

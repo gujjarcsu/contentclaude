@@ -55,12 +55,12 @@ describe("plainSentence", () => {
 describe("where it is spoken", () => {
   it("the Proof screen leads with it and keeps the statistician's line under it; the card and the weekly report carry both", () => {
     const proof = src("app/routes/app.proof.jsx");
-    expect(proof.indexOf("{plainSentence(s)}")).toBeGreaterThan(0);
-    expect(proof.indexOf("{plainSentence(s)}")).toBeLessThan(proof.indexOf("{verdictSentence(s)}"));
+    expect(proof.indexOf("{plainSentence(s, t)}")).toBeGreaterThan(0);
+    expect(proof.indexOf("{plainSentence(s, t)}")).toBeLessThan(proof.indexOf("{verdictSentence(s, t)}"));
     expect(proof).toMatch(/<Badge>seed \{seed\}<\/Badge>/); // the seed stays on the screen
     expect(proofCardLines({ enabled: true, lockConfigured: true, latest: { status: "reported", summary: summary(), startedAt: "2026-09-15T00:00:00Z" } })[0]).toMatch(/^Pages we submitted were crawled a median 31 hours sooner/);
     expect(proofCardLines({ enabled: true, lockConfigured: true, latest: { status: "reported", summary: summary(), startedAt: "2026-09-15T00:00:00Z" } })[1]).toBe(verdictSentence(summary()));
     const weekly = src("app/utils/weeklyReport.server.js");
-    expect(weekly.indexOf("lines.push(plainSentence(e.summary));")).toBeLessThan(weekly.indexOf("lines.push(verdictSentence(e.summary));"));
+    expect(weekly.indexOf("lines.push(plainSentence(e.summary, t));")).toBeLessThan(weekly.indexOf("lines.push(verdictSentence(e.summary, t));"));
   });
 });

@@ -7,6 +7,8 @@ import { addDocumentResponseHeaders } from "./shopify.server.js";
 import { shopFromHost } from "./utils/embedded.server.js";
 // Run startup tasks (stuck-job recovery + BullMQ worker) once at boot.
 import "./utils/startup.server.js";
+// Phase 12 Part D (D1) — every live catalogue registered before the first request.
+import "./i18n/catalogues.server.js";
 import logger from "./utils/logger.server.js";
 import { captureException } from "./utils/errorMonitoring.server.js";
 

@@ -9,6 +9,7 @@ import { apiVersion as SHOPIFY_API_VERSION } from "../shopify.server.js";
 import { getFreshOfflineSession, refreshOfflineToken } from "./offlineToken.server.js";
 import { buildFaqSchemaMetafield, ensureFaqMetafieldDefinition } from "./seo.server.js";
 import { gateContent, fingerprintFor } from "./qualityGate.server.js";
+import { JOB_MESSAGES } from "./jobMessages.js";
 import { scoreContent } from "./contentScorer.server.js";
 // Throttle between products to stay within Anthropic's rate limits.
 // Configurable via BULK_THROTTLE_MS env var.
@@ -136,8 +137,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
           errorLog: JSON.stringify([
             {
               productId: "all",
-              error:
-                "Brand voice not configured. Go to Settings to set up your brand voice before running a bulk job.",
+              error: JOB_MESSAGES.brandVoiceMissing,
             },
           ]),
         },
@@ -219,7 +219,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         if (!product) {
           jobLogger.warn({ shop: job.shop, productId }, "Product not found in Shopify during bulk job");
           if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
-            errorLog.push({ productId, error: "Product not found in Shopify" });
+            errorLog.push({ productId, error: JOB_MESSAGES.productNotFound });
           failedCount++;
           pendingFailed++;
           await flushCounters();
@@ -247,7 +247,7 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
               "Enhance skipped — product has no existing description",
             );
             if (errorLog.length < MAX_ERROR_LOG_ENTRIES)
-              errorLog.push({ productId, error: "[NO CHARGE] No existing description to enhance" });
+              errorLog.push({ productId, error: JOB_MESSAGES.enhanceSkipped });
             failedCount++;
             pendingFailed++;
             await flushCounters();
@@ -346,8 +346,8 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
         const gate = await tryConsumeGeneration(job.shop, job.contentTypes, productId);
         if (!gate.allowed) {
           const limitMsg = gate.isContention
-            ? "Temporary server contention — will retry on next job run."
-            : "Monthly generation limit reached. Upgrade at /app/plans.";
+            ? JOB_MESSAGES.contention
+            : JOB_MESSAGES.quotaReached;
           jobLogger.warn({ shop: job.shop, productId }, limitMsg);
           if (errorLog.length < MAX_ERROR_LOG_ENTRIES) errorLog.push({ productId, error: limitMsg });
           failedCount++;

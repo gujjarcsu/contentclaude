@@ -396,93 +396,91 @@ const FEATURE_TABLE = [
   {
     // Was hardcoded "25 / 50 / 200 / 1,000" — the pre-B2 allowances, still on
     // the screen after the locked table multiplied every one of them by 4-7.5x.
-    feature: "Credits / month",
+    feature: T("Credits / month"),
     free: FREE_PLAN.monthlyCredits.toLocaleString(),
     starter: BILLING_PLANS.starter.monthlyCredits.toLocaleString(),
     growth: BILLING_PLANS.growth.monthlyCredits.toLocaleString(),
     pro: BILLING_PLANS.pro.monthlyCredits.toLocaleString(),
   },
   {
-    feature: "Products covered",
+    feature: T("Products covered"),
     free: FREE_PLAN.productLimit.toLocaleString(),
     starter: BILLING_PLANS.starter.productLimit.toLocaleString(),
     growth: BILLING_PLANS.growth.productLimit.toLocaleString(),
-    pro: "Unlimited",
+    pro: T("Unlimited"),
   },
   {
-    feature: "Free trial",
+    feature: T("Free trial"),
     free: "—",
     starter: trialLine,
     growth: trialLine,
     pro: trialLine,
   },
-  { feature: "Product descriptions", free: true, starter: true, growth: true, pro: true },
-  { feature: "Meta titles & descriptions", free: true, starter: true, growth: true, pro: true },
-  { feature: "FAQ content", free: true, starter: true, growth: true, pro: true },
+  { feature: T("Product descriptions"), free: true, starter: true, growth: true, pro: true },
+  { feature: T("Meta titles & descriptions"), free: true, starter: true, growth: true, pro: true },
+  { feature: T("FAQ content"), free: true, starter: true, growth: true, pro: true },
   {
-    feature: `Image alt text (${CREDIT_WEIGHTS.altText} credits)`,
+    feature: T("Image alt text ({n} credits)"), vars: { n: CREDIT_WEIGHTS.altText },
     free: true, starter: true, growth: true, pro: true,
   },
   {
-    feature: "Full catalogue audit",
+    feature: T("Full catalogue audit"),
     // Never capped, on any plan including Free — a locked decision, and it is
     // the hook (14-PRICING.md §4).
     free: true, starter: true, growth: true, pro: true,
   },
   {
-    feature: "Content templates",
+    feature: T("Content templates"),
     free: ent("free", "contentTemplates"), starter: ent("starter", "contentTemplates"),
     growth: ent("growth", "contentTemplates"), pro: ent("pro", "contentTemplates"),
   },
   {
-    feature: "Version history & rollback",
+    feature: T("Version history & rollback"),
     free: ent("free", "versionHistory"), starter: ent("starter", "versionHistory"),
     growth: ent("growth", "versionHistory"), pro: ent("pro", "versionHistory"),
   },
   {
     // This row said Starter: NO while the code granted it. Derived now.
-    feature: "Bulk runs",
+    feature: T("Bulk runs"),
     free: ent("free", "bulkJobs"), starter: ent("starter", "bulkJobs"),
     growth: ent("growth", "bulkJobs"), pro: ent("pro", "bulkJobs"),
   },
   {
-    feature: "Autopilot mode",
+    feature: T("Autopilot mode"),
     free: ent("free", "autopilot"), starter: ent("starter", "autopilot"),
     growth: ent("growth", "autopilot"), pro: ent("pro", "autopilot"),
   },
   {
-    feature: "Two description options to compare",
+    feature: T("Two description options to compare"),
     free: ent("free", "abVariants"), starter: ent("starter", "abVariants"),
     growth: ent("growth", "abVariants"), pro: ent("pro", "abVariants"),
   },
-  { feature: "Dedicated support", free: false, starter: false, growth: false, pro: true },
+  { feature: T("Dedicated support"), free: false, starter: false, growth: false, pro: true },
 ];
 
 const FAQ_ITEMS = [
   {
-    q: "When do my credits reset?",
-    a: `${CREDIT_RESET_SENTENCE} ${CREDIT_ROLLOVER_SENTENCE}`,
+    q: T("When do my credits reset?"),
+    // one answer from two constants — the same sentences /terms carries
+    a: [CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE],
   },
   {
-    q: "Can I upgrade or downgrade at any time?",
-    a: "Yes. Approving a new plan replaces your current one — there is no cancellation step. Upgrades take effect immediately; a change to a cheaper plan is prorated by Shopify.",
+    q: T("Can I upgrade or downgrade at any time?"),
+    a: T("Yes. Approving a new plan replaces your current one — there is no cancellation step. Upgrades take effect immediately; a change to a cheaper plan is prorated by Shopify."),
   },
   {
     // B1 — credit weighting shipped at 7d23792 and this answer still described
     // the flat "one generation" model it replaced. Alt text costs nothing now
     // and a blog post costs three, so the old answer understated one and
     // overstated the other.
-    q: "What does one credit buy?",
-    a:
-      `Most things cost ${CREDIT_WEIGHTS.description} credit: a product description, a meta title and ` +
-      `description, or FAQ content. Image alt text is free — ${CREDIT_WEIGHTS.altText} credits, however many ` +
-      `images the product has. A blog post costs ${CREDIT_WEIGHTS.blog} credits, because it is several times ` +
-      `the work. When you select more than one content type in a single run, you are charged the most ` +
-      `expensive one, not the sum.`,
+    q: T("What does one credit buy?"),
+    a: T("Most things cost {description} credit: a product description, a meta title and description, or FAQ content. Image alt text is free — {altText} credits, however many images the product has. A blog post costs {blog} credits, because it is several times the work. When you select more than one content type in a single run, you are charged the most expensive one, not the sum."),
+    vars: { description: CREDIT_WEIGHTS.description, altText: CREDIT_WEIGHTS.altText, blog: CREDIT_WEIGHTS.blog },
   },
   {
-    q: "Is there a free trial?",
-    a: `All paid plans include a ${TRIAL_DAYS}-day free trial with ${TRIAL_CREDITS} credits to spend in it. You won't be charged until the trial ends and you can cancel anytime. The trial allowance is ${TRIAL_CREDITS} credits rather than the plan's full monthly amount, and it is one trial per store.`,
+    q: T("Is there a free trial?"),
+    a: T("All paid plans include a {days}-day free trial with {credits} credits to spend in it. You won't be charged until the trial ends and you can cancel anytime. The trial allowance is {credits} credits rather than the plan's full monthly amount, and it is one trial per store."),
+    vars: { days: TRIAL_DAYS, credits: TRIAL_CREDITS },
   },
 ];
 
@@ -842,7 +840,7 @@ export default function PlansPage() {
                 "Professional",
               ]}
               rows={FEATURE_TABLE.map((row) => [
-                row.feature,
+                t(row.feature, row.vars),
                 <FeatureCell key="free" value={row.free} />,
                 <FeatureCell key="starter" value={row.starter} />,
                 <FeatureCell key="growth" value={row.growth} />,
@@ -861,10 +859,10 @@ export default function PlansPage() {
             {FAQ_ITEMS.map((item, i) => (
               <BlockStack key={i} gap="100">
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  {item.q}
+                  {t(item.q)}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {item.a}
+                  {Array.isArray(item.a) ? item.a.map((k) => t(k)).join(" ") : t(item.a, item.vars)}
                 </Text>
                 {i < FAQ_ITEMS.length - 1 && <Divider />}
               </BlockStack>

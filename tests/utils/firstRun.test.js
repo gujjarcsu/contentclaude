@@ -93,7 +93,7 @@ describe("wiring", () => {
     expect(start).toMatch(/start\.blockers/);
     expect(start).toMatch(/holding this store back/);
     const home = code(readFileSync("app/routes/app._index.jsx", "utf8"));
-    expect(home).toMatch(/isFirstRun \|\| beforeFirstPublish \? await blockersFor\(shop\) : \[\]/); // Phase 12 A4: also until the first publish, for the findings card
+    expect(home).toMatch(/isFirstRun \|\| beforeFirstPublish \? await blockersFor\(shop, \{ t \}\) : \[\]/); // D1: lines in the merchant\'s language // Phase 12 A4: also until the first publish, for the findings card
   });
 
   it("blockersFor never throws — the first run must render whether or not the walk finished", () => {

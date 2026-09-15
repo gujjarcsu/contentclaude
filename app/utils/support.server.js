@@ -31,7 +31,8 @@ import { sendOperatorEmail, OPERATOR_EMAIL } from "./notify.server.js";
 // them from here would pull Prisma and the email client into the client
 // bundle — React Router's build refuses that, which is how the split arose.
 // Re-exported so a caller never has to import both, same as candidates.server.js.
-import { validateSupportRequest, OPEN_LIMIT } from "./support.js";
+import { validateSupportRequest, OPEN_LIMIT, SUPPORT_ERRORS } from "./support.js";
+import { enT } from "../i18n/index.js";
 export * from "./support.js";
 
 /**
@@ -41,8 +42,8 @@ export * from "./support.js";
  *   `ok` means THE QUESTION IS SAFE. `emailed` means it also reached the inbox.
  *   They are separate on purpose: the merchant is told the truth about both.
  */
-export async function submitSupportRequest({ shop, replyTo, subject, message, planName }) {
-  const valid = validateSupportRequest({ replyTo, subject, message });
+export async function submitSupportRequest({ shop, replyTo, subject, message, planName, t = enT }) {
+  const valid = validateSupportRequest({ replyTo, subject, message }, t);
   if (!valid.ok) return { ok: false, emailed: false, error: valid.error };
 
   // A brake on volume, not a gate on need — and it counts OPEN requests only,
@@ -53,7 +54,7 @@ export async function submitSupportRequest({ shop, replyTo, subject, message, pl
       return {
         ok: false,
         emailed: false,
-        error: `You already have ${open} questions open with us. We will work through those first — reply to any of them and it reaches the same place.`,
+        error: t(SUPPORT_ERRORS.tooManyOpen, { open }),
       };
     }
   } catch {
@@ -79,7 +80,7 @@ export async function submitSupportRequest({ shop, replyTo, subject, message, pl
     return {
       ok: false,
       emailed: false,
-      error: `We could not save that, and we would rather say so than lose your question. Please email ${OPERATOR_EMAIL} directly.`,
+      error: t(SUPPORT_ERRORS.notStored, { email: OPERATOR_EMAIL }),
     };
   }
 

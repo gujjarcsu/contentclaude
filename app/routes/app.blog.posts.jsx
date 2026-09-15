@@ -195,7 +195,7 @@ export default function BlogPosts() {
   return (
     <Page
       title={t("Blog Posts")}
-      subtitle={t("{length} post{v} generated", { length: posts.length, v: posts.length !== 1 ? "s" : "" })}
+      subtitle={t("{n, plural, one {# post} other {# posts}} generated", { n: posts.length })}
       primaryAction={{
         content: t("Write New Post"),
         onAction: () => navigate("/app/blog"),
@@ -318,10 +318,10 @@ export default function BlogPosts() {
                 <Divider />
                 <BlockStack gap="200">
                   {[
-                    "Publish drafts to your Shopify blog to drive organic traffic.",
-                    "Add 3–5 keywords per post for better SEO targeting.",
-                    "Longer posts give the model more to work with.",
-                    "Publish drafts to your Shopify blog when you are happy with them.",
+                    t("Publish drafts to your Shopify blog to drive organic traffic."),
+                    t("Add 3–5 keywords per post for better SEO targeting."),
+                    t("Longer posts give the model more to work with."),
+                    t("Publish drafts to your Shopify blog when you are happy with them."),
                   ].map((tip) => (
                     <InlineStack key={tip} gap="200" blockAlign="start">
                       <Text as="span" variant="bodySm" tone="success">

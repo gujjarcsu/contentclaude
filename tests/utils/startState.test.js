@@ -333,7 +333,7 @@ describe("the Start screen itself — structural guarantees", () => {
     // credits are weighted (alt text 0, blog 3) and the two units must never mix.
     // Phase 10 N1: the sentence moved to startCopy.js, pure, so it can be held against the card's arithmetic.
     const copy = readFileSync("app/utils/startCopy.js", "utf8");
-    expect(copy).toMatch(/planName === "free" \? " on the Free plan" : ""/);
+    expect(copy).toMatch(/planName === "free" \? t\(" on the Free plan"\) : ""/); // D1
     expect(code).not.toMatch(/free generations/);
     expect(code).not.toMatch(/generations/);
   });

@@ -18,14 +18,14 @@ import { remainingGenerations, sliceToQuota } from "./plans.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { parseFindings } from "./catalogueWatch.js";
 import { FREE_CONTENT_TYPES } from "./credits.js";
-import { FIX, FIX_LABEL, inferOptionName, parseLockedShops, isLockedShop, withoutFinding, isValidGtin, candidatesFromRows } from "./remediation.js";
+import { FIX, FIX_LABEL, FIX_ERRORS, inferOptionName, parseLockedShops, isLockedShop, withoutFinding, isValidGtin, candidatesFromRows } from "./remediation.js";
 
 export const PROPOSAL_CAP = 50;
 const LOCKED = parseLockedShops(process.env.REMEDIATION_LOCKED_SHOPS);
 
 export class RemediationLocked extends Error {
   constructor(shop) {
-    super("This store is monitored only. Changes to its catalogue are not made from here.");
+    super(FIX_ERRORS.monitoredOnly);
     this.name = "RemediationLocked";
     this.shop = shop;
   }
@@ -124,7 +124,7 @@ async function dropFinding(shop, productId, key) {
 export async function applyVendor(graphql, shop, items, vendor) {
   assertWritable(shop);
   const name = String(vendor ?? "").trim();
-  if (!name) return { applied: 0, failed: (items ?? []).map((i) => ({ productId: i.productId, error: "No brand name given." })) };
+  if (!name) return { applied: 0, failed: (items ?? []).map((i) => ({ productId: i.productId, error: FIX_ERRORS.noBrand })) };
   let applied = 0;
   const failed = [];
   for (const it of items ?? []) {
@@ -132,7 +132,7 @@ export async function applyVendor(graphql, shop, items, vendor) {
       const res = await graphql(VENDOR_MUTATION, { variables: { product: { id: it.productId, vendor: name } } });
       const m = await readMutationResult(res, "productUpdate");
       if (!m.ok) throw new Error(m.errorMessages.join("; "));
-      if (m.payload?.product?.vendor !== name) throw new Error("Shopify accepted the update but returned a different vendor.");
+      if (m.payload?.product?.vendor !== name) throw new Error(FIX_ERRORS.vendorMismatch);
       await dropFinding(shop, it.productId, { surface: "openai", field: "brand" });
       applied += 1;
     } catch (err) {
@@ -151,7 +151,7 @@ export async function applyOptionNames(graphql, shop, items) {
   for (const it of items ?? []) {
     const name = String(it.name ?? "").trim();
     if (!name || !it.optionId) {
-      failed.push({ productId: it.productId, error: "No option name given." });
+      failed.push({ productId: it.productId, error: FIX_ERRORS.noOptionName });
       continue;
     }
     try {
@@ -159,7 +159,7 @@ export async function applyOptionNames(graphql, shop, items) {
       const m = await readMutationResult(res, "productOptionUpdate");
       if (!m.ok) throw new Error(m.errorMessages.join("; "));
       const got = (m.payload?.product?.options ?? []).find((o) => o.id === it.optionId)?.name;
-      if (got !== name) throw new Error("Shopify accepted the update but returned a different option name.");
+      if (got !== name) throw new Error(FIX_ERRORS.optionMismatch);
       await dropFinding(shop, it.productId, { surface: "openai", field: "variant options" });
       applied += 1;
     } catch (err) {
@@ -178,11 +178,11 @@ export async function applyBarcodes(graphql, shop, items) {
   for (const it of items ?? []) {
     const code = String(it.barcode ?? "").replace(/\s+/g, "");
     if (!it.variantId) {
-      failed.push({ productId: it.productId, error: "No variant to write to." });
+      failed.push({ productId: it.productId, error: FIX_ERRORS.noVariant });
       continue;
     }
     if (!isValidGtin(code)) {
-      failed.push({ productId: it.productId, error: "Not a valid GTIN (8, 12, 13 or 14 digits with a correct check digit)." });
+      failed.push({ productId: it.productId, error: FIX_ERRORS.invalidGtin });
       continue;
     }
     try {
@@ -190,7 +190,7 @@ export async function applyBarcodes(graphql, shop, items) {
       const m = await readMutationResult(res, "productVariantsBulkUpdate");
       if (!m.ok) throw new Error(m.errorMessages.join("; "));
       const got = (m.payload?.productVariants ?? []).find((v) => v.id === it.variantId)?.barcode;
-      if (got !== code) throw new Error("Shopify accepted the update but returned a different barcode.");
+      if (got !== code) throw new Error(FIX_ERRORS.barcodeMismatch);
       await dropFinding(shop, it.productId, { surface: "openai", field: "gtin" });
       applied += 1;
     } catch (err) {

@@ -151,15 +151,15 @@ export const action = async ({ request }) => {
     // text is never surfaced: an upstream error body can echo the request
     // headers, and this string goes on a merchant's screen.
     const REASONS = {
-      empty: "Paste your Anthropic API key first.",
-      rejected: "Anthropic rejected that key. Check you copied all of it and that the key is still active.",
-      rate_limited: "Anthropic rate-limited the check, so nothing was saved. Try again in a minute — the key may be fine.",
-      upstream: "Anthropic could not be reached to check the key. Nothing was saved. Try again shortly.",
-      unreachable: "We could not reach Anthropic to check the key. Nothing was saved.",
-      storage: "The key checked out but could not be saved, so nothing was stored. Please try again.",
-      not_configured: "Using your own AI key is not available on this deployment yet.",
+      empty: T("Paste your Anthropic API key first."),
+      rejected: T("Anthropic rejected that key. Check you copied all of it and that the key is still active."),
+      rate_limited: T("Anthropic rate-limited the check, so nothing was saved. Try again in a minute — the key may be fine."),
+      upstream: T("Anthropic could not be reached to check the key. Nothing was saved. Try again shortly."),
+      unreachable: T("We could not reach Anthropic to check the key. Nothing was saved."),
+      storage: T("The key checked out but could not be saved, so nothing was stored. Please try again."),
+      not_configured: T("Using your own AI key is not available on this deployment yet."),
     };
-    return Response.json({ error: REASONS[result.reason] ?? REASONS.upstream }, { status: 400 });
+    return Response.json({ error: t(REASONS[result.reason] ?? REASONS.upstream) }, { status: 400 });
   }
 
   if (actionType === "saveTemplate" || actionType === "deleteTemplate") {
@@ -922,7 +922,7 @@ export default function SettingsPage() {
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {tpl.contentLength} · {tpl.contentTypes.replace(/,/g, ",")}
-                            {tpl.keywords && ` · keywords: ${tpl.keywords}`}
+                            {tpl.keywords && t(" · keywords: {keywords}", { keywords: tpl.keywords })}
                           </Text>
                         </BlockStack>
                         <Form method="post">

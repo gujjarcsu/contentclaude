@@ -16,6 +16,7 @@
  */
 
 import { Queue, Worker } from "bullmq";
+import { JOB_MESSAGES } from "../utils/jobMessages.js";
 import logger from "../utils/logger.server.js";
 import prisma from "../db.server.js";
 import { RUNS_JOBS, PROCESS_ROLE, MACHINE_ID, REGION } from "../utils/processRole.server.js";
@@ -219,7 +220,7 @@ export async function enqueueGenerationJob(jobId) {
       });
       if (active > INFLIGHT_CAP) {
         await prisma.generationJob.deleteMany({ where: { id: jobId, status: "queued" } });
-        throw new Error("You already have jobs running — please wait for them to finish, then try again.");
+        throw new Error(JOB_MESSAGES.jobsRunning);
       }
     }
 

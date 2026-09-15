@@ -440,8 +440,7 @@ export default function BlogPage() {
           <Banner tone="success" title={t("Blog post generated!")}>
             <p>
              {t("Saved as a draft. Review and edit below, then publish when ready.")}
-              {actionData.remaining !== undefined &&
-                ` · ${actionData.remaining} credits left this month.`}
+              {actionData.remaining !== undefined && t(" · {remaining} credits left this month.", { remaining: actionData.remaining })}
             </p>
           </Banner>
         )}

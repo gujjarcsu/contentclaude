@@ -29,6 +29,7 @@
  */
 import { gscLine } from "./gscAiControl.js";
 import { indexabilityLine } from "./indexability.js";
+import { T, enT } from "../i18n/index.js";
 
 // The one definition. catalogGaps.server.js re-exports it; it lives here
 // because this module must stay free of server imports for the routes.
@@ -54,28 +55,28 @@ export const KIND = Object.freeze({
 /** What a merchant reads, and what it costs them — graded, never "broken". */
 export const KIND_LABEL = Object.freeze({
   [KIND.DESCRIPTION_COLLAPSED]: {
-    title: "Description collapsed",
-    detail: "This product's description dropped below 50 characters since we last looked — usually a bulk import or an edit that cleared it.",
+    title: T("Description collapsed"),
+    detail: T("This product's description dropped below 50 characters since we last looked — usually a bulk import or an edit that cleared it."),
     grade: "degrading",
   },
   [KIND.PRODUCT_TYPE_MISSING]: {
-    title: "No product type",
-    detail: "Shopify's product type is empty. It is not required by any AI surface, but it feeds Shopify's own categorisation and your filters.",
+    title: T("No product type"),
+    detail: T("Shopify's product type is empty. It is not required by any AI surface, but it feeds Shopify's own categorisation and your filters."),
     grade: "cosmetic",
   },
   [KIND.ALT_TEXT_LOST]: {
-    title: "Alt text lost",
-    detail: "The featured image had alt text and now has none — a theme change or a re-upload. Alt text is free to regenerate.",
+    title: T("Alt text lost"),
+    detail: T("The featured image had alt text and now has none — a theme change or a re-upload. Alt text is free to regenerate."),
     grade: "degrading",
   },
   [KIND.HANDLE_CHANGED]: {
-    title: "URL changed",
-    detail: "The product's handle changed, so its address changed with it. Anything linking to the old address now lands on a redirect at best.",
+    title: T("URL changed"),
+    detail: T("The product's handle changed, so its address changed with it. Anything linking to the old address now lands on a redirect at best."),
     grade: "degrading",
   },
   [KIND.NEW_UNOPTIMISED]: {
-    title: "New, nothing written yet",
-    detail: "This product arrived after we started watching and has no content from us.",
+    title: T("New, nothing written yet"),
+    detail: T("This product arrived after we started watching and has no content from us."),
     grade: "cosmetic",
   },
 });
@@ -193,12 +194,11 @@ export function summarise(rows, now = new Date(), { firstWalkAt = null } = {}) {
   return { needAttention, sinceYesterday, byKind };
 }
 
-/** "3 products need attention, 1 since yesterday." — one sentence, or null. */
-export function attentionSentence({ needAttention, sinceYesterday }) {
+/** "3 products need attention, 1 since yesterday." — one sentence, or null. `t` (D1): the screen's translator; English by default. */
+export function attentionSentence({ needAttention, sinceYesterday }, t = enT) {
   if (!needAttention) return null;
-  const p = needAttention === 1 ? "product needs" : "products need";
-  const since = sinceYesterday > 0 ? `, ${sinceYesterday} since yesterday` : "";
-  return `${needAttention} ${p} attention${since}.`;
+  const since = sinceYesterday > 0 ? t(", {m} since yesterday", { m: sinceYesterday }) : "";
+  return t("{n, plural, one {# product needs} other {# products need}} attention{since}.", { n: needAttention, since });
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -241,8 +241,8 @@ export function attentionSentence({ needAttention, sinceYesterday }) {
 
 export const SURFACE = Object.freeze({ OPENAI: "openai", GOOGLE: "google" });
 export const SURFACE_LABEL = Object.freeze({
-  [SURFACE.OPENAI]: "OpenAI product feed",
-  [SURFACE.GOOGLE]: "Google Search",
+  [SURFACE.OPENAI]: T("OpenAI product feed"),
+  [SURFACE.GOOGLE]: T("Google Search"),
 });
 export const GRADE = Object.freeze({ BLOCKING: "blocking", DEGRADING: "degrading", COSMETIC: "cosmetic" });
 
@@ -251,6 +251,31 @@ export const EVIDENCE_MIN_CHARS = 120;
 
 /** Option names Shopify assigns when nobody chose one. */
 export const GENERIC_OPTION_NAMES = Object.freeze(new Set(["title", "default title", "default"]));
+
+/**
+ * D1 — every note a grade can carry, as a catalogue key. The walk STORES the
+ * English sentence (produced from the key through enT); the screen translates
+ * it back by the same key (app/i18n/stored.js), so a row graded last night
+ * reads in the merchant's language today.
+ */
+export const GRADE_NOTES = Object.freeze({
+  title: T("The feed requires a title. This product has none."),
+  description: T("The feed requires a description. This product's is empty."),
+  thin: T("Under {n} characters — a label, not something an answer can quote. Listed, but with little to say."),
+  link: T("Not available on the Online Store channel, so it has no public address for the feed to point at."),
+  brand: T("The feed requires a brand. Shopify's vendor field is empty."),
+  image: T("The feed requires an image. This product has no featured image."),
+  alt: T("The image has no alt text, so nothing describes it to a system that cannot see it. Free to generate."),
+  gtinMany: T("No barcode on any of the {n} variants we read. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add."),
+  gtinOne: T("No barcode on the first variant. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add."),
+  options: T("Variants exist but the option is still called “Title”. Naming it (Size, Colour) tells a shopper what they are choosing between."),
+  googleUrl: T("Not on the Online Store channel, so there is no page for Google to crawl."),
+  googleThin: T("Too short to make a snippet from; Google will pick text from elsewhere on the page."),
+  googleNoDescription: T("No description; Google will pick text from elsewhere on the page."),
+  googleImage: T("No image, so no image result and a plainer snippet."),
+  productType: T("Shopify's own taxonomy field. No AI surface requires it; it feeds Shopify's categorisation and your filters."),
+});
+export const GRADE_NOTE_KEYS = Object.freeze(Object.values(GRADE_NOTES));
 
 /**
  * Grade one product node against both surfaces.
@@ -299,65 +324,45 @@ export function gradeProduct(node, { storefrontPublic = true, gtinExempt = false
   const multiVariant = node?.hasOnlyDefaultVariant === false;
 
   // ── OpenAI product feed ──────────────────────────────────────────────────
-  if (!title) add(SURFACE.OPENAI, GRADE.BLOCKING, "title", "The feed requires a title. This product has none.");
+  if (!title) add(SURFACE.OPENAI, GRADE.BLOCKING, "title", GRADE_NOTES.title);
   if (!desc) {
-    add(SURFACE.OPENAI, GRADE.BLOCKING, "description", "The feed requires a description. This product's is empty.");
+    add(SURFACE.OPENAI, GRADE.BLOCKING, "description", GRADE_NOTES.description);
   } else if (desc.length < EVIDENCE_MIN_CHARS) {
-    add(
-      SURFACE.OPENAI,
-      GRADE.DEGRADING,
-      "description",
-      `Under ${EVIDENCE_MIN_CHARS} characters — a label, not something an answer can quote. Listed, but with little to say.`,
-    );
+    add(SURFACE.OPENAI, GRADE.DEGRADING, "description", enT(GRADE_NOTES.thin, { n: EVIDENCE_MIN_CHARS }));
   }
   // A locked storefront nulls every URL; that is one shop-level fact, not a
   // finding on each product.
   const noUrl = storefrontPublic && !url;
   if (noUrl) {
-    add(
-      SURFACE.OPENAI,
-      GRADE.BLOCKING,
-      "link",
-      "Not available on the Online Store channel, so it has no public address for the feed to point at.",
-    );
+    add(SURFACE.OPENAI, GRADE.BLOCKING, "link", GRADE_NOTES.link);
   }
-  if (!vendor) add(SURFACE.OPENAI, GRADE.BLOCKING, "brand", "The feed requires a brand. Shopify's vendor field is empty.");
+  if (!vendor) add(SURFACE.OPENAI, GRADE.BLOCKING, "brand", GRADE_NOTES.brand);
   if (!imageUrl) {
-    add(SURFACE.OPENAI, GRADE.BLOCKING, "image_link", "The feed requires an image. This product has no featured image.");
+    add(SURFACE.OPENAI, GRADE.BLOCKING, "image_link", GRADE_NOTES.image);
   } else if (!alt) {
-    add(SURFACE.OPENAI, GRADE.DEGRADING, "image alt", "The image has no alt text, so nothing describes it to a system that cannot see it. Free to generate.");
+    add(SURFACE.OPENAI, GRADE.DEGRADING, "image alt", GRADE_NOTES.alt);
   }
   if (checked && !anyBarcode && !gtinExempt) {
-    add(
-      SURFACE.OPENAI,
-      GRADE.DEGRADING,
-      "gtin",
-      `${checked.length > 1 ? `No barcode on any of the ${checked.length} variants we read` : "No barcode on the first variant"}. A GTIN lets the feed match this to a known product. Exempt if it is your own brand or handmade — then there is nothing to add.`,
-    );
+    add(SURFACE.OPENAI, GRADE.DEGRADING, "gtin", checked.length > 1 ? enT(GRADE_NOTES.gtinMany, { n: checked.length }) : GRADE_NOTES.gtinOne);
   }
   if (multiVariant && optionNames.length > 0 && optionNames.every((n) => GENERIC_OPTION_NAMES.has(n))) {
-    add(
-      SURFACE.OPENAI,
-      GRADE.DEGRADING,
-      "variant options",
-      "Variants exist but the option is still called “Title”. Naming it (Size, Colour) tells a shopper what they are choosing between.",
-    );
+    add(SURFACE.OPENAI, GRADE.DEGRADING, "variant options", GRADE_NOTES.options);
   }
 
   // ── Google Search ────────────────────────────────────────────────────────
   if (noUrl) {
-    add(SURFACE.GOOGLE, GRADE.BLOCKING, "url", "Not on the Online Store channel, so there is no page for Google to crawl.");
+    add(SURFACE.GOOGLE, GRADE.BLOCKING, "url", GRADE_NOTES.googleUrl);
   }
   if (desc && desc.length < EVIDENCE_MIN_CHARS) {
-    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", "Too short to make a snippet from; Google will pick text from elsewhere on the page.");
+    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", GRADE_NOTES.googleThin);
   } else if (!desc) {
-    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", "No description; Google will pick text from elsewhere on the page.");
+    add(SURFACE.GOOGLE, GRADE.DEGRADING, "description", GRADE_NOTES.googleNoDescription);
   }
-  if (!imageUrl) add(SURFACE.GOOGLE, GRADE.DEGRADING, "image", "No image, so no image result and a plainer snippet.");
+  if (!imageUrl) add(SURFACE.GOOGLE, GRADE.DEGRADING, "image", GRADE_NOTES.googleImage);
 
   // ── Shopify housekeeping ─────────────────────────────────────────────────
   if (!String(node?.productType ?? "").trim()) {
-    add(null, GRADE.COSMETIC, "product_type", "Shopify's own taxonomy field. No AI surface requires it; it feeds Shopify's categorisation and your filters.");
+    add(null, GRADE.COSMETIC, "product_type", GRADE_NOTES.productType);
   }
 
   return tally();
@@ -379,23 +384,23 @@ export function parseFindings(json) {
  * @param {{needAttention?: number, sinceYesterday?: number, blocking?: number,
  *   crawler?: {blocked?: string[]}, gsc?: {excluded?: boolean}}} s
  */
-export function homeAttentionLines(s) {
+export function homeAttentionLines(s, t = enT) {
   const lines = [];
   const blocked = s?.crawler?.blocked ?? [];
   if (blocked.length) {
-    lines.push(`${blocked.join(", ")} ${blocked.length === 1 ? "is" : "are"} blocked from your storefront.`);
+    lines.push(t("{agents} {n, plural, one {is} other {are}} blocked from your storefront.", { agents: blocked.join(", "), n: blocked.length }));
   }
   // P2.5 — the merchant's own answer, and the line says so.
-  const gsc = gscLine(s?.gsc);
+  const gsc = gscLine(s?.gsc, t);
   if (gsc) lines.push(gsc);
   // P2.4 — pages that cannot be indexed as they stand.
-  const idx = indexabilityLine(s?.indexability);
+  const idx = indexabilityLine(s?.indexability, t);
   if (idx) lines.push(idx);
   const blocking = Number(s?.blocking ?? 0);
   if (blocking > 0) {
-    lines.push(`${blocking} ${blocking === 1 ? "product is" : "products are"} missing something an AI shopping surface requires.`);
+    lines.push(t("{n, plural, one {# product is} other {# products are}} missing something an AI shopping surface requires.", { n: blocking }));
   }
-  const changed = attentionSentence(s ?? {});
+  const changed = attentionSentence(s ?? {}, t);
   if (changed) lines.push(changed);
   return lines;
 }

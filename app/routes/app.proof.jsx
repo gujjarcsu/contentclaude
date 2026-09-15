@@ -111,10 +111,10 @@ export default function ProofPage() {
 
                 {/* Phase 12 C1 — the plain sentence leads; the statistician's line follows it. */}
                 <Text as="p" variant="bodyLg" fontWeight="semibold">
-                  {plainSentence(s)}
+                  {plainSentence(s, t)}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {verdictSentence(s)}
+                  {verdictSentence(s, t)}
                 </Text>
 
                 <BlockStack gap="100">

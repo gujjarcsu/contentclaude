@@ -1685,7 +1685,7 @@ export default function ProductGeneratePage() {
                     checked={genAltText}
                     onChange={setGenAltText}
                     disabled={noImages}
-                    helpText={noImages ? t("No images on this product") : t("Applied directly to {length} image{v}{v1} — alt text costs no credits", { length: product.images.length, v: product.images.length !== 1 ? "s" : "", v1: product.hasMoreImages ? " (first 50)" : "" })}
+                    helpText={noImages ? t("No images on this product") : t("Applied directly to {n, plural, one {# image} other {# images}}{more} — alt text costs no credits", { n: product.images.length, more: product.hasMoreImages ? t(" (first 50)") : "" })}
                   />
 
                   <Divider />
@@ -1997,7 +1997,7 @@ export default function ProductGeneratePage() {
                         The banner now says what is actually true: the proposals
                         are ours, and what sits under CURRENT is theirs. */}
                     <Banner tone="info">
-                     {t("The")} <strong>proposed</strong> {t("content on this page was written by AI. Anything shown under “Currently on your store” is your own copy and is not changed until you publish.")}
+                     {t("The")} <strong>{t("proposed")}</strong> {t("content on this page was written by AI. Anything shown under “Currently on your store” is your own copy and is not changed until you publish.")}
                     </Banner>
 
                     {/* Description */}
@@ -2369,7 +2369,7 @@ export default function ProductGeneratePage() {
                             <InlineStack gap="200">
                               <Spinner size="small" />
                               <Text as="p" variant="bodySm" tone="subdued">
-                               {t("Generating alt text for {length} image {v}...", { length: product.images.length, v: product.images.length !== 1 ? "s" : "" })}
+                               {t("Generating alt text for {n, plural, one {# image} other {# images}}...", { n: product.images.length })}
                               </Text>
                             </InlineStack>
                           )}
@@ -2545,7 +2545,7 @@ export default function ProductGeneratePage() {
                           loading={isGenerating && genAltText}
                           disabled={isLoading}
                         >
-                         {t("Generate Alt Text for {length} Image {v}", { length: product.images.length, v: product.images.length !== 1 ? "s" : "" })}
+                         {t("Generate Alt Text for {n, plural, one {# Image} other {# Images}}", { n: product.images.length })}
                         </Button>
                       )}
                       <AltTextResultList results={altTextResults} />

@@ -367,7 +367,7 @@ export async function attentionList(shop, { limit = 200 } = {}) {
  * run. From the stored findings of the first walk; never throws, because the
  * first run must render whether or not the walk finished.
  */
-export async function blockersFor(shop, { now = new Date() } = {}) {
+export async function blockersFor(shop, { now = new Date(), t } = {}) {
   try {
     const { tallyFindings, blockerLines } = await import("./firstRun.js");
     const { parseFindings } = await import("./catalogueWatch.js");
@@ -375,7 +375,7 @@ export async function blockersFor(shop, { now = new Date() } = {}) {
       prisma.productWatch.findMany({ where: { shop, grade: { not: null } }, select: { grade: true, statusShop: true } }),
       latestCrawlerAccess(shop, { now }),
     ]);
-    return blockerLines(tallyFindings(rows, parseFindings), { passwordProtected: crawler?.passwordProtected === true });
+    return blockerLines(tallyFindings(rows, parseFindings), { passwordProtected: crawler?.passwordProtected === true, t });
   } catch (err) {
     logger.warn({ shop, err: err?.message }, "first-run blockers unavailable (non-fatal)");
     return [];

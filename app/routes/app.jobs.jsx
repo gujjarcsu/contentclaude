@@ -1,5 +1,6 @@
 import { useLoaderData, useNavigate, useRevalidator, useFetcher, useSearchParams } from "react-router";
-import { useT } from "../i18n/react.jsx";
+import { storedTFor } from "../i18n/storedKeys.js";
+import { useT, useStoredT } from "../i18n/react.jsx";
 import { tForRequest } from "../i18n/index.js";
 import {
   Page,
@@ -130,7 +131,7 @@ export const action = async ({ request }) => {
   } catch (err) {
     return Response.json(
       {
-        error: err.message?.startsWith("You already have jobs") ? err.message : t("Could not start the retry job. Please try again."),
+        error: err.message?.startsWith("You already have jobs") ? storedTFor(t)(err.message) : t("Could not start the retry job. Please try again."),
       },
       { status: 409 },
     );
@@ -202,6 +203,7 @@ function formatDate(iso) {
 
 export default function JobsPage() {
   const t = useT();
+  const st = useStoredT();
   const { jobs } = useLoaderData();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -546,10 +548,10 @@ export default function JobsPage() {
                                        {t("Open product")}
                                       </Button>
                                     ) : (
-                                      <strong>{err.productId || "Unknown"}</strong>
+                                      <strong>{err.productId || t("Unknown")}</strong>
                                     )}
                                     {" —"}
-                                    {err.error}
+                                    {st(err.error)}
                                   </Text>
                                 </InlineStack>
                               </Box>
@@ -557,7 +559,7 @@ export default function JobsPage() {
                           })}
                           {job.errorLog.length > 10 && (
                             <Text as="p" variant="bodySm" tone="subdued">
-                              ...and {job.errorLog.length - 10} {t("more errors")}
+                              {t("...and {n} more errors", { n: job.errorLog.length - 10 })}
                             </Text>
                           )}
                         </BlockStack>
@@ -570,7 +572,7 @@ export default function JobsPage() {
                         <InlineStack gap="300" blockAlign="center">
                           <Button onClick={() => navigate("/app/review")}>{t("Review drafts")}</Button>
                           <Text as="p" variant="bodySm" tone="subdued">
-                           {t("{completedProducts} product{v} ready", { completedProducts: job.completedProducts, v: job.completedProducts !== 1 ? "s" : "" })}
+                           {t("{n, plural, one {# product} other {# products}} ready", { n: job.completedProducts })}
                           </Text>
                           {job.failedProducts > 0 && (
                             <retryFetcher.Form method="post">

@@ -205,7 +205,7 @@ export const action = async ({ request }) => {
   const { targetIds: runIds, quotaSkipped } = sliceToQuota(targetIds, remaining);
   if (runIds.length === 0) {
     return Response.json({
-      error: t("You have no credits left this month, so there is nothing to run. {length} product{v} are waiting.", { length: targetIds.length, v: targetIds.length === 1 ? "" : "s" }),
+      error: t("You have no credits left this month, so there is nothing to run. {n, plural, one {# product is} other {# products are}} waiting.", { n: targetIds.length }),
       limitReached: true,
     });
   }
@@ -452,12 +452,12 @@ export default function OptimizePage() {
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">
-               {t("Optimize {canOptimize} product{v}", { canOptimize, v: canOptimize !== 1 ? "s" : "" })}
+               {t("Optimize {n, plural, one {# product} other {# products}}", { n: canOptimize })}
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
                {t("This will create a background bulk job for all {needsContent} products missing AI content.", { needsContent })}
-                {canOptimize < needsContent && ` Your quota covers ${canOptimize} of them this month.`}
-                {estMinutes > 0 && ` Estimated time: ~${estMinutes} minute${estMinutes !== 1 ? "s" : ""}.`}
+                {canOptimize < needsContent && t(" Your quota covers {canOptimize} of them this month.", { canOptimize })}
+                {estMinutes > 0 && t(" Estimated time: ~{n, plural, one {# minute} other {# minutes}}.", { n: estMinutes })}
               </Text>
 
               <BlockStack gap="200">
@@ -520,7 +520,7 @@ export default function OptimizePage() {
         )}
 
         {draftCount > 0 && (
-          <Banner tone="info" title={t("{draftCount} draft{v} waiting for review", { draftCount, v: draftCount !== 1 ? "s" : "" })}>
+          <Banner tone="info" title={t("{n, plural, one {# draft} other {# drafts}} waiting for review", { n: draftCount })}>
             <Box paddingBlockStart="200">
               <Button onClick={() => navigate("/app/review")}>{t("Review drafts")}</Button>
             </Box>
@@ -566,8 +566,8 @@ export default function OptimizePage() {
               </p>
             </Banner>
             <Text as="p">
-             {t("The live product descriptions on your Shopify storefront will be overwritten for{v} {v1} {v2}", { v: " ", v1: confirmMode === "enhance" ? "up to" : "all", v2: "" })}
-              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> products.
+             {t("The live product descriptions on your Shopify storefront will be overwritten for {scope}", { scope: confirmMode === "enhance" ? t("up to") : t("all") })}{" "}
+              <strong>{confirmMode === "enhance" ? totalProducts : canOptimize}</strong> {t("products.")}
             </Text>
             <Text as="p" tone="subdued">
              {t("This cannot be undone from Navaal. You can revert individual products via the product editor after the job completes.")}

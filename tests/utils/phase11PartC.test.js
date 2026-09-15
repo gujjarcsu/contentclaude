@@ -43,8 +43,8 @@ describe("C1 — the Method paragraph describes the method the code runs", () =>
 describe("C2 — one sentence about unused credits", () => {
   it("both surfaces render the same constant, and no file spells its own version", () => {
     expect(CREDIT_ROLLOVER_SENTENCE).toBe("Unused credits do not roll over.");
-    expect(src("app/routes/app.plans.jsx")).toMatch(/\$\{CREDIT_RESET_SENTENCE\} \$\{CREDIT_ROLLOVER_SENTENCE\}/);
-    expect(src("app/utils/legal.js")).toMatch(/\$\{CREDIT_RESET_SENTENCE\} \$\{CREDIT_ROLLOVER_SENTENCE\}/);
+    expect(src("app/routes/app.plans.jsx")).toMatch(/\[CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE\]/); // D1: the two keys, translated then joined
+    expect(src("app/utils/legal.js")).toMatch(/\[CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE\]/);
     const offenders = walk("app").filter((p) => !/credits\.js$/.test(p) && /roll over|roll-over/i.test(src(p))); // the identifier CREDIT_ROLLOVER_SENTENCE is not a spelling
     expect(offenders).toEqual([]);
     expect(CREDIT_RESET_SENTENCE).not.toMatch(/roll/);

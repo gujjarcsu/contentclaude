@@ -21,6 +21,7 @@
  * fastest, literally "descriptions"; FAQ needs the theme embed to matter).
  */
 import prisma from "../db.server.js";
+import { QUICK_START_MESSAGES } from "./jobMessages.js";
 import logger from "./logger.server.js";
 import { getCache } from "./cache.server.js";
 import { checkRateLimit } from "./rateLimit.server.js";
@@ -73,18 +74,8 @@ export async function recentDraftIds(shop, now = new Date()) {
   }
 }
 
-/** Merchant-safe failure copy (exact strings — locked by tests). Never an internal error message. */
-export const QUICK_START_MESSAGES = {
-  timeout: "This one took too long — no credit was used.",
-  busy: "Our AI is busy — no credit was used. Retry in a minute.",
-  empty: "The AI returned an empty draft — no credit was used.",
-  notFound: "This product no longer exists in your store.",
-  contention: "Busy for a moment — no credit was used.",
-  generic: "We couldn't write this one — no credit was used.",
-  save: "We couldn't save this draft — no credit was used.",
-  invalid: "Invalid product.",
-  rateLimited: (seconds) => `Too many at once — try again in ${seconds}s.`,
-};
+/** Merchant-safe failure copy (exact strings — locked by tests). Never an internal error message. D1: the keys live in jobMessages.js. */
+export { QUICK_START_MESSAGES };
 
 /** Map an AI/transport error to merchant-safe copy. Pure. */
 export function friendly(err) {

@@ -80,11 +80,11 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
   const src = code("app/routes/app._index.jsx");
 
   it("drafts waiting beat everything else", () => {
-    expect(src).toMatch(/draftCount > 0[\s\S]{0,200}Review \{draftCount\}/);
+    expect(src).toMatch(/draftCount > 0[\s\S]{0,200}Review \{n, plural, one \{# draft\} other \{# drafts\}\}/); // D1: an ICU plural, one key
   });
 
   it("then products with no content", () => {
-    expect(src).toMatch(/notOptimizedCount > 0[\s\S]{0,200}Optimize \{notOptimizedCount\}/);
+    expect(src).toMatch(/notOptimizedCount > 0[\s\S]{0,200}Optimize \{n, plural, one \{# product\} other \{# products\}\}/); // D1
   });
 
   it("and an audit when there is nothing else to do", () => {
@@ -96,8 +96,8 @@ describe("Home's primary is chosen by what the merchant should do next", () => {
   });
 
   it("the label counts the actual work, so it is never a bare verb", () => {
-    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/draftCount === 1 \? "" : "s"/); // the plural expression lives in the t() vars, which the unwrap hides
-    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/notOptimizedCount === 1 \? "" : "s"/);
+    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/one \{# draft\} other \{# drafts\}/); // D1: the plural lives in the key as an ICU block, which the unwrap hides
+    expect(stripComments(readFileSync("app/routes/app._index.jsx", "utf8"))).toMatch(/one \{# product\} other \{# products\}/);
   });
 });
 

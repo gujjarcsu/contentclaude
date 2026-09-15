@@ -10,7 +10,7 @@
  * Not in the sidebar (five items). Reached from the attention page.
  */
 import { useState } from "react";
-import { useT } from "../i18n/react.jsx";
+import { useT, useStoredT } from "../i18n/react.jsx";
 import { tForRequest } from "../i18n/index.js";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Checkbox, TextField, Banner, Badge, Link } from "@shopify/polaris";
@@ -76,6 +76,7 @@ export const action = async ({ request }) => {
 
 function ResultBanner({ data }) {
   const t = useT();
+  const st = useStoredT();
   if (!data) return null;
   if (data.error) return <Banner tone="critical" title={data.error} />;
   if (data.jobId || data.queued !== undefined) {
@@ -89,10 +90,10 @@ function ResultBanner({ data }) {
   }
   const failed = data.failed ?? [];
   return (
-    <Banner tone={failed.length ? "warning" : "success"} title={t("{v} applied{v1}.", { v: data.applied ?? 0, v1: failed.length ? `, ${failed.length} not` : "" })}>
+    <Banner tone={failed.length ? "warning" : "success"} title={t("{n} applied{rest}.", { n: data.applied ?? 0, rest: failed.length ? t(", {m} not", { m: failed.length }) : "" })}>
       {failed.slice(0, 5).map((f) => (
         <Text key={f.productId} as="p" variant="bodySm">
-          {f.error}
+          {st(f.error)}
         </Text>
       ))}
     </Banner>
@@ -126,12 +127,12 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
       <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="center" wrap>
           <Text as="h2" variant="headingSm">
-            {meta.title} · {rows.length}
+            {t(meta.title)} · {rows.length}
           </Text>
           <Badge tone={credits === 0 ? "success" : "info"}>{credits === 0 ? t("no credits") : t("{credits} credit each", { credits })}</Badge>
         </InlineStack>
         <Text as="p" variant="bodySm">
-          {meta.how}
+          {t(meta.how)}
         </Text>
         {shared && <TextField label={shared} value={sharedValue} onChange={setSharedValue} autoComplete="off" />}
         <InlineStack gap="200">
@@ -176,7 +177,7 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
               )
             }
           >
-            {t("{title} for {length} {v}", { title: meta.title, length: selected.length, v: credits > 0 ? ` (${cost} credit${cost === 1 ? "" : "s"})` : "" })}
+            {t("{title} for {n}{cost}", { title: t(meta.title), n: selected.length, cost: credits > 0 ? t(" ({c, plural, one {# credit} other {# credits}})", { c: cost }) : "" })}
           </Button>
           {locked && (
             <Text as="span" variant="bodySm" tone="subdued">
@@ -251,10 +252,10 @@ export default function FixPage() {
             {SKIPPED.map((s) => (
               <BlockStack key={s.what} gap="050">
                 <Text as="h3" variant="headingXs">
-                  {s.what}
+                  {t(s.what)}
                 </Text>
                 <Text as="p" variant="bodySm">
-                  {s.why}
+                  {t(s.why)}
                 </Text>
               </BlockStack>
             ))}

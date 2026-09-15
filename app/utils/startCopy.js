@@ -14,6 +14,8 @@
  * conclude the row is lying.
  */
 
+import { enT } from "../i18n/index.js";
+
 /** What the usage card shows as "left": allowance minus spent. One definition. */
 export function creditsLeft(monthlyCredits, used) {
   return Math.max(0, (Number(monthlyCredits) || 0) - (Number(used) || 0));
@@ -21,25 +23,26 @@ export function creditsLeft(monthlyCredits, used) {
 
 /**
  * @param {{targets: number, fresh: number, canStart: number, remaining: number,
- *   monthlyCredits?: number, planName?: string, alreadyDrafted?: number}} p
+ *   monthlyCredits?: number, planName?: string, alreadyDrafted?: number, t?: Function}} p
+ *   `t` (D1): the screen's translator; English by default.
  */
-export function costSentence({ targets, fresh, canStart, remaining, monthlyCredits = null, planName = "free", alreadyDrafted = 0 }) {
+export function costSentence({ targets, fresh, canStart, remaining, monthlyCredits = null, planName = "free", alreadyDrafted = 0, t = enT }) {
   if (!targets) return "";
   if (fresh === 0) {
-    return `Your ${targets} draft${targets === 1 ? " is" : "s are"} below — written earlier, no credits charged again. Nothing is published until you approve it.`;
+    return t("Your {n, plural, one {# draft is} other {# drafts are}} below — written earlier, no credits charged again. Nothing is published until you approve it.", { n: targets });
   }
-  if (canStart <= 0) return "You have no credits left this month. Your drafts are still here to review and publish.";
+  if (canStart <= 0) return t("You have no credits left this month. Your drafts are still here to review and publish.");
   const after = creditsLeft(remaining, canStart);
-  const of = Number.isFinite(Number(monthlyCredits)) && monthlyCredits !== null ? ` of ${monthlyCredits}` : "";
-  const plan = planName === "free" ? " on the Free plan" : "";
-  const reused = alreadyDrafted > 0 ? ` ${alreadyDrafted} ${alreadyDrafted === 1 ? "is" : "are"} already written and shown at no charge.` : "";
-  return `Writing ${canStart} draft${canStart === 1 ? "" : "s"} now — ${canStart} credit${canStart === 1 ? "" : "s"}; ${after}${of} left after this${plan}. Nothing is published until you approve it.${reused}`;
+  const of = Number.isFinite(Number(monthlyCredits)) && monthlyCredits !== null ? t(" of {monthlyCredits}", { monthlyCredits }) : "";
+  const plan = planName === "free" ? t(" on the Free plan") : "";
+  const reused = alreadyDrafted > 0 ? t(" {m, plural, one {# is} other {# are}} already written and shown at no charge.", { m: alreadyDrafted }) : "";
+  return t("Writing {n, plural, one {# draft} other {# drafts}} now — {n, plural, one {# credit} other {# credits}}; {after}{of} left after this{plan}. Nothing is published until you approve it.{reused}", { n: canStart, after, of, plan, reused });
 }
 
 /** "All 3 products we scanned score 21 — …" when every target scores the same, else null. */
-export function uniformScoreNote(targets, scanned) {
-  const scores = (targets ?? []).map((t) => Number(t?.scoreBefore)).filter(Number.isFinite);
+export function uniformScoreNote(targets, scanned, t = enT) {
+  const scores = (targets ?? []).map((x) => Number(x?.scoreBefore)).filter(Number.isFinite);
   if (scores.length < 2) return null;
   if (new Set(scores).size !== 1) return null;
-  return `These ${scores.length} products all score ${scores[0]}: they are missing the same things, so each one's number is the same as the store's. We scanned ${scanned} products to pick them.`;
+  return t("These {n} products all score {score}: they are missing the same things, so each one's number is the same as the store's. We scanned {scanned} products to pick them.", { n: scores.length, score: scores[0], scanned });
 }

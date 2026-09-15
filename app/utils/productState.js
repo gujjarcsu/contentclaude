@@ -32,6 +32,8 @@
  */
 
 /** The only vocabulary for product state. Nothing else may invent its own. */
+import { T } from "../i18n/index.js";
+
 export const PRODUCT_STATE = Object.freeze({
   NEEDS_CONTENT: "needs_content",
   DRAFT: "draft",
@@ -46,14 +48,14 @@ export const PRODUCT_STATE = Object.freeze({
 
 /** Plain-language labels. No jargon, no raw keys — Phase 2 item 2.9. */
 export const PRODUCT_STATE_LABEL = Object.freeze({
-  needs_content: "Needs content",
-  draft: "Ready to review",
+  needs_content: T("Needs content"),
+  draft: T("Ready to review"),
   // A7 (Phase 8) — "Live" meant live on the storefront, and a Shopify DRAFT
   // product has no storefront page. This is the state of OUR content on the
   // product; the Products list adds the product's own status beside it.
-  published_unverified: "Published, needs a check",
-  published: "Published",
-  rejected: "Rejected",
+  published_unverified: T("Published, needs a check"),
+  published: T("Published"),
+  rejected: T("Rejected"),
 });
 
 /**

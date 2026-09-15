@@ -11,6 +11,7 @@
  * whole design.
  */
 import { useState } from "react";
+import { tForRequest } from "../i18n/index.js";
 import { useT } from "../i18n/react.jsx";
 import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import {
@@ -59,6 +60,7 @@ export const action = async ({ request }) => {
   const plan = await getOrCreatePlan(session.shop).catch(() => null);
 
   const result = await submitSupportRequest({
+    t: tForRequest(request),
     shop: session.shop,
     replyTo: formData.get("replyTo"),
     subject: formData.get("subject"),
@@ -114,9 +116,7 @@ export default function SupportPage() {
           >
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd">
-                {actionData.emailed ? t("We aim to reply within one business day, to the address you gave us.") : "We have saved it and it will be picked up. The email notification did not go " +
-                    "through on our side, so if you do not hear back within one business day, " +
-                    `email ${supportEmail} and quote the reference below.`}
+                {actionData.emailed ? t("We aim to reply within one business day, to the address you gave us.") : t("We have saved it and it will be picked up. The email notification did not go through on our side, so if you do not hear back within one business day, email {supportEmail} and quote the reference below.", { supportEmail })}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
                 {t("Reference: {reference}", { reference: actionData.reference })}

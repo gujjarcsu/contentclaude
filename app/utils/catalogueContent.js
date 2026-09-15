@@ -34,6 +34,7 @@
  * PURE. No I/O. The walk and the query live in catalogueContent.server.js.
  */
 import { PRODUCT_STATE } from "./productState.js";
+import { enT } from "../i18n/index.js";
 
 /**
  * Count content states among a set of product ids.
@@ -78,9 +79,9 @@ export function intersectContent(rows, inScope) {
  *     ("30 since you installed" beside "14 of the 14 published to your store")
  *   - otherwise → the population alone
  */
-export function publishedSubtext({ ok, inScope, candidateCount, candidateLabel, record }) {
-  if (!ok || !Number.isFinite(candidateCount)) return "Products we have published content for";
-  const base = `of your ${candidateCount} ${candidateLabel}`;
-  if (Number.isFinite(record) && record > inScope) return `${base} · ${record} since you installed`;
+export function publishedSubtext({ ok, inScope, candidateCount, candidateLabel, record }, t = enT) {
+  if (!ok || !Number.isFinite(candidateCount)) return t("Products we have published content for");
+  const base = t("of your {count} {label}", { count: candidateCount, label: t(candidateLabel) });
+  if (Number.isFinite(record) && record > inScope) return t("{base} · {record} since you installed", { base, record });
   return base;
 }

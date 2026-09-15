@@ -15,6 +15,19 @@
  * No server-only imports. Safe in a route component.
  */
 import { OPERATOR_EMAIL_PUBLIC } from "./supportContact.js";
+import { T, enT } from "../i18n/index.js";
+
+/** D1 — every sentence the support form can answer with, as a catalogue key. */
+export const SUPPORT_ERRORS = Object.freeze({
+  email: T("We need an email address we can reply to. Please check it and try again."),
+  subject: T("Please add a subject, so we know what this is about."),
+  subjectLong: T("Subject is a little long — keep it under {max} characters."),
+  message: T("Please tell us a bit more — a sentence or two is enough."),
+  messageLong: T("That is longer than we can take here ({max} characters). Email {email} directly."),
+  tooManyOpen: T("You already have {open} questions open with us. We will work through those first — reply to any of them and it reaches the same place."),
+  notStored: T("We could not save that, and we would rather say so than lose your question. Please email {email} directly."),
+});
+export const SUPPORT_ERROR_KEYS = Object.freeze(Object.values(SUPPORT_ERRORS));
 
 /** Bounds, so one merchant cannot fill the table or the owner's inbox. */
 export const SUBJECT_MAX = 120;
@@ -39,26 +52,23 @@ export function looksLikeEmail(value) {
  * Validate a submission. Returns `{ ok: true, clean }` or `{ ok: false, error }`
  * with a sentence a merchant can act on.
  */
-export function validateSupportRequest({ replyTo, subject, message }) {
+export function validateSupportRequest({ replyTo, subject, message }, t = enT) {
   const r = String(replyTo ?? "").trim();
   const s = String(subject ?? "").trim();
   const m = String(message ?? "").trim();
 
   if (!looksLikeEmail(r)) {
-    return { ok: false, error: "We need an email address we can reply to. Please check it and try again." };
+    return { ok: false, error: t(SUPPORT_ERRORS.email) };
   }
-  if (s.length === 0) return { ok: false, error: "Please add a subject, so we know what this is about." };
+  if (s.length === 0) return { ok: false, error: t(SUPPORT_ERRORS.subject) };
   if (s.length > SUBJECT_MAX) {
-    return { ok: false, error: `Subject is a little long — keep it under ${SUBJECT_MAX} characters.` };
+    return { ok: false, error: t(SUPPORT_ERRORS.subjectLong, { max: SUBJECT_MAX }) };
   }
   if (m.length < 10) {
-    return { ok: false, error: "Please tell us a bit more — a sentence or two is enough." };
+    return { ok: false, error: t(SUPPORT_ERRORS.message) };
   }
   if (m.length > MESSAGE_MAX) {
-    return {
-      ok: false,
-      error: `That is longer than we can take here (${MESSAGE_MAX} characters). Email ${OPERATOR_EMAIL_PUBLIC} directly.`,
-    };
+    return { ok: false, error: t(SUPPORT_ERRORS.messageLong, { max: MESSAGE_MAX, email: OPERATOR_EMAIL_PUBLIC }) };
   }
   return { ok: true, clean: { replyTo: r, subject: s, message: m } };
 }

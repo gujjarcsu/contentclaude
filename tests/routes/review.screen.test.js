@@ -55,7 +55,7 @@ describe("rejecting is confirmed, because emptying the approvals armed it", () =
 
   it("the confirm is destructive and counts what will be rejected", () => {
     expect(code).toMatch(/destructive: true/);
-    expect(code).toMatch(/Reject \{length\} draft/);
+    expect(code).toMatch(/Reject \{n, plural, one \{# draft\} other \{# drafts\}\}\?/); // D1: an ICU plural, one key
   });
 
   it("it says the storefront is not touched, because it is not", () => {

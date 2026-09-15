@@ -13,7 +13,7 @@
  * the Home banner, which is where the number is.
  */
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
-import { useT } from "../i18n/react.jsx";
+import { useT, useStoredT } from "../i18n/react.jsx";
 import { Page, Card, Text, BlockStack, InlineStack, Badge, Button, EmptyState, Link } from "@shopify/polaris";
 import { authenticate } from "../shopify.server.js";
 import { KIND_LABEL, SURFACE_LABEL, VARIANT_BARCODE_SAMPLE, parseAttention, parseFindings, homeAttentionLines } from "../utils/catalogueWatch.js";
@@ -112,9 +112,9 @@ function GscCard({ gsc }) {
         {gsc?.answer ? (
           <BlockStack gap="200">
             <InlineStack gap="200" blockAlign="center" wrap>
-              <Badge tone={GSC_TONE[gsc.answer] ?? "info"}>{GSC_LABEL[gsc.answer] ?? gsc.answer}</Badge>
+              <Badge tone={GSC_TONE[gsc.answer] ?? "info"}>{t(GSC_LABEL[gsc.answer] ?? gsc.answer)}</Badge>
               <Text as="span" variant="bodySm" tone="subdued">
-                {t("your answer{v}", { v: gsc.answeredAt ? `, ${new Date(gsc.answeredAt).toLocaleDateString()}` : "" })}
+                {t("your answer{v}", { v: gsc.answeredAt ? `, ${new Date(gsc.answeredAt).toLocaleDateString(t.locale)}` : "" })}
               </Text>
               {gsc.stale && <Badge tone="attention">{t("worth a re-check")}</Badge>}
             </InlineStack>
@@ -127,7 +127,7 @@ function GscCard({ gsc }) {
               <Link url={GSC_SETTINGS_URL} target="_blank">
                 {t("Open Search Console settings")}
               </Link>
-              {answerForm("reset", "Check again")}
+              {answerForm("reset", t("Check again"))}
             </InlineStack>
           </BlockStack>
         ) : (
@@ -136,9 +136,9 @@ function GscCard({ gsc }) {
               {t("Open Search Console settings")}
             </Link>
             <InlineStack gap="200" wrap>
-              {answerForm(GSC_ANSWER.DEFAULT, "It's off — my store is included")}
-              {answerForm(GSC_ANSWER.EXCLUDED, "It's on — my store is excluded")}
-              {answerForm(GSC_ANSWER.NO_GSC, "I don't use Search Console")}
+              {answerForm(GSC_ANSWER.DEFAULT, t("It's off — my store is included"))}
+              {answerForm(GSC_ANSWER.EXCLUDED, t("It's on — my store is excluded"))}
+              {answerForm(GSC_ANSWER.NO_GSC, t("I don't use Search Console"))}
             </InlineStack>
           </BlockStack>
         )}
@@ -155,6 +155,7 @@ function GscCard({ gsc }) {
 
 export default function AttentionPage() {
   const t = useT();
+  const st = useStoredT();
   const { shopDomain, summary, rows, gaps, indexability = [] } = useLoaderData();
   const navigate = useNavigate();
   const loadingThisRoute = useRouteLoading();
@@ -200,7 +201,7 @@ export default function AttentionPage() {
               </Text>
             ) : crawler.blocked.length === 0 ? (
               <Text as="p" variant="bodySm">
-                {t("All six search and AI crawlers reached your storefront when we last checked {v}.", { v: crawler.checkedAt ? ` (${new Date(crawler.checkedAt).toLocaleDateString()})` : "" })}
+                {t("All six search and AI crawlers reached your storefront when we last checked {v}.", { v: crawler.checkedAt ? ` (${new Date(crawler.checkedAt).toLocaleDateString(t.locale)})` : "" })}
               </Text>
             ) : (
               crawler.blocked.map((agent) => (
@@ -210,13 +211,13 @@ export default function AttentionPage() {
                     {crawler.newlyBlocked.includes(agent) && <Badge tone="attention">{t("since the last check")}</Badge>}
                   </InlineStack>
                   <Text as="p" variant="bodySm">
-                    {CRAWLER_NOTE[agent] ?? ""}
+                    {t(CRAWLER_NOTE[agent] ?? "")}
                   </Text>
                 </BlockStack>
               ))
             )}
             <Text as="p" variant="bodySm" tone="subdued">
-              {t("Method: one read of robots.txt on your primary domain, then one request to your home page as each of")} {CRAWLERS.join(", ")}{t(". A robots rule, a 403 or a 429 counts as blocked. A storefront that does not answer is recorded as unreachable, not as blocked.")}
+              {t("Method: one read of robots.txt on your primary domain, then one request to your home page as each of {crawlers}. A robots rule, a 403 or a 429 counts as blocked. A storefront that does not answer is recorded as unreachable, not as blocked.", { crawlers: CRAWLERS.join(", ") })}
             </Text>
           </BlockStack>
         </Card>
@@ -243,7 +244,7 @@ export default function AttentionPage() {
               {t("Can search engines index the pages?")}
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              {t("Sitemap checked for {sitemapKnown} products; {checked} product pages fetched so far (", { sitemapKnown: idx.sitemapKnown, checked: idx.checked })}{idx.nightly ?? PAGE_SAMPLE} {t("more each night on your plan, products needing attention first).{v} {cannotIndex} cannot be indexed as they stand.", { v: " ", cannotIndex: idx.cannotIndex })}
+              {t("Sitemap checked for {sitemapKnown} products; {checked} product pages fetched so far ({nightly} more each night on your plan, products needing attention first). {cannotIndex} cannot be indexed as they stand.", { sitemapKnown: idx.sitemapKnown, checked: idx.checked, nightly: idx.nightly ?? PAGE_SAMPLE, cannotIndex: idx.cannotIndex })}
             </Text>
             {indexability.map((r) => (
               <Card key={r.productId}>
@@ -258,7 +259,7 @@ export default function AttentionPage() {
                         </Text>
                       </InlineStack>
                       <Text as="p" variant="bodySm">
-                        {f.note}
+                        {st(f.note)}
                       </Text>
                     </BlockStack>
                   ))}
@@ -292,13 +293,13 @@ export default function AttentionPage() {
                   {r.findings.map((f) => (
                     <BlockStack key={`${f.surface}-${f.field}`} gap="100">
                       <InlineStack gap="200" blockAlign="center">
-                        <Badge tone={TONE[f.grade] ?? "info"}>{t("{v} · {field}", { v: SURFACE_LABEL[f.surface] ?? "Shopify", field: f.field })}</Badge>
+                        <Badge tone={TONE[f.grade] ?? "info"}>{t("{surface} · {field}", { surface: t(SURFACE_LABEL[f.surface] ?? "Shopify"), field: f.field })}</Badge>
                         <Text as="span" variant="bodySm" tone="subdued">
                           {f.grade === "blocking" ? t("cannot list without it") : t("listed, but worse")}
                         </Text>
                       </InlineStack>
                       <Text as="p" variant="bodySm">
-                        {f.note}
+                        {st(f.note)}
                       </Text>
                     </BlockStack>
                   ))}
@@ -323,13 +324,13 @@ export default function AttentionPage() {
                     return (
                       <BlockStack key={kind} gap="100">
                         <InlineStack gap="200" blockAlign="center">
-                          <Badge tone={TONE[meta.grade] ?? "info"}>{meta.title}</Badge>
+                          <Badge tone={TONE[meta.grade] ?? "info"}>{t(meta.title)}</Badge>
                           <Text as="span" variant="bodySm" tone="subdued">
-                            since {new Date(since).toLocaleDateString()}
+                            {t("since {date}", { date: new Date(since).toLocaleDateString(t.locale) })}
                           </Text>
                         </InlineStack>
                         <Text as="p" variant="bodySm">
-                          {meta.detail}
+                          {t(meta.detail)}
                         </Text>
                       </BlockStack>
                     );

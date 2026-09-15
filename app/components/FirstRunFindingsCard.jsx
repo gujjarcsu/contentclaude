@@ -24,7 +24,7 @@ export function FirstRunFindingsCard({ findings = [], blockers = [], navigate })
       <BlockStack gap="400">
         <BlockStack gap="100">
           <Text as="h2" variant="headingMd">
-            {rows.length > 0 ? t("The {length} product{v} holding this store back", { length: rows.length, v: rows.length === 1 ? "" : "s" }) : t("What is holding this store back")}
+            {rows.length > 0 ? t("The {n, plural, one {# product} other {# products}} holding this store back", { n: rows.length }) : t("What is holding this store back")}
           </Text>
           <Text as="p" variant="bodySm" tone="subdued">
             {t("Scored on your first run. Each one has a draft written for it; the score moves when you publish.")}

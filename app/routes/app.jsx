@@ -5,15 +5,9 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import { FooterHelp, Link, Banner, Box, ProgressBar } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { I18nProvider } from "../i18n/react.jsx";
-import { normaliseUiLocale, createT } from "../i18n/index.js";
-
-// Phase 12 Part D — Polaris's own strings (pagination, modals, date pickers)
-// in the same locale as ours. One entry per LIVE locale, added the day the
-// locale goes live (tests/utils/i18nCatalogue.test.js holds the two lists
-// together); a locale that is not live never costs the bundle a byte.
-const POLARIS_I18N = { en: enTranslations };
-import { useEffect, useRef } from "react";
+import { I18nProvider, useLocaleLoaded } from "../i18n/react.jsx";
+import { normaliseUiLocale, createT, polarisFor } from "../i18n/index.js";
+import { useEffect, useMemo, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { ContentClaudeBrand } from "../components/ContentClaudeBrand.jsx";
@@ -182,13 +176,19 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   useStickyEmbeddedParams(host, shopDomain, uiLocale);
-  // this component renders the provider, so its own strings come straight from the locale
-  const t = createT(uiLocale);
+  // this component renders the provider, so its own strings come straight
+  // from the locale — re-created when the locale's chunk lands (D1)
+  const localeLoaded = useLocaleLoaded(uiLocale);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const t = useMemo(() => createT(uiLocale), [uiLocale, localeLoaded]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <I18nProvider locale={uiLocale}>
-      <PolarisProvider i18n={POLARIS_I18N[uiLocale] ?? enTranslations}>
+      {/* Phase 12 Part D — Polaris's own strings (pagination, modals, date
+          pickers) in the same locale as ours, from the locale's chunk;
+          English until it lands. */}
+      <PolarisProvider i18n={polarisFor(uiLocale) ?? enTranslations}>
         <s-app-nav>
           <div slot="logo" style={{ padding: "8px 16px" }}>
             <ContentClaudeBrand />
