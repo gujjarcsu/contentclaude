@@ -12,11 +12,13 @@
  * guard below refuses to boot a locale that is live with no table.
  */
 import de from "./locales/de.json";
+import fr from "./locales/fr.json";
 import polarisDe from "@shopify/polaris/locales/de.json";
+import polarisFr from "@shopify/polaris/locales/fr.json";
 import { registerCatalogue, registerPolaris, LIVE_UI_LOCALES, DEFAULT_UI_LOCALE } from "./index.js";
 
-export const SERVER_CATALOGUES = Object.freeze({ de });
-export const SERVER_POLARIS = Object.freeze({ de: polarisDe });
+export const SERVER_CATALOGUES = Object.freeze({ de, fr });
+export const SERVER_POLARIS = Object.freeze({ de: polarisDe, fr: polarisFr });
 
 for (const [loc, table] of Object.entries(SERVER_CATALOGUES)) registerCatalogue(loc, table);
 for (const [loc, table] of Object.entries(SERVER_POLARIS)) registerPolaris(loc, table);

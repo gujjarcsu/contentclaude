@@ -203,7 +203,7 @@ describe("the runtime", () => {
   it("Accept-Language picks the first language we ship; English anywhere first wins; an unshipped language is English", () => {
     expect(localeFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.8")).toBe("de");
     expect(localeFromAcceptLanguage("en-US,de;q=0.8")).toBe("en");
-    expect(localeFromAcceptLanguage("fr-FR,fr;q=0.9")).toBe("en");
+    expect(localeFromAcceptLanguage("ja-JP,ja;q=0.9")).toBe("en"); // ja is not live yet
     expect(localeFromAcceptLanguage("")).toBe("en");
     expect(localeFromAcceptLanguage(null)).toBe("en");
   });

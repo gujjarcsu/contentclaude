@@ -11,6 +11,7 @@ import { isLocaleLoaded, registerCatalogue, registerPolaris } from "./index.js";
 
 export const UI_LOCALE_CHUNKS = Object.freeze({
   de: () => Promise.all([import("./locales/de.json"), import("@shopify/polaris/locales/de.json")]),
+  fr: () => Promise.all([import("./locales/fr.json"), import("@shopify/polaris/locales/fr.json")]),
 });
 
 /**
