@@ -13,20 +13,17 @@ locale cannot publish without both. Verified on German: with text complete it st
 
 ---
 
-## The feature-media thumbnail — one decision for you
+## The feature-media thumbnail — settled
 
-English's feature media is a **branded title card** ("Navaal" over "AI content that gets…", 1600×900),
-and it exists **only inside the editor**. It is served from a signed `storage.googleapis.com` URL, it
-is not on the public listing page, and there is no copy of it anywhere in this repo — CW checked
-every PNG in the tree.
+The owner supplied the original branded card. It is at
+`listing-assets/1600x900/feature-thumbnail-1600x900.png` — CW read its bytes: valid PNG,
+**1600×900 exactly**, 41,313 bytes, no resize needed, and looked at it: the "Navaal." wordmark over
+*"AI content that gets you found"* / *"Google search & AI answer engines · inside Shopify"* and three
+chips (SEO Audit · AI Content Generation · Bulk Optimise). No statistic, no superlative, no
+testimonial; Google and Shopify named descriptively only. It matches English's feature media, so
+every locale's header will match English.
 
-- **If you still have that card**, drop it in as `listing-assets/1600x900/feature-thumbnail-1600x900.png`
-  and use it for all five non-English locales. The locales then match English exactly.
-- **If you don't**, use `02-review-desktop-1600x900.png` as the thumbnail as well. It is 1600×900 and
-  valid; the only cost is that the locale headers show the Review screen where English shows the card.
-
-CW cannot extract the original: the signed URL cannot be echoed and streaming the bytes out through
-the page is not worth what it would cost.
+**Use this one file for all four "Feature media" rows below.**
 
 ---
 
@@ -43,27 +40,27 @@ the thumbnail slot beside the Video URL if you keep the video.
 | 1 | de | Screenshot 1 | `02-review-desktop-1600x900.png` | *(already saved)* |
 | 2 | de | Screenshot 2 | `03-products-desktop-1600x900.png` | *(already saved)* |
 | 3 | de | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(already saved)* |
-| 4 | de | Feature media | thumbnail | — |
+| 4 | de | Feature media | `feature-thumbnail-1600x900.png` | — |
 | 5 | fr | Screenshot 1 | `02-review-desktop-1600x900.png` | *(already saved)* |
 | 6 | fr | Screenshot 2 | `03-products-desktop-1600x900.png` | *(already saved)* |
 | 7 | fr | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(already saved)* |
-| 8 | fr | Feature media | thumbnail | — |
+| 8 | fr | Feature media | `feature-thumbnail-1600x900.png` | — |
 | 9 | es | Screenshot 1 | `02-review-desktop-1600x900.png` | *(already saved)* |
 | 10 | es | Screenshot 2 | `03-products-desktop-1600x900.png` | *(already saved)* |
 | 11 | es | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(already saved)* |
-| 12 | es | Feature media | thumbnail | — |
+| 12 | es | Feature media | `feature-thumbnail-1600x900.png` | — |
 | 13 | it | Screenshot 1 | `02-review-desktop-1600x900.png` | `Navaal Revisione: sei bozze, approvate prima di pubblicare` |
 | 14 | it | Screenshot 2 | `03-products-desktop-1600x900.png` | `Navaal Prodotti: catalogo con stato dei contenuti` |
 | 15 | it | Screenshot 3 | `05-settings-desktop-1600x900.png` | `Navaal Impostazioni: voce di marca, lingua, approvazione` |
-| 16 | it | Feature media | thumbnail | — |
+| 16 | it | Feature media | `feature-thumbnail-1600x900.png` | — |
 | 17 | pt-BR | Screenshot 1 | `02-review-desktop-1600x900.png` | *(CW types it with the rest of the pt-BR text)* |
 | 18 | pt-BR | Screenshot 2 | `03-products-desktop-1600x900.png` | *(CW)* |
 | 19 | pt-BR | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(CW)* |
-| 20 | pt-BR | Feature media | thumbnail | — |
+| 20 | pt-BR | Feature media | `feature-thumbnail-1600x900.png` | — |
 | 21 | ja | Screenshot 1 | `02-review-desktop-1600x900.png` | *(CW)* |
 | 22 | ja | Screenshot 2 | `03-products-desktop-1600x900.png` | *(CW)* |
 | 23 | ja | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(CW)* |
-| 24 | ja | Feature media | thumbnail | — |
+| 24 | ja | Feature media | `feature-thumbnail-1600x900.png` | — |
 
 **de, fr and es are ready for their four now** — their text is complete and saved, and their three alt
 texts are already in, so you only place images.
