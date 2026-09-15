@@ -185,7 +185,7 @@ describe("the legal pages and the weekly report", () => {
   it("the locale of a public page: ?locale= first, then Accept-Language, else English; an unshipped language is English", () => {
     const req = (url, al) => new Request(url, al ? { headers: { "accept-language": al } } : undefined);
     expect(legalLocaleFor(req("https://app.navaal.ai/privacy?locale=de"))).toBe("de");
-    expect(legalLocaleFor(req("https://app.navaal.ai/privacy?locale=ja"))).toBe("en"); // ja is not live yet
+    expect(legalLocaleFor(req("https://app.navaal.ai/privacy?locale=ko"))).toBe("en"); // not one we ship
     expect(legalLocaleFor(req("https://app.navaal.ai/privacy", "de-AT,de;q=0.9"))).toBe("de");
     expect(legalLocaleFor(req("https://app.navaal.ai/privacy", "en-GB,de;q=0.9"))).toBe("en");
     expect(legalLocaleFor(req("https://app.navaal.ai/privacy"))).toBe("en");

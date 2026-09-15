@@ -15,6 +15,7 @@ export const UI_LOCALE_CHUNKS = Object.freeze({
   es: () => Promise.all([import("./locales/es.json"), import("@shopify/polaris/locales/es.json")]),
   it: () => Promise.all([import("./locales/it.json"), import("@shopify/polaris/locales/it.json")]),
   "pt-BR": () => Promise.all([import("./locales/pt-BR.json"), import("@shopify/polaris/locales/pt-BR.json")]),
+  ja: () => Promise.all([import("./locales/ja.json"), import("@shopify/polaris/locales/ja.json")]),
 });
 
 /**

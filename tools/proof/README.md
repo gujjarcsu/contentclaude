@@ -21,7 +21,7 @@ things that drive a browser **from a laptop**. Two different jobs that had been 
 | **Writes to a live shop** | `store-install-from-appstore`, `store-uninstall-app`, `billing-*`, `reattach-record`, `attach-*` | Install, uninstall, approve and cancel real subscriptions. `billing-*` moves a real store between plans. |
 | **Reads a live shop** | `gauntlet-*`, `proof-items*`, `verify-*`, `repro-*`, `title-click-*`, `incognito-*`, `reconcile-probe`, `_rectest` | Navigate the admin and screenshot. No writes, but a real session. |
 | **Local only** | `extract-reviewer-frames`, `record-reviewer-proof`, `billing-review-recording` | Turn an existing `.webm` into frames. Touch nothing remote. |
-| **Writes one setting on OUR store** | `locale-switch` | Phase 12 D: sets App language on `navaal-ttv-03` to a locale, reads Home / Attention / Plans in it, restores the setting. `node tools/proof/locale-switch.mjs fr`. |
+| **Writes one setting on OUR store** | `locale-switch` | Phase 12 D: sets App language on `navaal-ttv-03` to a locale, reads Home / Attention / Plans in it, restores the setting. `node tools/proof/locale-switch.mjs fr`; add `--shots` for a full-page PNG of each screen in `tools/proof/out/` (the D6 Japanese layout check). |
 | **Session management** | `login-cdp`, `refresh-session` | `login-cdp` opens a browser for **a human** to log in, and writes `tests/e2e/.auth/shopify.json`. No agent ever types those credentials. |
 
 **Run against `navaal-qa-fresh.myshopify.com`, never a real merchant store.** The one exception is a

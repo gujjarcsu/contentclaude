@@ -14,6 +14,8 @@
 import { chromium } from "@playwright/test";
 const LOCALE = process.argv[2];
 const STORE = process.argv[3] || "navaal-ttv-03";
+// --shots: save a full-page PNG of each screen to tools/proof/out/locale-<loc>-<screen>.png (the D6 layout check)
+const SHOTS = process.argv.includes("--shots");
 if (!LOCALE) {
   console.error("usage: node tools/proof/locale-switch.mjs <locale> [store-handle]");
   process.exit(2);
@@ -47,6 +49,13 @@ async function open(path) {
   return frame;
 }
 async function readFrame(frame, label, chars = 1800) {
+  if (SHOTS) {
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync("tools/proof/out", { recursive: true });
+    const file = `tools/proof/out/locale-${LOCALE}-${label.split(" ")[0].toLowerCase()}.png`;
+    await page.screenshot({ path: file, fullPage: true });
+    console.log(`screenshot: ${file}`);
+  }
   const info = await frame.evaluate(() => ({
     lang: document.documentElement.getAttribute("lang"),
     url: location.pathname + location.search.replace(/(id_token|session|hmac)=[^&]*/g, "$1=…"),

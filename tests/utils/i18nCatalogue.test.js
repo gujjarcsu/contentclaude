@@ -222,13 +222,14 @@ describe("the runtime", () => {
   it("Accept-Language picks the first language we ship; English anywhere first wins; an unshipped language is English", () => {
     expect(localeFromAcceptLanguage("de-DE,de;q=0.9,en;q=0.8")).toBe("de");
     expect(localeFromAcceptLanguage("en-US,de;q=0.8")).toBe("en");
-    expect(localeFromAcceptLanguage("ja-JP,ja;q=0.9")).toBe("en"); // ja is not live yet
+    expect(localeFromAcceptLanguage("ja-JP,ja;q=0.9")).toBe("ja"); // D6
+    expect(localeFromAcceptLanguage("ko-KR,ko;q=0.9")).toBe("en"); // not one we ship
     expect(localeFromAcceptLanguage("")).toBe("en");
     expect(localeFromAcceptLanguage(null)).toBe("en");
   });
 
   it("a locale without a catalogue falls back to English rather than to blanks", () => {
-    const t = createT("ja");
+    const t = createT("ko");
     expect(t("Review drafts")).toBe("Review drafts");
   });
 });
