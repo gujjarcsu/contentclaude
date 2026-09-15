@@ -1,9 +1,24 @@
 # Upload instructions — the legal pages get one home (Phase 8 Part B)
 
-**Status: PREPARED, NOT UPLOADED.** Same Hostinger session as `_UPLOAD-W1-POST.md`; three files,
-one paste. CW is re-pointing the listing's Privacy policy URL to `https://app.navaal.ai/privacy`
-today, so after this the listing, the marketing site and the app all resolve to the same
-generated page.
+**Status: PREPARED, NOT UPLOADED — and now in TWO STEPS, not one.** Same Hostinger session as
+`_UPLOAD-W1-POST.md`.
+
+> **CORRECTED 2026-09-15 (Phase 12 Part B).** CW found `navaal.ai/privacy` is **not** a stale copy of
+> the app's policy: it is a **two-part policy** — Part 1 the website and the free Bilby scan (the
+> first-party beacon, coarse location, the per-store record, the outreach rules), Part 2 the app —
+> and `app.navaal.ai/privacy` covered only the app. Redirecting it would have deleted the website's
+> only privacy policy. So:
+>
+> - **`terms.html` + the terms rule: upload now.** The 8 July `navaal.ai/terms` is stale app terms
+>   (7-day trial, "25 generations", `support@`); the app's `/terms` is the one to keep.
+> - **`privacy.html` + the privacy rule: ONLY once `app.navaal.ai/privacy` carries both parts** —
+>   the sha that ships that is `__SHA_B__`. Check `curl -s https://app.navaal.ai/privacy | grep -c
+>   'id="part-1"'` answers `1` before uploading the privacy shell. Until then the two pages stay
+>   two pages, and the listing's Privacy URL may point at either.
+>
+> Part 1's text lives in `app/utils/legal.js` as `SITE_PRIVACY_SECTIONS`, taken from the live page
+> and not paraphrased; the one substitution is the contact address (`hello@navaal.ai`, the inbox
+> that answers). The `.htaccess` snippet below carries both rules; paste only the terms rule first.
 
 **Why.** `app.navaal.ai/privacy` and `/terms` are generated from `app/utils/legal.js` and were
 current on 14 Sep. The listing pointed at `https://navaal.ai/privacy` — the static Hostinger copy

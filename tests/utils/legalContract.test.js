@@ -67,7 +67,7 @@ describe("A2 — /privacy states a transfer basis, generated from the processor 
     const who = PRIVACY_SECTIONS.findIndex((s) => s.subprocessors);
     expect(idx).toBeGreaterThan(who);
     const html = await legalPage("privacy").text();
-    expect(html).toContain("<h2>International transfers</h2>");
+    expect(html).toMatch(/<h3 id="p2-international-transfers">International transfers<\/h3>/); // Phase 12 Part B: a section of Part 2
     expect(html).toMatch(/operates from Australia/);
     for (const s of SUBPROCESSORS) {
       expect(html).toContain(`<b>${s.name}</b> (${s.region})`);

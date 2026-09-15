@@ -21,7 +21,9 @@ import { CREDIT_RESET_SENTENCE, CREDIT_ROLLOVER_SENTENCE } from "./credits.js";
 export const COMPANY = "Navaal";
 export const APP_NAME = "Navaal: AI SEO, AEO & GEO";
 export const CONTACT_EMAIL = "hello@navaal.ai";
-export const LAST_UPDATED = "14 September 2026";
+export const LAST_UPDATED = "15 September 2026";
+export const SITE_NAME = "navaal.ai";
+export const SCAN_NAME = "Bilby";
 
 /**
  * Every Prisma model, and what it holds in plain words.
@@ -75,6 +77,89 @@ export const SUBPROCESSORS = [
   { name: "Cloudflare R2", role: "Stores encrypted nightly database backups.", region: "Global", basis: "Cloudflare's Customer Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://www.cloudflare.com/cloudflare-customer-dpa/" },
   { name: "Resend", role: "Delivers operational email, including your support questions.", region: "United States", basis: "Resend's Data Processing Addendum and its EU-US Data Privacy Framework certification", dpaUrl: "https://resend.com/legal/dpa" },
   { name: "Sentry", role: "Receives error reports, which can include a shop domain.", region: "United States", basis: "Sentry's Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://sentry.io/legal/dpa/" },
+];
+
+/**
+ * Phase 12 Part B — the companies that process data for the WEBSITE and the
+ * free Bilby scan (Part 1). Separate from the app's list because the two
+ * halves of the policy describe different systems; same rule as the app's:
+ * a processor here without a transfer basis fails the build.
+ */
+export const SITE_SUBPROCESSORS = [
+  { name: "Cloudflare", role: "The CDN in front of the site, which is where the country header comes from.", region: "Global", basis: "Cloudflare's Customer Data Processing Addendum, which incorporates standard contractual clauses", dpaUrl: "https://www.cloudflare.com/cloudflare-customer-dpa/" },
+  { name: "Fly.io", role: "Hosts the website and the scan's database.", region: "Sydney, Australia", basis: "a United States company whose machines for this site run in Sydney; its Data Privacy Framework certification and privacy terms", dpaUrl: "https://fly.io/legal/data-privacy-framework/" },
+  { name: "Stripe", role: "Billing for Bilby plans — we never see card numbers.", region: "United States", basis: "Stripe's Data Processing Agreement, which incorporates standard contractual clauses", dpaUrl: "https://stripe.com/legal/dpa" },
+  { name: "Resend", role: "Sends the report and outreach emails described in Part 1.", region: "United States", basis: "Resend's Data Processing Addendum and its EU-US Data Privacy Framework certification", dpaUrl: "https://resend.com/legal/dpa" },
+];
+
+/** Generated from SITE_SUBPROCESSORS the way the app's transfer section is. */
+export const SITE_TRANSFER_SECTION = {
+  h: "Who processes it for the website, and where",
+  siteSubprocessors: true,
+  p: [
+    `${COMPANY} operates from Australia. Some of the companies that run the website and the scan are outside Australia, so data we send them leaves the country. For each one we rely on the transfer basis it publishes, linked here:`,
+    ...SITE_SUBPROCESSORS.map((s) => `<b>${s.name}</b> (${s.region}) — ${s.basis}: <a href="${s.dpaUrl}" rel="noopener">${s.dpaUrl.replace(/^https?:\/\//, "")}</a>.`),
+    "If a processor changes, this list and this section change with it and the date at the top changes too. This page describes what we do; it is not legal advice.",
+  ],
+};
+
+/**
+ * Phase 12 Part B — PART 1 of the policy: the navaal.ai website and the free
+ * Bilby store scan. The text is the owner's, taken from the live
+ * navaal.ai/privacy of 4 September 2026 and not paraphrased; the one
+ * substitution is the contact address, which is the app's CONTACT_EMAIL so
+ * every request lands in the inbox that answers. CW found that page was a
+ * two-part policy, not a stale copy: a redirect would have deleted the
+ * website's only policy. Both parts now live here, generated, one home.
+ */
+export const PRIVACY_INTRO = [
+  `This policy has two parts. <b>Part 1</b> covers the ${SITE_NAME} website and the free ${SCAN_NAME} store scan — what our own, first-party beacon records when you visit, and what a scan keeps. <b>Part 2</b> explains what data ${APP_NAME} (the "App"), built by ${COMPANY}, accesses from your Shopify store, why we access it, where it is stored, and the rights you have over it.`,
+  "In short: we access the store content you ask us to optimise, we send the specific content you choose to generate to Anthropic's Claude API to produce drafts, we never use your data to train AI models, and we delete your store's data when you uninstall.",
+];
+
+export const SITE_PRIVACY_SECTIONS = [
+  {
+    h: "No third-party trackers",
+    p: [
+      `${SITE_NAME} loads no third-party analytics, advertising pixels, tag managers or chat widgets. The only measurement on this site is a small script we wrote ourselves, which sends a few facts about each page view to our own server. There is no cookie: the script keeps a random session id and any utm_ tags in your browser's session storage, which your browser discards when the tab closes. Nothing is shared with, or read by, any other company.`,
+    ],
+  },
+  {
+    h: "What the beacon records",
+    p: [
+      "The page you viewed and the time.",
+      "Where you came from — the referring site's hostname (for example google.com or chatgpt.com) and any utm_ tags in the link, so we can tell search, an AI assistant, a listing, our own emails and direct visits apart. We never see what you searched for.",
+      "A coarse location — the country, and at the moment you start a scan the region and city, read from headers our CDN adds to the request. We do not look your address up with any geolocation service, and we do not store your IP address with your page views.",
+      "A device class (phone, tablet or desktop) worked out from your browser's user-agent string; the string itself is not kept.",
+      "What you did on the site — ran a scan, opened a report, clicked a pricing button — recorded as event names, never as form contents or free text. Email addresses are stripped from event data before it is written.",
+      "These records are kept for thirteen months so we can compare a month with the same month a year earlier, then deleted automatically.",
+    ],
+  },
+  {
+    h: "What a free scan keeps",
+    p: [
+      `When you run a free ${SCAN_NAME} scan, we keep the scan itself: the store address you entered, the pages ${SCAN_NAME} walked, their screenshots and load times, the findings and the evidence for each, and the store's name as its own home page title states it. Your IP address is recorded on the scan for abuse control (rate limits on the free scan) and is not shown in the report. If you choose to give an email address to receive the report, we keep it with that scan. Reports are the product — they are not deleted on a schedule — but you can ask us to delete any scan of a store you own at any time.`,
+    ],
+  },
+  {
+    h: "How we join this up",
+    p: [
+      `For each store domain that is scanned we keep one store record that brings the above together: the domain, the store name, the platform (Shopify or other), when it was first and last scanned, how many findings the last scan found, the country and city the scan was started from, how that visit reached us, and an email address if one was given. Its purpose is to let us see which stores are trying ${SCAN_NAME} and how far they get (visited → scanned → email known → signed up → trial → paying). It describes a store, not a person, and it is not sold, shared or enriched from any outside data broker.`,
+    ],
+  },
+  {
+    h: "Whether we will email a store",
+    p: [
+      `Leaving an email for a report does not put you on a marketing list: that address receives that report and, if you ticked the box, the monthly check-up you asked for — nothing else. Separately, ${COMPANY} may write once to a store whose scan found a real problem, but only through our outreach system, which applies the law of the store's own market (Australian Spam Act, US CAN-SPAM, UK PECR, Canadian CASL; EU stores are never cold-emailed), uses only a business contact the store publishes itself, sends at most one note and one follow-up, and honours a permanent one-click unsubscribe. There is no other path from a scan or a visit to an email from us. Every such note carries a one-click unsubscribe that is honoured permanently; to stop ${SCAN_NAME} walking your store at all, see <a href="https://navaal.ai/bilby/bot" rel="noopener">BilbyBot &amp; opt-out</a>.`,
+    ],
+  },
+  {
+    h: "Your choices",
+    p: [
+      `You can browse with the beacon blocked (any content blocker that stops requests to <code>/api/tools/event</code> does it; the site works without it). You can ask us to show, correct or delete anything above — the store record, a scan of your store, an email address — by writing to <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>, and to stop ${SCAN_NAME} walking your store at all by following <a href="https://navaal.ai/bilby/bot" rel="noopener">navaal.ai/bilby/bot</a>.`,
+    ],
+  },
+  SITE_TRANSFER_SECTION,
 ];
 
 /**
@@ -149,6 +234,7 @@ export const PRIVACY_SECTIONS = [
   {
     h: "Changes",
     p: [
+      "15 September 2026: the website's Part 1 (the first-party beacon, the free Bilby scan, the per-store record and the outreach rules — previously a separate page on navaal.ai) joined this page, so one policy covers everything Navaal does.",
       "If we change what we collect or who processes it, this page changes and the date at the top changes with it.",
     ],
   },

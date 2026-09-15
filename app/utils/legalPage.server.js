@@ -10,7 +10,7 @@
  * So: one server-rendered page, inline CSS, no scripts, no fonts, no network
  * calls. It cannot break in a way that hides a legal document.
  */
-import { PRIVACY_SECTIONS, TERMS_SECTIONS, DATA_INVENTORY, SUBPROCESSORS, COMPANY, APP_NAME, LAST_UPDATED } from "./legal.js";
+import { PRIVACY_SECTIONS, TERMS_SECTIONS, DATA_INVENTORY, SUBPROCESSORS, SITE_SUBPROCESSORS, SITE_PRIVACY_SECTIONS, PRIVACY_INTRO, COMPANY, APP_NAME, SITE_NAME, SCAN_NAME, LAST_UPDATED } from "./legal.js";
 
 /** Minimal escaping for values interpolated into HTML from the inventory. */
 function esc(v) {
@@ -28,21 +28,34 @@ function inventoryTable() {
   return `<table><thead><tr><th>Where</th><th>What it holds</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function subprocessorTable() {
-  const rows = SUBPROCESSORS.map(
+function subprocessorTable(list = SUBPROCESSORS) {
+  const rows = list.map(
     (s) => `<tr><td><b>${esc(s.name)}</b></td><td>${esc(s.role)}</td><td>${esc(s.region)}</td></tr>`,
   ).join("");
   return `<table><thead><tr><th>Company</th><th>What it does</th><th>Where</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function renderSections(sections) {
+const slug = (h) =>
+  String(h)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+function renderSections(sections, { level = 2, prefix = "" } = {}) {
+  const tag = `h${level}`;
   return sections
     .map((s) => {
       const paras = (s.p ?? []).map((t) => `<p>${t}</p>`).join("");
-      const extra = s.table ? inventoryTable() : s.subprocessors ? subprocessorTable() : "";
-      return `<section><h2>${esc(s.h)}</h2>${paras}${extra}</section>`;
+      const extra = s.table ? inventoryTable() : s.subprocessors ? subprocessorTable() : s.siteSubprocessors ? subprocessorTable(SITE_SUBPROCESSORS) : "";
+      return `<section><${tag} id="${prefix}${slug(s.h)}">${esc(s.h)}</${tag}>${paras}${extra}</section>`;
     })
     .join("");
+}
+
+/** Phase 12 Part B — the table of contents for the two-part policy. */
+function contents(part1, part2) {
+  const li = (prefix, list) => list.map((s) => `<li><a href="#${prefix}${slug(s.h)}">${esc(s.h)}</a></li>`).join("");
+  return `<nav class="toc" aria-label="Contents"><p><b>Contents</b></p><ol><li><a href="#part-1">Part 1 — The website and the free ${esc(SCAN_NAME)} scan</a><ol>${li("p1-", part1)}</ol></li><li><a href="#part-2">Part 2 — The ${esc(APP_NAME)} app</a><ol>${li("p2-", part2)}</ol></li></ol></nav>`;
 }
 
 const CSS = `
@@ -53,6 +66,11 @@ body { margin: 0; background: #fbfbfb; color: #1a1a1a;
 main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
 h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .35rem; }
 h2 { font-size: 1.15rem; margin: 2.4rem 0 .6rem; }
+h2.part { font-size: 1.4rem; margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid rgba(0,0,0,.1); }
+h3 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+.toc { margin: 1.25rem 0 0; font-size: .92rem; }
+.toc ol { padding-left: 1.25rem; margin: .25rem 0; }
+.lede { margin: .75rem 0 0; }
 p { margin: 0 0 .9rem; }
 code { background: rgba(0,0,0,.06); padding: .1em .35em; border-radius: 3px; font-size: .9em; }
 a { color: #0b57d0; }
@@ -78,8 +96,19 @@ footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid rgba(0,0,
 export function legalPage(which) {
   const isPrivacy = which === "privacy";
   const title = isPrivacy ? "Privacy Policy" : "Terms of Service";
-  const sections = isPrivacy ? PRIVACY_SECTIONS : TERMS_SECTIONS;
   const other = isPrivacy ? ["/terms", "Terms of Service"] : ["/privacy", "Privacy Policy"];
+  // Phase 12 Part B — /privacy is ONE policy in two parts: the website and
+  // the free scan (Part 1, the owner's text from navaal.ai), then the app
+  // (Part 2). The terms page is the app's alone.
+  const body = isPrivacy
+    ? `<p class="meta">How ${esc(SITE_NAME)}, the free ${esc(SCAN_NAME)} store scan, and the ${esc(APP_NAME)} app handle data — in plain English.</p>` +
+      PRIVACY_INTRO.map((t) => `<p class="lede">${t}</p>`).join("") +
+      contents(SITE_PRIVACY_SECTIONS, PRIVACY_SECTIONS) +
+      `<h2 class="part" id="part-1">Part 1 — The website and the free ${esc(SCAN_NAME)} scan</h2>` +
+      renderSections(SITE_PRIVACY_SECTIONS, { level: 3, prefix: "p1-" }) +
+      `<h2 class="part" id="part-2">Part 2 — The ${esc(APP_NAME)} app</h2>` +
+      renderSections(PRIVACY_SECTIONS, { level: 3, prefix: "p2-" })
+    : renderSections(TERMS_SECTIONS);
 
   const html = `<!doctype html>
 <html lang="en">
@@ -95,7 +124,7 @@ export function legalPage(which) {
 <main>
   <h1>${esc(title)}</h1>
   <p class="meta">${esc(APP_NAME)} · ${esc(COMPANY)} · Last updated ${esc(LAST_UPDATED)}</p>
-  ${renderSections(sections)}
+  ${body}
   <footer>
     <a href="${other[0]}">${esc(other[1])}</a> ·
     <a href="https://apps.shopify.com/navaal-ai-seo-geo-content">App Store listing</a>
