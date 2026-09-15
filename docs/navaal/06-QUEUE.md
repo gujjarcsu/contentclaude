@@ -1689,3 +1689,198 @@ than leaving yesterday's images up one more day. No upload. `CAPTURE COMPLETE` i
   privacy policies**; see the Task 4 section above.
 
 | — | CW | **Git from the device shell leaves stale `.git/HEAD.lock` and `.git/index.lock` after every commit** and cannot unlink them (the mount has no delete permission, and a request for it was refused). They block the *next* commit and `git pull`. Workaround that works: `mkdir -p .git/_stale && mv .git/HEAD.lock .git/index.lock .git/_stale/` before committing. Same cause as the `ORIG_HEAD.lock` note from Phase 10. | CW |
+
+---
+
+## OWNER SESSION — CW, 2026-09-15
+
+Owner at the keyboard throughout. Every write announced, made, then read back on a fresh load.
+
+### TASK 2 — HOSTINGER. DONE. All four §3 checks pass.
+
+```
+/privacy       HTTP/2 301  location: https://app.navaal.ai/privacy
+/terms         HTTP/2 301  location: https://app.navaal.ai/terms
+/privacy.html  HTTP/2 301  location: https://app.navaal.ai/privacy
+/terms.html    HTTP/2 301  location: https://app.navaal.ai/terms
+```
+
+One hop each. `app.navaal.ai/terms` canonical = **1**.
+
+**Checked before overwriting anything.** `app.navaal.ai/privacy` now carries both parts — `id="part-1"`
+and `id="part-2"`, Bilby ×15, the device class, the coarse location, the user-agent line, and every
+subprocessor. Nothing the website's own policy said is lost by the redirect. The site page's higher
+Bilby count (36) is nav and footer repetition, not content.
+
+**2a — the W1 post is live.** `https://navaal.ai/blog/shopify-product-data-409-stores` → **200**,
+`grep -c "36.2%"` → **2**. The rule holds: the headline never appears without its sensitivity row.
+`blog/index.html` 86,793 → 88,812 bytes, cards **27 → 28**, one `<div class="bgrid">` still, and the
+grid now starts `shopify-product-data-409-stores` · `ga4-purchase-event-missing-shopify` ·
+`meta-pixel-not-firing-shopify`. `blog/feed.xml` 13,238 → 13,793, items **20 → 21**, new item first,
+XML parses.
+
+**One correction made before pasting, and it matters.** `_UPLOAD-W1-POST.md` §3b gives the pubDate as
+`Sun, 14 Sep 2026 00:00:00 +1000`. **14 September 2026 is a Monday.** The post's own
+`datePublished` is `2026-09-14`, so the date is right and the weekday is wrong — a malformed RFC-822
+date that strict validators flag and some readers drop the item for. Entered as **`Mon`**, everything
+else verbatim.
+
+**Seen, not changed:** the live feed carried **20 items while the blog index carried 28** — the feed
+was already eight posts behind before today. And Hostinger's own Websites list shows
+**"Domain is not working. Check guide"** under `navaal.ai` while every page on it serves 200.
+
+**2c — closed, and the number in the brief was wrong by an order of magnitude.** The checklist said
+`support@navaal.ai` is on five marketing pages. It is on **64**, including `index.html`,
+`contact.html`, `support.html`, all seven doc pages, all thirteen tools and all five regional
+indexes. **The owner has confirmed `support@` is a real inbox, so nothing is edited and
+`CONTACT_EMAIL` stays as it is.** Both addresses are real. Recording the 64 so nobody plans a
+"five-page find and replace" again.
+
+### TASK 3 — F10 IS BLOCKED BY SHOPIFY, NOT BY US
+
+`navaal-ttv-03` → Online Store → Preferences, verbatim:
+
+> **Password protection** — Restrict access to visitors with the password
+> ⓘ **Your online store is in development. To let visitors access your store, give them the password.**
+
+The toggle is greyed and disabled. I clicked it; the storefront still answers
+`302 → /password`. Three surfaces checked and none offers a way out:
+
+- Settings → Plan reads **`Basic` · `Development store`** and offers only **Delete store**.
+- The Dev Dashboard store row's **Actions** menu offers only **Delete store**.
+- Preferences' toggle is disabled.
+
+**A development store cannot be made public, and it cannot be upgraded from inside itself.** So 3a
+fails and 3b–3f sit on it: Bing Webmaster cannot verify a site it cannot reach, and a crawl-time
+holdout has nothing to measure behind a password wall. **The owner chose "pay" — but there is no
+purchase surface on a dev store.** Paying means a different store: a new non-dev store on Basic, or
+an existing paid store. Owner's next call; nothing spent.
+
+### TASK 4 — THE `read_reports` REQUEST DOES NOT EXIST
+
+The API access page is at `partners.shopify.com/org/219167540/org_apps/368479600641/api_access`
+(the old `partners.shopify.com/<id>/apps/<id>/api_access` shape 404s; the org has migrated). It
+offers exactly **eight** requests:
+
+Protected customer data access · Read all orders scope · Access subscriptions APIs · Access payment
+mandate scopes · Access post-purchase extensions · Access Chat in checkout extensions · Access
+Advanced DOM Events in web pixels app extensions · Allow network access in checkout and account UI
+extensions.
+
+**There is no `read_reports` request, and nothing about reports or analytics at all.** I did not
+submit *Protected customer data access* — that gate is about customer names, emails and order
+history, not per-product sessions, and submitting it would be asking Shopify for the wrong thing and
+starting a review we would then have to justify. **P0.10 needs a decision, not a click:** declare
+`read_reports` in the app's scopes and see whether install succeeds (it is not on Shopify's
+restricted list), or ask Partner support which gate covers store analytics.
+
+### TASK 7 — THE OWNER'S ANSWER, VERBATIM
+
+**"No to all three."** `write_publications`, `write_online_store_navigation` and
+`read_legal_policies` stay unrequested until ten merchants. Cowork to move this into
+`04-DECISIONS.md`.
+
+### TASK 13 — GERMAN IS ENTERED AND SAVED. THE OTHER FIVE ARE NOT, AND HERE IS WHY
+
+**The gate is satisfied on the half that can be proved.** Production `1e1867e` ships
+`app/i18n/locales/{de,fr,es,it,pt-BR,ja}.json` with the Polaris bundles wired in
+`catalogues.server.js`, and the legal pages serve real translated prose, not placeholders:
+
+```
+de   Datenschutzerklärung          Teil 1 – Die Website und der kostenlose Bilby-Scan
+fr   Politique de confidentialité
+ja   プライバシーポリシー            第1部 — ウェブサイトと無料のBilbyスキャン
+```
+
+**The half I could not prove:** loading the embedded app with `?locale=de` on a dev store,
+**Shopify rewrote it back to `locale=en`** — the app's locale comes from the admin user's own
+language setting, not the URL. So German strings ship and German legal pages serve; that the
+embedded UI renders German to a merchant is **not** something I have seen with my own eyes. It needs
+the owner's admin language switched to German, which I did not do to his account.
+
+**German, entered and read back after a fresh page load** — every count matches the file exactly,
+and the editor trimmed nothing:
+
+| field | file | editor |
+|---|---|---|
+| App name | 25/30 | **25/30** |
+| Introduction | 81/100 | **81/100** |
+| Details | 495/500 | **495/500** |
+| Feature 1 | 68/80 | **68/80** |
+| Feature 2 | 68/80 | **68/80** |
+| Feature 3 | 70/80 | **70/80** |
+| Feature 4 | 77/80 | **77/80** |
+| Feature 5 | 75/80 | **75/80** |
+| Subtitle | 60/62 | **60/62** |
+
+Search terms committed as chips: `seo audit` · `produktbeschreibung` · `meta tags` · `alt text` ·
+`ki sichtbarkeit`. Privacy policy URL: `https://app.navaal.ai/privacy`. Saved; the language sits
+under **Languages not published** with an `Incomplete` badge. **Not published — the owner has not
+seen it yet.**
+
+**ONE FIELD THE EDITOR'S LIMIT BEAT THE FILE'S, quoted as required.** The file's second German
+search term is **`produktbeschreibungen`** — **21 characters against a 20-character field.** It
+cannot be entered. I entered the singular **`produktbeschreibung`** (19), a real German word and a
+valid search term. Cowork should correct the file for `de` and re-check the other five locales'
+terms against **20**, not against the file's own counts.
+
+**THE FILE DOES NOT COVER THE WHOLE FORM, AND THE BRIEF'S "paste every field verbatim" CANNOT BE
+DONE.** A per-language listing is not a translation layer — it is a full listing. Inherited from the
+primary listing (marked *"Review and edit this in the primary listing"*): category, languages,
+geographic requirements, sales-channel requirements, tracking codes, test account, screencast,
+testing instructions. **Everything else is per-language and empty**, and `LISTING-TRANSLATIONS.md`
+supplies none of it:
+
+1. **Plan display names ×4** — `Free`, `Starter`, `Growth`, `Professional`, each **0/18**. The file
+   gives plan *feature* lines and no display names. 18 characters, not 40.
+2. **Plan top-feature lines ×20** — the file has them, but each is an *Add*-then-type chip sequence
+   inside a per-plan accordion. Four plans × five lines.
+3. **Three desktop screenshots + three alt texts (0/64 each)** — required, per language, and the
+   file supplies neither. Task 12's frames are English-UI screenshots; their alt text would have to
+   be written in German.
+4. Support email, merchant review email, and optionally demo store URL and feature media.
+
+**What this costs.** German's nine text fields and five search terms took roughly forty precise
+interactions, because the search-term box commits one chip per round-trip and React's state runs a
+beat behind the DOM. The remaining German work is about the same again; five more languages is five
+times that. **Task 13 as written is not a 30-minute job — it is the largest single item in this
+file, and it is blocked on copy that does not exist yet.** Cowork should extend
+`LISTING-TRANSLATIONS.md` with the four plan display names and three alt texts per locale, and
+re-check every search term against 20 characters, before anyone opens the next language.
+
+### WHAT NOBODY ASKED ABOUT
+
+- **`REMEDIATION_LOCKED_SHOPS` went in, and Deploy Secrets shipped code with it.** Fly's own words:
+  *"Secrets are staged for the next release. To trigger a deploy, run `fly deploy` from a terminal
+  or "Deploy Secrets" button."* Pressing it ran **release #253** and moved production
+  `f974f49` → **`356684c`** — CC's Phase 12 Part A, built by CI and never chosen for release.
+  Health came back green, and the commit happened to fix several things I had reported, but the
+  mechanism is the finding: **Deploy Secrets releases the newest built image, not the running one.**
+  Recorded as false green #18.
+- **Two client secrets are live.** App settings shows `Secret Old` created **June 4, 2026 9:33 am**
+  and `Secret New` created **June 4, 2026 9:37 am**, both with Revoke buttons. A rotation was started
+  three months ago and the old secret was never revoked.
+- **The released app version is still `p0-xss-f505584`, 14 Sep.** Installs now read **15**. Every
+  deploy since — `356684c`, `cc33bf2`, `1e1867e` — shipped code without an app-version release, so
+  app config and the theme-extension liquid are still on the 14 Sep version. Same mechanism as the
+  Phase 7 P0; a standing condition, not a new defect.
+- **Webhook failure rate is 35.8%** on the app Overview (was 38.4% yesterday), under a green banner
+  that only covers breaking changes.
+
+### INBOX
+
+| — | CC | **`_UPLOAD-W1-POST.md` §3b's pubDate weekday is wrong** — `Sun, 14 Sep 2026`; 14 Sep 2026 is a Monday. Entered as `Mon`. Fix the file. | CW → CC |
+| — | CC | **The blog feed was eight posts behind the index** (20 vs 28) before today. Nothing generates it. | CW → CC |
+| — | Cowork | **`LISTING-TRANSLATIONS.md` does not cover the per-language listing form.** Missing: four plan display names (≤18) and three screenshot alt texts (≤64) per locale. And `produktbeschreibungen` is 21 characters against a 20-character field — re-check every locale's terms against 20. | CW → Cowork |
+| — | CC | **`read_reports` has no request form.** Eight requests exist and none is it. Decide: declare the scope, or ask Partner support. | CW → CC |
+| — | OWNER | **A dev store cannot be made public or upgraded.** F10 needs a different store. | CW → OWNER |
+| — | CC | **False green #18 — "Deploy Secrets" on Fly releases the newest built image**, not the running one. Anyone pressing it to apply a secret ships whatever CI last built. | CW → CC |
+| — | OWNER | **The old client secret from 4 June has never been revoked.** Two live secrets. | CW → OWNER |
+| — | CC | **`support@navaal.ai` is on 64 marketing pages, not five.** Owner confirms it is a real inbox, so nothing edited. | CW → CC |
+
+### STILL OPEN
+
+- **Task 6** — two founder emails drafted and shown; awaiting the owner's word per email. Nothing sent.
+- **Task 13** — five locales, plus German's plan lines, screenshots and alt text. Blocked on copy.
+- **Tasks 15, 16, 8, 3-RE, 10, 11, 12, 14** — not reached this session.
+- **`CAPTURE COMPLETE`** — still not posted; dev2 stays frozen.
