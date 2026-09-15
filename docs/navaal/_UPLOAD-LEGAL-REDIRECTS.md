@@ -12,7 +12,7 @@
 > - **`terms.html` + the terms rule: upload now.** The 8 July `navaal.ai/terms` is stale app terms
 >   (7-day trial, "25 generations", `support@`); the app's `/terms` is the one to keep.
 > - **`privacy.html` + the privacy rule: ONLY once `app.navaal.ai/privacy` carries both parts** —
->   the sha that ships that is `__SHA_B__`. Check `curl -s https://app.navaal.ai/privacy | grep -c
+>   the sha that ships that is `cc33bf2`. Check `curl -s https://app.navaal.ai/privacy | grep -c
 >   'id="part-1"'` answers `1` before uploading the privacy shell. Until then the two pages stay
 >   two pages, and the listing's Privacy URL may point at either.
 >
