@@ -372,6 +372,28 @@ adds a feature that is not on this list.
 
 **Status 2026-09-15 (CC, ship gate E in `06-QUEUE.md`):** proved — A2 (Phase 11 `cd96240`, the three integers in `05-EVIDENCE.md` §7c), A3 (`scheduledWeek.test.js`), A6, A7, A9, A10 (`3773f8d`), A8 (`creditsConcurrency.test.js` at `8e8ce9b`: two simultaneous generations, one debit each, the cap never overshoots; break-test 4/4; credit packs are not built, so that clause has nothing to test), A12 (no toml/`extensions/` change since `7942c30`; released version `p0-xss-f505584`). Routed — A1 (CW's third confusion count; second was 4), A11 (CW's Draft/Publish walks on five `navaal-shape-*` stores; 14 cells named with the store they would take). Owner — A4 (Neon restore drill, `OWNER-CHECKLIST.md`), A5 (the alert on a phone). **§6.5 is NOT CLOSED: it closes when A1, A4, A5, A11 and B3/B5 are posted by their owners.**
 
+**STATUS 2026-09-16 (Cowork, from outside and from the owner's own reads). TEN OF TWELVE PROVED.**
+Added since the 15th: **A4 PROVED** — Neon branch `restore-drill-2026-09-16T0127Z` (`br-calm-rice-a7raewsp`)
+off `production` at `01:27:38Z`, 201 in 819 ms, ready 23 s later, no compute endpoint, production
+untouched (CW, `b535e8e`). **A11 WALKED** — five shape stores read, table at `fc3ef8f`.
+**A5 SPLIT: proved for email, open for push** — two test alerts delivered 2026-09-16 13:06 Sydney and
+read back verbatim by the owner; the only attached contact is an email contact, so the line's own
+words ("received on a phone") are met only via Gmail push. Closing move: the free UptimeRobot mobile
+app attached as a second contact, one more test. **A1 IS THE LAST ENGINEERING GATE AND IT IS CC'S TO
+CLOSE, NOT CW'S.** CW's second count stands at four open — FR8 (a row labelled `This product: N/100`
+showing the store's number), FR13 (the `Review` button opens the generate page with no approve
+control, while the route `?product=<id>` renders them — CW proved the contract, so the button, not
+the route, is wrong), FR14 (`3 / 100 used` rendered as `3%`, hiding real spend) — plus FR0 untested
+on an empty store. **Fix those three and the count is ≤ 3 by arithmetic; then CW recounts once.**
+
+**B IS COMPLETE — 2026-09-16.** B1 live; B2 live in all six; **B3 and B5 done and verified from
+outside by Cowork**, one cache-busted fetch per locale, with the exact-match test (our own bullet 3
+present AND Shopify's auto-translation marker absent in the same fetch, false green #19): de, fr, es,
+it, pt-BR, ja — **six for six**, `bullet3=1 marker=0` on each; the listing's *Languages* field reads
+all seven and renders that way publicly. The sequencing rule was honoured throughout: no locale's
+listing was entered before its UI locale was live on production. What remains on translations is a
+quality pass, not a gate — localized screenshots per locale, queued behind CC's capture-harness fix.
+
 When A1–A12 are ticked, Track A becomes maintenance: security fixes, platform sunsets, merchant-reported defects, and nothing else without an explicit re-open.
 
 ### B. THE APP IN SIX LANGUAGES — and the rule that keeps it honest
