@@ -2462,3 +2462,51 @@ test alert then takes about a minute. H16 (the second alert contact) is bundled 
 **TASK 11 — DEFERRED, DATE.** The gate is 16 Sep 06:00 UTC. Clock read off the Neon API response
 at the moment of the check: **`2026-09-16T01:37:55Z`** — four and a half hours early. Not started.
 
+
+### 2026-09-16 — CW — TASK 14, THE SWEEP (run early because 3-RE and 10 are blocked)
+
+All cache-busted, read 2026-09-16 ~01:45–02:00 UTC.
+
+**Legal redirects — PASS.** One hop each, `HTTP/2 301`:
+`navaal.ai/privacy` → `https://app.navaal.ai/privacy`; `navaal.ai/terms` → `https://app.navaal.ai/terms`;
+`/privacy.html` and `/terms.html` redirect to the same two targets.
+
+**The W1 post — PASS.** `navaal.ai/blog/shopify-product-data-409-stores` **200**, `36.2%` appears
+**2** times (the gate), `71.9%` 4 times. The caveat is beside the headline.
+
+**The three published locales — PASS, all three in one fetch each.**
+| locale | bytes | auto-translation line | our bullet 3 |
+|---|---|---|---|
+| de | 197 289 | **0** | **1** |
+| fr | 198 712 | **0** | **1** |
+| es | 197 530 | **0** | **1** |
+
+**The three new locales are correctly NOT live yet** — `it`, `pt-BR`, `ja` each still carry
+*"Contiene testo tradotto automaticamente"* (and its pt/ja equivalents) **2** times, and our subtitle
+and bullets 1, 2, 4, 5 are absent. They publish when their images are up.
+
+**FALSE GREEN #23 — Shopify's machine translation can reproduce our own bullet 3 verbatim.**
+On the unpublished Italian page, `Descrizioni IA, meta tag, testi alternativi e FAQ con la tua voce
+di marca` matched **exactly once** — while our subtitle scored 0 and bullets 1/2/4/5 scored 0 and the
+auto-translation line was present twice. A bullet-3-only test would have called Italian live. **Both
+halves of the #19 test are load-bearing, and the line-absent half is the one that cannot be faked.**
+
+**Banned words and price strings on the English listing — CLEAN.**
+`2 months free` 0 · `7-day free trial` 0 · `One-click Optimize Store` 0 · `usage stats` 0 ·
+`99.90` 0 · `299.90` 0 · `799.90` 0 · `25 generations` 0 · `fastest` 0 · `guaranteed` 0.
+The ten `#1` hits are `fill="#1495CC"` inside Shopify's own SVG chrome, not copy; `best` 0 in text.
+Correct strings present: `9.99` ×6 · `29.99` ×2 · `79.99` ×2 · `95.90` · `287.90` · `767.90` ·
+`14-day` ×6.
+
+**The English gallery's alt texts are the new set — PASS.** Exactly three, ours:
+`Navaal Review: six drafts, each approved before publishing` ·
+`Navaal Products: catalogue view with content status per product` ·
+`Navaal Settings: brand voice, language and approval rules`.
+
+**INBOX — OWNER — `navaal-ttv-03` IS NOT PUBLIC.** `https://navaal-ttv-03.myshopify.com/` answers
+**302 → `/password`**; the storefront password is still on. Anything that reads that storefront from
+outside sees the password page, not the store. One toggle in *Online Store → Preferences*.
+
+**The listing's Languages field still reads `English` alone** — while German, French and Spanish are
+live on the public page. It is set to all seven as the last step of §3, after it/pt-BR/ja publish.
+
