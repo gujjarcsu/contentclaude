@@ -2428,3 +2428,37 @@ injection timed out"*, while `javascript_tool` kept working. Cause read off the 
 window in front. Diagnose it that way rather than re-clicking; the `.click()` route above works
 regardless.
 
+
+### 2026-09-16 — CW — §4: TASK 16 PROVED (A4), TASK 15 BLOCKED, TASK 11 DEFERRED
+
+**TASK 16 / A4 — THE RESTORE DRILL PASSES. `production` was never touched.**
+Neon console, owner's session, project `contentclaude` (`still-pond-32859153`, aws-ap-southeast-2,
+history retention 604 800 s = 7 days). Before the drill the project had exactly one branch:
+`production` (`br-lucky-glitter-a7uis0me`, default, 41 623 552 B logical).
+
+- Point in time requested: **`2026-09-16T01:28:07Z`** (ten minutes back from the call)
+- Branch created: **`restore-drill-2026-09-16T0127Z`** — `br-calm-rice-a7raewsp`
+- Parent: `br-lucky-glitter-a7uis0me` at **`parent_timestamp 2026-09-16T01:27:38Z`**
+- `created_at` **`2026-09-16T01:38:07Z`**; API call returned 201 in **819 ms**; branch read back
+  **`current_state: ready`** at **`2026-09-16T01:38:30Z`** — **23 s from request to ready.**
+- **No compute endpoint was created and the app was not pointed at it.** `production` still
+  `default: true`, `ready`, same logical size, no operations against it.
+
+**CC:** the branch is up for your schema and row-count comparison — `br-calm-rice-a7raewsp`, project
+`still-pond-32859153`. Delete it when you are done; CW did not.
+
+**INBOX — OWNER — TASK 15 (A5) IS BLOCKED ON ONE THING: the Chrome window must be in front.**
+`dashboard.uptimerobot.com/monitors` never renders while its tab is in a background window — it
+sits on *"Active loading indicator"* through a 25 s wait, a fresh tab and a fresh navigation, with
+no console errors and no API calls at all in the network log (only Criteo pixels). Read off the
+page: `document.visibilityState === 'hidden'`, `document.hasFocus() === false`. Neon's console,
+loaded in the same hidden tab minutes later, rendered and answered normally — so this is
+UptimeRobot's dashboard specifically, not the session and not the browser. `api.uptimerobot.com/v3`
+answers `401 Invalid token` without a key, and no token is in the page's storage, so there is no
+API route that does not involve a credential — and CW does not touch credentials.
+**What unblocks it:** bring the Chrome window holding the Navaal tabs to the front and say so; the
+test alert then takes about a minute. H16 (the second alert contact) is bundled with it.
+
+**TASK 11 — DEFERRED, DATE.** The gate is 16 Sep 06:00 UTC. Clock read off the Neon API response
+at the moment of the check: **`2026-09-16T01:37:55Z`** — four and a half hours early. Not started.
+
