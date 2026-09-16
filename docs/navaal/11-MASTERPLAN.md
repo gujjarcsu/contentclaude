@@ -449,6 +449,14 @@ all seven and renders that way publicly. The sequencing rule was honoured throug
 listing was entered before its UI locale was live on production. What remains on translations is a
 quality pass, not a gate — localized screenshots per locale, queued behind CC's capture-harness fix.
 
+**A4 — PROVED IN FULL 2026-09-16 (Cowork read both sides).** Branch and production agree exactly on
+schema — 23 tables, 337 columns, no column on one side and not the other — and on which 18 tables
+hold rows. The only three row-count differences are lower on the branch and append-only
+(`LogEvent` 4,375/4,879, `ProductScore` 98/120, `CrawlerAccess` 54/58), which is the drift the
+branch's point-in-time predicts. No table is empty on the branch and full on production. Evidence:
+`docs/history/restore-drill-2026-09-16-{production,branch}.json`. **Eleven of twelve; A5's push
+contact is the twelfth.**
+
 **A1 — GATE MET 2026-09-16, WITH A NAMED RESERVATION (Cowork).** CW's third count on `navaal-qa-fresh`
 from `7710be2` is **3**, the sequence being 15 → 4 → 3 (`f721f47`), so the ≤ 3 line passes and **A1
 is ticked — eleven of twelve.** The reservation, recorded so the tick cannot be read as "the first
