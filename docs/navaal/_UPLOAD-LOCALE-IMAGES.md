@@ -53,21 +53,26 @@ the thumbnail slot beside the Video URL if you keep the video.
 | 14 | it | Screenshot 2 | `03-products-desktop-1600x900.png` | `Navaal Prodotti: catalogo con stato dei contenuti` |
 | 15 | it | Screenshot 3 | `05-settings-desktop-1600x900.png` | `Navaal Impostazioni: voce di marca, lingua, approvazione` |
 | 16 | it | Feature media | `feature-thumbnail-1600x900.png` | — |
-| 17 | pt-BR | Screenshot 1 | `02-review-desktop-1600x900.png` | *(CW types it with the rest of the pt-BR text)* |
-| 18 | pt-BR | Screenshot 2 | `03-products-desktop-1600x900.png` | *(CW)* |
-| 19 | pt-BR | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(CW)* |
+| 17 | pt-BR | Screenshot 1 | `02-review-desktop-1600x900.png` | *(already saved)* `Navaal Revisão: seis rascunhos, aprovados antes de publicar` |
+| 18 | pt-BR | Screenshot 2 | `03-products-desktop-1600x900.png` | *(already saved)* `Navaal Produtos: catálogo com status do conteúdo` |
+| 19 | pt-BR | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(already saved)* `Navaal Configurações: voz da marca, idioma, aprovação` |
 | 20 | pt-BR | Feature media | `feature-thumbnail-1600x900.png` | — |
-| 21 | ja | Screenshot 1 | `02-review-desktop-1600x900.png` | *(CW)* |
-| 22 | ja | Screenshot 2 | `03-products-desktop-1600x900.png` | *(CW)* |
-| 23 | ja | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(CW)* |
+| 21 | ja | Screenshot 1 | `02-review-desktop-1600x900.png` | *(already saved)* `Navaal レビュー：下書き6件。公開前にそれぞれ承認` |
+| 22 | ja | Screenshot 2 | `03-products-desktop-1600x900.png` | *(already saved)* `Navaal 商品：商品ごとのコンテンツ状況を示すカタログ` |
+| 23 | ja | Screenshot 3 | `05-settings-desktop-1600x900.png` | *(already saved)* `Navaal 設定：ブランドの声、言語、承認ルール` |
 | 24 | ja | Feature media | `feature-thumbnail-1600x900.png` | — |
 
 **de, fr and es are ready for their four now** — their text is complete and saved, and their three alt
 texts are already in, so you only place images.
 
-**it, pt-BR and ja do not exist yet.** Creating a locale needs *Add a language* on the Partner
-Dashboard, and that session has expired (see the queue INBOX). Once you are signed in there, CW
-creates and fills all three, then these twelve rows become live too.
+**it, pt-BR and ja now exist and are text-complete.** Created on the Partner Dashboard and filled
+by CW on 16 Sep: every field, five bullets, five search terms, twenty plan lines, three alt texts,
+privacy URL and both support emails, each saved (banner cleared + two `POST /graphql 200`) and read
+back on a fresh load. **All twelve of their rows below are live for you now** — the alt text is
+already in the editor, so you only place images.
+
+The only thing each of the six locales still reports is its images: *Feature media* and
+*Screenshots*. Rows 1-24 close that.
 
 **Do not publish anything yourself.** CW verifies each locale — three new ids, 1600×900, thumbnail
 present, alt texts ours, issues **0** — and publishes on that evidence, then proves each on the

@@ -2381,3 +2381,50 @@ same mechanism, stated out loud.
   `partners.shopify.com` while you are there). Without it CW can read the app's screens from
   screenshots but cannot click anything in them, which blocks Task 3-RE's FR13-by-click, the A1
   reinstall walk and the A11 shape walks.
+
+---
+
+### 2026-09-16 — CW — §1 CLOSED: it, pt-BR and ja created, filled, saved, read back
+
+**TEXT COMPLETE it · TEXT COMPLETE pt-BR · TEXT COMPLETE ja.** All three languages created on the
+Partner Dashboard (*Add a language* → radio → *Add*) and filled from `LISTING-TRANSLATIONS.md`
+verbatim. Per locale: app name, subtitle, introduction, details, **five** feature bullets (4 and 5
+each created with an extra *Add*), **five** search-term chips, **twenty** plan feature lines (five
+per plan), four plan display names, three screenshot alt texts, privacy URL
+`https://app.navaal.ai/privacy`, and both `supportEmail` and `reviewNotificationEmail` set to
+`hello@navaal.ai` after toggling *Use support channels from primary listing* off. Every locale
+saved with the banner clearing **and two `POST /graphql 200`**, then read back on a fresh load —
+every field matched the source at the exact character count.
+
+Read back after save (fresh load), subtitle / intro / details / bullet lengths:
+- **it** — 57 · 94 · 476 · 66,74,74,74,71 — plans `Gratuito / Growth / Professional / Starter`
+- **pt-BR** — 60 · 82 · 450 · 73,75,73,74,78 — plans `Grátis / Growth / Professional / Starter`
+- **ja** — 37 · 36 · 190 · 28,31,33,32,31 — plans `無料 / Growth / Professional / Starter`
+
+Each locale still reports exactly the image issues — *Feature media* and *Screenshots* — which is
+rows 13–24 of `_UPLOAD-LOCALE-IMAGES.md`, now live for the owner with every alt text pre-saved.
+
+**FALSE GREEN #22 — the pricing-plan array is in ALPHABETICAL order, not plan order.**
+`pricingChargeRecurring.pricingPlans.0..3` reads **free, growth, professional, starter** — NOT
+Free/Starter/Growth/Professional. Filling 0..3 in brochure order silently puts Starter's lines on
+Growth's card. Verified twice: the card text for index 1 is `growthEdit$29.99/month…`, index 3 is
+`starterEdit$9.99/month…`, and the already-published French listing holds
+`Gratuit / Growth / Professional / Starter` in that order. Read the card label for each index
+before writing to it; never trust the index.
+
+**TOOLING — `element.click()` DOES actuate this editor; a `ref` click does not.**
+Superseding the earlier "coordinate clicks only" note: a plain `el.click()` from `javascript_tool`
+fires the React handler for every button tried — *Add a language*, the language radio (with a
+native-setter `checked` + `change` first), *Add* in the modal, *Add* under Features, the four
+per-plan *Add*s, the search-term *Add*, the support-inherit checkbox and **Save**. This removes the
+dependence on the browser window being frontmost for everything except the file DropZone, which
+remains the owner's click alone. Field values still need the native `value` setter plus `input`
+and `change`, or React keeps the old value.
+
+**TOOLING — coordinate clicks and screenshots need the Chrome window in the foreground.**
+Mid-run every `computer left_click` stopped actuating and every screenshot failed with *"Script
+injection timed out"*, while `javascript_tool` kept working. Cause read off the page:
+`document.visibilityState === 'hidden'`, `document.hasFocus() === false` — the owner had another
+window in front. Diagnose it that way rather than re-clicking; the `.click()` route above works
+regardless.
+
