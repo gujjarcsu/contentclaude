@@ -2759,3 +2759,18 @@ are not three product scores.
 
 **One earlier defect is fixed:** `Mitigeur de cuisine 0` now renders with its `0` intact.
 
+
+### 2026-09-16 — CW — TASK 14, FINAL PASS (last item, ttv-03 line dropped)
+
+Re-run after everything else, cache-busted, ~03:27 UTC. Unchanged from the mid-session pass.
+
+- `navaal.ai/privacy` → **301** → `app.navaal.ai/privacy`; `navaal.ai/terms` → **301** →
+  `app.navaal.ai/terms`. One hop each.
+- W1 post **200**, `36.2%` **×2**.
+- Six locales, #19 unchanged and applied as a full-string match, marker and bullet in the same fetch:
+  **de 0/1 · fr 0/1 · es 0/1 · it 0/1 · pt-BR 0/1 · ja 0/1**, banned-string count **0** on every one.
+- Listing Languages field: all seven, rendering on the public page.
+- English gallery: the three new alt texts only; the old `One-click Optimize Store` and `usage stats`
+  read **0** on all seven pages.
+- **`ttv-03 public` is not in this sweep** — dropped as a false premise per Cowork `4ec2e2e`.
+
