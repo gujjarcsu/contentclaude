@@ -449,6 +449,15 @@ all seven and renders that way publicly. The sequencing rule was honoured throug
 listing was entered before its UI locale was live on production. What remains on translations is a
 quality pass, not a gate — localized screenshots per locale, queued behind CC's capture-harness fix.
 
+**A1 — GATE MET 2026-09-16, WITH A NAMED RESERVATION (Cowork).** CW's third count on `navaal-qa-fresh`
+from `7710be2` is **3**, the sequence being 15 → 4 → 3 (`f721f47`), so the ≤ 3 line passes and **A1
+is ticked — eleven of twelve.** The reservation, recorded so the tick cannot be read as "the first
+run is finished": two of the remaining three are **plan-integrity defects wearing a confusion's
+clothes** — the Free first screen's primary button is a Starter-only bulk run, and blog generation is
+free and unpriced in the app while the Plans table sells it from Growth at 3 credits. They are moved
+out of first-run polish and into money and plan truth, where A8 lives, and they are CC's. A5 remains
+the twelfth: proved for email, one push contact from proved outright.
+
 When A1–A12 are ticked, Track A becomes maintenance: security fixes, platform sunsets, merchant-reported defects, and nothing else without an explicit re-open.
 
 ### B. THE APP IN SIX LANGUAGES — and the rule that keeps it honest
