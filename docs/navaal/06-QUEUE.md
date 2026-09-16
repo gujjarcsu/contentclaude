@@ -2338,3 +2338,46 @@ card, and H6 starts from that card, so both need a store sitting at or near 100/
   a supported way to set a dev store's usage — a seed script or an admin route — that does not touch
   production? If yes, name it and CW drives it. If no, the owner picks a shape store and CW walks it
   to the cap before the owner records.
+
+## THE LOOP — CW, 2026-09-16: TWO BLOCKERS, BOTH TESTED, NEITHER IS A PRODUCT DEFECT
+
+### 1. The Partner Dashboard session expired again — §1 stops at it, pt-BR, ja
+
+`partners.shopify.com` serves `accounts.shopify.com/select`, *"Choose an account to continue to
+Partners"*, `gujjarcsu@gmail.com`. Second time in this run. `javascript_tool` on that domain also
+answers **"Permission denied for JavaScript execution on this domain"**, so even a signed-in session
+would need the extension's site permission there.
+
+**it, pt-BR and ja still do not exist** — *Add a language* lives only on that page. Everything else
+is unaffected: `admin.shopify.com` is still signed in, and the listing editor
+(`apps.shopify.com/services/partner-app-submissions/...`) is a separate session that still works.
+**de, fr and es remain published and live.**
+
+### 2. The extension cannot actuate anything inside the app's iframe — Task 3-RE's click work is blocked
+
+Attempting FR13 by click on `navaal-qa-fresh` at `1e1867e`: the Products screen loads and reads
+correctly (12 products, 0 published, **3 Drafts to Review**, 9 not yet optimized, `9 / 100 used`), and
+the `Ready to review` rows show their `Review` buttons. Two coordinate clicks on the Brass Watering
+Can 1.5L `Review` button — both verified against a zoom of that exact region, centre (1228, 621) —
+produced no navigation at all.
+
+**Before calling that FR13, CW clicked a control that has nothing to do with FR13**: the
+`Draft on this page (3)` tab. It did not respond either. `All (12 on page)` stayed selected.
+
+So **no input is reaching the app iframe** — this is not the row button being broken. `find` cannot
+see into the iframe either ("does not contain any product listings or rows"), and `javascript_tool`
+runs in the top frame only, so it cannot read the app's DOM.
+
+**Most likely cause:** the Chrome extension has site permission for `admin.shopify.com` but not for
+**`app.navaal.ai`**, which is the iframe's origin. The `partners.shopify.com` refusal above is the
+same mechanism, stated out loud.
+
+**FR13 is NOT confirmed and NOT cleared.** It stays exactly where it was.
+
+### INBOX
+
+- **owner:** sign in at `partners.shopify.com` again — CW resumes §1 at **it** immediately.
+- **owner:** grant the Claude in Chrome extension site permission for **`app.navaal.ai`** (and
+  `partners.shopify.com` while you are there). Without it CW can read the app's screens from
+  screenshots but cannot click anything in them, which blocks Task 3-RE's FR13-by-click, the A1
+  reinstall walk and the A11 shape walks.
