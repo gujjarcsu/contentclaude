@@ -31,6 +31,9 @@ Status: `OPEN` · `DONE <date, how confirmed>`
 
 ## INBOX — unnumbered, append here
 
+- **OWNER — the outage had a blast radius nobody has looked at yet: EVERY webhook 401'd, including the three mandatory compliance ones. Check this before anything else.** `app/routes/` has seven webhook routes — `app/scopes_update`, `app/subscriptions_update`, `app/uninstalled`, `products/create`, and the three Shopify treats as mandatory: **`customers/data_request`, `customers/redact`, `shop/redact`**. Webhook HMACs are computed with the client secret, so for the whole outage window every one of them answered 401, exactly as `POST /webhooks/app/subscriptions_update 401` shows in the 11:30Z log. Two consequences, different in kind: (1) ordinary webhooks retry on Shopify's backoff for up to 48 hours and will have re-delivered on their own now that the secret is right — nothing to do; (2) **sustained failures on the mandatory compliance webhooks are a listing-status matter, not an engineering one.** Shopify emails the partner about them and, unaddressed, can flag or remove a published app. Three checks, five minutes: the Partner email inbox for any webhook-failure notice dated today; Partners → Apps → Navaal → the webhook delivery/health view for the failure rate over the outage window; and whether any compliance request actually arrived during it. **If a notice exists, reply to it — the app is fixed, the cause was a credential rotation, and it is resolved. An unanswered Shopify compliance notice is the one thing on this whole project that can undo the listing.** If no notice and the failure count is zero, say so and this closes.
+- **A5 CLOSING MOVE, now carrying more weight than the line implies (see false green #32).** Eleven of twelve Engineering Done lines are proved; A5's push half is the last. The move is unchanged and small — UptimeRobot mobile app added as a **push contact** on the deep-health monitor, one deliberately triggered alert received as a push on the phone, the timestamp posted. **But A5 says "alerting reaches a human", and today proved that the thing it alerts on cannot see a total authentication failure.** So A5 is ticked on its own words when the push arrives, and the queue carries #32 as the reason the words were too weak. Do not let ticking A5 close the question CC is now working on in `CC-PROMPT-P16-WEEKLY.md` §2.
+
 - **CLOSED — the 401 outage is over, 2026-09-16 ~11:58Z. The owner confirms the app loads on his dev stores.** Sequence, for the record: the log was read rather than reasoned from → the shape (id_token rejected on arrival, bounce, rejected again, plus a webhook 401 in the same minute) named the client secret as the single shared input → `aud` matched `client_id`, so the API key was excluded → `verify-client-secret.mjs` recomputed a real id_token's HMAC against the candidate the owner pulled from Partners and returned **MATCH before anything was imported** → `fly secrets import` → sha **unchanged at `a89e8b1`** with `startedAt` **11:57:41Z**, which is the correct signature of a secrets restart (running image, new start time) and not of a deploy → deep health ok → the owner clicked the app and it loaded. **No reinstall, no `shopify app deploy`, no new app version, no code change.** Total time from reading the log to the app loading: under 40 minutes, against roughly a day of guessing before it.
 - **THE IMPORT FAILED ONCE MORE ON FILE SHAPE, NOT ON VALUE — third time. The tooling now absorbs it.** `fly secrets import` rejected the file with `Secrets must be provided as NAME=VALUE pairs`: the owner had pasted the bare value with no `SHOPIFY_API_SECRET=` in front of it. Cowork repaired the file in place from the mounted repo — prefix added, trailing newline, ASCII, no BOM — re-ran the verifier to prove the rewrite had not mangled it, and never printed the value. **Standing rule, now with three instances behind it (BOM, quoted paste, missing key name): a secret is staged INSIDE the repo folder so its bytes can be inspected and its signature verified before it is imported, and the operator is never asked to get a file's shape right by hand.** Afterwards `s.env` was overwritten in place three times and moved to `_to_delete/`; `applog.txt` was moved there too because it carried live id_tokens. Only `shpss_test_secret` remains anywhere in the tree, and that is a fixture.
 - **A5 IS NOW WORTH MORE THAN A TICK — the monitor cannot see the outage that just happened.** False green #32: `/api/health?deep=1` reported ok on every check while every merchant got 401, because the health route never goes through `authenticate.admin`. Adding the UptimeRobot push contact completes A5 as written, but A5 as written would not have caught this. **Either the deep check gets one probe that exercises the auth path (mint a JWT locally with the configured secret and verify it, or fingerprint the secret against a value recorded at install), or the twelfth Engineering Done line is proving something weaker than everyone reading it will assume.** Routed to CC alongside the health-check work already in `CC-PROMPT-P16-WEEKLY.md` §2 — same endpoint, same sitting, and #32 is the stronger of the two reasons to touch it.
@@ -2898,3 +2901,59 @@ and not worked around. Everything else is ready: Node 22, Playwright, both brows
 CW did **not** substitute a browser screenshot: the extension's capture pipeline caps output at
 1456 px wide, so it cannot produce 1600×900 without upscaling, and an upscaled JPEG has no business
 on the App Store listing.
+
+### 2026-09-16 — CW — THE OUTREACH RUN: thirty re-counted, thirty routes confirmed, thirty drafts, none sent
+
+**The app was not opened in any dev store.** The embedded 401 is the owner's to fix and nothing in
+this brief needed the app.
+
+**Step 1 — thirty of thirty survive.** `tools/prospects/recheck.mjs` run sequentially against every
+host. No store was unreachable, none 404'd, none rate-limited. **No count collapsed and nothing moved
+by more than one product**, so nobody on the list has fixed what we would be writing to them about.
+Four rows moved by exactly one: rows **7** (`www.modifieddecals.com` 602/603 → 603/604), **12**
+(`www.amybradleydesigns.com` 216/223 → 217/224), **28** (`shoptriplebfarms.com` 174/250 → 175/251)
+and **29** (`zilla-meals.com` 84/123 → 85/123). `PROSPECTS.md` now carries both columns side by side;
+the 15 Sep figures were not overwritten.
+
+**Step 2 — routes re-confirmed read-only.** Page fetched, status read, **no form submitted, no DM
+sent, nothing signed in.** Two replaced: `www.hippierunner.com` (`/pages/contact` 301s to the
+homepage; `/pages/contact-us` is live and carries `orders@hippierunner.com`) and
+`shop.faithchurch.com` (no contact page at all; `info@faithchurch.com` is printed on
+`/policies/refund-policy`, which beats the recorded Instagram DM). Eleven upgraded from a form to a
+direct inbox on the store's own contact page. One named human: **Zen Garcia**, founder,
+`sacredwordpublishing.com`, named on their homepage. Two 404s that change nothing —
+`vftuner.com/pages/contact` and `maineaimranchdogs.com/pages/contact-us` are gone but both addresses
+are still printed on the sites. `drformulas.com` stays on its form: the email it prints,
+`help@drformulas.ocm`, is their own typo.
+
+**Two stores are Instagram-only and their handles are UNVERIFIED.** `bakeshopboyd.com` and
+`www.creamstreetlife.com` have no contact page and no address on any policy page.
+`instagram.com/<handle>` answers 200 for both but serves a login-walled shell with no account title,
+and CW does not sign in — the handles resolve, activity is unproven.
+
+**Step 3 — `docs/navaal/OUTREACH-DRAFTS.md`, thirty drafts, nothing sent.** 22 email, 6 contact form,
+2 Instagram DM. Every draft quotes **today's** count for that store and nothing else. Every draft is
+**inside its cap** — the file prints the real word count beside each one (email ≤120, form ≤80, DM
+≤50), and the longest are 120, 74 and 47. A per-draft check records the claim, the source, and the
+doctrine lines it could have tripped. Mechanical sweep of the message bodies only: `71.9` 0 ·
+`409 stores` 0 · `barcode` 0 · `guaranteed` 0 · `#1` 0 · `SLA` 0 · `dedicated account manager` 0 ·
+`24/7` 0 · `instantly` 0 · `best` 0. **One slot is deliberately unfilled** — `shop.faithchurch.com`
+has no category CW could source from outside, so the owner fills it during the pack's thirty-second
+look.
+
+**Step 4 — OWNER, one question, and the drafts are marked `UNCONFIRMED` until you answer it:**
+which of these thirty have you already emailed by hand, and on what date? §8 of the pack is empty.
+A second cold email from the same founder about the same thing reads as automation.
+
+**Step 5 — the six locales still pass, whole-string.**
+| locale | marker | bullet 3, exact whole string | bytes |
+|---|---|---|---|
+| de | 0 | `KI-Beschreibungen, Meta-Tags, Alt-Texte und FAQs in Ihrer Markenstimme` | 197,343 |
+| fr | 0 | `Descriptions IA, balises méta, textes alternatifs et FAQ dans votre ton` | 198,116 |
+| es | 0 | `Descripciones con IA, metaetiquetas, texto alternativo y FAQ con tu voz` | 197,087 |
+| it | 0 | `Descrizioni IA, meta tag, testi alternativi e FAQ con la tua voce di marca` | 197,106 |
+| pt-BR | 0 | `Descrições com IA, meta tags, texto alternativo e FAQ na voz da sua marca` | 196,795 |
+| ja | 0 | `AIによる商品説明・メタタグ・代替テキスト・FAQをブランドの声で` | 189,851 |
+Six for six, cache-busted, marker absent and the whole string present in the same fetch. Markers
+searched per locale included both the "contains automatically translated text" phrasing and the
+"automatic translation" phrasing.
