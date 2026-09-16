@@ -81,3 +81,9 @@ docs/history/_pw-run/
 # real shop domains; the finding goes in the queue, the log never gets committed.
 applog.txt
 *.flylog
+
+# Secret import files. `fly secrets import` reads from a file, so the file has
+# to exist for a minute; it must never be committed and is deleted after.
+s.env
+sec.txt
+*.secret
