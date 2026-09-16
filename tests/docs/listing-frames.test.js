@@ -34,11 +34,49 @@ describe("every listing frame captures the app, not the Shopify admin", () => {
     expect(CODE).toMatch(/const target = await frame\.frameElement\(\)/);
   });
 
-  it("the harness never screenshots the whole page", () => {
-    // `page.screenshot(` would put Shopify's chrome back in the image.
-    expect(CODE).not.toMatch(/\bpage\.screenshot\s*\(/);
+  it("the harness never captures anything but the app frame", () => {
+    // WHAT THIS ASSERTS, AND WHY THE WORDING CHANGED (Phase 14 item 5).
+    //
+    // It used to forbid the string `page.screenshot(` outright. CW's shape fix
+    // at `81fa07a` then did the right thing in the forbidden spelling: take the
+    // app frame's bounding box and pass it to `page.screenshot({ clip })`,
+    // which yields exactly the frame and no admin chrome — and left this guard
+    // failing on correct code, red in every suite run since.
+    //
+    // A guard written on a spelling outlives its reason. The rule is "nothing
+    // outside the app frame reaches the image", so that is what is checked now:
+    // every screenshot is clipped, and the clip comes from the frame's own box.
+    const shots = [...CODE.matchAll(/\bpage\.screenshot\s*\(\s*\{([\s\S]*?)\}\s*\)/g)].map((m) => m[1]);
+    expect(shots.length, "the harness must still take screenshots").toBeGreaterThan(0);
+    for (const opts of shots) {
+      expect(opts, "every screenshot must be clipped to the frame").toMatch(/clip:\s*\{\s*x:\s*box\.x,\s*y:\s*box\.y/);
+      expect(opts, "an unclipped fullPage shot would carry Shopify's chrome").not.toMatch(/fullPage/);
+    }
+    expect(CODE).toMatch(/const box = await target\.boundingBox\(\)/);
     // and the old ternary must not return.
     expect(CODE).not.toMatch(/frameElement\(\)\s*:\s*page/);
+  });
+
+  it("desktop frames are exactly 1600×900 pixels — the editor's own rule", () => {
+    // "Desktop screenshots must be 1600px by 900px" — the App Store editor, to
+    // the owner, 2026-09-15, rejecting the 3200×1800 this harness emitted
+    // because listing-assets/README.md said that was what Shopify wanted.
+    expect(CODE).toMatch(/deviceScaleFactor: scaleOf\(f\)/);
+    expect(CODE).not.toMatch(/deviceScaleFactor:\s*2\b/);
+    expect(CODE).toMatch(/scaleOf = \(f\) => \(f\.width >= DESKTOP_MIN_WIDTH \? 1 : 2\)/);
+    // the fifth hurdle reads the real pixels, and follows the same scale, so
+    // the two can never disagree the way the harness and the README did
+    expect(CODE).toMatch(/const scale = scaleOf\(f\)/);
+    expect(CODE).toMatch(/pw !== f\.width \* scale \|\| ph !== f\.height \* scale/);
+  });
+
+  it("the README states the verified desktop size and admits the mobile one is not", () => {
+    const readme = readFileSync("listing-assets/README.md", "utf8");
+    expect(readme).toMatch(/exactly 1600×900 pixels/);
+    expect(readme).toMatch(/Desktop screenshots must be 1600px by 900px/);
+    expect(readme).toMatch(/UNVERIFIED/);
+    // the claim this file carried for months, gone
+    expect(readme).not.toMatch(/3200×1800 PNG — which is what Shopify wants/);
   });
 
   it("still captures all eight frames", () => {

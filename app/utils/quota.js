@@ -46,6 +46,23 @@ export function quotaPct(usageCount, monthlyCredits) {
 }
 
 /**
+ * FR14 (Phase 14) — WHAT THIS NUMBER IS FOR, AND WHAT IT MUST NEVER BE.
+ *
+ * `quotaPct` is bar geometry and threshold logic (70 / 90). It is deliberately
+ * a rounded integer with a floor of 1, so non-zero spend always paints a
+ * visible sliver — right for a BAR, wrong for a READOUT, because 19 of 4,000
+ * is 0.475% and this returns 1.
+ *
+ * So it must never be the number a merchant reads. Every quota surface prints
+ * the fraction (`3 / 100 used`, `97 remaining of 100`) as its primary number,
+ * and every quota ProgressBar is `ariaLabelledBy` that same fraction — so the
+ * rounded percent is not the only number even for a screen reader, which was
+ * the one place it still stood alone. `tests/routes/quotaReadout.test.js`
+ * holds both halves on all four surfaces.
+ */
+export const QUOTA_PCT_IS_BAR_GEOMETRY_ONLY = true;
+
+/**
  * Which of the three states this shop is in. Pure.
  *
  *   ok          below the warning threshold, or unmetered

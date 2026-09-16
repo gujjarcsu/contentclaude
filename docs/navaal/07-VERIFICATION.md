@@ -127,6 +127,19 @@ Before claiming a pass, check you are not repeating one of these:
 17. A record deleted on a loop by a sweep that matched a domain, not an install — while the app kept serving screens.
 18. Fly's *Deploy Secrets* pressed as a restart: it releases the newest built image, not the running one (CW, owner session).
 19. A translated listing "rendering" in a locale that Shopify machine-translates anyway: the public page shows German before any German is published (Cowork, 2026-09-15).
+20. A partial save read as a complete one: the alt text saved fine while the pictures underneath never changed, so the read-back found new text over old images (CW, 2026-09-15).
+21. A read taken too early: the first cache-busted fetch straight after Publish still showed the machine translation, and `es` was half-propagated — subtitle ours, body Shopify's. One read at that moment supports either wrong conclusion; it took ~100 s to settle (CW, 2026-09-15).
+22. An array assumed to be in the order a human would write it: `pricingChargeRecurring.pricingPlans` is ALPHABETICAL — free, growth, professional, starter — so filling 0..3 in brochure order puts Starter's lines on Growth's card. Read the card label for each index; never trust the index (CW, 2026-09-16).
+23. A machine translation reproducing our own copy verbatim: on the unpublished Italian page our bullet 3 matched exactly once while the subtitle and bullets 1/2/4/5 scored 0 and the auto-translation line was present. A bullet-3-only test would have called Italian live — both halves of #19's test are load-bearing, and the line-absent half is the one that cannot be faked (Cowork, 2026-09-16).
+24. A guard written on a SPELLING rather than on its reason, failing on correct code: `listing-frames.test.js` forbade the string `page.screenshot(`, and the fix that made every frame correct — clipping to the app frame's own bounding box — uses exactly that call. It sat red in every suite run for a day, which is how a suite stops being read (CC, 2026-09-16).
+25. A source-reading guard that did not cover the file that broke: `lockedPricing.test.js` asserted "nothing anywhere still says monthlyLimit" while walking `app/` only. The one place still reading the renamed field was in `scripts/`, so a 100-credit store was seeded to 25 (CC, 2026-09-16).
+26. `grep` used to validate a VALUE — it matches LINES. `printf '%s' "$X" | grep -q` fails on an empty `$X` (no line at all) and succeeds on a multi-line `$X` if *any* line matches, so a workflow's own documented empty mode was refused while a newline injection would have been accepted and interpolated into `sh -c` on a production machine. A `case` pattern matches the whole value (CC, 2026-09-16).
+27. A lock enforced at the call sites that existed when it was written: `REMEDIATION_LOCKED_SHOPS` guarded five call sites, all in one file, so Review, the product page, bulk and autopilot could still write to a locked shop holding a client's catalogue. A rule about "every write" belongs at the place the writes leave the process, not at the writers you can currently name (CC, 2026-09-16).
+
+**Note on numbering (2026-09-16).** #20 to #23 were written up in `06-QUEUE.md` posts and never reached
+this list, so a reader checking "am I repeating a known false green?" against the checklist saw the list
+stop at 19 — a checklist with a gap in it is the shape of the thing it exists to prevent. They are
+transcribed above from those posts.
 
 ---
 

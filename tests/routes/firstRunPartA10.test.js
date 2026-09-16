@@ -16,6 +16,7 @@ import { code } from "../helpers/code.js";
 import { scoreProduct, pickWeakest, toScorable } from "../../app/utils/startState.server.js";
 import { costSentence, creditsLeft, uniformScoreNote } from "../../app/utils/startCopy.js";
 import { quotaPct } from "../../app/utils/quota.js";
+import { PRODUCT_STATE, rowActionHref } from "../../app/utils/productState.js";
 
 const node = (over = {}) => ({
   id: "gid://shopify/Product/1",
@@ -58,8 +59,11 @@ describe("FR8 — the row's number is that product's", () => {
 
   it("the row badge renders target.scoreBefore and never the store score", () => {
     const src = code(readFileSync("app/components/StartState.jsx", "utf8"));
-    expect(src).toMatch(/This product: \{scoreBefore\}\/100/);
+    // FR8 (Phase 14) — still target.scoreBefore and never the store score; the
+    // label now names the moment, because the number is the FIRST-RUN score.
+    expect(src).toMatch(/At first run: \{scoreBefore\}\/100/);
     expect(src).not.toMatch(/This product: \$\{scan\.storeScore\}/);
+    expect(src).not.toMatch(/This product: \{scoreBefore\}/);
     expect(readFileSync("app/utils/startState.server.js", "utf8")).toMatch(/scoreBefore: p\.scores\.combined/);
   });
 
@@ -100,8 +104,12 @@ describe("N1 — the splash states what the card will show", () => {
 });
 
 describe("FR13 — Review opens Review, scoped to the product", () => {
-  it("the Products row navigates with the product id", () => {
-    expect(code(readFileSync("app/routes/app.products.jsx", "utf8"))).toMatch(/navigate\(rowActionLabel\(id, description\) === "Review" \? `\/app\/review\?product=\$\{numericId\}` : `\/app\/products\/\$\{numericId\}`\)/); // Phase 12 A1: one navigate, after the bubble is stopped
+  it("the Products row navigates with the product id, decided by state rather than by the label", () => {
+    expect(code(readFileSync("app/routes/app.products.jsx", "utf8"))).toMatch(/navigate\(rowActionHref\(stateOfContentMap\(contentMap\[id\]\), numericId\)\)/);
+    expect(rowActionHref(PRODUCT_STATE.DRAFT, "123")).toBe("/app/review?product=123");
+    expect(rowActionHref(PRODUCT_STATE.NEEDS_CONTENT, "123")).toBe("/app/products/123");
+    // the old form, kept named so it cannot come back a fourth time
+    expect(code(readFileSync("app/routes/app.products.jsx", "utf8"))).not.toMatch(/navigate\(rowActionLabel\(id, description\) === "Review"ts\/\$\{numericId\}`\)/); // Phase 12 A1: one navigate, after the bubble is stopped
   });
   it("the Review loader honours ?product= (numeric only) and the page says it is scoped, with a way back to all", () => {
     const src = code(readFileSync("app/routes/app.review.jsx", "utf8"));

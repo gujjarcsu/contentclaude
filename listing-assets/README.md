@@ -15,8 +15,17 @@ products and 13 products of published content, so the screens are populated rath
 
 ## The frames
 
-Captured against deploy `0740f67`. Sizes are 2× (deviceScaleFactor 2), so a 1600×900 frame is a
-3200×1800 PNG — which is what Shopify wants for a crisp listing.
+**Desktop frames are exactly 1600×900 pixels.** Not 1600×900 at 2×. The App Store editor rejects
+anything else, in its own words, when the owner uploaded by hand on 2026-09-15:
+*"Desktop screenshots must be 1600px by 900px"*. This file previously said a 3200×1800 PNG was
+"what Shopify wants"; that was never read off the editor, and the harness was fixed at `81fa07a` to
+match it — a correct fix to a wrong spec. `tools/proof/listing-assets.mjs` now captures desktop at
+`deviceScaleFactor: 1` and its fifth hurdle reads the PNG header to prove it.
+
+**Mobile frames are 750×1624 (375×812 at 2×) and that size is UNVERIFIED.** Nobody has seen the
+editor's error for a mobile slot, which is the same standing 3200×1800 had. **To settle it:** open
+the listing editor, drag one mobile PNG into a mobile slot, and copy the error verbatim if it is
+refused — then set `scaleOf()` in the harness and this line from that sentence, not from this one.
 
 | # | File | Slot | Caption (< 100 chars) |
 |---|---|---|---|

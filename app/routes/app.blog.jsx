@@ -596,14 +596,16 @@ export default function BlogPage() {
                       <Text as="p" variant="bodySm" fontWeight="semibold">
                        {t("Monthly credits")}
                       </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
+                      <Text id="blog-credit-usage" as="p" variant="bodySm" tone="subdued">
                         {usageCount}/{monthlyCredits}
                       </Text>
                     </InlineStack>
+                    {/* FR14 — labelled by the count, never by the rounded percent alone. */}
                     <ProgressBar
                       progress={usagePct}
                       tone={usagePct >= 90 ? "critical" : "success"}
                       size="small"
+                      ariaLabelledBy="blog-credit-usage"
                     />
                   </BlockStack>
                 </Card>

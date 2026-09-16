@@ -797,7 +797,7 @@ export default function Dashboard() {
         <StoreScoreCard score={storeScore} />
 
         {/* Phase 12 A4 / FR8 — the result of the first run leads until the first publish. */}
-        {beforeFirstPublish && <FirstRunFindingsCard findings={findings} blockers={blockers} navigate={navigate} />}
+        {beforeFirstPublish && <FirstRunFindingsCard findings={findings} blockers={blockers} scanned={storeScore?.scanned ?? null} navigate={navigate} />}
 
         {/* Phase 4 item 5 — what autopilot did while nobody was watching.
             Phase 12 A3 — counted over the score card's own window, and named
@@ -1080,12 +1080,17 @@ export default function Dashboard() {
                   adjacent lines, in two different phrasings. The bar shows the
                   proportion; this shows the count; the line under the bar is
                   the one that carries the reset date. */}
-              <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
+              <Text id="home-credit-usage" as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
                 {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits: plan.monthlyCredits })}
               </Text>
             </InlineStack>
 
-            <ProgressBar progress={usagePct} tone={usageTone} size="medium" />
+            {/* FR14 (Phase 14) — the visible primary number is the fraction
+                above. The bar's own label was the ROUNDED PERCENT and nothing
+                else, so a screen reader heard "1%" for 19 of 4,000 and "3%" for
+                3 of 100: a rounded percent alone, which is the defect. Point the
+                bar at the fraction and the percent is never the only number. */}
+            <ProgressBar progress={usagePct} tone={usageTone} size="medium" ariaLabelledBy="home-credit-usage" />
 
             {/* Phase 3 item 3.4 — a readout, not an upsell. This card and the
                 Home hero were two of the six surfaces a quota-hit merchant met.

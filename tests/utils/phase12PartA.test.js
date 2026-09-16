@@ -182,14 +182,15 @@ describe("A4 — the first screen is a result, never a task", () => {
   it("before the first publish Home leads with the findings card and the theme step is one dismissible line; after it, the setup card", () => {
     const h = src("app/routes/app._index.jsx");
     expect(h).toMatch(/const beforeFirstPublish = !!shopRow && !shopRow\.firstPublishAt;/);
-    expect(h).toMatch(/\{beforeFirstPublish && <FirstRunFindingsCard findings=\{findings\} blockers=\{blockers\} navigate=\{navigate\} \/>\}/);
+    expect(h).toMatch(/\{beforeFirstPublish && <FirstRunFindingsCard findings=\{findings\} blockers=\{blockers\} scanned=\{storeScore\?\.scanned \?\? null\} navigate=\{navigate\} \/>\}/);
     expect(h).toMatch(/\{beforeFirstPublish \? <EmbedLaterNote confirmed=\{embedConfirmed\} \/> : <EmbedSetupCard shopDomain=\{shopDomain\} confirmed=\{embedConfirmed\} \/>\}/);
     expect(h.indexOf("<FirstRunFindingsCard")).toBeLessThan(h.indexOf("<EmbedLaterNote"));
     const e = src("app/components/EmbedSetupCard.jsx");
     expect(e).toMatch(/export function EmbedLaterNote/);
     expect(e).toMatch(/onDismiss=\{\(\) => setDismissed\(true\)\}/);
     const c = src("app/components/FirstRunFindingsCard.jsx");
-    expect(c).toMatch(/This product: \{scoreBefore\}\/100/); // FR8, durable
+    expect(c).toMatch(/At first run: \{scoreBefore\}\/100/); // FR8, durable — and labelled with its moment (Phase 14)
+    expect(c).toMatch(/uniformScoreNote/); // …and when every row scores the same, the card says why
     expect(c).toMatch(/navigate\(`\/app\/review\?product=\$\{numericId\(f\.productId\)\}`\)/);
     expect(src("app/utils/storeScore.server.js")).toMatch(/export async function firstRunFindings/);
   });
@@ -198,7 +199,7 @@ describe("A4 — the first screen is a result, never a task", () => {
 describe("A1 and A2 — the click and the link", () => {
   it("A1: the row's Review handler stops the bubble before it navigates, and the click harness exists", () => {
     const p = src("app/routes/app.products.jsx");
-    expect(p).toMatch(/e\?\.stopPropagation\?\.\(\);\s*e\?\.preventDefault\?\.\(\);\s*navigate\(rowActionLabel\(id, description\) === "Review"/);
+    expect(p).toMatch(/e\?\.stopPropagation\?\.\(\);\s*e\?\.preventDefault\?\.\(\);\s*navigate\(rowActionHref\(/);
     const harness = readFileSync("tools/proof/fr13-click.mjs", "utf8");
     expect(harness).toMatch(/await button\.click\(\)/);
     expect(harness).toMatch(/\/\^\\\/app\\\/review\\\?product=\\d\+\$\//);

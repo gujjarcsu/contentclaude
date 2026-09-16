@@ -25,10 +25,33 @@ jobs:
           KINDS: ${{ inputs.kinds }}
         run: |
           set -euo pipefail
-          # Only domains, '=', kinds, spaces and commas may reach the shell on a production machine.
-          if ! printf '%s' "$KINDS" | grep -Eq '^[A-Za-z0-9.=, -]*$'; then
-            echo "::error::kinds may contain only domains, '=', kinds, spaces and commas"; exit 1
-          fi
+          # Only domains, '=', kinds, spaces and commas may reach the shell on a
+          # production machine.
+          #
+          # Phase 14 item 6 — THIS GUARD HAD TWO FAULTS, AND GREP CAUSED BOTH.
+          #
+          # It was:  if ! printf '%s' "$KINDS" | grep -Eq '^[A-Za-z0-9.=, -]*$'
+          #
+          # 1. EMPTY INPUT ALWAYS FAILED. `printf '%s' ""` writes zero bytes, so
+          #    grep receives no LINE, matches nothing and exits 1 — and the `!`
+          #    turned "nothing to validate" into "invalid". The workflow's own
+          #    documented mode, "empty to list only", failed its own guard in
+          #    12 s, twice, on two different days.
+          #
+          # 2. A NEWLINE WOULD HAVE PASSED IT. `grep -q` succeeds if ANY line
+          #    matches. Given "a.myshopify.com=real\nb; rm -rf /" it matched
+          #    line 1 and exited 0 — and $KINDS is then interpolated whole, with
+          #    the newline, into `sh -c` on the production machine. The UI field
+          #    is single-line, but `gh workflow run -f kinds=...` is not, so this
+          #    was reachable. Proved, both ways, in tests/docs/workflowInputGuards.test.js.
+          #
+          # A `case` pattern has no concept of lines: it matches the WHOLE value.
+          # Empty contains no disallowed character, so it passes; a newline is
+          # not in the allowed set, so it is refused. No subprocess either.
+          case "$KINDS" in
+            *[!A-Za-z0-9.=,\ -]*)
+              echo "::error::kinds may contain only domains, '=', kinds, spaces and commas — and must be one line"; exit 1 ;;
+          esac
           flyctl ssh console --app contentclaude \
             -C "sh -c 'KINDS=\"${KINDS}\" node /app/scripts/shop-kind--writes-classification.mjs'" | tee kinds.json
           {

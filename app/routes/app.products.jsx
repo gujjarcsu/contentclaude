@@ -65,7 +65,7 @@ import {
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { QuotaWarningBanner, QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getQuotaWarning } from "../utils/quotaSurfaces.server.js";
-import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap, matchesListFilter } from "../utils/productState.js";
+import { PRODUCT_STATE, PRODUCT_STATE_LABEL, stateOfContentMap, matchesListFilter, rowActionHref } from "../utils/productState.js";
 import { productScoresFor } from "../utils/storeScore.server.js";
 import { shopifyQuery, productsPage } from "../utils/shopifyQuery.server.js";
 import { publishProductWithRetry } from "../utils/adminGraphql.server.js";
@@ -751,12 +751,17 @@ export default function ProductsPage() {
    * Three states, three verbs. "Generate" over a merchant's own paragraph is
    * the app telling them their work is missing.
    */
+  // FR13 (Phase 14) — the LABEL and the DESTINATION are now derived separately
+  // from the same state, because the old code compared this label to the
+  // English "Review" to pick the route. See rowActionHref in productState.js.
+  // The label was also rendering raw English on a six-language UI; it is a key
+  // now, like every other string on this screen.
   function rowActionLabel(productId, description) {
     const state = stateOfContentMap(contentMap[productId]);
-    if (state !== PRODUCT_STATE.NEEDS_CONTENT) return "Review";
+    if (state !== PRODUCT_STATE.NEEDS_CONTENT) return t("Review");
     return actionFor({ hasOwnContent: hasRealContent(description) }) === CONTENT_ACTION.ENHANCE
-      ? "Enhance"
-      : "Generate";
+      ? t("Enhance")
+      : t("Generate");
   }
 
   function getStatusBadge(productId, description) {
@@ -1055,12 +1060,13 @@ export default function ProductsPage() {
                   {t("Monthly credits")}
                 </Text>
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="p" variant="bodySm" tone="subdued">
+                  <Text id="products-credit-usage" as="p" variant="bodySm" tone="subdued">
                     {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits })}
                   </Text>
                 </InlineStack>
               </InlineStack>
-              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />
+              {/* FR14 — labelled by the count, never by the rounded percent alone. */}
+              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="products-credit-usage" />
             </BlockStack>
           </Card>
         )}
@@ -1268,7 +1274,7 @@ export default function ProductsPage() {
                             // page. Stop the bubble; then navigate once.
                             e?.stopPropagation?.();
                             e?.preventDefault?.();
-                            navigate(rowActionLabel(id, description) === "Review" ? `/app/review?product=${numericId}` : `/app/products/${numericId}`);
+                            navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId));
                           }}
                         >
                           {rowActionLabel(id, description)}

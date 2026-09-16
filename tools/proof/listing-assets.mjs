@@ -71,6 +71,24 @@ const FRESH_STORE = process.env.FRESH_STORE || "navaal-ttv-02";
  * `must` is a string only this screen renders. It is the guard against a run
  * that captures five pictures of the same page and calls it a success.
  */
+/**
+ * Phase 14 item 5 — the pixel scale each frame is captured at.
+ *
+ * DESKTOP 1x: the App Store editor rejects anything else. Verbatim, from the
+ * editor, on the owner's own upload 2026-09-15: "Desktop screenshots must be
+ * 1600px by 900px". So a desktop frame IS 1600x900 pixels, not 1600x900 CSS
+ * pixels at 2x.
+ *
+ * MOBILE 2x, UNVERIFIED: 750x1624 is what 375x812 at 2x produces, and nobody
+ * has yet seen the editor's error for a mobile slot. That is exactly how
+ * 3200x1800 survived — one unchecked number in a README, repeated until it
+ * looked like a fact. It stays 2x because changing it would be a second guess;
+ * the step that settles it is in listing-assets/README.md, and it costs one
+ * upload attempt.
+ */
+export const DESKTOP_MIN_WIDTH = 500;
+export const scaleOf = (f) => (f.width >= DESKTOP_MIN_WIDTH ? 1 : 2);
+
 const FRAMES = [
   {
     file: "01-home-desktop.png",
@@ -204,7 +222,20 @@ for (const f of SELECTED) {
     viewport: f.width >= 500
       ? { width: f.width + 320, height: f.height + 200 }
       : { width: f.width, height: f.height + 220 },
-    deviceScaleFactor: 2,
+    // Phase 14 item 5 — THE SCALE IS PER FRAME, AND DESKTOP IS 1x.
+    //
+    // This was a flat `2`, so a 1600x900 desktop frame produced a 3200x1800
+    // PNG, and listing-assets/README.md said that was "what Shopify wants".
+    // The editor's own words, when the owner uploaded by hand on 2026-09-15:
+    // "Desktop screenshots must be 1600px by 900px". It rejects 3200x1800.
+    // CW's shape fix at 81fa07a was a correct fix to a wrong spec, and this
+    // is the spec corrected — read off the editor rather than off the README.
+    //
+    // Mobile keeps 2x, and is labelled UNVERIFIED wherever it is written down:
+    // 750x1624 has never been checked against the editor's error the way the
+    // desktop size now has, and guessing twice is how 3200x1800 survived for
+    // months. See listing-assets/README.md.
+    deviceScaleFactor: scaleOf(f),
     userAgent: BROWSER_UA, // desktop UA even at 375px — a phone UA makes the
     hasTouch: f.width < 500, // admin cover itself with a "Download the app" promo
   });
@@ -352,10 +383,11 @@ for (const f of SELECTED) {
     // hurdle ever opened the file and looked.
     const pw = bytes.readUInt32BE(16);
     const ph = bytes.readUInt32BE(20);
-    if (pw !== f.width * 2 || ph !== f.height * 2) {
+    const scale = scaleOf(f);
+    if (pw !== f.width * scale || ph !== f.height * scale) {
       throw new Error(
-        `PNG is ${pw}x${ph}; the listing was promised ${f.width * 2}x${f.height * 2} ` +
-        `(${f.width}x${f.height} at 2x)`
+        `PNG is ${pw}x${ph}; the listing was promised ${f.width * scale}x${f.height * scale} ` +
+        `(${f.width}x${f.height} at ${scale}x)`
       );
     }
     if (size < 20_000) throw new Error(`PNG is implausibly small (${size} bytes) — probably a blank page`);

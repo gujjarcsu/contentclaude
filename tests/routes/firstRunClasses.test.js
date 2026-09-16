@@ -107,7 +107,11 @@ describe("A5 — buttons do what they say", () => {
   const p = src("app/routes/app.products.jsx");
 
   it("a row's Review button opens Review", () => {
-    expect(p).toMatch(/navigate\(rowActionLabel\(id, description\) === "Review" \? `\/app\/review\?product=\$\{numericId\}` : `\/app\/products\/\$\{numericId\}`\)/);
+    // FR13 (Phase 14) — the destination is no longer read off the button's own
+    // label. It is a pure function of the row's state, so it survives the label
+    // being translated and can be proved without a click.
+    expect(p).toMatch(/navigate\(rowActionHref\(stateOfContentMap\(contentMap\[id\]\), numericId\)\)/);
+    expect(p).not.toMatch(/rowActionLabel\([^)]*\)\s*===\s*"Review"/);
     expect(p).toMatch(/e\?\.stopPropagation\?\.\(\);/); // FR13, third time: the click must not bubble into the row
   });
 
@@ -137,8 +141,13 @@ describe("A6 — the score, labelled and not scary", () => {
     expect(s).not.toMatch(/Your store scores \{scan\.storeScore\}\/100/);
   });
 
-  it("a product row shows its own score, labelled as the product's", () => {
-    expect(src("app/components/StartState.jsx")).toMatch(/This product: \{scoreBefore\}\/100/);
+  it("a product row's score is labelled with the moment it belongs to, not asserted as current", () => {
+    // FR8 (Phase 14) — `scoreBefore` is frozen when the row is created, so
+    // "This product: 35/100" beside a live store score of 39 was false about
+    // WHEN, not about whose. Naming the moment makes it true in both cases.
+    const s = src("app/components/StartState.jsx");
+    expect(s).toMatch(/At first run: \{scoreBefore\}\/100/);
+    expect(s).not.toMatch(/This product: \{scoreBefore\}/);
   });
 
   it("spent credits never display as 0%", () => {

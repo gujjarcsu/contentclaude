@@ -165,3 +165,36 @@ export function matchesListFilter(product, contentByType, statusFilter) {
   if (statusFilter === "needsContent") return state === PRODUCT_STATE.NEEDS_CONTENT;
   return true;
 }
+
+/**
+ * FR13 (Phase 14) — WHERE A PRODUCT ROW'S BUTTON GOES. Pure.
+ *
+ * FR13 has been "fixed" three times and recurred three times, and the reason is
+ * the shape of the old code rather than any one line of it. The route was
+ * chosen by comparing the button's own DISPLAY LABEL to the English word
+ * "Review":
+ *
+ *     navigate(rowActionLabel(id, description) === "Review" ? review : product)
+ *
+ * Two faults in one expression. It couples a destination to a string that
+ * exists to be read by a human — so translating that label (Phase 12 put the
+ * whole UI into six languages, and this button was still rendering the raw
+ * English) would silently send every non-English merchant to the wrong screen,
+ * with no test failing. And it buries the decision in a render callback, where
+ * the only proof is a click — which is exactly what three sessions could not
+ * perform (false green #16: a control proved by its route).
+ *
+ * So the decision moves here: one pure function of the row's state, provable
+ * without a browser. The label is derived separately and may be translated
+ * freely.
+ *
+ * @param {string} state             one of PRODUCT_STATE
+ * @param {string|number} numericId  Shopify's numeric product id
+ * @returns {string} the path the row's primary button must navigate to
+ */
+export function rowActionHref(state, numericId) {
+  const id = String(numericId ?? "");
+  // Anything that HAS content — draft, published, unverified, rejected — is
+  // reviewed. Only a product with nothing written goes to the generate page.
+  return state === PRODUCT_STATE.NEEDS_CONTENT ? `/app/products/${id}` : `/app/review?product=${id}`;
+}

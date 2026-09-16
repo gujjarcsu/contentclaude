@@ -44,8 +44,18 @@ Then say, in one line, how many CW tasks are open and which you are starting wit
 
 1. **Never type the owner's credentials.** If something needs a login the browser does not already
    have, stop and say so.
-2. **Never write to the EBS commercial catalogue** (`askebs.com.au`, and its Shopify store). Read
-   only. Shopify has no undo for a bulk product edit.
+2. **Never write to the EBS commercial catalogue.** Read only. Shopify has no undo for a bulk
+   product edit. The stores, by domain: `askebs.myshopify.com`, and the owner's own build holding
+   a client's catalogue — `r20bcm-2d.myshopify.com`, which 301s to
+   `ebs-bathroom-and-plumbing-supplies-3.myshopify.com`. **What the app enforces, stated exactly,
+   because this rule read as an absolute before it was one:** until 2026-09-16 the secret
+   `REMEDIATION_LOCKED_SHOPS` stopped catalogue *fixes* only — Review, a product page, a bulk job
+   and autopilot never checked it. Since Phase 14 the guard sits on the graphql callable itself
+   (`app/utils/writeLock.server.js`), wrapped around all three ways this app can reach Shopify, so
+   **every** mutation against a locked shop is refused with *"This store is monitored only."* Reads
+   are deliberately untouched: a locked store is still audited and scored. The lock is a
+   development-time belt, not a property of the store — removing a domain from the secret restores
+   writing, which is what happens the day a client deliberately adopts the app.
 3. **Read every result back on a fresh page load**, not from the confirmation screen. A save
    confirmation is not evidence.
 4. **"Could not read" and "no change" are different findings.** Never substitute one for the other.

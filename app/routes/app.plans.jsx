@@ -773,6 +773,7 @@ export default function PlansPage() {
                   {t("{usageCount} used", { usageCount })}
                 </Text>
                 <Text
+                  id="plans-credit-usage"
                   as="p"
                   variant="bodySm"
                   fontWeight="semibold"
@@ -781,7 +782,8 @@ export default function PlansPage() {
                   {t("{usageRemaining} remaining of {monthlyCredits}", { usageRemaining, monthlyCredits: plan.monthlyCredits })}
                 </Text>
               </InlineStack>
-              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" />
+              {/* FR14 — labelled by the count, never by the rounded percent alone. */}
+              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="plans-credit-usage" />
               {usagePct >= 70 && plan.planName !== "pro" && (
                 <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "critical" : undefined}>
                   {usagePct >= 90 ? t("Nearly at limit") : t("Usage climbing — consider upgrading")}

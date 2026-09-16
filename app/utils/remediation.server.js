@@ -18,40 +18,21 @@ import { remainingGenerations, sliceToQuota } from "./plans.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { parseFindings } from "./catalogueWatch.js";
 import { FREE_CONTENT_TYPES } from "./credits.js";
-import { FIX, FIX_LABEL, FIX_ERRORS, inferOptionName, parseLockedShops, isLockedShop, withoutFinding, isValidGtin, candidatesFromRows } from "./remediation.js";
-
-export const PROPOSAL_CAP = 50;
-const LOCKED = parseLockedShops(process.env.REMEDIATION_LOCKED_SHOPS);
-
-export class RemediationLocked extends Error {
-  constructor(shop) {
-    super(FIX_ERRORS.monitoredOnly);
-    this.name = "RemediationLocked";
-    this.shop = shop;
-  }
-}
-
-/** Throws before any write for a locked shop. The message is merchant-safe. */
-export function assertWritable(shop) {
-  if (isLockedShop(shop, LOCKED)) {
-    logger.warn({ shop, event: "remediation_refused_locked" }, "remediation refused: locked shop");
-    throw new RemediationLocked(shop);
-  }
-}
-
-export function isRemediationLocked(shop) {
-  return isLockedShop(shop, LOCKED);
-}
+import { FIX, FIX_LABEL, FIX_ERRORS, inferOptionName, withoutFinding, isValidGtin, candidatesFromRows } from "./remediation.js";
 
 /**
- * P3 (Phase 8) — is the lock CONFIGURED at all? The brief: nothing is
- * submitted to Bing "while REMEDIATION_LOCKED_SHOPS is unset". A lock that
- * does not exist protects nothing, so the holdout refuses to run until the
- * owner has set it — even to an empty list is not enough; it must be present.
+ * Phase 14 item 1 — the lock itself moved to `writeLock.server.js`, where it
+ * also wraps the three graphql factories, so that Review, the product page, a
+ * bulk job and autopilot are covered too. These five writers keep calling
+ * `assertWritable(shop)` first: it fails earlier and more cheaply than the
+ * choke point, and belt-and-braces on a guard that protects a third party's
+ * catalogue is the right trade. Re-exported because the route and the tests
+ * import them from here.
  */
-export function lockConfigured() {
-  return typeof process.env.REMEDIATION_LOCKED_SHOPS === "string" && process.env.REMEDIATION_LOCKED_SHOPS.trim().length > 0;
-}
+export { RemediationLocked, assertWritable, isRemediationLocked, lockConfigured } from "./writeLock.server.js";
+import { assertWritable } from "./writeLock.server.js";
+
+export const PROPOSAL_CAP = 50;
 
 const OPTIONS_QUERY = `query optionValues($ids: [ID!]!) {
   nodes(ids: $ids) {

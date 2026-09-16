@@ -11,6 +11,7 @@ import { BILLING_PLANS as BILLING_PLAN_BASE, TRIAL_DAYS } from "./utils/billing-
 import { buildBillingConfig } from "./utils/billing-config.js";
 import { refreshOfflineToken } from "./utils/offlineToken.server.js";
 import { noteAfterAuth, trackShopAuth } from "./utils/installTracking.server.js";
+import { guardShopWrites } from "./utils/writeLock.server.js";
 
 // Billing test mode: always on outside production (real charges off). In
 // production it's off — UNLESS explicitly overridden for pre-launch testing.
@@ -41,9 +42,35 @@ export const BILLING_PLANS = Object.fromEntries(
 
 export { BILLING_TEST };
 
+/**
+ * Phase 14 item 7 — THE APP BOOTS WITH EXACTLY ONE CLIENT SECRET, OR NOT AT ALL.
+ *
+ * `apiSecretKey: process.env.SHOPIFY_API_SECRET || ""` booted happily with no
+ * secret at all, and `startup.server.js` only pushed a WARNING where a missing
+ * REDIS_URL is fatal. An empty HMAC key is not "unconfigured": it is a key an
+ * attacker also knows, so every webhook signature and every signed URL would
+ * verify against a value anyone can compute. Fail at boot instead — the same
+ * shape as the BILLING_TEST guard below, for the same reason.
+ *
+ * "Exactly one" is also the point of the hygiene item this came from: the app's
+ * client secret from 4 June has never been revoked, so two are live in the
+ * Partner Dashboard three months apart. Fly holds ONE (`fly secrets list` shows
+ * a single SHOPIFY_API_SECRET row), and which of the two it is cannot be
+ * determined from inside the app without printing a secret. The owner's step,
+ * with its rollback, is in OWNER-CHECKLIST.md.
+ */
+const API_SECRET = process.env.SHOPIFY_API_SECRET || "";
+if (process.env.NODE_ENV === "production" && API_SECRET.trim() === "") {
+  throw new Error(
+    "FATAL: SHOPIFY_API_SECRET is not set — every webhook HMAC and signed URL would be " +
+      "verified against an empty key, which anyone can compute. Set the secret with " +
+      "`fly secrets import` from a file before deploying.",
+  );
+}
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+  apiSecretKey: API_SECRET,
   apiVersion: ApiVersion.April26,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
@@ -123,6 +150,28 @@ async function adminWithTokenRefresh(request) {
     throw err;
   }
 }
+/**
+ * Phase 14 item 1 — THE WRITE LOCK'S CHOKE POINT FOR EVERY REQUEST PATH.
+ *
+ * `REMEDIATION_LOCKED_SHOPS` guarded five call sites inside
+ * remediation.server.js and nothing else, so a locked shop could still be
+ * published to through Review, a product page, a bulk job or autopilot. This
+ * is the one place every authenticated admin request passes through (the
+ * comment below already said so, for install tracking), so it is where the
+ * guard belongs: one wrapper, and a route added next month inherits it.
+ *
+ * Reads are untouched — `guardShopWrites` returns the original function for
+ * any shop that is not locked, and passes every non-mutation document through
+ * for one that is. A locked store is still audited and scored.
+ */
+function guardedAdminContext(ctx) {
+  const shop = ctx?.session?.shop;
+  if (!ctx?.admin?.graphql || !shop) return ctx;
+  const guarded = guardShopWrites(ctx.admin.graphql.bind(ctx.admin), shop);
+  if (guarded === ctx.admin.graphql) return ctx;
+  return { ...ctx, admin: Object.assign(Object.create(Object.getPrototypeOf(ctx.admin)), ctx.admin, { graphql: guarded }) };
+}
+
 shopify.authenticate.admin = async (request) => {
   const ctx = await adminWithTokenRefresh(request);
   // Install-source tracking — the shop record (see installTracking.server.js).
@@ -131,7 +180,19 @@ shopify.authenticate.admin = async (request) => {
   // authenticated admin request passes through. Never throws; the common
   // request is a Set lookup, so the happy path stays untouched.
   await trackShopAuth(request, ctx?.session?.shop);
-  return ctx;
+  return guardedAdminContext(ctx);
+};
+
+// The other way in: `unauthenticated.admin(shop)`, used by the llms.txt
+// renderer. A read today — guarded anyway, because "it only reads" is a
+// property of today's caller, not of the door.
+const _rawUnauthenticatedAdmin = shopify.unauthenticated.admin.bind(shopify.unauthenticated);
+shopify.unauthenticated.admin = async (shop, ...rest) => {
+  const ctx = await _rawUnauthenticatedAdmin(shop, ...rest);
+  if (!ctx?.admin?.graphql) return ctx;
+  const guarded = guardShopWrites(ctx.admin.graphql.bind(ctx.admin), ctx?.session?.shop ?? shop);
+  if (guarded === ctx.admin.graphql) return ctx;
+  return { ...ctx, admin: Object.assign(Object.create(Object.getPrototypeOf(ctx.admin)), ctx.admin, { graphql: guarded }) };
 };
 
 export const authenticate = shopify.authenticate;

@@ -97,8 +97,18 @@ export async function runStartupChecks() {
         "Set the REDIS_URL secret before deploying.",
     );
   }
+  // Phase 14 item 7 — a missing client secret is FATAL in production, not a
+  // warning. An empty HMAC key is not "unconfigured": it is a key an attacker
+  // also knows, so every webhook signature and signed URL would verify against
+  // a value anyone can compute. Same shape as REDIS_URL above, for a sharper
+  // reason. The throw also lives in shopify.server.js, where the value is
+  // consumed and where import order cannot skip it.
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) {
-    warnings.push("Shopify API credentials not configured");
+    const msg = "Shopify API credentials not configured";
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`FATAL: ${msg} — SHOPIFY_API_SECRET must be set; an empty HMAC key is forgeable`);
+    }
+    warnings.push(msg);
   }
   const appUrl = process.env.SHOPIFY_APP_URL || "";
   if (!appUrl || appUrl.includes("example.com")) {

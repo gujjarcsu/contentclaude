@@ -1,0 +1,184 @@
+{
+  "readAt": "2026-09-16T05:06:05.987Z",
+  "listingLive": "2026-09-08T00:00:00.000Z",
+  "shops": [
+    {
+      "shop": "zephyrin-wynter-a01g3uy4.myshopify.com",
+      "present": true,
+      "kindAsStored": "unclassified",
+      "install": {
+        "installedAt": "2026-09-10T15:44:52.134Z",
+        "installCount": 1,
+        "reinstalledAt": null,
+        "uninstalledAt": null,
+        "redactedAt": null,
+        "stillInstalledPerOurRow": true,
+        "installSource": "unknown",
+        "surfaceType": null,
+        "surfaceDetail": null,
+        "installRef": null,
+        "utmSource": null,
+        "installLandingPath": "/app",
+        "installRefererHost": "admin.shopify.com",
+        "locale": null,
+        "localeSource": null,
+        "uiLocale": null
+      },
+      "reviewWindow": {
+        "listingLive": "2026-09-08T00:00:00.000Z",
+        "daysAfterListingLive": 2.7
+      },
+      "token": {
+        "offlineSessionPresent": true,
+        "offlineTokenPresent": true,
+        "offlineTokenExpires": "2026-09-15T17:01:03.426Z",
+        "offlineScope": "write_content,write_products",
+        "onlineSessions": 0,
+        "sessionsTotal": 1
+      },
+      "plan": {
+        "planName": "free",
+        "status": "active",
+        "monthlyCredits": 100,
+        "hasShopifyCharge": false,
+        "trialEndsAt": null,
+        "createdAt": "2026-09-10T15:44:52.259Z"
+      },
+      "trialUsedAt": null,
+      "catalogue": {
+        "productCountAtFirstLoad": 0,
+        "productsScored": 0
+      },
+      "content": {
+        "rowsTotal": 0,
+        "published": 0,
+        "drafts": 0,
+        "firstCreatedAt": null,
+        "lastUpdatedAt": null,
+        "lastStatus": null
+      },
+      "credits": {
+        "usageRows": 0,
+        "creditsSpent": 0,
+        "trialCreditsUsed": 0
+      },
+      "funnel": {
+        "caveat": "installed before the funnel migration (2026-09-15T09:00:00.000Z): firstScreenAt / firstApproveAt / returnedAt are null because the columns did not exist, NOT because nothing happened",
+        "firstScreenAt": null,
+        "quickStartStartedAt": null,
+        "quickStartDraftCount": 0,
+        "firstDraftSeenAt": null,
+        "firstDraftSource": null,
+        "firstApproveAt": null,
+        "firstPublishAt": null,
+        "returnedAt": null,
+        "reviewAskCount": 0
+      },
+      "lastActivity": {
+        "what": "installedAt",
+        "at": "2026-09-10T15:44:52.134Z"
+      },
+      "activityTimeline": [
+        {
+          "what": "installedAt",
+          "at": "2026-09-10T15:44:52.134Z"
+        }
+      ]
+    },
+    {
+      "shop": "peter-shops-2.myshopify.com",
+      "present": true,
+      "kindAsStored": "unclassified",
+      "install": {
+        "installedAt": "2026-09-11T17:44:09.490Z",
+        "installCount": 1,
+        "reinstalledAt": null,
+        "uninstalledAt": null,
+        "redactedAt": null,
+        "stillInstalledPerOurRow": true,
+        "installSource": "unknown",
+        "surfaceType": null,
+        "surfaceDetail": null,
+        "installRef": null,
+        "utmSource": null,
+        "installLandingPath": "/app",
+        "installRefererHost": "admin.shopify.com",
+        "locale": null,
+        "localeSource": null,
+        "uiLocale": null
+      },
+      "reviewWindow": {
+        "listingLive": "2026-09-08T00:00:00.000Z",
+        "daysAfterListingLive": 3.7
+      },
+      "token": {
+        "offlineSessionPresent": true,
+        "offlineTokenPresent": true,
+        "offlineTokenExpires": "2026-09-15T17:01:19.905Z",
+        "offlineScope": "write_content,write_products",
+        "onlineSessions": 0,
+        "sessionsTotal": 1
+      },
+      "plan": {
+        "planName": "free",
+        "status": "active",
+        "monthlyCredits": 100,
+        "hasShopifyCharge": false,
+        "trialEndsAt": null,
+        "createdAt": "2026-09-11T17:44:09.578Z"
+      },
+      "trialUsedAt": null,
+      "catalogue": {
+        "productCountAtFirstLoad": 2,
+        "productsScored": 0
+      },
+      "content": {
+        "rowsTotal": 3,
+        "published": 0,
+        "drafts": 3,
+        "firstCreatedAt": "2026-09-11T17:44:32.468Z",
+        "lastUpdatedAt": "2026-09-11T17:44:32.470Z",
+        "lastStatus": "draft"
+      },
+      "credits": {
+        "usageRows": 1,
+        "creditsSpent": 1,
+        "trialCreditsUsed": 0
+      },
+      "funnel": {
+        "caveat": "installed before the funnel migration (2026-09-15T09:00:00.000Z): firstScreenAt / firstApproveAt / returnedAt are null because the columns did not exist, NOT because nothing happened",
+        "firstScreenAt": null,
+        "quickStartStartedAt": "2026-09-11T17:44:22.650Z",
+        "quickStartDraftCount": 1,
+        "firstDraftSeenAt": "2026-09-11T17:44:32.499Z",
+        "firstDraftSource": "quick_start",
+        "firstApproveAt": null,
+        "firstPublishAt": null,
+        "returnedAt": null,
+        "reviewAskCount": 0
+      },
+      "lastActivity": {
+        "what": "firstDraftSeenAt",
+        "at": "2026-09-11T17:44:32.499Z"
+      },
+      "activityTimeline": [
+        {
+          "what": "firstDraftSeenAt",
+          "at": "2026-09-11T17:44:32.499Z"
+        },
+        {
+          "what": "lastContentUpdate",
+          "at": "2026-09-11T17:44:32.470Z"
+        },
+        {
+          "what": "quickStartStartedAt",
+          "at": "2026-09-11T17:44:22.650Z"
+        },
+        {
+          "what": "installedAt",
+          "at": "2026-09-11T17:44:09.490Z"
+        }
+      ]
+    }
+  ]
+}

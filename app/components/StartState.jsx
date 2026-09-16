@@ -132,7 +132,7 @@ function TargetCard({ target, autoStart, onDraft }) {
             {target.title}
           </Text>
           <InlineStack gap="200">
-            <Badge tone={scoreTone(target.scoreBefore)}>{t("This product: {scoreBefore}/100", { scoreBefore: target.scoreBefore })}</Badge>
+            <Badge tone={scoreTone(target.scoreBefore)}>{t("At first run: {scoreBefore}/100", { scoreBefore: target.scoreBefore })}</Badge>
             {lift != null && lift > 0 && <Badge tone="success">{t("+{lift}", { lift })}</Badge>}
           </InlineStack>
         </InlineStack>

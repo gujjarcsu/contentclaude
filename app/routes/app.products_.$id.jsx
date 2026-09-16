@@ -42,6 +42,7 @@ import { getEntitlements } from "../utils/billing-plans.js";
 import { snapshotAndPrune } from "../utils/contentVersion.server.js";
 import { sanitizeHtml } from "../utils/ai.server.js";
 import { readMutationResult } from "../utils/adminGraphql.server.js";
+import { FIX_ERRORS } from "../utils/remediation.js";
 import { normalizeAltTextResults } from "../utils/altText.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
@@ -707,6 +708,13 @@ export async function action({ request, params }) {
       const mutation = await readMutationResult(mutationResult, "productUpdate");
       if (!mutation.ok) {
         logger.error({ shop, productId, errors: mutation.errorMessages }, "Publish productUpdate failed");
+        // Phase 14 item 1 — a write-lock refusal is neither Shopify's fault nor
+        // merchant-fixable, and "try again in a moment" would be false: it is
+        // refused every time until the owner removes the domain from the secret.
+        // Say what actually happened.
+        if (mutationResult?.locked) {
+          return { error: t("Publishing failed — {msg} Nothing was published.", { msg: FIX_ERRORS.monitoredOnly }) };
+        }
         // userErrors are merchant-fixable (bad values); top-level errors are not —
         // show the specific reason only when it's actionable.
         const msg =

@@ -123,8 +123,13 @@ describe("both axes exist on every plan", () => {
       readdirSync(d, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`],
       );
-    const files = walk("app")
-      .filter((f) => /\.(js|jsx)$/.test(f))
+    // Phase 14 item 3 — this walked `app/` only, and the one place still
+    // reading `plan.monthlyLimit` was in `scripts/`: the seed-usage script,
+    // which therefore fell to its `?? 25` default and seeded a 100-credit store
+    // to 25. A guard that does not cover the file that broke is not the guard
+    // it claims to be.
+    const files = [...walk("app"), ...walk("scripts")]
+      .filter((f) => /\.(js|jsx|mjs)$/.test(f))
       // schemaColumns.generated.js is EXEMPT and must be: it lists the columns
       // that exist in the DATABASE, and the database column is still called
       // monthlyLimit. The rename was done with Prisma's @map so the client
@@ -134,7 +139,12 @@ describe("both axes exist on every plan", () => {
       // guard reads the real database, so this file naming the real column is
       // exactly right.
       .filter((f) => !f.endsWith(".generated.js"));
-    const offenders = files.filter((f) => readFileSync(f, "utf8").includes("monthlyLimit"));
+    // …and it reads CODE, not prose. 07-VERIFICATION.md records this exact
+    // shape ("a source-reading guard must strip comments, or it fires on its own
+    // documentation"): the seed script's comment explains the monthlyLimit
+    // defect by name, which is how a future session learns why the rule exists.
+    const { stripComments } = await import("../helpers/code.js");
+    const offenders = files.filter((f) => stripComments(readFileSync(f, "utf8")).includes("monthlyLimit"));
     expect(offenders, `still reference monthlyLimit: ${offenders.join(", ")}`).toEqual([]);
   });
 });

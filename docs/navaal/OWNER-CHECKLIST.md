@@ -1,5 +1,66 @@
 # OWNER CHECKLIST — things only Waqas can do
 
+## 🔴 PHASE 14 (2026-09-16) — TWO THINGS ONLY YOU CAN DO. Ten minutes, and one of them is security.
+
+**S1 — revoke the old client secret (5 minutes, Partner Dashboard). Do this one first.**
+The app's client secret was rotated; **the one created on 4 June was never revoked**, so two secrets
+have been able to sign for this app for three months. A client secret is the key behind every
+webhook HMAC and every signed URL — two live keys is twice the surface and only one of them is in
+use.
+
+What is known from this side, **without ever reading a value**: Fly holds **exactly one** secret
+under the name `SHOPIFY_API_SECRET`, status *Deployed*, with no second or rotated name beside it
+(`SHOPIFY_API_SECRET_OLD`, `_PREVIOUS`, a list — a test now fails if one ever appears). **Which of
+the two Partner-Dashboard secrets that is cannot be determined from here**, because deciding it
+would mean comparing the two values, and CC does not read or print a secret. Only the Partner
+Dashboard can tell you.
+
+1. Partner Dashboard → the app → **Client credentials**. Two client secrets are listed with their
+   creation dates.
+2. Revoke the **older** one — the **4 June** secret. Keep the newer.
+3. Watch the app for five minutes: open it from a store, and check the webhook deliveries page.
+4. **Rollback, if HMAC verification starts failing:** that means Fly held the 4 June one after all.
+   Re-import the *surviving* secret into Fly **from a file** — never `fly secrets set`, which leaves
+   the secret in your shell history. Three lines, and the secret is never typed where it is echoed
+   or recorded:
+
+   ```sh
+   read -rs SECRET                                           # types nothing to the screen
+   printf 'SHOPIFY_API_SECRET=%s
+' "$SECRET" > /tmp/s.env; unset SECRET
+   fly secrets import -a contentclaude < /tmp/s.env && shred -u /tmp/s.env
+   ```
+
+   Fly restarts the machine and verification recovers.
+
+**Why now, and not sooner:** the app used to boot happily with **no** secret at all —
+`apiSecretKey: process.env.SHOPIFY_API_SECRET || ""` — and an empty HMAC key is not "unconfigured",
+it is a key anybody can compute. That now throws at boot in production, so the failure mode above is
+a loud one, not a silent one (`tests/utils/clientSecret.test.js`).
+
+**A4 — finish the restore drill you started, then delete the branch (10 minutes, Neon console).**
+The drill proved a branch can be *created* from a point in time in 23 s. It has never proved the
+branch *contains* anything, and **a restore you have not read is not a restore** — which is the
+whole of line A4. CC has now recorded production's half, read-only:
+`docs/history/restore-drill-2026-09-16-production.json` — **23 tables, 337 columns, 18 tables with
+rows**. The branch's half cannot be read from here: `restore-drill-2026-09-16T0127Z`
+(`br-calm-rice-a7raewsp`, project `still-pond-32859153`) has **no compute endpoint**, and no Neon
+API key exists on this machine or in Fly.
+
+1. console.neon.tech → the project → **Branches** → `restore-drill-2026-09-16T0127Z` → **add a
+   compute endpoint**. Copy its **pooled** connection string; paste it nowhere but your shell.
+2. `COMPARE_DATABASE_URL='<branch string>' node scripts/restore-drill-compare.mjs > drill.json`
+   (read-only — every statement in it is a `SELECT`; it prints the host, never the string).
+3. `diff <(jq -S . docs/history/restore-drill-2026-09-16-production.json) <(jq -S . drill.json)`
+   — ignore the `readAt` and `host` lines, they are meant to differ.
+4. **PASS:** `columns` identical (the schema came across), and every row count on the branch is
+   ≤ production and **non-zero wherever production is non-zero**. **FAIL:** any table that is empty
+   on the branch and full on production — however green the branch's status looked.
+5. Paste the verdict into the queue. **Then delete the branch**, and the compute endpoint with it.
+
+**The branch is deliberately still there.** Deleting it before the comparison would have destroyed
+the only thing the comparison needs, so CC left it rather than closing the item on litter.
+
 ## 🔴 PHASE 12, ENGINEERING DONE — TWO LINES ONLY YOU CAN TICK (2026-09-15)
 
 **A4 — the restore drill (15 minutes, Neon console).** Line A4 of `11-MASTERPLAN.md` §6.5 says *a
@@ -40,8 +101,9 @@ ten products; (f) run the Crawl-holdout workflow. Seventy-two hours later the ap
 result about a store. That screen is the trial's hero moment and the first thing worth showing a
 prospect.
 
-**0b. F9 / P0.10 — Shopify Level 2 approval for `read_reports`** (a form, your account). P3.4 —
-AI-referral sessions per product — is built and tested and cannot run until this is granted.
+**0b. F9 / P0.10 — WITHDRAWN, NOTHING FOR YOU TO DO.** This asked you to apply for "Shopify
+Level 2 approval for `read_reports`". **CORRECTED 2026-09-16 (Phase 14 item 7): there is no form to apply for.** CW read the Partner API-access page in the owner session — it offers eight requests and none is `read_reports`. It is an ordinary scope, so this is governed by the scope decision (no new scopes until ten merchants), not by a Shopify review cycle. P0.10 is closed as a false premise. P3.4 — AI-referral sessions per product — stays built
+and tested behind a scope this app will not add until it has ten merchants.
 
 ## (the five below stand)
 
@@ -290,9 +352,10 @@ domain, domain ownership proven via Search Console, current contact info, and a 
 **Google's calendar is 3–8 weeks and there is no appeal.** Unverified apps are capped at **100 users
 total**. Free to start. Not started.
 
-### C. Apply for Shopify Level 2 protected customer data access **[blocks every AI-referral number]** — **this week**
-`shopifyqlQuery` needs `read_reports` **and** Level 2, even for queries that touch no customer data —
-Shopify staff confirmed this. Security questionnaire plus a review cycle. Not started.
+### C. ~~Apply for Shopify Level 2 protected customer data access~~ — **WITHDRAWN, do not start**
+**CORRECTED 2026-09-16 (Phase 14 item 7): there is no form to apply for.** CW read the Partner API-access page in the owner session — it offers eight requests and none is `read_reports`. It is an ordinary scope, so this is governed by the scope decision (no new scopes until ten merchants), not by a Shopify review cycle. P0.10 is closed as a false premise. `shopifyqlQuery` needs the `read_reports` scope, and adding a scope re-prompts every
+installed merchant for consent — which is a decision about our merchants, not a queue at Shopify.
+Nothing here is blocked on an approval; it is blocked on having ten merchants worth re-prompting.
 
 ### D. Write the list of 30 named prospects **[the critical path]** — **within 7 days**
 Names, not channels. Network, Bilby's audience, the navaal.ai list, communities where merchants
@@ -484,7 +547,9 @@ scheduler, stated on the screen.
    `/app/proof` reads out within 72 hours.
 
 **Two decisions filed as backlog rows:** F9 — P3.4 (AI sessions from ShopifyQL) is blocked on the
-Level 2 approval you were already asked to start (P0.10); F10 is the Bing step above.
+`read_reports` SCOPE, which re-prompts every installed merchant, and therefore on the scope decision
+(no new scopes until ten merchants). It is **not** blocked on a Level 2 approval: no such form
+exists, and P0.10 is closed as a false premise (corrected 2026-09-16). F10 is the Bing step above.
 
 ---
 

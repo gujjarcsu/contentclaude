@@ -128,7 +128,7 @@ $0.00 revenue and an unverified billing chain. That was the single largest unqua
 | P0.7 | CW | **Replace "Dedicated account manager" and "SLA support" on the live listing** with the wording in `12-OFFER.md` §6 — the service stays, the two undefined words go. Also audit the listing for **"llms.txt"** and **"instant indexing"**, both now banned. | immediately |
 | P0.8 | CC | **DONE 2026-09-14.** Audited every user-visible string in `app/routes` and `app/components` against **4.3.3/4.3.4** (statistics and superlatives, *"verifiable and unverifiable"*), **4.3.6/4.3.7** (testimonials), **4.2.2** (pricing in images) and the Sidekick / Shopify-purple branding rejection. **One real breach, and it was shipping:** the Pro plan card in `app/routes/app.plans.jsx` still said **"Dedicated account manager"** and **"SLA support"** — the two phrases `08-ECONOMICS.md` guardrail 6 bans outright. P0.7 covers the listing; this was the same wording *inside the app*, which nobody had checked. Replaced with the exact `12-OFFER.md` §6 wording: *"Direct access to the founder"*, *"Setup call when you start"*, *"Every question answered within one business day"*. The **service is unchanged** — only the two undefined words go. **Clean elsewhere:** no superlatives (every `first`/`only` hit is "the first N products" or a code comment); no testimonials; `llms.txt` appears only in log messages and the functional proxy route, never in rendered copy; no Sidekick icon and no Shopify-purple hex anywhere in `app/` or `public/`; and **4.2.2 checked twice, because the frames moved under me** — I first opened the committed `01-home-desktop.png` (a plan *name* and a usage count, no price), then a parallel session **re-captured all seven frames at 00:22:53Z**, which made that reading stale. Re-checked against the new capture: no price-shaped string in any of the seven extracted texts. *(Their `04-start-desktop.png` is `ok:false` with a stated reason and correctly not written — their work, untouched.)* **Made permanent:** `tests/docs/app-store-copy.test.js`, 181 assertions, fails the build if any banned phrase returns. It strips comments first — the fix for this rule leaves a comment *saying* "SLA" to explain why it is gone, and a scanner that cannot tell those apart would fail on its own fix and get switched off. Its testimonial regex was tightened after it flagged a `<Select>` option as a testimonial by matching across newlines. | ✅ done |
 | **P0.9** | **OWNER** | **Start Google OAuth app verification** for `webmasters.readonly` — assume it is a sensitive scope. Needs a published privacy policy, a verified domain, a demo video, and **3–8 weeks of Google's calendar**. Free to start, blocks the entire Google proof engine, **not started**. | **this week** |
-| **P0.10** | **OWNER** | **Apply for Shopify Level 2 protected customer data access.** Required for `shopifyqlQuery`, therefore for every AI-referral number we want to show. Security questionnaire and review cycle. **Not started.** | **this week** |
+| **P0.10** | ~~OWNER~~ | **CLOSED AS A FALSE PREMISE 2026-09-16.** This said: apply for Shopify Level 2 protected customer data access, required for `shopifyqlQuery`. **CORRECTED 2026-09-16 (Phase 14 item 7): there is no form to apply for.** CW read the Partner API-access page in the owner session — it offers eight requests and none is `read_reports`. It is an ordinary scope, so this is governed by the scope decision (no new scopes until ten merchants), not by a Shopify review cycle. P0.10 is closed as a false premise. What `shopifyqlQuery` actually needs is the ordinary `read_reports` scope, and adding a scope re-prompts every installed merchant — so P3.4 waits on ten merchants, not on Shopify. | **closed** |
 | P0.11 | COWORK | **Reconcile `04-DECISIONS.md` against `09-DOCTRINE.md` line by line.** Mark every conflicted row `SUPERSEDED`. It is titled *"settled, do not re-litigate"* and is now the most out-of-date file we have — and it governs the live listing. | this week |
 
 ### PHASE 1 — TRUTH, AND THE FAILURE STATES
@@ -225,7 +225,7 @@ Bing has a REST API. Google does not.
 | P3.1 | CC | **The crawl-time holdout — built 2026-09-14 (Phase 8), on Bing's URL Submission API, not the IndexNow key file.** Verified against indexnow.org before building: a key file anywhere but the storefront root only authorises its own directory, and a Shopify store cannot serve a root file from an app (app proxy is `/apps/navaal/`; a theme write needs the `write_themes` exemption). Bing's submission API takes the merchant's own key, needs no hosted file, is sanctioned for commerce pages and feeds the same crawl scheduler. Same experiment; the screen names the channel. Live at the Phase 8 Part C sha in `06-QUEUE.md`; a proved result needs a merchant (or a public dev store) with a Bing key — owner steps in `OWNER-CHECKLIST.md`. **The IndexNow crawl-time holdout.** Submit a random half of changed URLs, withhold the other half, measure time-to-crawl. Genuinely causal, zero risk (IndexNow is not a ranking factor), and we found no competitor doing it. **This is the trial's hero moment.** |
 | P3.2 | CC | **Bing Webmaster REST API**: URL submission (sanctioned for commerce pages, ~10,000/day — Google has no equivalent), and **per-page query stats with separate impression and click positions**, which Google does not provide. SOAP/POX retired 31 Aug 2026 — REST only. |
 | P3.3 | CC | **Teach the two reports that have no API**: Google's generative-AI performance report (impressions only) and **Bing's AI Performance** — citations, grounding queries and **citation share against competitors**, the richest free AI-citation dataset in existence. Guided in-app. We teach it; we never scrape it. |
-| P3.4 | CC | **BLOCKED ON P0.10 (owner) as of 2026-09-14 — the classification half is built and tested (`app/utils/aiSessions.js`); the `shopifyqlQuery` waits on `read_reports` + Level 2, and a test fails if anything runs it before then.** **First-party AI sessions** via ShopifyQL `agentic_referring_channel` (ChatGPT, Google AI Mode/Gemini, Copilot, Shop), with Perplexity and Claude **inferred from referrer domain and labelled as inferred**. State in the UI that AI-assisted visits arriving via Google count as organic, so the number is a floor. *Gated on P0.10.* |
+| P3.4 | CC | **BLOCKED ON THE SCOPE DECISION, NOT ON A FORM (corrected 2026-09-16, Phase 14 item 7).** The earlier note said this waited on "`read_reports` + Level 2", as though an approval had to be granted. CW read the Partner API-access page in the owner session: it offers eight requests and **none of them is `read_reports`**. There is no Level 2 form for it. `read_reports` is an **ordinary scope** — adding it to the toml forces every installed merchant to re-approve, which is why it falls under the standing scope decision (**no new scopes until ten merchants**), and P0.10 is closed as a false premise. The classification half is built and tested (`app/utils/aiSessions.js`); the `shopifyqlQuery` stays behind a test that fails if anything runs it before the scope is added. **First-party AI sessions** via ShopifyQL `agentic_referring_channel` (ChatGPT, Google AI Mode/Gemini, Copilot, Shop), with Perplexity and Claude **inferred from referrer domain and labelled as inferred**. State in the UI that AI-assisted visits arriving via Google count as organic, so the number is a floor. *Gated on P0.10.* |
 | P3.5 | CC | **Shared-corpus prompt sampling** (`09-DOCTRINE.md` §3): ~50 prompts × 4 engines × 7 runs/day **per vertical**, fanned out to every merchant in it. Per-engine, 4-week rolling, cited separated from mentioned, interval always shown, method labelled on every screen. Plus the honest n=1 view: the actual answer an engine gave, labelled as one observation and never trended. |
 | P3.6 | CC | **The weekly report** — the heartbeat. Only when there is something true to say. One email per week across the whole app. Every number links to the screen that proves it. |
 
@@ -386,6 +386,61 @@ control, while the route `?product=<id>` renders them — CW proved the contract
 the route, is wrong), FR14 (`3 / 100 used` rendered as `3%`, hiding real spend) — plus FR0 untested
 on an empty store. **Fix those three and the count is ≤ 3 by arithmetic; then CW recounts once.**
 
+**STATUS 2026-09-16, LATER (CC, Phase 14 — `<SHA>`). THE THREE A1 DEFECTS ARE FIXED IN THE CODE; THE COUNT IS CW'S.**
+
+- **FR13 — fixed, and the reason it kept coming back is fixed with it.** The row's destination was
+  chosen by comparing the button's own DISPLAY LABEL to the English word `"Review"`, inside a render
+  callback. That couples a route to a string meant for a human — and Phase 12 put the UI into six
+  languages while this button was still rendering raw English, so translating it would have sent
+  every non-English merchant to the wrong screen with no test failing. The decision is now
+  `rowActionHref(state, numericId)` in `productState.js`: pure, one function of the row's state,
+  provable without a click (`tests/routes/a1Defects.test.js`). The `stopPropagation` from `356684c`
+  stays. **The click itself is still unproved from here** — no harness can actuate inside the app's
+  cross-origin iframe (CW's Task 3-RE proved that with a control), so `tools/proof/fr13-click.mjs` on
+  Windows remains the only click proof.
+- **FR8 — fixed as a label, which is what it always was.** `scoreBefore` is frozen when the row is
+  created (`storeScore.server.js` keeps the before-fields out of the upsert's `update`), so
+  `This product: 21/100` asserted a CURRENT number that is a FIRST-RUN number — which is why
+  `navaal-shape-fr` showed three rows at 35 beside a live store score of 39. The badge now reads
+  **`At first run: N/100`**, true in both cases, and the uniform-score sentence that has existed
+  since Phase 10 now also renders on the Home card where the owner actually met the three identical
+  badges — it only ever appeared on the write-time splash, which has no route back.
+- **FR14 — the visible half was already fixed; the half that was left is fixed now.** All four quota
+  surfaces already print the FRACTION as the primary number (`3 / 100 used`, `97 remaining of 100`).
+  The one place a rounded percent still stood alone was the ProgressBar's accessible label, which is
+  the only number a screen reader gets from the bar — "1%" for 19 of 4,000, which `quotaPct`'s own
+  floor overstates. Every quota bar is now `ariaLabelledBy` the fraction, and `quota.js` records that
+  the integer is bar geometry and threshold logic, never a readout.
+
+**A1 remains OPEN and it is CW's to close:** the third confusion count, through the First-run reset
+workflow on `navaal-qa-fresh`. Three of the four are fixed in the code, so the count should fall to
+one (FR0, untested on an empty store) — but a count is a count, not an arithmetic claim, and CC does
+not close A1.
+
+**A4 IS STILL HALF A DRILL, AND THE OTHER HALF IS THE OWNER'S.** The branch was created and proved
+ready in 23 s; **nothing has ever read what is in it**, and a restore you have not read is not a
+restore. CC captured production's side of the comparison on 2026-09-16 (read-only, from the Fly
+machine): **23 tables, 337 columns, 18 tables with rows** — `LogEvent` 4 868 · `ProductWatch` 1 595 ·
+`GeneratedContent` 199 · `ProductScore` 120 · `UsageRecord` 113 · `CrawlerAccess` 58 ·
+`ContentVersion` 50 · `_prisma_migrations` 28 · `Shop` 24 · `Plan` 17 · `Session` 17 · `GDPRRequest`
+16 · `GenerationJob` 16 · `BrandVoice` 10 · `BlogPost` 6 · `GrowthState` 3 ·
+`ReviewRequestAttempt` 2 · `SupportRequest` 1. The branch side cannot be read from here: it has **no
+compute endpoint** (CW deliberately created none) and no Neon API key exists on this machine or in
+Fly. `scripts/restore-drill-compare.mjs` is the other half — it takes `COMPARE_DATABASE_URL` and
+prints the same three things. **The branch is NOT deleted**, because deleting it before the
+comparison would destroy the only thing the comparison needs. Owner's step and the pass/fail rule
+are in `OWNER-CHECKLIST.md`.
+
+**A9 — THE LOCK NOW MATCHES THE DOCTRINE (`<SHA>`).** `REMEDIATION_LOCKED_SHOPS` guarded five call
+sites, all inside `remediation.server.js`; Review, the product page, a bulk job and autopilot
+imported neither `assertWritable` nor `isRemediationLocked`, so a locked shop could still be written
+to — and the owner had just locked a store holding **a client's real catalogue**. The guard now sits
+on the graphql callable itself (`app/utils/writeLock.server.js`), wrapped around all three ways this
+app can reach Shopify (`authenticate.admin`, `unauthenticated.admin`, the worker's
+`shopifyGraphql`), so a route added next month inherits it. Reads are untouched by design: a locked
+store is still audited and scored. `tests/utils/writeLock.test.js` — 13 cases, 3 of which fail on
+the old behaviour.
+
 **B IS COMPLETE — 2026-09-16.** B1 live; B2 live in all six; **B3 and B5 done and verified from
 outside by Cowork**, one cache-busted fetch per locale, with the exact-match test (our own bullet 3
 present AND Shopify's auto-translation marker absent in the same fetch, false green #19): de, fr, es,
@@ -476,7 +531,7 @@ screen.
 | **We imply significance we do not have.** | P5.6 shows the MDE **with the design effect** before the test; small catalogues are told plainly which claim is unavailable. |
 | **Our own bulk content triggers a scaled-content problem.** | P1.7's quality floor; P5.8's interim stop and rollback. |
 | **A platform deadline delists us.** *(Revised 2026-09-14.)* The **1 Oct** date was carrying two items and one of them was a false alarm: the theme-extension `api_version` half (P0.1) **never applied to us** — that deadline binds UI extensions and we ship none. The half that is real is **P0.2**, script tags, and it is **verified clean**. **16 Oct is IDENTIFIED, 2026-09-14: Admin API 2025-10 becomes inaccessible** (`09-DOCTRINE.md` §4 carried it all along — a previous session wrote that "nothing in the folder says what it is", which was false; it had only not looked there). **It does not bind us:** we are on **2026-04**, which sunsets 2027-04-01, and `scripts/check-api-versions.mjs` fails the build 90 days before any pin expires. **Neither October date is now an open risk.** | Phase 0 leads everything; P0.3 now puts the version check in CI — including the invariant that would catch a future UI extension on a dead version. |
-| **Calendar-bound approvals block the proof engine.** Google verification is 3–8 weeks; Shopify Level 2 is a review cycle. | P0.9 and P0.10 start **this week**, months before they are needed. |
+| **Calendar-bound approvals block the proof engine.** Google verification is 3–8 weeks. **The Shopify half of this risk was imaginary:** there is no Level 2 form for `read_reports` (corrected 2026-09-16), so P0.10 is closed and only P0.9 is calendar-bound. | P0.9 starts **this week**, months before it is needed. |
 | **Support load exceeds one person.** | P6.2's system; P6.3 forbids selling what we cannot honour; P1.6 moves failure states into Phase 1. |
 | **Key-person risk.** | P6.7. A productivity system is not a risk control. |
 | **We drift back to unevidenced claims** because they sell more easily. | P1.1's test fails on the banned phrases. The doctrine outranks enthusiasm. |

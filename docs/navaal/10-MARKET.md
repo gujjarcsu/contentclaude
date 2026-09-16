@@ -121,8 +121,11 @@ Also native and free:
   *"title, description, options, images, price, availability and other key attributes, all
   structured in a way that AI agents can parse."* **The merchant does nothing.**
 - **AI-referral analytics** — `agentic_referring_channel` in ShopifyQL, values **ChatGPT, Google AI
-  Mode and Gemini, Microsoft Copilot, Shop**. Readable by an app via `shopifyqlQuery` with
-  `read_reports` **and Level 2 protected customer data access**.
+  Mode and Gemini, Microsoft Copilot, Shop**. Readable by an app via `shopifyqlQuery` with the
+  `read_reports` scope. **Corrected 2026-09-16:** this said "and Level 2 protected customer data
+  access". There is no Level 2 request form for `read_reports` — CW read the Partner API-access
+  page, which offers eight requests and none of them is this. It is an ordinary scope, and the cost
+  is that adding it re-prompts every installed merchant for consent.
 - Themes are **required by Shopify** to emit product rich snippets; the `structured_data` Liquid
   filter outputs `Product` / `ProductGroup` / `Article`. Canonicals, sitemap, robots.txt and title
   tags are all auto-generated.
@@ -169,7 +172,7 @@ attribute completeness is what decides eligibility.**
 | **Google Indexing API** | — | **Restricted to `JobPosting` and `BroadcastEvent` only.** Product pages are not eligible. Using it anyway is against policy |
 | **IndexNow** | notifies **Bing, Yandex, Naver, Seznam, Yep** within minutes; 10,000 URLs per POST | **Google does not participate.** No published time-to-index guarantee |
 | **Bing Webmaster API** | URL submission (**sanctioned for commerce pages**, ~10,000/day), **per-page query stats with separate impression and click positions** | SOAP/POX retired 31 Aug 2026 — REST only |
-| **ShopifyQL** | `agentic_referring_channel`, `landing_page_path`, `traffic_type`, sessions, conversion rate | needs `read_reports` **+ Level 2 protected customer data approval** |
+| **ShopifyQL** | `agentic_referring_channel`, `landing_page_path`, `traffic_type`, sessions, conversion rate | needs the `read_reports` scope — **not** a Level 2 approval (corrected 2026-09-16: no such form exists) |
 | **Order.customerJourneySummary** | first/last visit, referrer, UTMs, days to conversion | **30-day attribution window** — every revenue claim inherits it |
 
 **Statistical power — the numbers that decide what we can sell to whom:**

@@ -150,6 +150,29 @@ export function proposeVendor({ brandStoreName, shopName }) {
   return s || "";
 }
 
+/**
+ * Phase 14 item 1 — does this GraphQL document ask Shopify to CHANGE something?
+ *
+ * The lock used to sit on five call sites inside remediation.server.js, so a
+ * locked shop could still be written to through Review, a product page, a bulk
+ * job or autopilot — four paths that import neither `assertWritable` nor
+ * `isRemediationLocked`. The guard now sits on the graphql callable itself
+ * (`guardShopWrites`), which needs exactly one decision: read or write.
+ *
+ * Comments and string literals are removed first, so a READ whose text merely
+ * contains the word — `query findPosts($q: String = "mutation")` — stays a
+ * read. An operation keyword must be followed by a name, `(`, `{` or `@`.
+ *
+ * PURE.
+ */
+export function isMutationDocument(query) {
+  const src = String(query ?? "")
+    .replace(/"""[\s\S]*?"""/g, '""') // block strings first: they may contain quotes and #
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/#[^\n]*/g, "");
+  return /(^|[^A-Za-z0-9_])mutation(\s|\(|\{|@)/.test(src);
+}
+
 /** REMEDIATION_LOCKED_SHOPS → a Set of lower-cased shop domains. */
 export function parseLockedShops(env) {
   return new Set(

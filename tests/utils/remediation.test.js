@@ -84,7 +84,12 @@ describe("the lock", () => {
       const m = srv.match(new RegExp(`export async function ${w}\\([^)]*\\) \\{\\s*assertWritable\\(shop\\);`));
       expect(m, `${w} must call assertWritable(shop) first`).not.toBeNull();
     }
-    expect(srv).toMatch(/REMEDIATION_LOCKED_SHOPS/);
+    // Phase 14 item 1 — the secret is read in writeLock.server.js now, which is
+    // also where the three graphql factories are wrapped so that Review, the
+    // product page, bulk and autopilot are covered too. These five writers keep
+    // their own earlier check; the assertion follows the env var to its file.
+    expect(srv).toMatch(/from "\.\/writeLock\.server\.js"/);
+    expect(code(readFileSync("app/utils/writeLock.server.js", "utf8"))).toMatch(/process\.env\.REMEDIATION_LOCKED_SHOPS/);
   });
 
   it("the route turns the lock into a 403 with the merchant-safe message, and never a stack", () => {
