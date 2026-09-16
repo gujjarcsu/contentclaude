@@ -37,12 +37,26 @@ const page = ctx.pages()[0] || (await ctx.newPage());
 
 const t0 = Date.now();
 const trail = [];
-const mark = (u) => {
-  const e = { atMs: Date.now() - t0, url: String(u).slice(0, 160) };
+let tabSeq = 0;
+const mark = (u, tab) => {
+  const e = { atMs: Date.now() - t0, tab, url: String(u).slice(0, 160) };
   trail.push(e);
-  console.log(`  [${(e.atMs / 1000).toFixed(1)}s] ${e.url}`);
+  console.log(`  [${(e.atMs / 1000).toFixed(1)}s] (tab${tab}) ${e.url}`);
 };
-page.on("framenavigated", (f) => { if (f === page.mainFrame()) mark(f.url()); });
+// Trail EVERY page, not just the first. A Shopify install opens the app in a NEW tab, so a
+// first-page-only trail stops dead at the App Store URL and the whole flow goes unrecorded.
+const attach = (p) => {
+  const myTab = ++tabSeq;
+  p.on("framenavigated", (f) => { if (f === p.mainFrame()) mark(f.url(), myTab); });
+  p.on("close", () => console.log(`  (tab${myTab} closed)`));
+  return myTab;
+};
+attach(page);
+ctx.on("page", async (p) => {
+  const n = attach(p);
+  console.log(`  -> new tab${n} opened`);
+  try { await p.waitForLoadState("domcontentloaded", { timeout: 15000 }); mark(p.url(), n); } catch {}
+});
 
 console.log(`\n  ${WHICH.toUpperCase()} - ${SPEC.what}`);
 console.log(`  Recording to ${OUT}`);
@@ -92,5 +106,5 @@ const report = {
 };
 fs.writeFileSync(path.join(OUT, `${SPEC.file}.json`), JSON.stringify(report, null, 2));
 console.log(`\n  report: docs/history/recordings/${SPEC.file}.json`);
-console.log(`  the .webm lands in that folder too - rename it to ${SPEC.file}.webm\n`);
+console.log(`  one .webm PER TAB lands in that folder - rename them ${SPEC.file}-tab1.webm, -tab2.webm ...\n`);
 await ctx.close();

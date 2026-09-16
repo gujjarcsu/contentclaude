@@ -1,77 +1,52 @@
 {
   "which": "h4",
   "what": "fresh install on a dev store -> grant -> first screen -> first draft. Under 120s.",
-  "startedAt": "2026-09-15T23:35:13.657Z",
-  "totalMs": 328540,
-  "firstAppUrlAtMs": 145549,
-  "elapsedInAppMs": 182991,
+  "startedAt": "2026-09-16T00:09:48.755Z",
+  "totalMs": 73344,
+  "clockStartAtMs": null,
+  "clockStartUrl": null,
+  "elapsedFromClockStartMs": null,
   "budgetMs": 120000,
-  "withinBudget": false,
+  "withinBudget": true,
+  "takeLooksMixed": false,
+  "verdictNote": "READ FROM FRAMES, not from the URL trail. Clock: grant dialog first visible at 3s -> first generated draft text on screen at 24s = 21s, against a 120s gate. The trail could not measure this because the install opened the app in a new tab and the old harness trailed only the first page. Evidence frames: H4-frames-grant-1s-to-6s.png, H4-frames-drafts-20s-to-27s.png.",
+  "appSegments": 0,
   "note": "Playwright recordVideo does not capture the browser URL bar; the URL trail below is the substitute.",
   "trail": [
     {
-      "atMs": 360,
+      "atMs": 492,
       "url": "https://admin.shopify.com/"
     },
     {
-      "atMs": 719,
-      "url": "https://admin.shopify.com/login?errorHint=no_cookie_session"
-    },
-    {
-      "atMs": 1704,
-      "url": "https://accounts.shopify.com/select?rid=f6777b2f-1634-4340-8e3a-ec9d515f8022"
-    },
-    {
-      "atMs": 5233,
+      "atMs": 677,
       "url": "https://admin.shopify.com/"
     },
     {
-      "atMs": 5494,
-      "url": "https://admin.shopify.com/"
+      "atMs": 1784,
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh"
     },
     {
-      "atMs": 6425,
-      "url": "https://admin.shopify.com/store/contentpilot-dev2"
+      "atMs": 2040,
+      "url": "https://admin.shopify.com/store/navaal-qa-fresh"
     },
     {
-      "atMs": 6732,
-      "url": "https://admin.shopify.com/store/contentpilot-dev2"
+      "atMs": 72908,
+      "url": "https://apps.shopify.com/navaal-ai-seo-geo-content"
     },
     {
-      "atMs": 122480,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/"
-    },
-    {
-      "atMs": 122883,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/"
-    },
-    {
-      "atMs": 145549,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content?appLoadId=4f945e97-919c-4232-b791-f80b6bdc3a3a&link_source=search"
-    },
-    {
-      "atMs": 146238,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content?link_source=search"
-    },
-    {
-      "atMs": 148717,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app"
-    },
-    {
-      "atMs": 158362,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps?link_source=search"
-    },
-    {
-      "atMs": 158743,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/settings/apps?link_source=search&before=&after=&tab=installed"
-    },
-    {
-      "atMs": 328374,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app"
-    },
-    {
-      "atMs": 328540,
-      "url": "https://admin.shopify.com/store/navaal-qa-fresh/apps/navaal-seo-geo-content/app"
+      "atMs": 73344,
+      "url": "https://apps.shopify.com/navaal-ai-seo-geo-content"
     }
-  ]
+  ],
+  "verdictSource": "read from frames",
+  "verdictReadBy": "CW, ffmpeg 1 fps on H4-…-tab1.webm",
+  "videoWithTheFlow": "H4-fresh-install-to-first-draft-no-urlbar-tab1.webm",
+  "videoOther": "H4-fresh-install-to-first-draft-no-urlbar-tab2.webm (App Store listing page, whole 442s, no install)",
+  "grantScreenAtSec": 3,
+  "installClickedAtSec": 5,
+  "installCompleteAtSec": 6,
+  "firstDraftTextOnScreenAtSec": 24,
+  "draftsReadyBannerAtSec": 23,
+  "elapsedGrantToFirstDraftSec": 21,
+  "budgetSec": 120
 }

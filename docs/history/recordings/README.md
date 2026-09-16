@@ -1,40 +1,42 @@
 # Recordings — what is here and what each take proves
 
-Playwright `recordVideo` writes `page@<hash>.webm`. Rename each take to the name in its JSON report
-(`H4-…`, `H5-…`, `H6-…`) once you know which is which; the report's `startedAt` matches the file's
-mtime. `-no-urlbar` is in every name because Playwright cannot record the browser URL bar — the JSON
-`trail` is the substitute.
+Playwright `recordVideo` writes one `page@<hash>.webm` **per tab**. `-no-urlbar` is in every name
+because Playwright cannot record the browser URL bar; the JSON `trail` is the substitute.
 
-## H4, first take — video good, verdict NOT VALID
+## H4 — PASSES, 21 s against a 120 s gate. Read from frames.
 
-`H4-fresh-install-to-first-draft-no-urlbar.json`, from the owner's run. The video exists and the
-flow is in it. **The 120-second verdict it carried is not a real H4 measurement and must not be
-recorded as a fail.** The trail shows why:
+Clean take, 2026-09-16T00:09:48Z, store `navaal-qa-fresh` (Northline Supply).
 
-```
-  0.4s  admin.shopify.com/                      <- cold start, not signed in
-  1.7s  accounts.shopify.com/select             <- sign-in
-  6.4s  .../store/contentpilot-dev2             <- wrong store
-122.5s  .../store/navaal-qa-fresh/              <- 116s spent getting to the right store
-145.5s  .../apps/navaal-seo-geo-content         <- app opens
-158.4s  .../settings/apps                       <- back OUT to the apps list
-328.4s  .../apps/navaal-seo-geo-content/app     <- back in, 170s later
-```
+| moment | at | evidence |
+|---|---|---|
+| Install app grant dialog first visible | **3 s** | `H4-frames-grant-1s-to-6s.png` |
+| Install pressed (button shows a spinner) | 5 s | same sheet |
+| App listed under Installed | 6 s | same sheet |
+| App first screen, "Let's get your store found by AI", 21/100 | 12 s | tab1 |
+| "2 drafts ready to review" banner | 23 s | `H4-frames-drafts-20s-to-27s.png` |
+| **First generated draft text on screen** | **24 s** | same sheet |
 
-The old harness bracketed "first app URL → last navigation", which swallowed the store hunt and a
-170-second excursion back through `settings/apps` — almost certainly the uninstall/reinstall. It
-reported `elapsedInAppMs 182991` against a 120000 budget and `withinBudget false`. That number
-measures the recording session, not the install-to-first-draft flow.
+**Grant → first draft = 21 s. Budget 120 s. Within budget, with 99 s to spare.**
 
-**Fixed in the harness.** It now starts the clock at the first app URL *after the last install
-boundary*, counts app segments, and — when a take crosses an install boundary again after the app
-was already open — refuses to give a verdict at all, setting `withinBudget: null` and
-`takeLooksMixed: true` with the reason in `verdictNote`. A take that wanders gets no green and no
-red; it gets re-recorded.
+Written into the JSON by hand with `verdictSource: "read from frames"`. The harness could not measure
+it: **the install opened the app in a NEW tab**, and the old harness trailed only the first page, so
+its trail stopped dead at `apps.shopify.com/navaal-ai-seo-geo-content` at 73 s and it returned no
+verdict at all. Fixed — `record-h456.mjs` now attaches the same `framenavigated` handler to every
+page via `ctx.on('page')`, tags each entry with its tab, and brackets across all of them.
 
-**So H4 is owed one more take:** open the app fresh on `navaal-qa-fresh`, run install → grant →
-first screen → first draft, and close the window. Nothing else in the take.
+**Which video is which.** `-tab1.webm` (265 s) is the one with the flow: the grant dialog, the
+install, the first screen and the drafts. `-tab2.webm` (442 s) is the App Store listing page for its
+whole length — the Install button is never clicked in it. Confirmed by reading contact sheets of
+both at 1 frame per 10 s.
 
-Three `.webm` files are present and only one JSON — the report is written when the window closes
-cleanly, so two takes ended another way. `ffprobe` reads a duration from one (108.7s) and `N/A` from
-the other two, meaning their headers were never finalised. Those two are not evidence of anything.
+**Incidental, and it corroborates the owner's FR8 read:** at 16 s tab1 shows all three products —
+Stoneware Mug 400ml, Cast Iron Skillet 26cm, Brass Watering Can 1.5L — each tagged `This product:
+21/100`, identical to the store's 21/100, with the app's own line underneath: *"These 3 products all
+score 21: they are missing the same things, so each one's number is the same as the store's."*
+
+Six stray `page@*.webm` deleted with the owner's permission: four takes with no report, plus the two
+now saved under their `-tab1` / `-tab2` names.
+
+## H5, H6 — not recorded yet
+
+See the queue for the Free-store-at-cap problem that H5 needs solved first.

@@ -2292,3 +2292,46 @@ a green nor a red; it gets re-recorded. Full trail and reasoning in `docs/histor
 - **owner:** one more H4 take — open the app on `navaal-qa-fresh`, install → grant → first screen →
   first draft, close the window, nothing else in the take. Two of the three `.webm` files have no
   report and unfinalised headers (`ffprobe` returns `N/A`); they are not evidence and can be deleted.
+
+## TASK 8 — H4 PASSES: 21 s AGAINST A 120 s GATE, READ FROM FRAMES (CW)
+
+| moment | at |
+|---|---|
+| Install app grant dialog first visible | **3 s** |
+| Install pressed | 5 s |
+| App listed under Installed | 6 s |
+| App first screen, 21/100 | 12 s |
+| "2 drafts ready to review" | 23 s |
+| **First generated draft text on screen** | **24 s** |
+
+**Grant → first draft = 21 s, budget 120 s, within budget with 99 s to spare.** Written into
+`H4-fresh-install-to-first-draft-no-urlbar.json` by hand, `verdictSource: "read from frames"`.
+Evidence sheets committed: `H4-frames-grant-1s-to-6s.png`, `H4-frames-drafts-20s-to-27s.png`.
+
+**The trail could not have measured it.** The install opens the app in a **new tab** and the harness
+trailed only the first page, so it stopped at `apps.shopify.com/navaal-ai-seo-geo-content` at 73 s
+and returned no verdict. Fixed: `ctx.on('page')` attaches the same handler to every page, each trail
+entry carries its tab number, and the bracket runs across all tabs.
+
+**The owner had the two videos the wrong way round** — worth knowing before anyone trusts a file
+name. `-tab1` (265 s) holds the flow; `-tab2` (442 s) is the App Store listing page for its entire
+length with Install never clicked. Read off contact sheets of both.
+
+**Corroborates FR8 independently.** At 16 s tab1 shows Stoneware Mug 400ml, Cast Iron Skillet 26cm
+and Brass Watering Can 1.5L each tagged `This product: 21/100` against a store score of 21/100, with
+the app's own explanation beneath: *"These 3 products all score 21: they are missing the same things,
+so each one's number is the same as the store's."* So the number is deliberate, not a bug in the
+computation — the defect CC is chasing is that the screen presents it as a per-product score. That
+line is the app admitting it.
+
+### H5 AND H6 ARE BLOCKED ON A FREE STORE AT ITS CAP — INBOX
+
+`navaal-qa-fresh` is on the **Free plan** but nowhere near its cap: tab1 reads *"Writing 3 drafts now
+— 3 credits; 91 of 100 left after this on the Free plan."* H5 needs the warning surface and the 100 %
+card, and H6 starts from that card, so both need a store sitting at or near 100/100 used.
+
+- **owner + CC:** decide how a Free store reaches its cap for the recording. Burning 91 credits by
+  hand is slow and wasteful; a seeded usage row on a dev store would be one command. **CC:** is there
+  a supported way to set a dev store's usage — a seed script or an admin route — that does not touch
+  production? If yes, name it and CW drives it. If no, the owner picks a shape store and CW walks it
+  to the cap before the owner records.
