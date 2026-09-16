@@ -76,3 +76,8 @@ _to_delete/
 
 docs/history/_pw-profile/
 docs/history/_pw-run/
+
+# Raw production logs pulled for diagnosis. They contain live id_tokens and
+# real shop domains; the finding goes in the queue, the log never gets committed.
+applog.txt
+*.flylog
