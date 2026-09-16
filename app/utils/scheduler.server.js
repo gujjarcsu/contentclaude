@@ -26,6 +26,7 @@ import { getRedis } from "./cache.server.js";
 import { runNightlyBackup } from "./backup.server.js";
 import { sweepUnfinishedWebhookWork } from "./webhookWork.server.js";
 import { sweepOldLogs, RETENTION_DAYS } from "./logSink.server.js";
+import { runScheduled } from "./schedulerHealth.server.js";
 
 const HEALTH_INTERVAL_MS = 5 * 60 * 1000;
 /** How often the worker looks for webhook work that was acknowledged but never finished. */
@@ -390,21 +391,21 @@ export function startScheduler() {
     // P2.3 — the catalogue watch. Dynamic import on purpose: that module
     // imports sydneyParts from here, and a static import both ways is a
     // load-order cycle. Same Redis day-claim as the digest inside it.
-    import("./catalogueWatch.server.js")
-      .then((m) => m.maybeRunCatalogueWatch())
-      .catch((err) => logger.error({ err }, "catalogue watch threw"));
+    //
+    // Phase 16 — each of these four now reports its outcome as well as logging
+    // it. `weeklyReport` threw on EVERY tick for weeks (its import chain
+    // reaches `i18n/catalogues.server.js`, whose bare JSON imports Node's own
+    // ESM loader refuses) and `/api/health?deep=1` went on saying the worker
+    // was fine, because a tick that dies during import never reaches the job
+    // table the health check counts. `runScheduled` keeps the log line
+    // unchanged and adds the counter the endpoint can see.
+    runScheduled("catalogueWatch", () => import("./catalogueWatch.server.js").then((m) => m.maybeRunCatalogueWatch()), "catalogue watch threw");
     // P3.1 — the crawl-time holdout (03:00 Sydney) and P3.6 — the weekly
     // report (Monday 09:00 Sydney). Same dynamic-import reason, same day-claim.
-    import("./crawlHoldout.server.js")
-      .then((m) => m.maybeRunCrawlHoldout())
-      .catch((err) => logger.error({ err }, "crawl holdout threw"));
-    import("./weeklyReport.server.js")
-      .then((m) => m.maybeSendWeeklyReports())
-      .catch((err) => logger.error({ err }, "weekly report threw"));
+    runScheduled("crawlHoldout", () => import("./crawlHoldout.server.js").then((m) => m.maybeRunCrawlHoldout()), "crawl holdout threw");
+    runScheduled("weeklyReport", () => import("./weeklyReport.server.js").then((m) => m.maybeSendWeeklyReports()), "weekly report threw");
     // Phase 10 Part B — the funnel digest to the owner (Monday 08:30 Sydney).
-    import("./funnel.server.js")
-      .then((m) => m.maybeSendFunnelDigest())
-      .catch((err) => logger.error({ err }, "funnel digest threw"));
+    runScheduled("funnelDigest", () => import("./funnel.server.js").then((m) => m.maybeSendFunnelDigest()), "funnel digest threw");
   }, 60_000);
   _digestTimer.unref?.();
 

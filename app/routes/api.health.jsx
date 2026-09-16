@@ -123,6 +123,39 @@ export const loader = async ({ request }) => {
       logger.warn({ err: err.message }, "Health check: job probe failed");
     }
 
+    // ── The SCHEDULED jobs ────────────────────────────────────────────────
+    // Phase 16, and false green #33. The two probes above answer "is a worker
+    // attached" and "are there failed rows in GenerationJob". Neither can see a
+    // scheduler tick that throws while importing its own module — it dies
+    // before it reaches the queue and before it writes a row — so the weekly
+    // report threw sixty times an hour for weeks under a green deep check.
+    // One HGETALL of a four-field hash the worker keeps; see
+    // app/utils/schedulerHealth.js for why the thresholds are what they are.
+    try {
+      const { readSchedulerHealth } = await import("../utils/schedulerHealth.server.js");
+      const sched = await readSchedulerHealth();
+      checks.scheduler = sched.available
+        ? { jobs: sched.jobs, failing: sched.failing, worstConsecutiveTicks: sched.consecutive }
+        : { error: sched.reason ?? "unavailable" };
+      if (!sched.available) {
+        // "no redis" is already reported by the Redis check above; saying it
+        // twice would be two alerts for one fact. A read that FAILED is
+        // different: the counter exists and we could not see it.
+        if (sched.reason === "read failed") degraded = true;
+      } else if (sched.unhealthy) {
+        // Ten ticks is ten minutes. That is not a wobble; that job does not work.
+        healthy = false;
+        logger.error({ job: sched.worst, consecutive: sched.consecutive, failing: sched.failing }, "Health check: a scheduled job has failed every tick");
+      } else if (sched.degraded) {
+        degraded = true;
+        logger.warn({ job: sched.worst, consecutive: sched.consecutive }, "Health check: a scheduled job is failing repeatedly");
+      }
+    } catch (err) {
+      checks.scheduler = { error: "unavailable" };
+      degraded = true;
+      logger.warn({ err: err.message }, "Health check: scheduler probe failed");
+    }
+
     // ── The AI circuit breaker ────────────────────────────────────────────
     try {
       const { getCircuitBreakerState } = await import("../utils/ai.server.js");

@@ -143,11 +143,19 @@ describe("every shipped locale is complete", () => {
       if (l === "en") continue;
       expect(SERVER_POLARIS[l], `Polaris strings for ${l} on the server`).toBeTruthy();
       expect(polarisFor(l), `Polaris strings for ${l} registered`).toBeTruthy();
-      expect(chunks).toContain(`import("./locales/${l}.json")`);
-      expect(chunks).toContain(`import("@shopify/polaris/locales/${l}.json")`);
+      // Phase 16 — the locale still has to be here, and now it has to carry
+      // the import attribute as well. Node's own ESM loader refuses a bare
+      // JSON import, and the WORKER process loads this tree with Node's
+      // loader rather than Vite's — which is what made the weekly report
+      // never run at all.
+      expect(chunks).toContain(`import("./locales/${l}.json", { with: { type: "json" } })`);
+      expect(chunks).toContain(`import("@shopify/polaris/locales/${l}.json", { with: { type: "json" } })`);
     }
+    // Stated as the rule rather than per-locale, so a locale added later
+    // without the attribute fails here before anyone tries to load it.
+    expect([...chunks.matchAll(/import\(\s*"[^"]+\.json"\s*\)/g)].map((m) => m[0]), "a JSON import with no attribute").toEqual([]);
     // nothing static for English, and no catalogue in the shared client code
-    expect(chunks).not.toMatch(/import\("\.\/locales\/en\.json"\)/);
+    expect(chunks).not.toMatch(/import\("\.\/locales\/en\.json"/);
     expect(readFileSync("app/i18n/index.js", "utf8")).not.toMatch(/^import .*locales\//m);
   });
 

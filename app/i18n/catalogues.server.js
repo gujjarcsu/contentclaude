@@ -11,18 +11,18 @@
  * add it to LIVE_UI_LOCALES — the test holds the three together and the
  * guard below refuses to boot a locale that is live with no table.
  */
-import de from "./locales/de.json";
-import fr from "./locales/fr.json";
-import es from "./locales/es.json";
-import it from "./locales/it.json";
-import ptBR from "./locales/pt-BR.json";
-import ja from "./locales/ja.json";
-import polarisDe from "@shopify/polaris/locales/de.json";
-import polarisFr from "@shopify/polaris/locales/fr.json";
-import polarisEs from "@shopify/polaris/locales/es.json";
-import polarisIt from "@shopify/polaris/locales/it.json";
-import polarisPtBR from "@shopify/polaris/locales/pt-BR.json";
-import polarisJa from "@shopify/polaris/locales/ja.json";
+import de from "./locales/de.json" with { type: "json" };
+import fr from "./locales/fr.json" with { type: "json" };
+import es from "./locales/es.json" with { type: "json" };
+import it from "./locales/it.json" with { type: "json" };
+import ptBR from "./locales/pt-BR.json" with { type: "json" };
+import ja from "./locales/ja.json" with { type: "json" };
+import polarisDe from "@shopify/polaris/locales/de.json" with { type: "json" };
+import polarisFr from "@shopify/polaris/locales/fr.json" with { type: "json" };
+import polarisEs from "@shopify/polaris/locales/es.json" with { type: "json" };
+import polarisIt from "@shopify/polaris/locales/it.json" with { type: "json" };
+import polarisPtBR from "@shopify/polaris/locales/pt-BR.json" with { type: "json" };
+import polarisJa from "@shopify/polaris/locales/ja.json" with { type: "json" };
 import { registerCatalogue, registerPolaris, LIVE_UI_LOCALES, DEFAULT_UI_LOCALE } from "./index.js";
 
 export const SERVER_CATALOGUES = Object.freeze({ de, fr, es, it, "pt-BR": ptBR, ja });

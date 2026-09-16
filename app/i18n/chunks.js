@@ -10,12 +10,12 @@
 import { isLocaleLoaded, registerCatalogue, registerPolaris } from "./index.js";
 
 export const UI_LOCALE_CHUNKS = Object.freeze({
-  de: () => Promise.all([import("./locales/de.json"), import("@shopify/polaris/locales/de.json")]),
-  fr: () => Promise.all([import("./locales/fr.json"), import("@shopify/polaris/locales/fr.json")]),
-  es: () => Promise.all([import("./locales/es.json"), import("@shopify/polaris/locales/es.json")]),
-  it: () => Promise.all([import("./locales/it.json"), import("@shopify/polaris/locales/it.json")]),
-  "pt-BR": () => Promise.all([import("./locales/pt-BR.json"), import("@shopify/polaris/locales/pt-BR.json")]),
-  ja: () => Promise.all([import("./locales/ja.json"), import("@shopify/polaris/locales/ja.json")]),
+  de: () => Promise.all([import("./locales/de.json", { with: { type: "json" } }), import("@shopify/polaris/locales/de.json", { with: { type: "json" } })]),
+  fr: () => Promise.all([import("./locales/fr.json", { with: { type: "json" } }), import("@shopify/polaris/locales/fr.json", { with: { type: "json" } })]),
+  es: () => Promise.all([import("./locales/es.json", { with: { type: "json" } }), import("@shopify/polaris/locales/es.json", { with: { type: "json" } })]),
+  it: () => Promise.all([import("./locales/it.json", { with: { type: "json" } }), import("@shopify/polaris/locales/it.json", { with: { type: "json" } })]),
+  "pt-BR": () => Promise.all([import("./locales/pt-BR.json", { with: { type: "json" } }), import("@shopify/polaris/locales/pt-BR.json", { with: { type: "json" } })]),
+  ja: () => Promise.all([import("./locales/ja.json", { with: { type: "json" } }), import("@shopify/polaris/locales/ja.json", { with: { type: "json" } })]),
 });
 
 /**

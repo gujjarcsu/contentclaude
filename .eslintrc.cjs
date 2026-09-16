@@ -57,6 +57,25 @@ module.exports = {
       },
     },
 
+    // Phase 16 — IMPORT ATTRIBUTES. `app/i18n/` loads JSON with
+    // `with { type: "json" }`, which is what Node's own ESM loader requires and
+    // what the WORKER process uses (fly.toml runs `node worker.js`, which
+    // imports the source tree rather than the Vite bundle). Without the
+    // attribute the weekly report threw on every 60-second tick for weeks.
+    //
+    // ESLint 8.57's parser is espree 9.6, which cannot parse the syntax at any
+    // `ecmaVersion` — "latest" caps at ES2024 and import attributes are ES2025.
+    // `@typescript-eslint/parser` is already a dependency of this config, is
+    // already the parser for every .ts file here, and reads the syntax fine via
+    // the installed TypeScript 5.9. So these two files borrow it rather than the
+    // repo taking a new devDependency for a lint-only problem. When ESLint
+    // moves to 9, this override can go.
+    {
+      files: ["app/i18n/**/*.js"],
+      parser: "@typescript-eslint/parser",
+      parserOptions: { ecmaVersion: "latest", sourceType: "module" },
+    },
+
     // Typescript
     {
       files: ["**/*.{ts,tsx}"],

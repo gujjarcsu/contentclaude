@@ -173,6 +173,22 @@ Before claiming a pass, check you are not repeating one of these:
     outage continued. **The correct order, recorded again because it was written down before this
     outage and not followed: set the platform to the secret you intend to KEEP, confirm the app
     works, only then revoke the other** (Cowork, 2026-09-16).
+34. **`worker running` and `failedLast10Min: 0` meant only that nothing had reached the job table.**
+    A scheduled job that throws BEFORE it gets there was invisible, and one had been throwing every
+    minute since the i18n work landed. `/api/health?deep=1` asks BullMQ whether a worker is attached
+    and counts rows in `GenerationJob`; a scheduler tick that dies inside `import()` reaches neither,
+    so the weekly report — which had therefore never run in production at all — was
+    indistinguishable from a weekly report that was simply idle. Both numbers were correct. Neither
+    was an answer to the question anyone was asking them. **A probe that can only see work that
+    started is not a probe of whether work starts** (CC, 2026-09-16).
+35. **Two loaders, and a module written for one of them.** `app/i18n/catalogues.server.js` used bare
+    JSON imports, which Vite rewrites at build time — so the web bundle was correct and every test
+    that went through Vite passed. But `worker.js` is `node worker.js`: the worker loads the SOURCE
+    tree with Node's own ESM loader, where a JSON import without `with { type: "json" }` is a hard
+    error. The tell was in the path in the error message — `file:///app/app/…` is source, not
+    build — and nothing in the suite could have caught it, because the suite runs through Vite too.
+    **Where a repo has two loaders, a test that uses only one of them proves half the claim** (CC,
+    2026-09-16).
 
 **Note on numbering (2026-09-16).** #20 to #23 were written up in `06-QUEUE.md` posts and never reached
 this list, so a reader checking "am I repeating a known false green?" against the checklist saw the list

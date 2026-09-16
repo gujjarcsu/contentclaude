@@ -21,7 +21,13 @@ const { prisma, queueHealth, breaker } = vi.hoisted(() => ({
   breaker: vi.fn(() => ({ open: false, failures: 0, lastFailureAt: null })),
 }));
 vi.mock("../../app/db.server", () => ({ default: prisma }));
-vi.mock("../../app/utils/cache.server", () => ({ getCache: vi.fn(async (k, supplier) => supplier()) }));
+// Phase 16 — the deep check also reads the scheduled-job failure counters,
+// which live in Redis because the scheduler runs in the worker process.
+// `getRedis` returning null is the "no Redis configured" case, which is
+// deliberately NOT a degrade: these assertions stay about the queue, Redis
+// and the breaker. The counters have their own suite in
+// tests/routes/schedulerHealth.test.js.
+vi.mock("../../app/utils/cache.server", () => ({ getCache: vi.fn(async (k, supplier) => supplier()), getRedis: vi.fn(async () => null) }));
 vi.mock("../../app/utils/logger.server", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
