@@ -53,6 +53,10 @@ API key exists on this machine or in Fly.
    (read-only — every statement in it is a `SELECT`; it prints the host, never the string).
 3. `diff <(jq -S . docs/history/restore-drill-2026-09-16-production.json) <(jq -S . drill.json)`
    — ignore the `readAt` and `host` lines, they are meant to differ.
+3b. **The two column numbers in this repo are both right, and they differ by eight.** The health
+   line says `columns=329`; the comparison says **337**. The difference is `_prisma_migrations`,
+   which has exactly 8 columns and which `/api/health?deep=1` does not count. Diff the JSON against
+   the JSON and the question does not arise.
 4. **PASS:** `columns` identical (the schema came across), and every row count on the branch is
    ≤ production and **non-zero wherever production is non-zero**. **FAIL:** any table that is empty
    on the branch and full on production — however green the branch's status looked.
