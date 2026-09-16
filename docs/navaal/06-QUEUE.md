@@ -2619,3 +2619,33 @@ the old `One-click Optimize Store` and `usage stats` read **0** everywhere.
 **The Languages field renders on the public page:** *English, German, Spanish, French, Italian,
 Japanese, and Portuguese (Brazil)*.
 
+
+### 2026-09-16 — CW — THE FOCUS WALL, MEASURED RATHER THAN ASSUMED
+
+The extension opened its **own Chrome window** and that window sits behind the owner's. Every tab the
+extension controls — including ones created seconds earlier — reads `document.visibilityState:
+"hidden"`, `document.hasFocus(): false`. `window.focus()` from page script does not raise it.
+
+**What still works while hidden:** `javascript_tool`, `navigate`, `find`, `read_page`,
+`read_console_messages`, `read_network_requests`, and `element.click()` — which is how all six
+locales were filled, published and their Languages field saved.
+
+**What does not, proven this session, not assumed:**
+1. **Coordinate clicks.** Control test on a harmless target: the app's own *Products* nav link,
+   rect read fresh and converted (×0.81667) to (97, 436), `elementFromPoint` confirming the link
+   under that point — clicked, waited 2.5 s, `location.pathname` **unchanged**. No input reaches a
+   hidden window.
+2. **Screenshots** — `captureVisibleTab` has nothing to capture.
+3. **UptimeRobot's dashboard.** 82 resources and 72 scripts load, then **zero** requests to any
+   `uptimerobot` host and one console line (the extension's own). It never leaves *"Active loading
+   indicator"*. Neon's console, Shopify admin, the Partner Dashboard and GitHub all render fine in
+   the same hidden tab — so this is that SPA, not the session.
+4. **The app iframe.** `read_page` on the embedded app returns `main` with only the heading; the
+   iframe's tree is not exposed, `javascript_tool` is top-frame only and the iframe is cross-origin,
+   `window.open(iframe.src)` returns `null` without a gesture, and
+   `app.navaal.ai/app?shop=…` redirects to `/auth/login`. With screenshots unavailable there is no
+   read path into the app at all.
+
+So **Task 15, Task 10 and Task 3-RE are gated on exactly one action: the owner clicking the
+extension's Chrome window once.** Nothing else is outstanding.
+
