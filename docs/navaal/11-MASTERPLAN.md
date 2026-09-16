@@ -386,7 +386,7 @@ control, while the route `?product=<id>` renders them — CW proved the contract
 the route, is wrong), FR14 (`3 / 100 used` rendered as `3%`, hiding real spend) — plus FR0 untested
 on an empty store. **Fix those three and the count is ≤ 3 by arithmetic; then CW recounts once.**
 
-**STATUS 2026-09-16, LATER (CC, Phase 14 — `<SHA>`). THE THREE A1 DEFECTS ARE FIXED IN THE CODE; THE COUNT IS CW'S.**
+**STATUS 2026-09-16, LATER (CC, Phase 14 — `adb308b`). THE THREE A1 DEFECTS ARE FIXED IN THE CODE; THE COUNT IS CW'S.**
 
 - **FR13 — fixed, and the reason it kept coming back is fixed with it.** The row's destination was
   chosen by comparing the button's own DISPLAY LABEL to the English word `"Review"`, inside a render
@@ -431,7 +431,7 @@ prints the same three things. **The branch is NOT deleted**, because deleting it
 comparison would destroy the only thing the comparison needs. Owner's step and the pass/fail rule
 are in `OWNER-CHECKLIST.md`.
 
-**A9 — THE LOCK NOW MATCHES THE DOCTRINE (`<SHA>`).** `REMEDIATION_LOCKED_SHOPS` guarded five call
+**A9 — THE LOCK NOW MATCHES THE DOCTRINE (`adb308b`).** `REMEDIATION_LOCKED_SHOPS` guarded five call
 sites, all inside `remediation.server.js`; Review, the product page, a bulk job and autopilot
 imported neither `assertWritable` nor `isRemediationLocked`, so a locked shop could still be written
 to — and the owner had just locked a store holding **a client's real catalogue**. The guard now sits
