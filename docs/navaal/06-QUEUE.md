@@ -2587,3 +2587,35 @@ it was not weakened to a prefix or to the subtitle.
 Japanese, Portuguese (Brazil)` — saved (banner cleared + `POST /graphql 200` ×2) and read back on a
 fresh load.
 
+
+### 2026-09-16 — CW — TASK 14, THE SWEEP, RE-RUN AFTER PUBLISH (and my ttv-03 line retracted)
+
+**RETRACTION — my own INBOX line "navaal-ttv-03 IS NOT PUBLIC" is withdrawn.** Cowork ruled it a
+false premise at `4ec2e2e`, the same class as F10: Shopify does not let a development store remove
+its storefront password, so that check can never pass and is not a defect. It is **dropped from the
+sweep**. Storefront verification on a dev store goes through the admin's authenticated preview
+(Themes → View, or the `_bt` preview link) on the signed-in session. **No storefront password is to
+be typed, requested or stored** — the owner offered one and Cowork declined it as unnecessary.
+Anything that genuinely needs a public storefront waits for F10's real route.
+
+**Legal redirects — PASS.** `HTTP/2 301`, one hop each: `navaal.ai/privacy` and `/privacy.html` →
+`app.navaal.ai/privacy`; `navaal.ai/terms` and `/terms.html` → `app.navaal.ai/terms`. Both targets
+**200** — `Privacy Policy — Navaal: AI SEO, AEO & GEO` (23 669 B) and `Terms of Service — Navaal: AI
+SEO, AEO & GEO` (5 457 B, 4 163 characters of text, zero banned phrases).
+
+**The W1 post — PASS.** **200**, `36.2%` exactly **2**, `71.9%` 4. The caveat is beside the headline.
+
+**All seven public listing pages — CLEAN, checked one by one.**
+`2 months free` · `two months free` · `7-day free trial` · `One-click Optimize Store` · `usage stats`
+· `99.90` · `299.90` · `799.90` · `25 generations` · `fastest` · `guaranteed` · `No. 1` — **0 on
+every page.** Correct prices on every page: `9.99` ×6, `95.90`, `287.90`, `767.90`.
+**No statistic anywhere in our copy:** every `%` on the page is a Tailwind class
+(`lg:tw-grid-cols-[75%_1fr]`, `tw-min-w-[80%]`), not a claim.
+
+**The gallery's alt texts — PASS on all six locales plus English.** Exactly three distinct alt texts
+per page (each rendered three times by the responsive gallery), every one ours and in that locale —
+the old `One-click Optimize Store` and `usage stats` read **0** everywhere.
+
+**The Languages field renders on the public page:** *English, German, Spanish, French, Italian,
+Japanese, and Portuguese (Brazil)*.
+
