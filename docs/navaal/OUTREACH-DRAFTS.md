@@ -26,7 +26,7 @@ thirty seconds and make sure the line naming what they sell is true in their wor
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at brbarbados.com's public product feed: 977 of 977 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the supplements gets found.
+I build a Shopify app and, while checking stores in your category, I looked at brbarbados.com's public product feed: 977 of 977 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the supplements get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -85,7 +85,7 @@ Hi — I build a Shopify app. Looking at momarsh.com's public product feed today
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at vftuner.com's public product feed: 69 of 69 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the calibration tools gets found.
+I build a Shopify app and, while checking stores in your category, I looked at vftuner.com's public product feed: 69 of 69 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the calibration tools get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -113,7 +113,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at mcarthurs.com's public product feed: 571 of 571 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the cakes gets found.
+I build a Shopify app and, while checking stores in your category, I looked at mcarthurs.com's public product feed: 571 of 571 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the cakes get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -141,7 +141,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at dressmagenta.com's public product feed: 1,842 of 1,843 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the dresses gets found.
+I build a Shopify app and, while checking stores in your category, I looked at dressmagenta.com's public product feed: 1,842 of 1,843 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the dresses get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -169,7 +169,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at www.modifieddecals.com's public product feed: 603 of 604 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the decals gets found.
+I build a Shopify app and, while checking stores in your category, I looked at www.modifieddecals.com's public product feed: 603 of 604 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the decals get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -252,7 +252,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at unlimitedpatchworks.com's public product feed: 155 of 156 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the patches gets found.
+I build a Shopify app and, while checking stores in your category, I looked at unlimitedpatchworks.com's public product feed: 155 of 156 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the patches get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -296,7 +296,7 @@ Hi — I make a Shopify app and checked bakeshopboyd.com's product feed today: 6
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at www.amybradleydesigns.com's public product feed: 217 of 224 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the quilt kits gets found.
+I build a Shopify app and, while checking stores in your category, I looked at www.amybradleydesigns.com's public product feed: 217 of 224 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the quilt kits get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -370,7 +370,7 @@ Hi — I build a Shopify app. Looking at medicalgearoutfitters.com's public prod
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at maineaimranchdogs.com's public product feed: 68 of 72 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the Pomsky listings gets found.
+I build a Shopify app and, while checking stores in your category, I looked at maineaimranchdogs.com's public product feed: 68 of 72 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the Pomsky listings get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -413,7 +413,7 @@ Hi — I build a Shopify app. Looking at paintbynumbershome.com's public product
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at www.tauricase.com's public product feed: 215 of 252 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the cases gets found.
+I build a Shopify app and, while checking stores in your category, I looked at www.tauricase.com's public product feed: 215 of 252 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the cases get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -523,7 +523,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at superiorviewfarm.com's public product feed: 102 of 128 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the plants gets found.
+I build a Shopify app and, while checking stores in your category, I looked at superiorviewfarm.com's public product feed: 102 of 128 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the plants get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -594,7 +594,7 @@ Hi — I build a Shopify app. Looking at brightboxes.shop's public product feed 
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at www.hippierunner.com's public product feed: 958 of 1,276 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the graphic tees gets found.
+I build a Shopify app and, while checking stores in your category, I looked at www.hippierunner.com's public product feed: 958 of 1,276 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the graphic tees get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -622,7 +622,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi Zen,
 
-I build a Shopify app and, while checking stores in your category, I looked at sacredwordpublishing.com's public product feed: 260 of 360 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the books gets found.
+I build a Shopify app and, while checking stores in your category, I looked at sacredwordpublishing.com's public product feed: 260 of 360 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the books get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -678,7 +678,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at shoptriplebfarms.com's public product feed: 175 of 251 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the farm goods gets found.
+I build a Shopify app and, while checking stores in your category, I looked at shoptriplebfarms.com's public product feed: 175 of 251 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the farm goods get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -706,7 +706,7 @@ Founder, Navaal · navaal.ai
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at zilla-meals.com's public product feed: 85 of 123 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the meals gets found.
+I build a Shopify app and, while checking stores in your category, I looked at zilla-meals.com's public product feed: 85 of 123 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the meals get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
