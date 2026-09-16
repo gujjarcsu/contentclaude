@@ -2799,3 +2799,69 @@ Re-run after everything else, cache-busted, ~03:27 UTC. Unchanged from the mid-s
   read **0** on all seven pages.
 - **`ttv-03 public` is not in this sweep** — dropped as a false premise per Cowork `4ec2e2e`.
 
+
+### 2026-09-16 — CW — THE THIRD CONFUSION COUNT IS **3**. A1's GATE IS MET.
+
+Full walk in `docs/history/screen-reads/first-run-qa-fresh-2026-09-16.md`. Method identical to counts
+one and two: the *First-run reset* workflow on `navaal-qa-fresh` (05:37:47Z, from `7710be2`,
+`firstDraftSeenAt` → `null`), then the app walked cold. **15 → 4 → 3.** No uninstall, so no invented
+uninstall reason reached the funnel.
+
+**The three, in order of how much they would cost a real merchant:**
+1. **The first screen's primary button is a Starter feature on a Free store.** *"Write the rest in
+   bulk"* is the dark primary control on the first run; *Bulk runs* is listed under **Starter** and
+   not under Free. No upgrade marker. FR10's class, new location.
+2. **Blog is fully open on Free and never states a cost.** *"Generate Blog Post"* with no credit
+   price and no gate, while the Plans table lists blog posts from **Growth** at *3 credits each* and
+   the Free card omits them.
+3. **"Reject 3 not approved"** beside *"0 of 3 approved"* reads as *reject all three*. Weakest of
+   the three.
+
+**CC — three of the four are closed and one is unverifiable from my side:**
+- **FR8 CLOSED, including the hard case.** `contentpilot-dev2`: store score **65/100**, the three
+  rows **`At first run: 56/100`**, and the sentence *"These 3 products all score 56… We scanned 14
+  products to pick them."* Product rows carry no score at all now.
+- **FR14 closed on every visible surface** (`9 / 100 used`, `9 used · 91 remaining of 100`).
+  **The `aria-label` half is UNVERIFIED** — no accessibility tree crosses the app's cross-origin
+  iframe boundary from this harness. It needs a screen reader on the owner's machine, or a test.
+- **FR13 correct by route, untestable by click here — and the mechanism is now proven, not guessed.**
+  A capture listener on the top document logged `pointerdown|IFRAME|1505,758|trusted=true` (and
+  mousedown/mouseup/click) for a click aimed at the row's `[Review]` button: a **real** event, at
+  **exactly** the right CSS point, whose target is the `<iframe>` element. The extension dispatches on
+  the top frame's session, so an OOPIF never receives it. Control: the *Draft on this page* tab is
+  equally inert. **This is a permanent limit of CW's harness, not a defect in the app** — record it
+  once and stop re-testing it. `/app/review?product=<numeric>` renders correctly.
+- **FR0** cannot be tested on a 12-product store; `navaal-shape-zero` shows a proper empty state.
+
+### 2026-09-16 — CW — FRAME 01 IS UNBLOCKED. **FRAME 03 IS STILL HELD: the 8-vs-9 count is live.**
+
+Read off `contentpilot-dev2` `/app/products` today, one screen, three numbers:
+- header — *"15 products in your catalog · 14 active and draft products published to your online
+  store · **8 with content published** · 6 ready to review · 0 not yet optimized · 17 archived not
+  shown"*
+- tile — **8** *AI Content Published*, *"of your 14 active and draft products published to your
+  online store · 24 since you installed"*
+- tabs — *All (15 on page) · Not optimized on this page (0) · Draft on this page (6) ·
+  **Published on this page (9)***
+
+**8 ≠ 9, on the same screen, and the denominators disagree too: 0 + 6 + 9 = 15 rows, while 8 + 6 =
+14.** The tabs count rows in the list; the tile counts against *active and draft products published
+to the online store*. The likeliest single cause is one row that is in the list but outside the 14 —
+the same class as the old *Live badge on a Shopify-draft product*. Stated as the shape of it, not a
+diagnosis. **Frame 03 comes from this screen, so it stays held.** Frame 01 (`/app` on dev2) is clean:
+FR8 is gone from it and the score block is labelled.
+
+**INBOX — OWNER — THE RE-CAPTURE CANNOT RUN ON THIS MACHINE'S LINUX VM.**
+`node tools/proof/listing-assets.mjs 01-home` fails at browser launch:
+`chrome-headless-shell: error while loading shared libraries: **libXdamage.so.1**: cannot open shared
+object file`. It is the only missing library (`ldd` on both the full chromium and the headless shell
+reports exactly one). The VM has **no sudo**, `apt-get update` has no route to a mirror (it hangs),
+and copying the library in from elsewhere was refused by this session's safety classifier — correctly,
+and not worked around. Everything else is ready: Node 22, Playwright, both browsers, and
+`tests/e2e/.auth/shopify.json` in place. **Two ways forward, both one line:**
+- run it where it has always run, on Windows: `node tools/proof/listing-assets.mjs 01-home` (then
+  `03-products`), or
+- install `libxdamage1` in the Cowork Linux VM and CW runs it unattended next time.
+CW did **not** substitute a browser screenshot: the extension's capture pipeline caps output at
+1456 px wide, so it cannot produce 1600×900 without upscaling, and an upscaled JPEG has no business
+on the App Store listing.
