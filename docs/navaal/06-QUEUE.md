@@ -2510,3 +2510,34 @@ outside sees the password page, not the store. One toggle in *Online Store → P
 **The listing's Languages field still reads `English` alone** — while German, French and Spanish are
 live on the public page. It is set to all seven as the last step of §3, after it/pt-BR/ja publish.
 
+
+### 2026-09-16 — CW — TASK 3-RE AND TASK 10 ARE BLOCKED, AND ON THE SAME THING
+
+Both need the Chrome window in the foreground. Recorded exactly, with what was tried.
+
+**TASK 3-RE — nothing inside the embedded app can be read or clicked from here.**
+`admin.shopify.com/store/navaal-shape-drafts/apps/navaal-seo-geo-content/app` loads and the top
+frame reads fine — the left nav shows *Products · Review · Blog · Settings* and the iframe is
+`name="app-iframe" src="https://app.navaal.ai/"`. Beyond that:
+1. `find` and `read_page` both fail with *"Page still loading (executeScript waited 45000ms for
+   document_idle)"* — twice each. Shopify admin never reaches `document_idle` for the extension, so
+   the accessibility tree is unavailable on that page whether or not the iframe is permitted.
+2. `javascript_tool` runs in the top frame only and the iframe is cross-origin, so its DOM is not
+   reachable; `window.open(iframe.src)` returned `null` (popup blocked, no user gesture) and the
+   token in that src is a credential CW does not read or move.
+3. Standalone: `https://app.navaal.ai/app?shop=navaal-shape-drafts.myshopify.com` **redirects to
+   `https://app.navaal.ai/auth/login`** — a login wall. CW stops at login walls.
+So **FR13-by-click, the GID form, the French store re-read, the A1 third confusion count, the A11
+shape walks and the German first run are all not started.** They need coordinate clicks, and
+coordinate clicks need the window in front (see the focus finding above).
+
+**TASK 10 — the workflow dispatch was refused, and CW did not work around it.**
+`github.com/gujjarcsu/contentclaude/actions/workflows/shop-kind.yml` opens signed in; the *Run
+workflow* dropdown opens and the form is there (`inputs[kinds]`, branch, submit). Submitting it by
+script was **denied by the session's own safety classifier** (*Blind Apply*) — the right call for a
+blind form POST, and not something to retry another way. The sanctioned route is a real click on the
+green *Run workflow* button, which again needs the window in front. **Neither the Shop-kind seed nor
+the Funnel read has been run; no reading to post.** The first run should be the **list-only** one
+(empty `kinds`), which writes nothing and returns every shop with its stored and effective kind —
+that listing is what the seed pairs should be built from, rather than from the ledger alone.
+
