@@ -2707,3 +2707,55 @@ shops*; it now says **0 real and 3 unclassified**, and unclassified is reported 
 than counted as a merchant. **OWNER / CC:** classify those three — each is `real` or `shopify` — and
 the digest becomes true rather than merely safe.
 
+
+### 2026-09-16 — CW — TASK 3-RE: FR13 ROUTE-CONFIRMED, CLICK-UNCONFIRMED; A11 WALKED; A1 BLOCKED
+
+**FR13 — the route exists and is correct. The click still cannot be tested from here, and the
+control proves why.**
+On `navaal-qa-fresh` (Northline Supply, 12 products, 3 drafts ready), `/app/products` shows two
+`Ready to review` rows — *Brass Watering Can 1.5L* and *Cast Iron Skillet 26cm* — each with a
+`[Review]` button. Clicking that button at its own fresh coordinates did nothing: the top URL stayed
+`/app/products`. **The control — the `Draft on this page (3)` tab, an unrelated control on the same
+screen — also did nothing.** So this is the harness's reach, not the app: no synthetic input reaches
+the app's cross-origin iframe, because the extension raises events in the TOP document, where
+`elementFromPoint` returns the `<iframe>` itself. **FR13 is neither confirmed nor cleared by click.**
+
+**What IS proved, by navigating the route directly:**
+`…/apps/navaal-seo-geo-content/app/review?product=9854392271078` (the numeric id of *Brass Watering
+Can 1.5L*, read off the Shopify admin) renders **“Review & Publish — 1 product with draft content
+ready to review”** with the banner **“Showing one product — Opened from its row on Products. Approve
+and publish here; the rest of your drafts are one click away.”**, a *Show all drafts* button, and the
+approve controls **“0 of 1 approved · Approve all on this page · Clear selection · Reject 1 not
+approved.”** So the `?product=<numeric>` contract and the approve control are real and correct; the
+publish button sits below the iframe's own fold, which cannot be scrolled from outside (the top
+document is 945 px and does not scroll; the iframe is 832 px with its own scroller).
+
+**A1 — the third confusion count is NOT started and cannot be.** It needs a fresh reinstall and a
+walk of FR0–FR14 inside the app, which is clicking inside that iframe.
+
+**A11 — five shape stores walked, first screen read off the screen.**
+
+| store | first screen |
+|---|---|
+| `-variants` | Store SEO score **26/100 across 7 products sampled**, *“Unchanged since September 15.”* Three products holding it back: *Trade Work Boot 0/1/2*. Findings: 7 descriptions too short · 7 images no alt text · 1 product no barcode. *Welcome back! 0 products optimized · 3 drafts awaiting review.* |
+| `-fr` | **35 → 39/100**, `+4 since September 15`, **across 8 products sampled**. Three products: *Mitigeur de cuisine 0/1/2*. Findings: 8 images no alt text · 8 products no barcode · 7 descriptions too short. *1 product optimized · 2 drafts awaiting review.* **The whole screen is in English on an all-French store** — the known defect, unchanged. |
+| `-b2b` | Empty state, and a good one: *“Your products aren't on your Online Store yet… Your store has 12 products and none is there yet: they are drafts, archived, or sold through another channel only.”* |
+| `-cap` | **26/100 across 30 products sampled**, three products *Product 0 / 10 / 11*, findings counted at **150** descriptions / 150 images / 150 products. |
+| `-zero` | Empty state: *“Add a product and we'll get started.”* |
+
+**The `-cap` contradiction is narrower than it was written up, and the correction matters.** Counted
+off the Shopify admin, that catalogue really is **150 products** (`Product 0` … `Product 149`,
+paginated 1-50), so **150 is the true number and the findings are right.** What the screen does is
+put a **30-product sample score** beside **150-product findings** without saying they have different
+scopes — it only hints at it with *“This is a sample. The SEO Audit scores more of your catalog.”*
+**CC: this is a labelling defect, not a counting one. Do not "fix" the 150.**
+
+**FR8 confirmed a third and fourth time, with a sharper clue.** On `-variants` all three "products
+holding this store back" read `This product: 26/100` against a store score of 26; on `-cap` all three
+read `26/100` against 26. **On `-fr` all three read `35/100` while the store score is `39` — the
+previous score.** So the per-product figure is the STORE score captured at first run, not the
+product's own — which the card half-admits (*“Scored on your first run”*). Three identical numbers
+are not three product scores.
+
+**One earlier defect is fixed:** `Mitigeur de cuisine 0` now renders with its `0` intact.
+
