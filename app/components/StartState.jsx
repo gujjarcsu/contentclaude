@@ -50,7 +50,8 @@ import {
   ProgressBar,
 } from "@shopify/polaris";
 import { GeoRubric } from "./GeoRubric.jsx";
-import { WATCH_FROM_HERE, blockerLine } from "../utils/firstRun.js";
+import { WATCH_FROM_HERE, blockerLine, canRunFix, primaryFixIndex } from "../utils/firstRun.js";
+import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
@@ -307,6 +308,13 @@ function StartBody({ scan, start, navigate, onRetry }) {
   const done = drafted.size;
   // P2.7 — the specific things holding this store back, from the first walk.
   const blockers = Array.isArray(start.blockers) ? start.blockers : [];
+  // Phase 15 (CW's third count) — the dark control on a brand-new FREE store
+  // was "Write the rest in bulk", and every bulk run is a Starter feature. The
+  // primary now goes to the first fix this plan can actually run, and a fix it
+  // cannot run says so on the button instead of leading nowhere.
+  const entitlements = getEntitlements(start.planName ?? "free");
+  const primaryIndex = primaryFixIndex(blockers, entitlements);
+  const bulkPlanLabel = cheapestPlanLabelWith("bulkJobs");
 
   return (
     <BlockStack gap="500">
@@ -382,13 +390,18 @@ function StartBody({ scan, start, navigate, onRetry }) {
                 </BlockStack>
                 {b.fix &&
                   (b.fix.external ? (
-                    <Button url={b.fix.to} target="_top" variant={i === 0 ? "primary" : undefined}>
+                    <Button url={b.fix.to} target="_top" variant={i === primaryIndex ? "primary" : undefined}>
                       {t(b.fix.label)}
                     </Button>
                   ) : (
-                    <Button variant={i === 0 ? "primary" : undefined} onClick={() => navigate(b.fix.to)}>
-                      {t(b.fix.label)}
-                    </Button>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Button variant={i === primaryIndex ? "primary" : undefined} onClick={() => navigate(b.fix.to)}>
+                        {t(b.fix.label)}
+                      </Button>
+                      {!canRunFix(b.fix, entitlements) && (
+                        <Badge tone="info">{t("{plan} and above", { plan: bulkPlanLabel })}</Badge>
+                      )}
+                    </InlineStack>
                   ))}
               </InlineStack>
             ))}

@@ -85,3 +85,34 @@ export function publishedSubtext({ ok, inScope, candidateCount, candidateLabel, 
   if (Number.isFinite(record) && record > inScope) return t("{base} · {record} since you installed", { base, record });
   return base;
 }
+
+/**
+ * Frame 03 — THE ROW THAT IS ON THE PAGE AND OUTSIDE EVERY NUMBER ABOVE IT.
+ *
+ * On `contentpilot-dev2` the Products screen read: header `8 with content
+ * published`, tile `8 AI Content Published`, tab `Published on this page (9)`,
+ * and the tab denominators `0 + 6 + 9 = 15` against the header's `8 + 6 = 14`.
+ * Every number was individually right and no merchant could reconcile them.
+ *
+ * The cause is two populations on one screen, exactly the defect the top of
+ * this file exists to remove:
+ *
+ *   the LIST   `-status:archived`                       15 products
+ *   the HEADER the candidate scope, which requires
+ *              publication to the Online Store channel  14 products
+ *
+ * The one product in the first and not the second is a Shopify DRAFT with
+ * published content of ours — the same class as the old Live-badge-on-a-
+ * Shopify-draft. "on this page" was the only qualifier the tabs carried, and it
+ * explains PAGINATION, not scope, so on a 15-product store that fits on one
+ * page it explained nothing at all.
+ *
+ * This counts them so the screen can name them and the row can be found.
+ * PURE.
+ */
+export function offStorefrontRows(products) {
+  if (!Array.isArray(products)) return 0;
+  // `undefined` is "we did not ask" and must never be counted as "no": the
+  // field is only absent on a row built before `publishedAt` was queried.
+  return products.filter((p) => p && p.onStorefront === false).length;
+}

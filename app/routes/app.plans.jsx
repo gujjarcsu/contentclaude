@@ -455,6 +455,16 @@ const FEATURE_TABLE = [
     growth: ent("growth", "bulkJobs"), pro: ent("pro", "bulkJobs"),
   },
   {
+    // Phase 15 — this row did not exist, while the Growth CARD above sold
+    // "Blog posts (3 credits each)" and the app generated them for anybody.
+    // Derived from the same entitlement the route now enforces, so the row and
+    // the gate cannot drift apart.
+    feature: T("Blog posts ({n} credits each)"),
+    vars: { n: CREDIT_WEIGHTS.blog },
+    free: ent("free", "blogPosts"), starter: ent("starter", "blogPosts"),
+    growth: ent("growth", "blogPosts"), pro: ent("pro", "blogPosts"),
+  },
+  {
     feature: T("Autopilot mode"),
     free: ent("free", "autopilot"), starter: ent("starter", "autopilot"),
     growth: ent("growth", "autopilot"), pro: ent("pro", "autopilot"),

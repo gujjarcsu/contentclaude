@@ -44,6 +44,15 @@ export const FREE_PLAN = {
     autopilot: false,
     contentTemplates: false,
     versionHistory: false,
+    // Phase 15 — the locked table sells blog posts from Growth (14-PRICING.md
+    // §4: Free —, Starter —, Growth ✓, Pro ✓) and the plans page repeats it as
+    // "Blog posts (3 credits each)" under Growth. The code had no such
+    // entitlement at all, so /app/blog generated for anyone who asked and never
+    // said what it cost. Either the table was a false claim on the page a
+    // merchant decides to pay from, or the app was giving a metered feature
+    // away — and the table is the owner-approved one (04-DECISIONS.md
+    // §PRICING), so the table is what the code now enforces.
+    blogPosts: false,
     // GEO / AEO entitlements
     geoScore: true,       // GEO Readiness Score is the free hook (read-only)
     llmsTxt: false,       // llms.txt generation/serving — Starter+
@@ -78,6 +87,7 @@ export const BILLING_PLANS = {
       autopilot: false,
       contentTemplates: true,
       versionHistory: true,
+      blogPosts: false,   // 14-PRICING.md §4: blog starts at Growth
       geoScore: true,
       llmsTxt: true,
       aiVisibility: false,
@@ -97,6 +107,7 @@ export const BILLING_PLANS = {
       autopilot: true,
       contentTemplates: true,
       versionHistory: true,
+      blogPosts: true,
       geoScore: true,
       llmsTxt: true,
       aiVisibility: false,
@@ -116,6 +127,7 @@ export const BILLING_PLANS = {
       autopilot: true,
       contentTemplates: true,
       versionHistory: true,
+      blogPosts: true,
       geoScore: true,
       llmsTxt: true,
       aiVisibility: true,  // P1 tracker entitled at Pro; still flag-gated off by default
@@ -175,15 +187,56 @@ export function planLimitsFor(planName) {
  * version of a paywall: the gate is a CAPABILITY, not a rationed quantity, and
  * nothing about it is hidden (14-PRICING.md §5).
  */
+export function cheapestPlanWith(entitlement) {
+  return (
+    Object.values(BILLING_PLANS)
+      .filter((p) => p.entitlements?.[entitlement])
+      .sort((a, b) => a.amount - b.amount)[0] ?? null
+  );
+}
+
+/**
+ * The display name of the cheapest plan carrying an entitlement — "Starter",
+ * "Growth". Derived, never typed: a marker on a button that names a plan the
+ * table does not sell that feature on is the same class of defect as a refusal
+ * quoting the wrong price.
+ */
+export function cheapestPlanLabelWith(entitlement) {
+  const p = cheapestPlanWith(entitlement);
+  if (!p) return null;
+  return p.planName.charAt(0).toUpperCase() + p.planName.slice(1);
+}
+
 export function bulkRefusal(what) {
-  const cheapest = Object.values(BILLING_PLANS)
-    .filter((p) => p.entitlements?.bulkJobs)
-    .sort((a, b) => a.amount - b.amount)[0];
+  const cheapest = cheapestPlanWith("bulkJobs");
   if (!cheapest) return `${what} is not available on your plan.`;
-  const label = cheapest.planName.charAt(0).toUpperCase() + cheapest.planName.slice(1);
+  const label = cheapestPlanLabelWith("bulkJobs");
   return (
     `${what} is a paid feature — on the free plan you can still generate for any product, ` +
     `one at a time, and the full catalogue audit is never capped. ` +
     `${label} adds bulk from $${cheapest.amount}/month with ${cheapest.monthlyCredits.toLocaleString()} credits.`
+  );
+}
+
+/**
+ * Phase 15 — the refusal a merchant sees when blog generation is gated, built
+ * the same way as `bulkRefusal` and for the same reasons: it says WHY, it names
+ * the plan and the price from the table rather than from a literal, and it
+ * states the credit cost so the number on the plans page and the number in the
+ * refusal cannot drift apart.
+ *
+ * The cost is passed in rather than imported: `credits.js` imports the i18n
+ * module, and this file is deliberately dependency-free so a server utility and
+ * a route component can both read it.
+ */
+export function blogRefusal(creditsEach) {
+  const cheapest = cheapestPlanWith("blogPosts");
+  if (!cheapest) return "Blog posts are not available on your plan.";
+  const label = cheapestPlanLabelWith("blogPosts");
+  return (
+    `Blog posts are a ${label} feature — they cost ${creditsEach} credits each, ` +
+    `several times a product description, which is why they are not on the free plan. ` +
+    `${label} is $${cheapest.amount}/month with ${cheapest.monthlyCredits.toLocaleString()} credits. ` +
+    `Posts you have already written stay here and can still be published.`
   );
 }

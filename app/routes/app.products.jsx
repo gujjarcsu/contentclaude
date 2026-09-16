@@ -54,7 +54,7 @@ import { runQuickStartOne, PRODUCT_GID_RE } from "../utils/quickStart.server.js"
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
-import { publishedSubtext } from "../utils/catalogueContent.js";
+import { publishedSubtext, offStorefrontRows } from "../utils/catalogueContent.js";
 import {
   actionFor,
   hasRealContent,
@@ -89,7 +89,7 @@ export const loader = async ({ request }) => {
           products(last: ${PAGE_SIZE}, before: $cursor, sortKey: TITLE, query: "${LIST_SCOPE_QUERY}") {
             pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
             edges { node {
-              id title handle status productType vendor description
+              id title handle status productType vendor description publishedAt
               featuredImage { url altText }
               variants(first: 1) { edges { node { price } } }
               tags
@@ -100,7 +100,7 @@ export const loader = async ({ request }) => {
           products(first: ${PAGE_SIZE}, after: $cursor, sortKey: TITLE, query: "${LIST_SCOPE_QUERY}") {
             pageInfo { hasPreviousPage hasNextPage startCursor endCursor }
             edges { node {
-              id title handle status productType vendor description
+              id title handle status productType vendor description publishedAt
               featuredImage { url altText }
               variants(first: 1) { edges { node { price } } }
               tags
@@ -147,6 +147,13 @@ export const loader = async ({ request }) => {
     title: node.title,
     handle: node.handle,
     status: node.status,
+    // Frame 03 — `publishedAt` is Shopify's own answer to "is this product on
+    // the Online Store channel". The page lists `-status:archived` (deliberately
+    // wide: a merchant's drafts are still theirs) while the header counts the
+    // CANDIDATE scope, which requires online-store publication. One product can
+    // therefore be on this page and outside every number above it. The row now
+    // carries the fact, so the difference can be seen instead of inferred.
+    onStorefront: !!node.publishedAt,
     productType: node.productType,
     vendor: node.vendor,
     description: node.description || "",
@@ -690,6 +697,11 @@ export default function ProductsPage() {
   // "Draft (120)" sit above an empty list — the store-wide totals live in the
   // stat cards above instead.
   const statusById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.status])), [products]);
+  // Frame 03 — the badge and the count must key on the SAME fact. Shopify
+  // status alone misses a product that is ACTIVE but unpublished from the
+  // Online Store channel: it is out of the header's population just the same,
+  // and it used to carry no marker at all.
+  const onStorefrontById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.onStorefront])), [products]);
 
   const pageCounts = useMemo(() => {
     let draft = 0,
@@ -702,7 +714,9 @@ export default function ProductsPage() {
       else if (state === PRODUCT_STATE.NEEDS_CONTENT) none++;
       // rejected is deliberately in no tab; it is counted in the cards above.
     }
-    return { draft, published, none };
+    // Frame 03 — how many rows on this page the header's population excludes,
+    // so the two can be reconciled on screen instead of by arithmetic.
+    return { draft, published, none, offStorefront: offStorefrontRows(products) };
   }, [products, contentMap]);
 
   const tabs = useMemo(
@@ -770,9 +784,15 @@ export default function ProductsPage() {
       // A7 (Phase 8) — published content on a product Shopify holds as a draft
       // or archived has no storefront page. Say both things.
       const shopifyStatus = String(statusById[productId] ?? "ACTIVE").toUpperCase();
-      const notLive = (state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED) && shopifyStatus !== "ACTIVE";
-      if (notLive) {
+      const live = state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED;
+      if (live && shopifyStatus !== "ACTIVE") {
         return <Badge tone="attention">{t("{state} · product is a Shopify {v}, not on your storefront", { state: t(PRODUCT_STATE_LABEL[state]), v: shopifyStatus.toLowerCase() })}</Badge>;
+      }
+      // Frame 03 — ACTIVE but never published to the Online Store channel.
+      // Same consequence, no page for anyone to read, and the old badge said
+      // nothing because it only looked at `status`.
+      if (live && onStorefrontById[productId] === false) {
+        return <Badge tone="attention">{t("{state} · not on your Online Store, so it has no public page", { state: t(PRODUCT_STATE_LABEL[state]) })}</Badge>;
       }
       return <Badge tone={BADGE_TONE[state]}>{t(PRODUCT_STATE_LABEL[state])}</Badge>;
     }
@@ -1178,6 +1198,17 @@ export default function ProductsPage() {
         {/* Product list with status tabs */}
         <Card padding="0">
           <Tabs tabs={tabs} selected={activeTab} onSelect={handleTabChange} fitted />
+          {/* Frame 03 — the sentence that makes the tab counts and the header
+              add up. Shown only when the page actually contains such a row, and
+              it names the reason rather than the difference: "on this page"
+              explains pagination, and this is not pagination. */}
+          {pageCounts.offStorefront > 0 && (
+            <Box paddingInline="400" paddingBlockStart="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                {t("{n, plural, one {# product here is not on your Online Store, so it is listed but not counted in the totals above. Publish it in Shopify and it joins the counts.} other {# products here are not on your Online Store, so they are listed but not counted in the totals above. Publish them in Shopify and they join the counts.}}", { n: pageCounts.offStorefront })}
+              </Text>
+            </Box>
+          )}
           <ResourceList
             resourceName={{ singular: "product", plural: "products" }}
             items={filteredProducts}

@@ -30,7 +30,7 @@ export const BLOCKER_GROUPS = Object.freeze([
     key: "openai·description·blocking",
     grade: "blocking",
     line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no description — the OpenAI product feed cannot list {n, plural, one {it} other {them}}. The first three are being written below.", { n }),
-    fix: { label: T("Write the rest in bulk"), to: "/app/fix" },
+    fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·image_link·blocking",
@@ -42,7 +42,7 @@ export const BLOCKER_GROUPS = Object.freeze([
     key: "openai·brand·blocking",
     grade: "blocking",
     line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no brand — Shopify's vendor field is empty, and the feed requires it.", { n }),
-    fix: { label: T("Set the brand in one click"), to: "/app/fix" },
+    fix: { label: T("Set the brand in one click"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·title·blocking",
@@ -60,24 +60,28 @@ export const BLOCKER_GROUPS = Object.freeze([
     key: "openai·description·degrading",
     grade: "degrading",
     line: (n, t = enT) => t("{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote. The first three are being written below.", { n }),
-    fix: { label: T("Write the rest in bulk"), to: "/app/fix" },
+    fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·image alt·degrading",
     grade: "degrading",
     line: (n, t = enT) => t("{n, plural, one {# image has} other {# images have}} no alt text — free to write, reviewed before it is published.", { n }),
-    fix: { label: T("Write alt text"), to: "/app/fix" },
+    fix: { label: T("Write alt text"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·variant options·degrading",
     grade: "degrading",
     line: (n, t = enT) => t("{n, plural, one {# product's option is} other {# products' options are}} still called “Title”.", { n }),
-    fix: { label: T("Name the options"), to: "/app/fix" },
+    fix: { label: T("Name the options"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·gtin·degrading",
     grade: "degrading",
     line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no barcode. Own brand or handmade? Say so once and it stops.", { n }),
+    // NOT `needsBulk`. This one writes a PREFERENCE to our own database
+    // ("own brand or handmade — stop asking"), touches no catalogue and costs
+    // nothing. Charging a merchant to stop being nagged would be the wrong
+    // direction, so it is the fix a free store can always press.
     fix: { label: T("Tell us"), to: "/app/fix" },
   },
 ]);
@@ -138,3 +142,36 @@ export const WATCH_FROM_HERE = Object.freeze({
     "Every day we read your whole catalogue again: descriptions that collapse, alt text that disappears, URLs that change, new products with nothing written, what each AI surface asks for, whether six search and AI crawlers can reach your storefront, and whether your pages can be indexed. When something changes, Home tells you the same day — and only then.",
   ),
 });
+
+/**
+ * Phase 15 — CAN THIS PLAN ACTUALLY PRESS THIS BUTTON?
+ *
+ * CW's third confusion count found the darkest control on a brand-new Free
+ * store's first screen was "Write the rest in bulk", and every bulk run on
+ * `/app/fix` is a Starter feature (14-PRICING.md §4: Free is "one at a time").
+ * The screen offered it as the primary action with no marker at all, so the
+ * first thing a merchant is invited to do was the one thing their plan could
+ * not do.
+ *
+ * Two rules follow, and they are here rather than in a component so they can be
+ * proved without rendering:
+ *   - a fix the plan cannot run is never the primary control;
+ *   - and it carries a marker naming the plan that can.
+ *
+ * PURE.
+ */
+export function canRunFix(fix, entitlements) {
+  if (!fix) return false;
+  if (!fix.needsBulk) return true;
+  return !!entitlements?.bulkJobs;
+}
+
+/**
+ * Index of the blocker whose fix should be the primary (dark) control, or -1
+ * when this plan can run none of them — in which case nothing is primary,
+ * because a dark button that refuses is worse than no dark button.
+ */
+export function primaryFixIndex(blockers, entitlements) {
+  const list = Array.isArray(blockers) ? blockers : [];
+  return list.findIndex((b) => b?.fix && canRunFix(b.fix, entitlements));
+}

@@ -18,6 +18,7 @@ import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { greetingName } from "../utils/shopName.js";
 import { FIX, FIX_LABEL, SKIPPED, proposeVendor } from "../utils/remediation.js";
+import { bulkRefusal, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 
@@ -25,11 +26,17 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const { remediationCandidates, proposeOptionNames, firstVariants, isRemediationLocked } = await import("../utils/remediation.server.js");
-  const { remainingGenerations } = await import("../utils/plans.server.js");
-  const [candidates, bv, remaining] = await Promise.all([
+  const { remainingGenerations, checkEntitlement } = await import("../utils/plans.server.js");
+  const [candidates, bv, remaining, bulkEnt] = await Promise.all([
     remediationCandidates(shop),
     prisma.brandVoice.findUnique({ where: { shop }, select: { storeName: true } }),
     remainingGenerations(shop),
+    // Phase 15 — EVERY SECTION ON THIS PAGE IS A BULK RUN, and none of them
+    // checked the entitlement. 14-PRICING.md §4 sells Free as "one at a time"
+    // and the plans table shows "Bulk runs ✗" for Free, while this page would
+    // happily apply a vendor to fifty products or queue fifty descriptions.
+    // The screen now says so before the press rather than after it.
+    checkEntitlement(shop, "bulkJobs"),
   ]);
   const [options, variants] = await Promise.all([
     proposeOptionNames(admin.graphql, shop, candidates[FIX.OPTION_NAME].map((c) => c.productId)),
@@ -38,6 +45,8 @@ export const loader = async ({ request }) => {
   return Response.json({
     shopDomain: shop,
     locked: isRemediationLocked(shop),
+    // Data, not a sentence: the screen builds the words in the merchant's language.
+    bulkEntitled: !!bulkEnt.allowed,
     remaining,
     vendorProposal: proposeVendor({ brandStoreName: bv?.storeName, shopName: greetingName(shop, null) }),
     candidates,
@@ -60,6 +69,21 @@ export const action = async ({ request }) => {
     items = [];
   }
   const r = await import("../utils/remediation.server.js");
+
+  // Phase 15 — THE BULK GATE, server-side, because the UI is a courtesy and
+  // this is the rule. `gtin_exempt` is deliberately NOT here: it writes a
+  // PREFERENCE to our own database ("own brand, stop asking"), touches no
+  // catalogue and costs nothing, and charging a merchant to stop being nagged
+  // would be the wrong direction.
+  const BULK_INTENTS = new Set(["apply_vendor", "apply_options", "apply_barcodes", "start_alt_text", "start_descriptions"]);
+  if (BULK_INTENTS.has(intent)) {
+    const { checkEntitlement } = await import("../utils/plans.server.js");
+    const bulkEnt = await checkEntitlement(shop, "bulkJobs");
+    if (!bulkEnt.allowed) {
+      return Response.json({ intent, error: bulkRefusal("Fixing many products at once"), limitReached: true }, { status: 403 });
+    }
+  }
+
   try {
     if (intent === "apply_vendor") return Response.json({ intent, ...(await r.applyVendor(admin.graphql, shop, items, fd.get("vendor"))) });
     if (intent === "apply_options") return Response.json({ intent, ...(await r.applyOptionNames(admin.graphql, shop, items)) });
@@ -104,7 +128,7 @@ function ResultBanner({ data }) {
  * One fix. Rows carry a tick and, when `field` is set, a text box whose value
  * goes with the row. `shared` is one text box for the whole section.
  */
-function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, locked, credits, remaining, storeHandle }) {
+function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, locked, gated = false, credits, remaining, storeHandle }) {
   const t = useT();
   const meta = FIX_LABEL[fix];
   const [ticked, setTicked] = useState(() => new Set(rows.filter((r) => !r.disabled).map((r) => r.key)));
@@ -165,10 +189,19 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
             {t("{cost} credits for {length} products; {remaining} left this month. The first {remaining1} will run and the rest are disclosed, not silently dropped.", { cost, length: selected.length, remaining, remaining1: remaining })}
           </Text>
         )}
+        {gated && (
+          /* Phase 15 — stated before the button, not discovered on the press.
+             It names the plan from the table and never reads as a dead end:
+             the findings above stay visible and free, which is the whole hook
+             (14-PRICING.md §5, "the audit is never capped"). */
+          <Text as="p" variant="bodySm" tone="subdued">
+            {t("Fixing many products at once is on {plan} and above. Everything listed here stays visible on every plan, and you can still write for one product at a time from its own page.", { plan: cheapestPlanLabelWith("bulkJobs") })}
+          </Text>
+        )}
         <InlineStack gap="200" blockAlign="center">
           <Button
             variant="primary"
-            disabled={locked || selected.length === 0 || busy}
+            disabled={locked || gated || selected.length === 0 || busy}
             loading={busy}
             onClick={() =>
               submit(
@@ -184,6 +217,7 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
               {t("This store is monitored only; nothing is written from here.")}
             </Text>
           )}
+          {gated && !locked && <Badge tone="info">{t("{plan} and above", { plan: cheapestPlanLabelWith("bulkJobs") })}</Badge>}
         </InlineStack>
       </BlockStack>
     </Card>
@@ -192,7 +226,8 @@ function FixSection({ fix, rows, field, shared, sharedDefault, submit, busy, loc
 
 export default function FixPage() {
   const t = useT();
-  const { shopDomain, locked, remaining, vendorProposal, candidates, options, variants } = useLoaderData();
+  const { shopDomain, locked, bulkEntitled, remaining, vendorProposal, candidates, options, variants } = useLoaderData();
+  const gated = !bulkEntitled;
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const loadingThisRoute = useRouteLoading();
@@ -237,12 +272,12 @@ export default function FixPage() {
             <Text as="p">{t("Nothing to fix from here right now. The daily check keeps looking.")}</Text>
           </Card>
         )}
-        <FixSection fix={FIX.VENDOR} rows={simple(candidates[FIX.VENDOR])} shared="Brand name to apply" sharedDefault={vendorProposal} submit={post("apply_vendor")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
-        <FixSection fix={FIX.OPTION_NAME} rows={optionRows} field="Option name" submit={post("apply_options")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
-        <FixSection fix={FIX.ALT_TEXT} rows={simple(candidates[FIX.ALT_TEXT])} submit={post("start_alt_text")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
-        <FixSection fix={FIX.DESCRIPTION} rows={simple(candidates[FIX.DESCRIPTION])} submit={post("start_descriptions")} busy={busy} locked={locked} credits={1} remaining={remaining} storeHandle={storeHandle} />
+        <FixSection fix={FIX.VENDOR} rows={simple(candidates[FIX.VENDOR])} shared="Brand name to apply" sharedDefault={vendorProposal} submit={post("apply_vendor")} busy={busy} locked={locked} gated={gated} credits={0} remaining={remaining} storeHandle={storeHandle} />
+        <FixSection fix={FIX.OPTION_NAME} rows={optionRows} field="Option name" submit={post("apply_options")} busy={busy} locked={locked} gated={gated} credits={0} remaining={remaining} storeHandle={storeHandle} />
+        <FixSection fix={FIX.ALT_TEXT} rows={simple(candidates[FIX.ALT_TEXT])} submit={post("start_alt_text")} busy={busy} locked={locked} gated={gated} credits={0} remaining={remaining} storeHandle={storeHandle} />
+        <FixSection fix={FIX.DESCRIPTION} rows={simple(candidates[FIX.DESCRIPTION])} submit={post("start_descriptions")} busy={busy} locked={locked} gated={gated} credits={1} remaining={remaining} storeHandle={storeHandle} />
         <FixSection fix={FIX.GTIN_EXEMPT} rows={simple(candidates[FIX.GTIN_EXEMPT])} submit={post("gtin_exempt")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
-        <FixSection fix={FIX.BARCODE} rows={barcodeRows} field="GTIN" submit={post("apply_barcodes")} busy={busy} locked={locked} credits={0} remaining={remaining} storeHandle={storeHandle} />
+        <FixSection fix={FIX.BARCODE} rows={barcodeRows} field="GTIN" submit={post("apply_barcodes")} busy={busy} locked={locked} gated={gated} credits={0} remaining={remaining} storeHandle={storeHandle} />
 
         <Card>
           <BlockStack gap="200">

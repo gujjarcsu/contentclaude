@@ -27,7 +27,10 @@ import { authenticate } from "../shopify.server.js";
 import { getLiveShopName } from "../utils/shopName.server.js";
 import { authorName as resolveAuthorName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
-import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
+import { withGenerationCredit, getOrCreatePlan, getMonthlyUsageCount, checkEntitlement } from "../utils/plans.server.js";
+import { blogRefusal, cheapestPlanWith, cheapestPlanLabelWith } from "../utils/billing-plans.js";
+import { formatPrice } from "../utils/billing-config.js";
+import { CREDIT_WEIGHTS } from "../utils/credits.js";
 import { quotaPct } from "../utils/quota.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
@@ -43,7 +46,7 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const resumePostId = url.searchParams.get("postId");
 
-  const [brandVoice, plan, usageCount, recentPosts] = await Promise.all([
+  const [brandVoice, plan, usageCount, recentPosts, blogEnt] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
@@ -53,6 +56,10 @@ export const loader = async ({ request }) => {
       take: 5,
       select: { id: true, title: true, status: true, wordCount: true, createdAt: true },
     }),
+    // Phase 15 — blog is a Growth feature in the locked table and was ungated
+    // in the code. The loader carries the answer so the screen can say so
+    // BEFORE a merchant types a topic, rather than after they press the button.
+    checkEntitlement(shop, "blogPosts"),
   ]);
 
   // If ?postId= is provided, load that draft so the component can pre-fill the editor
@@ -80,6 +87,9 @@ export const loader = async ({ request }) => {
     upsell,
     monthlyCredits: plan.monthlyCredits,
     planName: plan.planName,
+    // A loader ships data, never a sentence: the screen builds the words.
+    blogEntitled: !!blogEnt.allowed,
+    blogCredits: CREDIT_WEIGHTS.blog,
     recentPosts: recentPosts.map((p) => ({
       ...p,
       createdAt: p.createdAt.toISOString(),
@@ -102,6 +112,17 @@ export const action = async ({ request }) => {
     const instructions = (formData.get("instructions") || "").slice(0, 1000).trim();
 
     if (!topic) return Response.json({ error: t("Topic is required.") }, { status: 400 });
+
+    // Phase 15 — THE PLAN GATE, and it is here rather than only in the UI.
+    // 14-PRICING.md §4 sells blog posts from Growth at 3 credits each and the
+    // plans page repeats it; the code had no blogPosts entitlement at all, so
+    // any shop could generate one and was charged 3 credits without ever being
+    // told the price. The screen now says both before the button, and this
+    // refuses the submit for anything that reaches the action anyway.
+    const blogEnt = await checkEntitlement(shop, "blogPosts");
+    if (!blogEnt.allowed) {
+      return Response.json({ error: blogRefusal(CREDIT_WEIGHTS.blog), limitReached: true }, { status: 403 });
+    }
 
     // Phase 0 item 24 — blog generation is the most expensive single call in the
     // app and had no rate limit at all; the same 10/minute ceiling as every
@@ -327,8 +348,13 @@ const LOADING_MESSAGES = [
 
 export default function BlogPage() {
   const t = useT();
-  const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell } =
+  const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell, blogEntitled, blogCredits } =
     useLoaderData();
+  // Phase 15 — the plan and the price this screen names are DERIVED from the
+  // same table the plans page reads, never typed here. A marker naming a plan
+  // the table does not sell blog on is the defect this is fixing.
+  const blogPlan = cheapestPlanWith("blogPosts");
+  const blogPlanLabel = cheapestPlanLabelWith("blogPosts");
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -458,7 +484,30 @@ export default function BlogPage() {
                     <Icon source={BlogIcon} tone="info" />
                   </InlineStack>
 
-                  {isOutOfUsage ? (
+                  {!blogEntitled ? (
+                    /* Phase 15 — the gate, stated BEFORE the topic is typed.
+                       The old screen took a topic, generated, and charged 3
+                       credits it never named, on a plan the table does not sell
+                       blog on. This is not a dead end: it says the price, the
+                       plan and what happens to the posts already written. */
+                    <BlockStack gap="300">
+                      <Text as="h3" variant="headingSm">
+                        {t("Blog posts are on {plan} and above", { plan: blogPlanLabel })}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("A post costs {credits} credits, several times what a product description costs — which is why it is not on the free plan. {plan} is {price} a month with {planCredits} credits.", {
+                          credits: blogCredits,
+                          plan: blogPlanLabel,
+                          price: formatPrice(blogPlan?.amount ?? 0),
+                          planCredits: blogPlan?.monthlyCredits ?? 0,
+                        })}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Posts you have already written stay here, and you can still publish them.")}
+                      </Text>
+                      <Button onClick={() => navigate("/app/plans")}>{t("See plans")}</Button>
+                    </BlockStack>
+                  ) : isOutOfUsage ? (
                     <QuotaReachedCard upsell={upsell} surface="blog" />
                   ) : (
                     <Form method="post">
@@ -545,6 +594,12 @@ export default function BlogPage() {
                         >
                           {isGenerating ? t("Generating...") : t("Generate Blog Post")}
                         </Button>
+                        {/* Phase 15 — the price, on the button that spends it.
+                            A8 says money is exact; a merchant should never
+                            discover the cost from the balance afterwards. */}
+                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                          {t("Costs {credits} credits", { credits: blogCredits })}
+                        </Text>
 
                         {actionData?.limitReached && <QuotaReachedCard upsell={upsell} surface="blog" />}
                       </BlockStack>
