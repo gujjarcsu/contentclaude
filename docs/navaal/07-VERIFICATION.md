@@ -150,6 +150,29 @@ Before claiming a pass, check you are not repeating one of these:
     ignored it the tests would still be green and the bar would still announce "1%". Rendering the
     component answered it in one line, and turned up a second fact no source check could: Polaris
     emits its own visually-hidden percent beside the bar (CC, 2026-09-16).
+31. **`fly secrets list` read as "Fly holds the right values".** During a total authentication
+    outage the list showed twenty clean names, no duplicate, no BOM, every one marked *deployed* —
+    and the value behind `SHOPIFY_API_SECRET` was the secret that had just been REVOKED. The command
+    reports names and a digest. It cannot tell you a value is *correct*, only that a value is
+    *present*, and "deployed" means the release went out, not that the release works. The screen
+    looked perfectly healthy for the entire outage (Cowork, 2026-09-16).
+32. **A health check that stays green through a complete authentication failure.** For hours, every
+    embedded load of the app answered 401 to every merchant, and `/api/health?deep=1` reported
+    `status ok`, `database ok`, `redis ok`, `worker running`, `failedLast10Min 0` the whole time —
+    because the health route does not authenticate, so nothing it touches goes through
+    `authenticate.admin`. UptimeRobot, watching that endpoint, would never have fired. **A monitor
+    that cannot fail the way the product fails is decoration.** The deep check needs one probe that
+    exercises the auth path — verify a locally minted JWT with the configured secret, or assert the
+    secret's fingerprint against a value recorded at install — or the next credential outage is
+    again found by a human clicking the app (Cowork, 2026-09-16).
+33. **A restored value assumed to be the good one, because restoring is what a rollback means.**
+    The rollback import put back the 4 June secret and was read as "we are back to the last known
+    good state". Revoking is not symmetric: once one of a pair is revoked, Shopify signs with the
+    OTHER one, so restoring the revoked value re-broke the app in exactly the way the rollback was
+    meant to undo. The import ran cleanly, all four machines restarted, health was green, and the
+    outage continued. **The correct order, recorded again because it was written down before this
+    outage and not followed: set the platform to the secret you intend to KEEP, confirm the app
+    works, only then revoke the other** (Cowork, 2026-09-16).
 
 **Note on numbering (2026-09-16).** #20 to #23 were written up in `06-QUEUE.md` posts and never reached
 this list, so a reader checking "am I repeating a known false green?" against the checklist saw the list
