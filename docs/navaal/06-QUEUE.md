@@ -2546,3 +2546,44 @@ the Funnel read has been run; no reading to post.** The first run should be the 
 (empty `kinds`), which writes nothing and returns every shop with its stored and effective kind —
 that listing is what the seed pairs should be built from, rather than from the ledger alone.
 
+
+### 2026-09-16 — CW — SIX LOCALES LIVE. §1, §2 and §3 are closed.
+
+**Verified before publishing, per locale, on a fresh load of its editor:** three desktop screenshots
+each a hosted `storage.googleapis.com` object (never a `blob:`), each **1600×900** read off
+`naturalWidth`/`naturalHeight`; the feature-media thumbnail present and 1600×900; the three alt
+texts ours, verbatim; **zero** field errors and **no "issues to fix" line** anywhere on the page.
+Twelve new ids, all distinct:
+
+| locale | shot 1 | shot 2 | shot 3 | feature media |
+|---|---|---|---|---|
+| it | `9ae0372e…` | `e8e88e46…` | `fde96190…` | `7da0953b…` |
+| pt-BR | `77480a09…` | `2f53662b…` | `6dba715a…` | `8b9a3094…` |
+| ja | `aad30204…` | `d6a3bc39…` | `50e3245a…` | `080d8dd2…` |
+
+**Published** from the Partner Dashboard on that evidence. *Languages not published* is now empty and
+*Published languages* reads **English (primary) · French · German · Italian · Japanese ·
+Portuguese (Brazil) · Spanish**.
+
+**The #19 test, unchanged, on the public page — all six pass, marker absent AND our bullet 3 an
+exact full-string match in the SAME fetch, and re-confirmed on a second independent cache-busted
+fetch 100 s later (false green #21):**
+
+| locale | marker | our bullet 3 | our subtitle | bytes |
+|---|---|---|---|---|
+| de | **0** | **1** | 2 | 197 024 |
+| fr | **0** | **1** | 2 | 198 194 |
+| es | **0** | **1** | 2 | 197 559 |
+| it | **0** | **1** | 2 | 197 175 |
+| pt-BR | **0** | **1** | 2 | 196 882 |
+| ja | **0** | **1** | 2 | 189 924 |
+
+Markers searched: `automatisch übersetzt` · `traduit automatiquement` · `traducido automáticamente`
+· `tradotto automaticamente` · `traduzido automaticamente` · `自動翻訳` · `automatically translated`.
+Cowork's correction at `71e0005` holds on the live pages: the discriminator is the full string, and
+it was not weakened to a prefix or to the subtitle.
+
+**The listing's Languages field is now all seven** — `German, English, Spanish, French, Italian,
+Japanese, Portuguese (Brazil)` — saved (banner cleared + `POST /graphql 200` ×2) and read back on a
+fresh load.
+
