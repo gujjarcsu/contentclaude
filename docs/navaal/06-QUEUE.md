@@ -2651,3 +2651,59 @@ locales were filled, published and their Languages field saved.
 So **Task 15, Task 10 and Task 3-RE are gated on exactly one action: the owner clicking the
 extension's Chrome window once.** Nothing else is outstanding.
 
+
+### 2026-09-16 — CW — TASK 15 (A5) SENT, AND TASK 10 READ
+
+**TASK 15 / A5 — TEST ALERT SENT AT `2026-09-16T03:06:16Z` (13:06 Sydney).** From the deep-health
+monitor `Keyword on app.navaal.ai/api/health?deep=1` — KW type, **Up 5d 22h**, 5-minute interval,
+**100%** over 7 and 30 days, last check 3m 39s before the click, response time avg 462 ms / min 443
+/ max 480 over the hour, region North America. Toast read back on screen: **"Test notification
+sent."** Attached contacts, read off the *To be notified* panel: exactly **one**, `gujjarcsu`, an
+email contact (envelope icon, green dot). *Send to attached notify-only users* reads **[0]**.
+Awaiting the owner's read-back of the alert text from his phone — appended here verbatim when he
+posts it.
+
+**H16 — the second contact cannot be added on this tier, and the Integrations page settles it.**
+`dashboard.uptimerobot.com/integrations` offers exactly five categories: *Chat platforms ·
+Webhooks · Connectors & incident management · Push notifications · API*. **There is no email
+category** — a second email recipient is a team member / notify-only seat, which is paid, matching
+what H16 already found. The free route remains the Gmail forward `gujjarcsu@` → `hello@navaal.ai`,
+which is an owner action (it needs a confirmation code read off the inbox) and a standing mail rule,
+so CW did not create it. **OWNER:** either make that forward, or accept one inbox and close H16.
+
+---
+
+**TASK 10 — DEFECT FIRST: the Shop-kind workflow cannot run in its own documented list-only mode.**
+Its input says *"empty to list only"*. Run **#1** with the field empty **failed in 12 s**:
+`kinds may contain only domains, '=', kinds, spaces and commas` → `exit code 1`. The guard is
+`printf '%s' "$KINDS" | grep -Eq '^[A-Za-z0-9.=, -]*$'` — with an empty `KINDS`, `printf` emits **no
+line at all**, so `grep` finds nothing to match and returns 1 even though the pattern allows empty.
+Run **#2** failed identically. **CC:** guard on the value, not on grep's exit over an empty stream —
+e.g. `case "$KINDS" in ''|*[!A-Za-z0-9.=,\ -]*) ... esac`, or `printf '%s\n'`. Until then the
+listing is only reachable by passing at least one valid pair.
+
+**The listing, taken from run #3 (one known-good pair) — 15 shops, and the expected shape is wrong.**
+Effective kinds before the seed: **ours 12 · unclassified 3 · shopify 0 · real 0.** Stored: 14
+unclassified. The queue's expectation of *ours 11 / Shopify's 7 / real 3 ever* does not match the
+database: **Shopify's reviewer stores are not shop rows at all, and EBS is not a shop row either.**
+The three that are not ours: `r20bcm-2d.myshopify.com`, `zephyrin-wynter-a01g3uy4.myshopify.com`,
+`peter-shops-2.myshopify.com` — all three installed.
+
+**The seed ran (run #4): 11 written, 0 refused.** `contentpilot-dev2` · `navaal-ttv-01/02/03/05` ·
+`navaal-shape-variants/fr/b2b/cap/zero` · `navaal-qa-fresh` all stored as **ours**, joining
+`navaal-shape-drafts` from run #3. **Stored now equals effective: ours 12, unclassified 3** — no
+count depends on a filename pattern any more. CW classified **nothing** as `real` or `shopify`,
+because the ledger does not settle those three and a guess there is what the whole `ShopKind`
+change exists to prevent.
+
+**THE FUNNEL READ (read-only workflow, success in 12 s):**
+> `Funnel: 0 real installed · 0 published · 0 returned · 3 unclassified`
+> *Navaal funnel — week to 2026-09-16.* `0 real shop(s) counted; 12 of ours and 0 of Shopify's
+> excluded. 3 unclassified.` Installed **0** · First screen **0** · First draft **0** · First
+> approve **0** · First publish **0** · Returned **0** · Uninstalled **0**, every median `—`.
+
+**This is the fix working, not a regression.** The owner's Monday digest would have said *11 real
+shops*; it now says **0 real and 3 unclassified**, and unclassified is reported as a number rather
+than counted as a merchant. **OWNER / CC:** classify those three — each is `real` or `shopify` — and
+the digest becomes true rather than merely safe.
+
