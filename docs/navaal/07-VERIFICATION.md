@@ -135,6 +135,21 @@ Before claiming a pass, check you are not repeating one of these:
 25. A source-reading guard that did not cover the file that broke: `lockedPricing.test.js` asserted "nothing anywhere still says monthlyLimit" while walking `app/` only. The one place still reading the renamed field was in `scripts/`, so a 100-credit store was seeded to 25 (CC, 2026-09-16).
 26. `grep` used to validate a VALUE — it matches LINES. `printf '%s' "$X" | grep -q` fails on an empty `$X` (no line at all) and succeeds on a multi-line `$X` if *any* line matches, so a workflow's own documented empty mode was refused while a newline injection would have been accepted and interpolated into `sh -c` on a production machine. A `case` pattern matches the whole value (CC, 2026-09-16).
 27. A lock enforced at the call sites that existed when it was written: `REMEDIATION_LOCKED_SHOPS` guarded five call sites, all in one file, so Review, the product page, bulk and autopilot could still write to a locked shop holding a client's catalogue. A rule about "every write" belongs at the place the writes leave the process, not at the writers you can currently name (CC, 2026-09-16).
+28. **A price enforced on one screen and nowhere else.** The plans page sold blog posts under
+    Growth at 3 credits each and the comparison table had no blog row at all, while `/app/blog`
+    generated for any shop that asked and never named a price. A feature is "sold at N" only where
+    a gate says so; a card is a claim, not an enforcement (CC, 2026-09-16).
+29. **A gate believed because two of its three doors were shut.** `bulkJobs` was checked in
+    Products and in Optimize, so "bulk is gated" read as true. `/app/fix` — the page the first
+    screen's own dark button points at — checked nothing, and every section on it is a bulk run.
+    Counting the call sites that DO check is how the previous false green (#27) happened too;
+    the question is always which door is open, never how many are shut (CC, 2026-09-16).
+30. **A prop proved to be PASSED, not to have ARRIVED.** Phase 14 asserted from source that all four
+    quota bars set Polaris's `ariaLabelledBy`, and every assertion passed. None of them showed that
+    the prop reaches the element or that the fraction is what a screen reader hears — if Polaris had
+    ignored it the tests would still be green and the bar would still announce "1%". Rendering the
+    component answered it in one line, and turned up a second fact no source check could: Polaris
+    emits its own visually-hidden percent beside the bar (CC, 2026-09-16).
 
 **Note on numbering (2026-09-16).** #20 to #23 were written up in `06-QUEUE.md` posts and never reached
 this list, so a reader checking "am I repeating a known false green?" against the checklist saw the list

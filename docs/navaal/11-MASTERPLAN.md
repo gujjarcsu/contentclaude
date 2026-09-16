@@ -458,6 +458,49 @@ free and unpriced in the app while the Plans table sells it from Growth at 3 cre
 out of first-run polish and into money and plan truth, where A8 lives, and they are CC's. A5 remains
 the twelfth: proved for email, one push contact from proved outright.
 
+**THE RESERVATION IS DISCHARGED — 2026-09-16, LATER (CC, Phase 15, `e3e5952`).** Both plan-integrity
+defects are fixed in the code, and reading them turned up a third that was worse than either.
+
+- **Bulk on Free — and the door nobody had checked.** The report was that the first screen's dark
+  button led where the plan could not go. It did not: **`/app/fix`, the page that button points at,
+  had no entitlement check at all.** `bulkJobs` was enforced in Products and in Optimize, which is
+  why "bulk is gated" read as true, while the fix page would apply a vendor to fifty products or
+  queue fifty descriptions on a free store — against a plans table that shows **Bulk runs ✗** for
+  Free. Five of its six intents are now gated server-side with the existing `bulkRefusal` sentence.
+  The sixth, `gtin_exempt`, is deliberately **not**: it writes a preference to our own database
+  ("own brand — stop asking"), touches no catalogue and costs nothing, and charging a merchant to
+  stop being nagged would be the wrong direction.
+- **The first screen no longer dead-ends.** Every blocker fix that goes to `/app/fix` is marked
+  `needsBulk`, and two pure rules in `firstRun.js` decide the screen: a fix this plan cannot run is
+  never the primary control, and it carries a marker naming the plan that can. When the plan can run
+  none of them, **nothing is primary** — a dark button that refuses is worse than no dark button.
+- **Blog is gated where the table sells it, and the price is on the button.** `blogPosts` carries
+  14-PRICING.md §4 into the code (Free no, Starter no, Growth yes, Pro yes); the action refuses
+  before a credit is reserved and before the model is called; the comparison table gained a row
+  derived from the same entitlement, its number read from `CREDIT_WEIGHTS`.
+  **Nobody loses anything they were using** — read from production 2026-09-16: exactly one shop has
+  ever written a blog post (`contentpilot-dev2`, 6 posts, **on Pro**, which keeps it), and the plan
+  census is 16 free / 1 pro.
+  **And the debit had never once run at its stated price.** All six of those rows are dated
+  **2026-08-12 at 1 credit each** — a month before the weighting shipped (`0c5274b`, 2026-09-14) —
+  so no blog post has ever been charged 3 in production. That is precisely why
+  `tests/utils/blogCredit.test.js` runs the real serializable transaction rather than reading the
+  weight table: A8 says money is exact, and this is the one number a merchant would notice.
+- **Frame 03's row is found, and it is on the screen.** `gid://shopify/Product/7800250007655` on
+  `contentpilot-dev2`: our state **published**, Shopify status **DRAFT**, `publishedAt` null. Two
+  populations were on one screen — the list is `-status:archived` (wide on purpose: a merchant's
+  drafts are still theirs) and the header counts the candidate scope, which requires online-store
+  publication. **"on this page" explains pagination**, and this store's 15 products fit on one page,
+  so it explained nothing. The list query now asks for `publishedAt`, a line under the tabs names
+  the difference when there is one, and the row badge keys on the same fact the count does — which
+  also catches a product that is ACTIVE but unpublished from the channel, a case the old badge
+  missed. **Frame 03 is unblocked for re-capture; the capture itself is still CW's or the owner's.**
+- **FR14's accessible label is verified rather than read** (`tests/routes/quotaAccessibleName.test.js`).
+  Polaris's `ariaLabelledBy` does reach a real `<progress>` element and the fraction is what names
+  it, on all four surfaces, with nothing competing. Recorded while there: Polaris also emits its own
+  visually-hidden percent, so the rounded number is still a separate node in the accessibility tree.
+  It is Polaris's, not ours, and it is no longer the bar's name.
+
 When A1–A12 are ticked, Track A becomes maintenance: security fixes, platform sunsets, merchant-reported defects, and nothing else without an explicit re-open.
 
 ### B. THE APP IN SIX LANGUAGES — and the rule that keeps it honest
