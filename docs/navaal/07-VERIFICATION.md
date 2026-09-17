@@ -708,3 +708,56 @@ correctness.
 find X. A named suspect in a diagnosis doc is read as a finding by everyone downstream, and it sends
 whoever picks it up looking for a thing that is not there — the same cost as the webhook
 delivery-health page I sent the owner hunting for.
+
+## False green #36 — reading the code is not checking the system (P22, 2026-09-17)
+
+I wrote a brief whose entire premise was that the outreach engine had never been switched on: that
+`startEngine` had never returned `ok: true` and four readiness gates were open. Production says it
+started **3 September 14:45:17Z** and has sent **136 real emails to real merchants**. Every gate was
+closed.
+
+The method was the error. I read `lib/outreach.ts`, saw `engineState` assemble a `notReady` list,
+saw four conditions, and **inferred** the state. I never queried the database once. The signer alone
+should have stopped me: it reads absent from the config table because it resolves from
+`CONFIG_DEFAULTS` in `config.ts:36` — a file I did not open, deciding a value I asserted as fact.
+
+**One hour earlier** I committed the rule from false green #35: *"A check states the vantage point it
+was run from, or it is not a check."* Then I reasoned about production from source and called the
+result a finding. Writing a rule down is not the same as having it.
+
+**Rule. The code says what is possible. Only the database says what happened.** Any claim about
+what a system has done — sent, started, stored, skipped — is a query or it is a guess. A brief that
+asserts runtime state without one is a brief built on nothing, and it costs a worker a full run
+solving problems that do not exist.
+
+## The defect P22 found by being wrong: Start walked past the guard eight times
+
+`startEngine` checked readiness and never checked health. `clearPause` refuses while the 30-day rate
+is over the line — its own comment reads *"so it can never be used to talk past a live breach"* — but
+Start set `paused_at = null` and did everything `clearPause` exists to refuse. `outreach_consent`
+holds **eight** `engine started by admin` rows between 3 and 17 September: the 2% auto-pause fired
+eight times against a real rate of **8.1%**, and was overridden eight times by the one button nobody
+had taught to look.
+
+**Rule. Every path that clears a safety state checks the condition that set it.** A guard with two
+doors and a check on one door is not a guard. When a system has a `clearPause` that refuses and a
+`start` that does not, the refusal is decoration.
+
+## The defect nobody found until the schema was read: the system cannot see a reply
+
+`outreach_sends` carries `opened_at`, `delivered_at`, `bounced_at`, `complained_at`,
+`unsubscribed_at`, `report_viewed_at`, `trial_at`, `followup_at` — and **no `replied_at`**. The
+follow-up query gates on `trial_at is null and followup_at is null`. It cannot ask whether the
+merchant answered. On 17 September it sent **50 follow-ups**.
+
+For all 136 sends `Reply-To` was `OPS_EMAIL` → `navaal.aiiii@gmail.com`. A Gmail search of the
+mailbox the owner reads shows `scout@navaal.ai` has received **one message ever** — the 7 September
+test. Every reply from 128 delivered emails landed somewhere nothing was reading.
+
+The file's own line 32, written by whoever built it: *"A reply nobody reads is worse than no
+outreach: it is a merchant who answered a message about their own broken store…"*
+
+**Rule. A comment describing a failure mode is not a control against it.** The system named this
+exact risk in prose at the top of the file and then shipped without the column that would prevent
+it. Search the schema for the state a stated rule depends on; if no column holds it, the rule is a
+wish.
