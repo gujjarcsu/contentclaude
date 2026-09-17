@@ -1,9 +1,8 @@
 # OUTREACH DRAFTS — thirty stores, re-counted 2026-09-16. **Nothing here has been sent.**
 
-> **UNCONFIRMED — may already have been contacted.** The send log at `OUTREACH-PACK.md` §8 is
-> empty, but the owner has emailed some of these stores by hand. Until he says which and when,
-> treat every draft below as possibly a second approach. A second cold email from the same
-> founder about the same thing reads as automation, which is what the pack exists to avoid.
+> **CLEARED TO SEND 2026-09-17.** The owner confirms he has contacted only two people by
+> hand, neither of them on this list, so no draft below is a second approach. Signature is
+> Waqas, replies to hello@navaal.ai. Fill nothing — these are ready.
 
 **Counts re-taken 2026-09-16** with `node tools/prospects/recheck.mjs`, whole public catalogue,
 `products.json` paginated at 250, public pages only. Every number below is today's, not the
@@ -33,7 +32,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -50,7 +49,7 @@ Founder, Navaal · navaal.ai
 **Route note:** The email printed on their contact page is mistyped (`help@drformulas.ocm`), so the form is the only sound route.
 
 ```
-Hi — I build a Shopify app. Looking at drformulas.com's public product feed today: 79 of 79 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at drformulas.com's public product feed today: 79 of 79 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *73 words (cap 80).*
 
@@ -65,7 +64,7 @@ Hi — I build a Shopify app. Looking at drformulas.com's public product feed to
 **Held in reserve for "how do you know?":** 27 of 76 products have a description under 120 characters
 
 ```
-Hi — I build a Shopify app. Looking at momarsh.com's public product feed today: 76 of 76 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at momarsh.com's public product feed today: 76 of 76 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *73 words (cap 80).*
 
@@ -92,7 +91,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -120,7 +119,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -148,7 +147,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -176,7 +175,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -203,7 +202,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -231,7 +230,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -259,7 +258,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -303,7 +302,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -319,7 +318,7 @@ Founder, Navaal · navaal.ai
 **Held in reserve for "how do you know?":** 137 of 672 products have a description under 120 characters
 
 ```
-Hi — I build a Shopify app. Looking at chalicecollectibles.com's public product feed today: 649 of 672 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at chalicecollectibles.com's public product feed today: 649 of 672 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *73 words (cap 80).*
 
@@ -350,7 +349,7 @@ Hi — I make a Shopify app and checked www.creamstreetlife.com's product feed t
 **Held in reserve for "how do you know?":** 39 of 286 products have a description under 120 characters
 
 ```
-Hi — I build a Shopify app. Looking at medicalgearoutfitters.com's public product feed today: 274 of 286 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at medicalgearoutfitters.com's public product feed today: 274 of 286 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *73 words (cap 80).*
 
@@ -377,7 +376,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -393,7 +392,7 @@ Founder, Navaal · navaal.ai
 **Held in reserve for "how do you know?":** 6 of 1,568 products have a description under 120 characters
 
 ```
-Hi — I build a Shopify app. Looking at paintbynumbershome.com's public product feed today: 1,407 of 1,568 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at paintbynumbershome.com's public product feed today: 1,407 of 1,568 products have no product type set. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *73 words (cap 80).*
 
@@ -420,7 +419,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -448,7 +447,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -475,7 +474,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -503,7 +502,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -530,7 +529,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -558,7 +557,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -574,7 +573,7 @@ Founder, Navaal · navaal.ai
 **Held in reserve for "how do you know?":** 11 of 141 products have no product type set
 
 ```
-Hi — I build a Shopify app. Looking at brightboxes.shop's public product feed today: 109 of 141 products have a description under 120 characters. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. {Owner's name}, Navaal, {owner email}
+Hi — I build a Shopify app. Looking at brightboxes.shop's public product feed today: 109 of 141 products have a description under 120 characters. That feed is what search and AI shopping assistants read. My app audits the whole catalogue, writes the gaps in your own voice, and nothing publishes until you approve it. Free plan, no card. https://apps.shopify.com/navaal-ai-seo-geo-content — happy to walk you through it in 15 minutes. Waqas, Navaal, hello@navaal.ai
 ```
 *74 words (cap 80).*
 
@@ -601,7 +600,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -629,7 +628,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *119 words (cap 120).*
@@ -657,7 +656,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -685,7 +684,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -713,7 +712,7 @@ My app audits the whole catalogue, writes what's missing in your own brand voice
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
@@ -727,21 +726,21 @@ Founder, Navaal · navaal.ai
 **Quoting:** 19 of 29 products have a description under 120 characters
 **15 Sep:** 19 of 29 products have a description under 120 characters  — *unchanged*
 **Held in reserve for "how do you know?":** 12 of 29 products have no product type set
-**Route note:** ROUTE REPLACED: no contact page exists; this address is printed on `/policies/refund-policy`. Better than the Instagram DM the table recorded. **One slot is unfilled** — their nav gives no category CW could source from outside, so the owner fills `{their category}` in the pack's thirty-second look.
+**Route note:** ROUTE REPLACED: no contact page exists; this address is printed on `/policies/refund-policy`. Better than the Instagram DM the table recorded. **One slot is unfilled** — their nav gives no category CW could source from outside, so the owner fills `your products` in the pack's thirty-second look.
 
 **Subject:** `19 of 29 products on shop.faithchurch.com`
 
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at shop.faithchurch.com's public product feed: 19 of 29 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how {their category} gets found.
+I build a Shopify app and, while checking stores in your category, I looked at shop.faithchurch.com's public product feed: 19 of 29 products have a description under 120 characters. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how your products get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
 If it's useful, here it is: https://apps.shopify.com/navaal-ai-seo-geo-content
 If it's not, no follow-up from me beyond one more note.
 
-{Owner's name}
+Waqas
 Founder, Navaal · navaal.ai
 ```
 *120 words (cap 120).*
