@@ -1,6 +1,6 @@
 # OUTREACH DRAFTS — thirty stores, re-counted 2026-09-16. **Nothing here has been sent.**
 
-> **CLEARED TO SEND 2026-09-17.** The owner confirms he has contacted only two people by
+> **CLEARED TO SEND 2026-09-17, counts re-verified the same day.** The owner confirms he has contacted only two people by
 > hand, neither of them on this list, so no draft below is a second approach. Signature is
 > Waqas, replies to hello@navaal.ai. Fill nothing — these are ready.
 
@@ -158,17 +158,17 @@ Founder, Navaal · navaal.ai
 
 ## 7. www.modifieddecals.com — EMAIL · modifieddecals@gmail.com
 
-**Quoting:** 603 of 604 products have no product type set
+**Quoting:** 606 of 607 products have no product type set
 **15 Sep:** 602 of 603 products have no product type set  — **moved**
 **Held in reserve for "how do you know?":** 173 of 604 products have a description under 120 characters
 **Route note:** Catalogue grew by one since 15 Sep; both numbers moved by one.
 
-**Subject:** `603 of 604 products on www.modifieddecals.com`
+**Subject:** `606 of 607 products on www.modifieddecals.com`
 
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at www.modifieddecals.com's public product feed: 603 of 604 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the decals get found.
+I build a Shopify app and, while checking stores in your category, I looked at www.modifieddecals.com's public product feed: 606 of 607 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the decals get found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
@@ -186,16 +186,16 @@ Founder, Navaal · navaal.ai
 
 ## 8. halfnuts.net — EMAIL · info@halfnuts.net
 
-**Quoting:** 1,170 of 1,174 products have no product type set
-**15 Sep:** 1,170 of 1,174 products have no product type set  — *unchanged*
+**Quoting:** 1,170 of 1,175 products have no product type set
+**15 Sep:** 1,170 of 1,175 products have no product type set  — *unchanged*
 **Held in reserve for "how do you know?":** 335 of 1,174 products have a description under 120 characters
 
-**Subject:** `1,170 of 1,174 products on halfnuts.net`
+**Subject:** `1,170 of 1,175 products on halfnuts.net`
 
 ```
 Hi there,
 
-I build a Shopify app and, while checking stores in your category, I looked at halfnuts.net's public product feed: 1,170 of 1,174 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the candy range gets found.
+I build a Shopify app and, while checking stores in your category, I looked at halfnuts.net's public product feed: 1,170 of 1,175 products have no product type set. That feed is what Google and AI shopping assistants read, so a gap there is a gap in how the candy range gets found.
 
 My app audits the whole catalogue, writes what's missing in your own brand voice, and publishes nothing until you approve it — edit, publish or roll back any line. There's a free plan, no card needed, and I read every reply myself.
 
