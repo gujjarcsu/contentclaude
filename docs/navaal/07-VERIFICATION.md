@@ -664,3 +664,47 @@ shared index inherit a conflict on files nobody touched.
 **Rule.** Before any commit in this repo, `git diff --ignore-cr-at-eol --stat` is the real diff and
 `git status` is not. Stage by explicit path — `git add -N` for new files, `git commit -o <paths>` — and
 never renormalise line endings inside a shipping phase. That cleanup gets its own brief on a quiet index.
+
+## False green #35 is WITHDRAWN — the churn was in my eyes, not the tree (2026-09-17, same day)
+
+I recorded a 104-file line-ending hazard in `navaal-platform` and wrote it into the P20 brief. CC
+reported back that it was not there: `git status` showed 25, `--ignore-cr-at-eol` showed the same 25.
+CC was right.
+
+The repo has no `.gitattributes` and no local `core.autocrlf`. Git for Windows sets
+`core.autocrlf=true` globally from its installer, so from CC's Windows vantage point git normalises
+CRLF to LF into the index and those files are identical to their blobs. From the container, mounting
+the same folder over the device bridge, autocrlf is off and the same files read as wholly rewritten.
+Proof, run side by side on one tree:
+
+```
+git diff --stat                        103 files, 9834 insertions, 9478 deletions
+git diff --ignore-cr-at-eol --stat       4 files,  359 insertions,     3 deletions
+git -c core.autocrlf=true diff --stat    4 files,  359 insertions,     3 deletions
+```
+
+I measured a real difference and reported it as a property of the repository when it was a property
+of the observer.
+
+**Rule. A check states the vantage point it was run from, or it is not a check.** Anything measured
+from the container about a repo that lives on Windows is a claim about the container until it is
+re-run where the work happens. This is the third time this class has bitten: the TestingBot title
+never opened, the too-specific footer grep, and now this. Each one arrived carrying the authority of
+having been checked, which is what makes a wrong check worse than no check.
+
+**Residual, real but separate.** Any commit made to this repo from Linux, WSL or a container would
+produce the 99-file churn. It wants a `.gitattributes`, on a quiet index, in its own brief.
+
+## Closed against me: diagnosis item 4, the "bad Product schema" (2026-09-17)
+
+`SEO-DIAGNOSIS-2026-09-17.md` item 4 read: *"something is emitting Product markup, almost certainly
+one of the tools."* I swept all 84 `sitemap.xml` URLs for `"@type": "Product"` and found **zero**.
+What Search Console labels **"Product snippets"** is `SoftwareApplication` carrying `Offer` /
+`AggregateOffer` — live on `/bilby`, `/bilby/pricing` and `/apps/navaal-seo`, deliberately, and
+correct. The 83 impressions at position 82.5 are those pages lacking authority, not markup lacking
+correctness.
+
+**Rule.** Before writing "something is emitting X, almost certainly Y", run the sweep that would
+find X. A named suspect in a diagnosis doc is read as a finding by everyone downstream, and it sends
+whoever picks it up looking for a thing that is not there — the same cost as the webhook
+delivery-health page I sent the owner hunting for.
