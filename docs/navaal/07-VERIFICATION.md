@@ -629,3 +629,38 @@ Final state of the route table, so nobody re-opens it:
   of *Save* and created SCREENSHOT 4 carrying `An image is required` and `Alt text is required`.
   An empty slot fails validation, so Save cannot succeed until it is deleted. Screenshot, click,
   screenshot — never two clicks between looks.
+
+---
+
+## False green #34 — a sweep that reports its own leftovers undercounts them (P19, 2026-09-17)
+
+CC's commit message on `0bf63ce` stated that **19** banned-word hits remained after the sweep. CC then
+re-ran the sweep against its own claim and found **58 hits across 18 files** — three times its own
+number. It corrected the record in `6c7a197` and finished the job across 19 files, leaving 23, all of
+them in code identifiers rather than text a human reads.
+
+The defect is not the miscount. It is that the miscount lived in a **commit message**, which nothing
+re-reads. A number written into prose beside the work is asserted once and then inherited forever: every
+later reader treats "19 remaining" as measured, because it sits next to a diff that plainly was.
+
+**Rule.** A count that describes the state of the tree after a change is produced by a **command re-run
+after the commit**, and the command goes in the message beside the number so the next reader can re-run
+it in one paste. A number in a commit message with no command attached is a claim, not a measurement.
+
+CC caught this itself, unprompted, and said so plainly. That is the behaviour this project runs on and
+it is worth more than the error cost.
+
+## False green #35 — a working tree where 95% of the noise is invisible to review (2026-09-17)
+
+`git status` in `navaal-platform` lists **110 modified files**. `git diff --ignore-cr-at-eol` shows real
+content in **6**. The other 104 are CRLF-vs-LF only: a Windows editor rewrote line endings on files git
+holds as LF, and `core.autocrlf` is unset.
+
+Every one of those 104 looks like work in `git status`, in a diff stat, and in any review that counts
+files. None of them is. The danger is one keystroke wide: `git add -A` stages all 104, the real change
+disappears inside a churn commit, `git blame` dies across the platform, and the other two workers on the
+shared index inherit a conflict on files nobody touched.
+
+**Rule.** Before any commit in this repo, `git diff --ignore-cr-at-eol --stat` is the real diff and
+`git status` is not. Stage by explicit path — `git add -N` for new files, `git commit -o <paths>` — and
+never renormalise line endings inside a shipping phase. That cleanup gets its own brief on a quiet index.
