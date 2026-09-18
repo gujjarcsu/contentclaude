@@ -855,3 +855,42 @@ it was.
 **Rule. A ledger that stores only that something happened cannot answer what happened.** Record
 enough of the event to reconstruct the decision it drove — never the card, never the secret, but the
 identifier, the amount and the mode.
+
+## False green #39 — nine "roundups" that were seven vendor blogs (audit, 2026-09-18)
+
+The SEO audit named nine third-party roundups for "best shopify store monitoring tools 2026" and
+told CW to pitch them. CW read the pages: CubeAPM ranks CubeAPM first, Beaconmon's is by Beaconmon's
+founder, Visual Sentinel's by Visual Sentinel's founder, StoreSEO's list has StoreSEO at #1 labelled
+"Winner", and storecensus is an auto-generated directory whose monitoring page lists a TikTok pixel
+app. The real list was two.
+
+I read titles in a search result and called them a category. This is the TestingBot error again —
+a name passed downstream from a result title without opening the page — and it is the third time.
+
+**Rule. A search result is a pointer, not a fact.** Before a URL becomes an instruction to another
+worker, open it and record who wrote it and what they sell.
+
+## False green #40 — measuring the instrument with itself (audit, 2026-09-18)
+
+The CW brief asked for "ChatGPT, Perplexity and Claude, each asked *What is Navaal?*, recorded as
+the GEO score measured at the source." CW's line: *the instrument running this brief is Claude.*
+Asking a model a question from inside a session of that model measures the session, not the world.
+The brief also asked for "an incognito window" in the automation browser — which is the owner's
+signed-in Chrome on his own IP.
+
+**Rule. The thing being measured and the thing doing the measuring cannot be the same thing**, and
+"neutral" has to be checked, not assumed — the browser you are handed carries whoever's cookies and
+IP it was opened with.
+
+## Two facts from CW's loop worth keeping
+
+- The App Store's own search ranks the app **#1 of 135 for "navaal"**. The audit's finding was about
+  Google's index of apps.shopify.com and was right; the brief generalised it into a listing problem
+  and was wrong. A plain fetch of the search URL returns "trouble loading your results" — the
+  results are in a deferred turbo-frame — so a naive check would have confirmed the false premise by
+  accident.
+- The brand is losing to a **homophone family**, not to navaal.com: the literal search "navaal.ai"
+  returns Nava AI (LinkedIn ×2, Capterra), a $22M cloud startup called Nava, thenava.ai, a Nava AI
+  token and a fintech Nava. **"Navaal AI" is Nava AI plus one letter.** The name decision is
+  therefore forced: `Navaal`, never `Navaal AI` — and the two live properties carrying the wrong
+  name (App Store developer page, YouTube @NavaalAI) are the entire current `sameAs`.
