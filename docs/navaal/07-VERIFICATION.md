@@ -894,3 +894,39 @@ IP it was opened with.
   token and a fintech Nava. **"Navaal AI" is Nava AI plus one letter.** The name decision is
   therefore forced: `Navaal`, never `Navaal AI` — and the two live properties carrying the wrong
   name (App Store developer page, YouTube @NavaalAI) are the entire current `sameAs`.
+
+## False green #41 — I found the instrument's defect mid-audit and committed the instrument anyway (2026-09-18)
+
+The audit crawler appended every `<title>` on a page to the page title, including inline-SVG
+`<title>` elements that give diagrams their accessible names. I saw the anomaly during the audit
+(`/blog` reading 355 characters), re-measured by hand with a `<head>`-only regex, used the corrected
+number in the report — and then committed the uncorrected script to `scripts/` as the project's
+instrument, with only an unrelated H1 fix. CC ran it, found three pages reported over-length that
+were fine, and noted the exit line "0 titles > 60" could only have been met by deleting accessible
+names from diagrams.
+
+Three more from the same run: `imgs_noalt` counted `alt=""` as missing, so "433 of 785 images
+without alt" was two different facts added together — the true count of `<img>` with no `alt`
+attribute was zero; the crawler followed `/credits`' 307 and filed the sign-in page's HTML under
+`/credits`, which became "indexable and ranking, 34 words"; and "no Person on any blog post" came
+from reading only top-level graph nodes when every post carried a nested Person author with a
+stable `@id`.
+
+**Rule. A workaround applied by hand is a defect left in the tool.** If a measurement had to be
+corrected to be reported, the correction goes into the instrument before the instrument goes to
+anyone else. And the instrument is checked against a page whose answer is already known before its
+output becomes a brief.
+
+## False green #42 — one Lighthouse run scored 98 and I wrote "do not spend another hour on speed"
+
+The audit ran Lighthouse once per page. `/bilby` scored 98, LCP 2.0 s. Four runs after P28: 97 /
+85 / 86 / 85, LCP 2.4 / 3.9 / 3.9 / 4.0 s. Same 33 requests, same 722 KB — in the slow runs every
+resource finished *earlier* and LCP fired *later*. The cause: the film poster added in P20 is a
+**379 KB JPEG, 53% of the page, above the fold, `loading="lazy"`** — a lazy-loaded LCP candidate,
+the one defect Lighthouse has a named audit for. It is bimodal because the browser decides late
+whether a lazy image is near the viewport. The audit's single run landed in the fast mode and the
+audit told the project the page was done.
+
+**Rule. A performance number is a distribution, not a value.** Five runs, report all five, exit on
+the worst. And every claim of "already right, do not touch" is held to the same standard as a claim
+of a defect — a false all-clear costs more, because nobody re-checks it.
