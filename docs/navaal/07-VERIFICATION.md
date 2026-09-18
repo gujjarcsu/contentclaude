@@ -814,3 +814,44 @@ Three defects the code review missed and the screenshot pass caught:
 
 **Rule. Appearance is only claimable from an image.** And a visual test whose two states can come out
 identical is not a test — the harness has to be shown capable of failing before its passes count.
+
+## False green #38 — a check that returns the same answer for every input (P27, 2026-09-18)
+
+P27 asked CC to reconcile every shop's plan against Shopify. The method it implied — read
+`Session.accessToken`, call the Admin API — returned **`Invalid API key or access token` for 17 of 17
+shops**. Read naively that is every merchant broken and the app dead.
+
+It was the instrument. The app sets `expiringOfflineAccessTokens: true`, so stored tokens are
+short-lived and exchanged on use. CC's line: *"A check that returns the same answer for every input
+measures nothing."*
+
+**Rule. Before believing a check, vary its input and confirm the answer changes.** A uniform result
+across every subject is evidence about the instrument, not the subjects. This is now the fifth
+instrument this project has caught measuring the wrong thing:
+
+| instrument | what it actually measured |
+|---|---|
+| dark-mode screenshots | nothing — the harness toggled `prefers-color-scheme`, the site themes on `[data-theme]`, so both captures were byte-identical |
+| `report_viewed_at` | nothing — joined on `outreach_targets.scan_id`, a real column no code writes |
+| "numbers at rest" counter | too many — walked the DOM per element's own `display`, so a closed `<details>` counted as visible |
+| plan reconciliation | nothing — expiring tokens made every shop fail identically |
+| the secret-leak test | nothing — asserted the secret's length, `"42"`, was absent from output full of 13-digit timestamps, which contain `42` about a third of the time |
+
+**And the corollary, CC's words: a green flaky test is worse than none, because it reads as proof.**
+
+## Two facts from P27 worth keeping
+
+**No billing webhook has ever been recorded.** 5,783 log rows over 10–18 September, 30 distinct event
+tags, **zero** `app_subscriptions_update`. My claim that the 16 September outage rejected every
+billing webhook was unconfirmable — not because the door held, but because almost nothing was
+knocking. The premise was right (`webhookAuth.server.js:213` signs with the same
+`SHOPIFY_API_SECRET` as `authenticate.admin`); the conclusion did not follow.
+
+**`stripe_events` keeps only `id`, `type`, `received_at`.** The 27 August purchase was traceable only
+because `credit_ledger` happens to store the session id. A checkout that failed *before* the grant
+would leave nothing to trace at all. The ledger records that an event arrived and nothing about what
+it was.
+
+**Rule. A ledger that stores only that something happened cannot answer what happened.** Record
+enough of the event to reconstruct the decision it drove — never the card, never the secret, but the
+identifier, the amount and the mode.
