@@ -761,3 +761,56 @@ outreach: it is a merchant who answered a message about their own broken store�
 exact risk in prose at the top of the file and then shipped without the column that would prevent
 it. Search the schema for the state a stated rule depends on; if no column holds it, the rule is a
 wish.
+
+## False green #37 — a self-referential guard (P25, 2026-09-17)
+
+I asked CC to build a health check that signs a synthetic session token with the running process's
+client secret and verifies it through the same path a real `id_token` takes, expecting a wrong secret
+to produce a 503.
+
+CC's answer: **a token signed with secret X and verified with secret X always verifies, whatever X
+is.** There is no wrong secret from inside that loop. I had specified a test that cannot fail, and
+called it a guard.
+
+CC's second sentence is the one worth keeping: *that is precisely why 16 September was invisible.*
+The outage was never a broken verifier. It was a verifier **agreeing with itself while disagreeing
+with Shopify**. Only something outside the process can see that. CC built the half a self-check can
+do — refusing a missing, empty, whitespace-padded or quoted secret, printing nothing — and put the
+other half where it belongs: a rejection counter at the single wrapped `authenticate.admin` choke
+point, where 100% rejection with traffic present is the wrong-secret signature. It reported the two
+separately, noting that blending them would have rebuilt the original false green with more steps.
+
+**Rule. A check whose expected and actual values come from the same source proves only that the
+source is self-consistent.** Correctness against an external authority is measured at the boundary
+with that authority, or not at all. When designing a guard, ask what input would make it fail; if no
+input can, it is not a guard.
+
+## The catch of the project: a column that exists and nothing writes (P25)
+
+`report_viewed_at` was stamped by matching `outreach_targets.scan_id` — a real column that **nothing
+in the codebase ever populates** (every path fills `walk_scan_id`). A valid query against a real
+column matched nothing, threw nothing, and read **0 on all 136 sends**, while the `events` table held
+**35 human report views** over the same window.
+
+The conclusion survived the fix: matched against the sends, those 35 were none of our recipients, so
+the true answer was zero. **Both halves matter.** The number was right and it was unknowable, and for
+two weeks nobody could have told the difference between "nobody clicked" and "the join is dead".
+
+**Rule. A number that rides a join needs an independent path to the same truth, and the two compared.**
+A query that returns zero rows is indistinguishable from a query asking the wrong question. This is
+the class that also produced the 0 opens (tracking off) and the 8 restarts (guard not consulted).
+
+## What a photograph sees that a diff does not (P25, pass 4)
+
+Three defects the code review missed and the screenshot pass caught:
+
+- **Dark mode had never been tested.** The site themes on `[data-theme=dark]`; the harness was
+  toggling `prefers-color-scheme`. The tell was that the light and dark screenshots came out
+  **byte-identical** — a comparison that cannot differ was passing.
+- **The smallest text on the page was 10.5px**, and it was the label above every tile: the text that
+  says what each number *is*.
+- **43 numbers against a bar of 40**, four of them digits inside section headings carrying no
+  information the ordering did not already carry.
+
+**Rule. Appearance is only claimable from an image.** And a visual test whose two states can come out
+identical is not a test — the harness has to be shown capable of failing before its passes count.
