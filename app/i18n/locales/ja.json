@@ -1422,5 +1422,6 @@
   "Your store is excluded from Google's AI features — your answer after checking Search Console.": "ストアはGoogleのAI機能から除外されています — Search Consoleを確認した後のあなたの回答です。",
   "Your storefront is password-protected, so every crawler — and every shopper — gets the password page instead of your products. That is expected before launch. Remove the password when you open and we check again the same night.": "ストアフロントがパスワードで保護されているため、すべてのクローラーとお客様には商品ではなくパスワードページが表示されます。公開前は想定どおりです。開店時にパスワードを外していただければ、その夜に再確認します。",
   "Your storefront is password-protected, so nothing can be listed anywhere yet. Expected before launch; we re-check the night it opens.": "ストアフロントがパスワードで保護されているため、まだどこにも掲載できません。公開前は想定どおりで、開店した夜に再確認します。",
-  "Your subscription is active. Your new monthly credits are live.": "サブスクリプションは有効です。新しい月間クレジットが利用可能になりました。"
+  "Your subscription is active. Your new monthly credits are live.": "サブスクリプションは有効です。新しい月間クレジットが利用可能になりました。",
+  "A record that Shopify notified us about your store: the topic, your shop domain, the delivery id and when it arrived. Never the contents of the notification. Deleted when your data is erased.": "Shopify からストアに関する通知を受け取った記録です。トピック、ストアのドメイン、配信 ID、受信日時を含みます。通知の内容は含みません。データが削除されるとこの記録も削除されます。"
 }

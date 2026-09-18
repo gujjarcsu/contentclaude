@@ -70,6 +70,10 @@ const DIGEST_HOUR_SYDNEY = 7;
 /** Backups run at 03:00 Sydney — quiet hours, well clear of the digest. */
 const BACKUP_KEY = "ops:backup:lastRunDay";
 const BACKUP_HOUR_SYDNEY = 3;
+/** P27 item 2 - the billing reconciliation runs at 04:00 Sydney: after the backup,
+    well clear of the digest, and quiet hours for the merchants it queries. */
+const RECONCILE_KEY = "ops:billingReconcile:lastRunDay";
+const RECONCILE_HOUR_SYDNEY = 4;
 
 let _healthTimer = null;
 let _digestTimer = null;
@@ -286,6 +290,40 @@ export async function maybeRunBackup({ now = new Date(), run = runNightlyBackup 
 }
 
 /**
+ * P27 item 2 - reconcile every shop's plan against Shopify, at 04:00 Sydney.
+ *
+ * Our plan table is a claim; Shopify is the authority. On 16 September the client
+ * secret did not match Shopify's, so every billing webhook was rejected with the
+ * same 401 every page load got - and nothing recorded the refusals, so afterwards
+ * the app could not say which subscription changes it had missed. This asks.
+ *
+ * READ-ONLY, and it stays that way. A disagreement means somebody is being over-
+ * or under-charged, and which direction to correct it is a decision, not a sweep.
+ * It emails the owner and changes nothing.
+ */
+export async function maybeReconcileBilling({ now = new Date(), run = null } = {}) {
+  const { day, hour } = sydneyParts(now);
+  if (hour !== RECONCILE_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
+
+  try {
+    const redis = await getRedis();
+    if (redis) {
+      const claimed = await redis.set(RECONCILE_KEY, day, "EX", 36 * 3600, "NX");
+      if (!claimed && (await redis.get(RECONCILE_KEY)) === day) {
+        return { ran: false, reason: "already ran today" };
+      }
+      if (!claimed) await redis.set(RECONCILE_KEY, day, "EX", 36 * 3600);
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, "billing reconcile: could not claim the day, running anyway");
+  }
+
+  const doRun = run ?? ((await import("./billingReconcile.server.js")).reconcileBilling);
+  const result = await doRun({});
+  return { ran: true, day, ...result };
+}
+
+/**
  * Is the embedded admin still serving? — the fourth question the brief asks.
  *
  * `/api/health` can be entirely green while `/app` returns a 500. The health
@@ -406,6 +444,10 @@ export function startScheduler() {
     runScheduled("weeklyReport", () => import("./weeklyReport.server.js").then((m) => m.maybeSendWeeklyReports()), "weekly report threw");
     // Phase 10 Part B — the funnel digest to the owner (Monday 08:30 Sydney).
     runScheduled("funnelDigest", () => import("./funnel.server.js").then((m) => m.maybeSendFunnelDigest()), "funnel digest threw");
+    // P27 item 2 - the billing reconciliation (04:00 Sydney). Registered here so it
+    // appears in the job table the deep health check reads: a reconciliation that
+    // silently stopped running would be the same shape of failure it exists to catch.
+    runScheduled("billingReconcile", () => maybeReconcileBilling(), "billing reconcile threw");
   }, 60_000);
   _digestTimer.unref?.();
 

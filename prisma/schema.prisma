@@ -170,11 +170,11 @@ model UsageRecord {
 
 // GDPR webhook audit log — required for Shopify App Store
 model GDPRRequest {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   shop        String
   requestType String // "customer_data_request" | "customer_redact" | "shop_redact"
   payload     String // raw JSON of the webhook payload
-  processedAt DateTime @default(now())
+  processedAt DateTime  @default(now())
   /// Phase 11 Part A — when the work this request asked for was actually done
   /// (or found not to apply). The sweep re-applied an unconsumed shop_redact
   /// to every later install of the same domain; a completed request is never
@@ -201,7 +201,7 @@ model GDPRRequest {
 // find it. The merchant is told which of those happened rather than a cheerful
 // "sent".
 model SupportRequest {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   shop      String
   // Where the merchant wants the reply. Their own address, typed by them —
   // deliberately NOT taken from the Shopify session, because the person asking
@@ -217,8 +217,8 @@ model SupportRequest {
   // email is a convenience on top of it.
   emailedAt DateTime?
   // "open" | "answered" — set by the owner, not by the app.
-  status    String   @default("open")
-  createdAt DateTime @default(now())
+  status    String    @default("open")
+  createdAt DateTime  @default(now())
 
   @@index([shop])
   @@index([status, createdAt])
@@ -570,17 +570,17 @@ model ProductWatch {
 // is stored so the split can be reproduced; the summary is JSON so the screen
 // shows both arms and the interval, never a point estimate alone.
 model CrawlExperiment {
-  id          String   @id @default(cuid())
+  id          String               @id @default(cuid())
   shop        String
   seed        Int
-  status      String   @default("running") // "running" | "reported"
-  startedAt   DateTime @default(now())
+  status      String               @default("running") // "running" | "reported"
+  startedAt   DateTime             @default(now())
   submittedAt DateTime?
   reportedAt  DateTime?
-  summary     String   @default("{}")
+  summary     String               @default("{}")
   urls        CrawlExperimentUrl[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@index([shop, status])
   @@index([shop, startedAt])
@@ -731,4 +731,39 @@ model LogEvent {
   @@index([shop, createdAt])
   @@index([event, createdAt])
   @@index([level, createdAt])
+}
+
+/// P27 item 1 — every HMAC-verified webhook delivery, recorded before the handler runs.
+///
+/// The Shopify rail had no arrivals ledger at all. Duplicate detection was a Redis
+/// key with a TTL, so the evidence that a delivery had ever happened expired with
+/// it, and a missing Redis made every redelivery look fresh. When the question
+/// "were billing webhooks rejected during the 16 September outage" was asked, the
+/// only place that could answer was Shopify.
+///
+/// Ignored topics are recorded too. A topic this app does not handle still proves
+/// the door was open at that minute, which is exactly what the silence alarm reads.
+model WebhookDelivery {
+  id String @id @default(cuid())
+
+  /// x-shopify-webhook-id. Null only if Shopify omitted it; a redelivery repeats it.
+  webhookId   String?
+  /// The raw topic header, e.g. "app_subscriptions/update" — not the upper-cased form.
+  topic       String
+  shop        String
+  apiVersion  String?
+  triggeredAt DateTime?
+  receivedAt  DateTime  @default(now())
+
+  /// True when the dedup claim said we had already seen this webhook id.
+  duplicate Boolean @default(false)
+  /// True once a route recognised the topic and ran its handler.
+  handled   Boolean @default(false)
+  /// Size of the signed body. Never the body itself — payloads carry merchant data.
+  bodyBytes Int?
+
+  @@index([receivedAt])
+  @@index([shop, receivedAt])
+  @@index([topic, receivedAt])
+  @@index([webhookId, shop])
 }

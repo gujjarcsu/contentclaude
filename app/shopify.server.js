@@ -173,7 +173,22 @@ function guardedAdminContext(ctx) {
 }
 
 shopify.authenticate.admin = async (request) => {
-  const ctx = await adminWithTokenRefresh(request);
+  /* Count every attempt and every rejection at the ONE door they all pass through (P25 pass 2c).
+     A self-check proves this build can verify a token it signed itself; with the WRONG secret that
+     also passes, which is how the 16 Sep outage hid behind a green health check. The rate here is
+     the observable that separates them: a wrong secret does not degrade authentication, it fails it
+     for everybody. Counts only — no shop, no token, nothing identifying. Never throws. */
+  const counter = await import("./utils/authCounter.server.js").catch(() => null);
+  try { counter?.authAttempt(); } catch { /* bookkeeping must never break the door */ }
+  let ctx;
+  try {
+    ctx = await adminWithTokenRefresh(request);
+  } catch (e) {
+    /* a redirect thrown by the auth flow is the normal bounce to /auth, not a rejection; a 401 is */
+    const isRedirect = e instanceof Response && e.status >= 300 && e.status < 400;
+    if (!isRedirect) { try { counter?.authRejected(); } catch { /* as above */ } }
+    throw e;
+  }
   // Install-source tracking — the shop record (see installTracking.server.js).
   // A brand-new install has no OAuth callback under managed installation: its
   // first authenticated request IS the install, and this is the one place every

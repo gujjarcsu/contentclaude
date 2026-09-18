@@ -156,6 +156,45 @@ export const loader = async ({ request }) => {
       logger.warn({ err: err.message }, "Health check: scheduler probe failed");
     }
 
+    // ── The CLIENT SECRET ─────────────────────────────────────────────────
+    //
+    // False green #1, and the most expensive one: on 2026-09-16 the deployed
+    // client secret was not the one Shopify signs with, every merchant got 401
+    // on every page, and all five checks above were genuinely fine. The monitor
+    // read 100% through an outage in which the product did not work at all.
+    //
+    // Shopify signs the embedded-app id_token with the client secret. If ours is
+    // not Shopify's, authenticate.admin rejects every session token and every
+    // webhook HMAC fails the same way. So: sign a synthetic token with the
+    // secret this process is running with and put it through the same
+    // verification a real id_token takes. Prints nothing — no secret, no length,
+    // no fingerprint. See app/utils/sessionTokenHealth.server.js for why the
+    // self-check and the live rejection rate are reported separately rather than
+    // blended: a WRONG secret still verifies against itself, which is exactly
+    // how this hid.
+    try {
+      const { checkSessionTokenSecret } = await import("../utils/sessionTokenHealth.server.js");
+      const t = checkSessionTokenSecret();
+      /* the live half: a wrong-but-well-formed secret passes the self-check and fails every real
+         token, so the rejection rate is the only in-process signal that tells them apart */
+      const { sessionTokenRejections } = await import("../utils/sessionTokenHealth.server.js");
+      const { readAuthCounter } = await import("../utils/authCounter.server.js");
+      const live = await sessionTokenRejections(readAuthCounter);
+      checks.sessionToken = { ok: t.ok, reason: t.reason, live };
+      if (live?.fatal) {
+        healthy = false;
+        logger.error({ attempts: live.attempts, rejected: live.rejected }, "Health check: every session token is being rejected — the client secret is almost certainly wrong");
+      }
+      if (!t.ok) {
+        healthy = false;
+        logger.error({ reason: t.reason }, "Health check: the app cannot validate a session token");
+      }
+    } catch (err) {
+      checks.sessionToken = { error: "unavailable" };
+      healthy = false;
+      logger.error({ err: err.message }, "Health check: session-token probe failed");
+    }
+
     // ── The AI circuit breaker ────────────────────────────────────────────
     try {
       const { getCircuitBreakerState } = await import("../utils/ai.server.js");

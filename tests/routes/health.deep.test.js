@@ -56,6 +56,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.NODE_ENV = "production";
   process.env.REDIS_URL = "redis://localhost:6379";
+  /* P25 added a client-secret self-check to this endpoint, and an absent secret is
+     correctly fatal there. These suites are about the queue, Redis and the jobs, so
+     give them a well-formed secret; the self-check has its own suite. Without this
+     every deep-check assertion here read 503 for a reason none of them was testing. */
+  process.env.SHOPIFY_API_SECRET = "shpss_health_suite_secret";
   prisma.$queryRaw.mockResolvedValue([{ ok: 1 }]);
   prisma.generationJob.count.mockResolvedValue(0);
   queueHealth.mockResolvedValue({ configured: true, workerRunning: true, counts: { wait: 0, active: 1, failed: 0 }, error: null });

@@ -43,6 +43,20 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getRedis } from "./cache.server.js";
 import logger from "./logger.server.js";
+/* P27 item 1 — every refusal below is counted and every acceptance is recorded.
+   This is the ONE place a Shopify webhook is judged, so it is the one place that
+   has to keep the books. Guarding the choke point, not the call sites. */
+import {
+  doorBadMethod,
+  doorNoSignature,
+  doorBadSignature,
+  doorBadShopHeader,
+  doorMalformedBody,
+  doorShopMismatch,
+  doorStale,
+  recordDelivery,
+  ledgerHasSeen,
+} from "./webhookDoor.server.js";
 
 const SHOP_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 
@@ -170,19 +184,31 @@ export function isDeliveryFresh(triggeredAt, now = Date.now(), maxAgeMs = MAX_WE
 /**
  * Claim a delivery id exactly once. Returns true when THIS request owns the
  * work, false when it is a redelivery of one already claimed.
- * Redis-less environments (dev, Redis outage) always return true — the routes
- * keep their own second guards, and dropping work is worse than repeating it.
+ *
+ * P27 item 1 — Redis used to be the whole of this, and a Redis-less environment
+ * therefore treated EVERY redelivery as fresh: the dedup store and the evidence
+ * that a delivery had ever happened were the same expiring key. The delivery
+ * ledger is now the durable half. Redis stays the fast path; when it is absent
+ * or throwing, the ledger answers "have we already written this webhook id for
+ * this shop", which is the same question with a table behind it instead of a TTL.
+ *
+ * If both are unavailable the old behaviour stands — process it — because the
+ * routes keep their own second guards and dropping work is worse than repeating it.
  */
 export async function claimWebhookDelivery(shop, webhookId) {
   if (!webhookId) return true;
   try {
     const redis = await getRedis();
-    if (!redis) return true;
+    if (!redis) return !(await ledgerHasSeen(shop, webhookId));
     const claim = await redis.set(`whdedup:${shop}:${webhookId}`, "1", "EX", DEDUP_TTL_SECONDS, "NX");
     return !!claim;
   } catch (err) {
-    logger.warn({ shop, webhookId, err: err.message }, "Webhook dedup claim failed — processing anyway");
-    return true;
+    logger.warn({ shop, webhookId, err: err.message }, "Webhook dedup claim failed — falling back to the ledger");
+    try {
+      return !(await ledgerHasSeen(shop, webhookId));
+    } catch {
+      return true;
+    }
   }
 }
 
@@ -213,28 +239,32 @@ export async function verifyShopifyWebhook(
   { secret = process.env.SHOPIFY_API_SECRET, dedupe = true, now = Date.now() } = {},
 ) {
   if (request.method !== "POST") {
-    throw new Response(undefined, { status: 405, statusText: "Method not allowed" });
+    throw new Response(undefined, { status: 405, statusText: doorBadMethod(now) });
   }
   const rawBody = await request.text();
   const provided = request.headers.get("x-shopify-hmac-sha256") || "";
   if (!secret || !provided) {
-    throw new Response(undefined, { status: 401, statusText: "Unauthorized" });
+    /* Deliberately one branch for both: distinguishing "we have no secret" from
+       "you sent no signature" in the response would tell an unauthenticated
+       caller something about our configuration. The counter does not split them
+       either, for the same reason. */
+    throw new Response(undefined, { status: 401, statusText: doorNoSignature(now) });
   }
   const expected = Buffer.from(computeWebhookHmac(rawBody, secret));
   const given = Buffer.from(provided);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-    throw new Response(undefined, { status: 401, statusText: "Unauthorized" });
+    throw new Response(undefined, { status: 401, statusText: doorBadSignature(now) });
   }
   const shop = (request.headers.get("x-shopify-shop-domain") || "").trim().toLowerCase();
   if (!SHOP_RE.test(shop)) {
-    throw new Response(undefined, { status: 400, statusText: "Bad Request" });
+    throw new Response(undefined, { status: 400, statusText: doorBadShopHeader(now) });
   }
   let payload = {};
   if (rawBody) {
     try {
       payload = JSON.parse(rawBody);
     } catch {
-      throw new Response(undefined, { status: 400, statusText: "Bad Request" });
+      throw new Response(undefined, { status: 400, statusText: doorMalformedBody(now) });
     }
   }
 
@@ -245,7 +275,7 @@ export async function verifyShopifyWebhook(
       { headerShop: shop, payloadShop: claimed, event: "webhook_shop_mismatch" },
       "Webhook shop header does not match the signed payload — rejected",
     );
-    throw new Response(undefined, { status: 401, statusText: "Unauthorized" });
+    throw new Response(undefined, { status: 401, statusText: doorShopMismatch(now) });
   }
 
   // Topic in the library's shape (APP_UNINSTALLED) so callers can compare either way.
@@ -264,10 +294,27 @@ export async function verifyShopifyWebhook(
       { shop, topic: rawTopic, triggeredAt, maxAgeMs: MAX_WEBHOOK_AGE_MS, event: "webhook_stale" },
       "Webhook delivery older than the backstop window — rejected",
     );
-    throw new Response(undefined, { status: 401, statusText: "Unauthorized" });
+    throw new Response(undefined, { status: 401, statusText: doorStale(now) });
   }
 
   const duplicate = dedupe ? !(await claimWebhookDelivery(shop, webhookId)) : false;
+
+  /* P27 item 1 — the ledger row goes in HERE: past every refusal, so it only
+     ever records genuine Shopify traffic, and before the caller's handler runs,
+     so an arrival is on record even if the handler then throws. Topics this app
+     ignores are recorded too — a 422 "unhandled topic" is still proof the door
+     was open at that minute, which is what the silence alarm reads. This never
+     throws; a ledger that could refuse a signed webhook would be worse than no
+     ledger at all. */
+  await recordDelivery({
+    webhookId,
+    topic: rawTopic,
+    shop,
+    apiVersion: request.headers.get("x-shopify-api-version"),
+    triggeredAt,
+    duplicate,
+    bodyBytes: rawBody ? Buffer.byteLength(rawBody, "utf8") : 0,
+  });
 
   return {
     shop,

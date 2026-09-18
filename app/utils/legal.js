@@ -95,6 +95,7 @@ export const DATA_INVENTORY = [
   { model: "CrawlerAccess", holds: T("A daily record of whether search and AI crawlers can reach your storefront, and what your robots.txt allowed."), personal: false },
   { model: "GDPRRequest", holds: T("A record that Shopify sent us a privacy request, with identifiers only — never the customer email or phone in the payload."), personal: false },
   { model: "LogEvent", holds: T("Operational logs: warnings and errors, with your shop domain. Kept 30 days."), personal: false },
+  { model: "WebhookDelivery", holds: T("A record that Shopify notified us about your store: the topic, your shop domain, the delivery id and when it arrived. Never the contents of the notification. Deleted when your data is erased."), personal: false },
 ];
 
 /** Companies that process data on our behalf. Naming them is the point. */

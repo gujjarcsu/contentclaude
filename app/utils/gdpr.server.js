@@ -45,6 +45,15 @@ export const GDPR_SHOP_MODELS = [
   "crawlExperimentUrl",
   "crawlExperiment",
   "crawlerAccess",
+  // P27 item 1 - the webhook arrivals ledger. Deleted rather than exempted.
+  //
+  // It holds no content: a topic, the shop domain, Shopify's delivery id, two
+  // timestamps and a byte count. But the shop domain IS the merchant, and the
+  // pattern of when a store's webhooks arrived is a record of that store. The
+  // audit trail proving we honoured the erasure is GDPRRequest’s job, which is
+  // exactly why that one is exempt and this one is not - an exemption is only
+  // honest when something else is already keeping the record.
+  "webhookDelivery",
 ];
 
 /**
