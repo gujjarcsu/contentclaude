@@ -27,7 +27,12 @@ vi.mock("../../app/db.server", () => ({ default: prisma }));
 // deliberately NOT a degrade: these assertions stay about the queue, Redis
 // and the breaker. The counters have their own suite in
 // tests/routes/schedulerHealth.test.js.
-vi.mock("../../app/utils/cache.server", () => ({ getCache: vi.fn(async (k, supplier) => supplier()), getRedis: vi.fn(async () => null) }));
+// P38 — the Redis check PINGs the shared client now, so the default client
+// answers PING and has an empty scheduler record.
+vi.mock("../../app/utils/cache.server", () => ({
+  getCache: vi.fn(async (k, supplier) => supplier()),
+  getRedis: vi.fn(async () => ({ ping: async () => "PONG", hgetall: async () => ({}) })),
+}));
 vi.mock("../../app/utils/logger.server", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -118,11 +123,18 @@ describe("item 26 — the deep check sees what the shallow one cannot", () => {
   });
 
   it("is degraded, not down, when Redis is unreachable", async () => {
-    const { getCache } = await import("../../app/utils/cache.server");
-    getCache.mockRejectedValueOnce(new Error("redis down"));
+    const { getRedis } = await import("../../app/utils/cache.server");
+    getRedis.mockResolvedValueOnce(null);
     const { res, body } = await call("?deep=1");
     expect(res.status).toBe(200);
     expect(body.status).toBe("degraded");
+    expect(body.checks.redis).toBe("degraded");
+  });
+
+  it("P38 — a client whose PING throws is degraded, not ok (the 4-day false green)", async () => {
+    const { getRedis } = await import("../../app/utils/cache.server");
+    getRedis.mockResolvedValueOnce({ ping: async () => { throw new Error("Connection is closed."); } });
+    const { body } = await call("?deep=1");
     expect(body.checks.redis).toBe("degraded");
   });
 

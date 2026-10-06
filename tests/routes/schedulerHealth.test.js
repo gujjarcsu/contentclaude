@@ -27,6 +27,8 @@ const { prisma, queueHealth, breaker, redis, store } = vi.hoisted(() => {
       hdel: vi.fn(async (_k, f) => void store.delete(f)),
       hgetall: vi.fn(async () => Object.fromEntries(store)),
       expire: vi.fn(async () => 1),
+      // P38 — the health route's Redis check is a real PING now.
+      ping: vi.fn(async () => "PONG"),
     },
   };
 });
@@ -224,11 +226,15 @@ describe("THE DEFECT: the deep check now sees it", () => {
   });
 
   it("no Redis at all is not a second alert for the same fact", async () => {
+    // P38 — the Redis check is a real PING now, so no Redis reads "degraded"
+    // (before, it read "ok" through the in-process cache fallback). The
+    // scheduler record must not escalate that one fact any further.
     const cache = await import("../../app/utils/cache.server.js");
-    cache.getRedis.mockResolvedValueOnce(null);
+    cache.getRedis.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     const { body } = await deep();
+    expect(body.checks.redis).toBe("degraded");
     expect(body.checks.scheduler.error).toBe("no redis");
-    expect(body.status).toBe("ok");
+    expect(body.status).toBe("degraded");
   });
 
   it("it costs one round trip on the hash, however many jobs there are", async () => {

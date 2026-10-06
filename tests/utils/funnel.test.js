@@ -24,7 +24,7 @@ const src = (p) => code(readFileSync(p, "utf8"));
 const { db, log, redis, redisRef, emails } = vi.hoisted(() => {
   const fn = () => vi.fn();
   return {
-    db: { shop: { updateMany: fn(), findUnique: fn(), findMany: fn() } },
+    db: { shop: { updateMany: fn(), findUnique: fn(), findMany: fn() }, scheduledRun: { create: fn() } },
     log: { info: fn(), warn: fn(), error: fn(), debug: fn() },
     redis: { set: fn(), get: fn() },
     redisRef: { current: null },
@@ -199,19 +199,18 @@ describe("the Monday", () => {
     expect(src("app/utils/scheduler.server.js")).toMatch(/minute: Number\(parts\.minute\), weekday \};/);
   });
 
-  it("the digest runs Monday 08:30 Sydney, once per week under Redis, and not at another hour", async () => {
+  it("the digest runs Monday 08:30 Sydney, once per week under a Postgres claim, and not at another hour", async () => {
     const run = vi.fn(async () => ({ sent: true }));
     expect(await funnelServer.maybeSendFunnelDigest({ now: new Date("2026-09-20T22:10:00Z"), run })).toEqual({ ran: false, reason: "not the hour" }); // 08:10
     expect(await funnelServer.maybeSendFunnelDigest({ now: new Date("2026-09-21T22:30:00Z"), run })).toEqual({ ran: false, reason: "not the hour" }); // Tuesday
     expect(run).not.toHaveBeenCalled();
-    redisRef.current = redis;
-    redis.set.mockResolvedValueOnce("OK");
+    // P38 — the week is claimed by a ScheduledRun insert, not a Redis SET NX.
+    db.scheduledRun.create.mockResolvedValueOnce({});
     const first = await funnelServer.maybeSendFunnelDigest({ now: MONDAY_0830, run });
     expect(first).toMatchObject({ ran: true, day: "2026-09-21", sent: true });
-    expect(redis.set).toHaveBeenCalledWith("cc:funnel-digest:week", "2026-09-21", "EX", 8 * 24 * 3600, "NX");
-    redis.set.mockResolvedValueOnce(null);
-    redis.get.mockResolvedValueOnce("2026-09-21");
-    expect(await funnelServer.maybeSendFunnelDigest({ now: new Date("2026-09-20T22:45:00Z"), run })).toEqual({ ran: false, reason: "already ran this week" });
+    expect(db.scheduledRun.create).toHaveBeenCalledWith({ data: { job: "funnelDigest", period: "2026-09-21" } });
+    db.scheduledRun.create.mockRejectedValueOnce(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }));
+    expect(await funnelServer.maybeSendFunnelDigest({ now: new Date("2026-09-20T22:45:00Z"), run })).toEqual({ ran: false, reason: "already ran" });
     expect(run).toHaveBeenCalledTimes(1);
   });
 

@@ -767,3 +767,22 @@ model WebhookDelivery {
   @@index([topic, receivedAt])
   @@index([webhookId, shop])
 }
+
+/// P38 — "this scheduled job has run for this period", one row per claim.
+///
+/// The day/week claims lived in Redis, and every one of them was written
+/// "if the claim fails, run anyway". When the Redis cache client died on
+/// 2026-10-01 the daily digest went to the owner 60 times a day, the funnel
+/// digest 30 times, and the backup and billing reconcile ran every minute of
+/// their hour. The claim is a primary-key insert now: the insert that wins runs
+/// the job, a duplicate key means it already ran, and any other failure means
+/// the marker cannot be read — the job is SKIPPED and the owner told once.
+model ScheduledRun {
+  /// The job, e.g. "dailyDigest".
+  job       String
+  /// The period it ran for — the Sydney day ("2026-10-07"), or the Monday for weekly jobs.
+  period    String
+  claimedAt DateTime @default(now())
+
+  @@id([job, period])
+}

@@ -8,7 +8,7 @@
  */
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
-import { getRedis } from "./cache.server.js";
+import { claimScheduledRun } from "./scheduledRun.server.js";
 import { sydneyParts } from "./scheduler.server.js";
 import { sendOperatorEmail } from "./notify.server.js";
 import { computeFunnel, composeFunnelDigest, FUNNEL_SELECT } from "./funnel.js";
@@ -16,7 +16,6 @@ import { computeFunnel, composeFunnelDigest, FUNNEL_SELECT } from "./funnel.js";
 export const FUNNEL_DAY_SYDNEY = 1; // Monday
 export const FUNNEL_HOUR_SYDNEY = 8;
 export const FUNNEL_MINUTE_MIN = 30; // after the 08:00 support digest
-const FUNNEL_KEY = "cc:funnel-digest:week";
 
 export async function funnelRows(db = prisma) {
   // Phase 11 — an anonymised row is a ghost of a past install, not a shop.
@@ -42,19 +41,8 @@ export async function sendFunnelDigest({ now = new Date(), dryRun = false } = {}
 export async function maybeSendFunnelDigest({ now = new Date(), run = sendFunnelDigest } = {}) {
   const { day, hour, minute, weekday } = sydneyParts(now);
   if (weekday !== FUNNEL_DAY_SYDNEY || hour !== FUNNEL_HOUR_SYDNEY || minute < FUNNEL_MINUTE_MIN) return { ran: false, reason: "not the hour" };
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(FUNNEL_KEY, day, "EX", 8 * 24 * 3600, "NX");
-      if (!claimed) {
-        const current = await redis.get(FUNNEL_KEY);
-        if (current === day) return { ran: false, reason: "already ran this week" };
-        await redis.set(FUNNEL_KEY, day, "EX", 8 * 24 * 3600);
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err?.message }, "funnel digest: could not claim the week, running anyway");
-  }
+  const claim = await claimScheduledRun("funnelDigest", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
   const result = await run({ now });
   return { ran: true, day, ...result };
 }

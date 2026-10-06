@@ -22,7 +22,7 @@
 import logger from "./logger.server.js";
 import { sendOperatorEmail } from "./notify.server.js";
 import { buildDailyDigest } from "./digest.server.js";
-import { getRedis } from "./cache.server.js";
+import { claimScheduledRun } from "./scheduledRun.server.js";
 import { runNightlyBackup } from "./backup.server.js";
 import { sweepUnfinishedWebhookWork } from "./webhookWork.server.js";
 import { sweepOldLogs, RETENTION_DAYS } from "./logSink.server.js";
@@ -52,6 +52,12 @@ const BROWSER_UA =
 
 /** Do not send the same alarm every five minutes for hours. */
 const REALERT_AFTER_MS = 60 * 60 * 1000;
+/**
+ * P38 — the DOWN alert: once when it breaks, once when it recovers, and one
+ * reminder a day while it stays broken. Hourly sent ~100 identical emails
+ * between 1 and 5 October, which teaches the owner to stop reading them.
+ */
+const DOWN_REMINDER_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How long `degraded` may persist before it is treated as an outage.
@@ -64,15 +70,12 @@ const REALERT_AFTER_MS = 60 * 60 * 1000;
  * short of a merchant's whole afternoon.
  */
 const DEGRADED_PROBES_BEFORE_ALERT = 3;
-/** Digest bookkeeping lives in Redis so a worker restart cannot double-send. */
-const DIGEST_KEY = "ops:digest:lastSentDay";
+/** Digest bookkeeping lives in Postgres (ScheduledRun) so a worker restart cannot double-send. */
 const DIGEST_HOUR_SYDNEY = 7;
 /** Backups run at 03:00 Sydney — quiet hours, well clear of the digest. */
-const BACKUP_KEY = "ops:backup:lastRunDay";
 const BACKUP_HOUR_SYDNEY = 3;
 /** P27 item 2 - the billing reconciliation runs at 04:00 Sydney: after the backup,
     well clear of the digest, and quiet hours for the merchants it queries. */
-const RECONCILE_KEY = "ops:billingReconcile:lastRunDay";
 const RECONCILE_HOUR_SYDNEY = 4;
 
 let _healthTimer = null;
@@ -194,8 +197,8 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
 
   if (bad) {
     const recovered = _lastStatus === "ok";
-    const stale = now - _lastAlertAt > REALERT_AFTER_MS;
-    // Alert on the transition into trouble, then at most hourly while it lasts.
+    const stale = now - _lastAlertAt > DOWN_REMINDER_AFTER_MS;
+    // Alert on the transition into trouble, then once a day while it lasts.
     if (recovered || stale) {
       _lastAlertAt = now;
       alerted = true;
@@ -242,20 +245,9 @@ export async function maybeSendDigest({ now = new Date(), build = buildDailyDige
   const { day, hour } = sydneyParts(now);
   if (hour !== DIGEST_HOUR_SYDNEY) return { sent: false, reason: "not the hour" };
 
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      // NX means the first caller in the hour wins and the rest are no-ops.
-      const claimed = await redis.set(DIGEST_KEY, day, "EX", 36 * 3600, "NX");
-      if (!claimed) {
-        const current = await redis.get(DIGEST_KEY);
-        if (current === day) return { sent: false, reason: "already sent today" };
-        await redis.set(DIGEST_KEY, day, "EX", 36 * 3600);
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, "digest: could not claim the day, sending anyway");
-  }
+  // P38 — the claim is in Postgres, and a claim that cannot be read means no send.
+  const claim = await claimScheduledRun("dailyDigest", day);
+  if (!claim.run) return { sent: false, reason: claim.reason };
 
   const { subject, text } = await build({ now });
   const result = await sendOperatorEmail({ subject, text });
@@ -271,18 +263,8 @@ export async function maybeRunBackup({ now = new Date(), run = runNightlyBackup 
   const { day, hour } = sydneyParts(now);
   if (hour !== BACKUP_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
 
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(BACKUP_KEY, day, "EX", 36 * 3600, "NX");
-      if (!claimed && (await redis.get(BACKUP_KEY)) === day) {
-        return { ran: false, reason: "already ran today" };
-      }
-      if (!claimed) await redis.set(BACKUP_KEY, day, "EX", 36 * 3600);
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, "backup: could not claim the day, running anyway");
-  }
+  const claim = await claimScheduledRun("nightlyBackup", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
 
   const result = await run({ now });
   logger.info({ event: "nightly_backup", day, ok: result.ok }, "Nightly backup attempt");
@@ -305,18 +287,8 @@ export async function maybeReconcileBilling({ now = new Date(), run = null } = {
   const { day, hour } = sydneyParts(now);
   if (hour !== RECONCILE_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
 
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(RECONCILE_KEY, day, "EX", 36 * 3600, "NX");
-      if (!claimed && (await redis.get(RECONCILE_KEY)) === day) {
-        return { ran: false, reason: "already ran today" };
-      }
-      if (!claimed) await redis.set(RECONCILE_KEY, day, "EX", 36 * 3600);
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, "billing reconcile: could not claim the day, running anyway");
-  }
+  const claim = await claimScheduledRun("billingReconcile", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
 
   const doRun = run ?? ((await import("./billingReconcile.server.js")).reconcileBilling);
   const result = await doRun({});

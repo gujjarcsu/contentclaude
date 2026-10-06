@@ -9,10 +9,25 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { emails, redis, redisRef } = vi.hoisted(() => ({
+const { emails, redis, redisRef, runs } = vi.hoisted(() => ({
   emails: [],
   redis: { set: vi.fn(async () => "OK"), get: vi.fn(async () => null), del: vi.fn(async () => 1) },
   redisRef: { current: null },
+  runs: new Set(),
+}));
+
+// P38 — the once-a-day claim is a ScheduledRun primary-key insert in Postgres.
+vi.mock("../../app/db.server.js", () => ({
+  default: {
+    scheduledRun: {
+      create: async ({ data }) => {
+        const k = `${data.job}|${data.period}`;
+        if (runs.has(k)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+        runs.add(k);
+        return data;
+      },
+    },
+  },
 }));
 
 vi.mock("../../app/utils/logger.server.js", () => ({
@@ -37,6 +52,7 @@ const res = (status, body) => ({ status, text: async () => JSON.stringify(body) 
 beforeEach(() => {
   vi.clearAllMocks();
   emails.length = 0;
+  runs.clear();
   redisRef.current = null;
   redis.set.mockResolvedValue("OK");
   redis.get.mockResolvedValue(null);
@@ -60,6 +76,10 @@ describe("item 5 — the health watch emails when production is unhealthy", () =
   });
 
   it("emails when production does not answer at all", async () => {
+    // P38 — the previous test left it DOWN, and a reminder is now daily, not
+    // hourly; start from healthy so this is a fresh break.
+    await checkHealthOnce({ fetchImpl: vi.fn(async () => res(200, { status: "ok" })), now: 19_000_000 });
+    emails.length = 0;
     const fetchImpl = vi.fn(async () => {
       throw new Error("ETIMEDOUT");
     });
@@ -126,9 +146,7 @@ describe("item 5 — the daily digest goes at 07:00 Sydney, once", () => {
   });
 
   it("a worker restart inside the hour does not send a second copy", async () => {
-    redisRef.current = redis;
-    redis.set.mockResolvedValue(null); // the day is already claimed
-    redis.get.mockResolvedValue("2026-09-09");
+    runs.add("dailyDigest|2026-09-09"); // the day is already claimed, in Postgres
     const out = await maybeSendDigest({
       now: at("2026-09-08T21:30:00Z"),
       build: async () => ({ subject: "s", text: "t" }),

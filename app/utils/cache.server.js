@@ -49,27 +49,39 @@ const REDIS_RETRY_BACKOFF_MS = 60_000; // only retry once per minute after a fai
 
 export async function getRedis() {
   if (!REDIS_URL) return null;
-  if (_redis) return _redis;
+  // P38 — with retryStrategy null, a connection the SERVER closes cleanly goes
+  // straight to status "end" without an "error" event. The handler below never
+  // ran, `_redis` kept the dead client, and every command on every machine threw
+  // "Connection is closed." from 2026-10-01 11:40Z for four days. An ended client
+  // is no client: drop it and connect a new one.
+  if (_redis && _redis.status !== "end") return _redis;
+  _redis = null;
   // Circuit breaker: don't hammer a broken Redis on every request
   if (_redisFailedAt && Date.now() - _redisFailedAt < REDIS_RETRY_BACKOFF_MS) return null;
   try {
     const { default: Redis } = await import("ioredis");
-    _redis = new Redis(REDIS_URL, {
+    const client = new Redis(REDIS_URL, {
       maxRetriesPerRequest: 0,
       retryStrategy: () => null, // disable ioredis internal retries — we handle retries ourselves
       connectTimeout: 3000,
       lazyConnect: true,
       enableOfflineQueue: false,
     });
-    _redis.on("error", (err) => {
+    _redis = client;
+    client.on("error", (err) => {
       logger.warn({ err: err.message }, "Redis cache connection error — falling back to in-process cache");
-      _redis = null;
+      if (_redis === client) _redis = null;
       _redisFailedAt = Date.now();
     });
-    await _redis.connect();
+    client.on("end", () => {
+      if (_redis !== client) return;
+      logger.warn("Redis cache connection ended — reconnecting on next use");
+      _redis = null;
+    });
+    await client.connect();
     _redisFailedAt = 0;
     logger.info("Redis cache connected");
-    return _redis;
+    return client;
   } catch (err) {
     logger.warn({ err: err.message }, "Could not connect to Redis — using in-process cache");
     _redis = null;

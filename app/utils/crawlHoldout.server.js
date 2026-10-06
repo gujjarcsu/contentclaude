@@ -21,7 +21,7 @@
  */
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
-import { getRedis } from "./cache.server.js";
+import { claimScheduledRun } from "./scheduledRun.server.js";
 import { sydneyParts } from "./scheduler.server.js";
 import { isRemediationLocked, lockConfigured } from "./remediation.server.js";
 import { storefrontOrigin, storefrontPasswordProtected } from "./crawlerAccess.server.js";
@@ -33,7 +33,6 @@ import { newSeed, splitArms, summariseExperiment, MAX_URLS_PER_EXPERIMENT, MIN_P
 
 export const HOLDOUT_HOUR_SYDNEY = 3; // after the 02:00 catalogue walk
 export const CHECKS_PER_SHOP_PER_DAY = 120;
-const HOLDOUT_KEY = "cc:crawl-holdout:day";
 const DAY_MS = 24 * 3600 * 1000;
 
 /** Product pages published in the window that are in no experiment yet. */
@@ -173,19 +172,8 @@ export async function runCrawlHoldoutForAllShops({ now = new Date() } = {}) {
 export async function maybeRunCrawlHoldout({ now = new Date(), run = runCrawlHoldoutForAllShops } = {}) {
   const { day, hour } = sydneyParts(now);
   if (hour !== HOLDOUT_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(HOLDOUT_KEY, day, "EX", 36 * 3600, "NX");
-      if (!claimed) {
-        const current = await redis.get(HOLDOUT_KEY);
-        if (current === day) return { ran: false, reason: "already ran today" };
-        await redis.set(HOLDOUT_KEY, day, "EX", 36 * 3600);
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err?.message }, "crawl holdout: could not claim the day, running anyway");
-  }
+  const claim = await claimScheduledRun("crawlHoldout", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
   const result = await run({ now });
   return { ran: true, day, ...result };
 }

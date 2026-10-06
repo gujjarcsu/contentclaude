@@ -29,7 +29,16 @@ const redis = {
   del: async (k) => (store.delete(k) ? 1 : 0),
 };
 const anyModel = new Proxy({}, { get: (_t, k) => (k === "then" ? undefined : async () => []) });
-vi.mock("../../app/db.server.js", () => ({ default: new Proxy({}, { get: (_t, k) => (k === "then" || typeof k === "symbol" ? undefined : anyModel) }) }));
+// P38 — the claims are a ScheduledRun primary-key insert now; same store, real PK semantics.
+const scheduledRun = {
+  create: async ({ data }) => {
+    const k = `run:${data.job}|${data.period}`;
+    if (store.has(k)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    store.set(k, true);
+    return data;
+  },
+};
+vi.mock("../../app/db.server.js", () => ({ default: new Proxy({}, { get: (_t, k) => (k === "then" || typeof k === "symbol" ? undefined : k === "scheduledRun" ? scheduledRun : anyModel) }) }));
 vi.mock("../../app/utils/logger.server.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock("../../app/utils/cache.server.js", () => ({ getRedis: async () => redis, getCache: vi.fn(async (_k, fn) => fn()), setCache: vi.fn(), invalidateCache: vi.fn() }));
 vi.mock("../../app/utils/notify.server.js", () => ({

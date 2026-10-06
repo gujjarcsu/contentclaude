@@ -40,6 +40,10 @@ const MODELS = [...SCHEMA.matchAll(/^model (\w+) \{/gm)].map((m) => m[1]);
 const EXEMPT = {
   // Shopify's own session table, described in the inventory under "Session".
   // Listed here only because Prisma splits nothing else out.
+  // P38 — the app's own scheduler bookkeeping: a job name and a date, e.g.
+  // ("dailyDigest", "2026-10-07"). No shop, no merchant, no customer, nothing
+  // about anyone's store, so there is nothing in it for the policy to describe.
+  ScheduledRun: "internal job-run markers; holds no store or personal data",
 };
 
 describe("the data inventory covers every model in the schema", () => {

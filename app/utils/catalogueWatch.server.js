@@ -35,7 +35,7 @@
  */
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
-import { getRedis } from "./cache.server.js";
+import { claimScheduledRun } from "./scheduledRun.server.js";
 import { shopifyQuery } from "./shopifyQuery.server.js";
 import { getFreshOfflineSession } from "./offlineToken.server.js";
 import { scopeForShop, scopeQueryFor } from "./candidates.server.js";
@@ -55,7 +55,6 @@ export const WATCH_PAGE = 100;
 export const WATCH_MAX_PAGES = 50; // 5,000 products — the Growth cap
 export const WATCH_BUDGET_MS = 8_000; // inline from Home: a page is waiting
 export const WATCH_DAILY_BUDGET_MS = 30_000; // the daily job: nothing is
-const WATCH_KEY = "cc:catalogue-watch:day";
 const UPSERT_CHUNK = 50;
 const API_VERSION = "2026-04";
 
@@ -461,19 +460,8 @@ export async function runCatalogueWatchForAllShops({ now = new Date() } = {}) {
 export async function maybeRunCatalogueWatch({ now = new Date(), run = runCatalogueWatchForAllShops } = {}) {
   const { day, hour } = sydneyParts(now);
   if (hour !== WATCH_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(WATCH_KEY, day, "EX", 36 * 3600, "NX");
-      if (!claimed) {
-        const current = await redis.get(WATCH_KEY);
-        if (current === day) return { ran: false, reason: "already ran today" };
-        await redis.set(WATCH_KEY, day, "EX", 36 * 3600);
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err?.message }, "catalogue watch: could not claim the day, running anyway");
-  }
+  const claim = await claimScheduledRun("catalogueWatch", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
   const result = await run({ now });
   // Phase 11 Part A — after the walk, ask Shopify about every row the flag
   // disagrees with. Dynamic import: installState imports installTracking,

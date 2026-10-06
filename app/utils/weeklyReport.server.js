@@ -11,7 +11,7 @@
  */
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
-import { getRedis } from "./cache.server.js";
+import { claimScheduledRun } from "./scheduledRun.server.js";
 import { sydneyParts } from "./scheduler.server.js";
 import { shopifyQuery } from "./shopifyQuery.server.js";
 import { getFreshOfflineSession } from "./offlineToken.server.js";
@@ -26,7 +26,6 @@ import "../i18n/catalogues.server.js";
 
 export const REPORT_DAY_SYDNEY = 1; // Monday
 export const REPORT_HOUR_SYDNEY = 9;
-const REPORT_KEY = "cc:weekly-report:week";
 export const APP_URL = process.env.SHOPIFY_APP_URL || "https://app.navaal.ai";
 
 /**
@@ -111,19 +110,8 @@ export async function sendWeeklyReports({ now = new Date() } = {}) {
 export async function maybeSendWeeklyReports({ now = new Date(), run = sendWeeklyReports } = {}) {
   const { day, hour, weekday } = sydneyParts(now);
   if (weekday !== REPORT_DAY_SYDNEY || hour !== REPORT_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
-  try {
-    const redis = await getRedis();
-    if (redis) {
-      const claimed = await redis.set(REPORT_KEY, day, "EX", 8 * 24 * 3600, "NX");
-      if (!claimed) {
-        const current = await redis.get(REPORT_KEY);
-        if (current === day) return { ran: false, reason: "already ran this week" };
-        await redis.set(REPORT_KEY, day, "EX", 8 * 24 * 3600);
-      }
-    }
-  } catch (err) {
-    logger.warn({ err: err?.message }, "weekly report: could not claim the week, running anyway");
-  }
+  const claim = await claimScheduledRun("weeklyReport", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
   const result = await run({ now });
   return { ran: true, day, ...result };
 }

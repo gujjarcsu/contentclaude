@@ -24,7 +24,7 @@
  */
 
 import prisma from "../db.server.js";
-import { getCache } from "../utils/cache.server.js";
+import { getRedis } from "../utils/cache.server.js";
 import logger from "../utils/logger.server.js";
 
 /** Answer even when a dependency will not: reject rather than hang. */
@@ -61,8 +61,15 @@ export const loader = async ({ request }) => {
   // ── Redis ───────────────────────────────────────────────────────────────
   if (process.env.REDIS_URL) {
     try {
+      // P38 — a real PING on the shared client. This used to go through
+      // getCache, which falls back to the in-process cache when Redis fails, so
+      // it said "ok" for four days while every Redis command threw.
       await withTimeout(
-        getCache("__health_ping__", async () => "ok", 5),
+        (async () => {
+          const redis = await getRedis();
+          if (!redis) throw new Error("no redis connection");
+          await redis.ping();
+        })(),
         REDIS_TIMEOUT_MS,
         "redis",
       );
