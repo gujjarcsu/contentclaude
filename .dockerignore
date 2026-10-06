@@ -71,3 +71,17 @@ playwright-report
 test-results
 .playwright-mcp
 .claude
+
+# P38 — the deploy died before the build: "archive/tar: unknown file mode
+# ?rwxr-xr-x". docs/history/_pw-profile/ is a saved Chromium profile whose
+# Singleton{Lock,Cookie,Socket} are WSL symlinks (reparse tag 0xA000001D),
+# which Windows tar cannot read. `*.md` above is anchored to the root, so the
+# whole 127 MB docs/ tree was being uploaded on every deploy. Nothing in the
+# image reads any of these: no runtime file reads outside app/, prisma/ and
+# scripts/, and the build (vite / react-router) does not reference them.
+docs
+listing-assets
+_to_delete
+Claude outputs
+navaal-e2e
+drill.json
