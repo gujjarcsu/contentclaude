@@ -69,7 +69,9 @@ vi.mock("ioredis", () => ({
 process.env.REDIS_URL = "redis://example:6379";
 const { getRedis } = await import("../../app/utils/cache.server.js");
 const { claimScheduledRun } = await import("../../app/utils/scheduledRun.server.js");
-const { maybeSendDigest, checkHealthOnce } = await import("../../app/utils/scheduler.server.js");
+const { maybeSendDigest, checkHealthOnce, checkAppShellOnce, maybeSweepScheduledRuns } = await import("../../app/utils/scheduler.server.js");
+const { sweepOldScheduledRuns } = await import("../../app/utils/scheduledRun.server.js");
+const { buildDailyDigest } = await import("../../app/utils/digest.server.js");
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -183,5 +185,84 @@ describe("4 — DOWN: once on the break, once on recovery, one reminder a day", 
     emails.length = 0;
     for (let i = 0; i < (23 * HOUR) / (5 * MIN); i++) await checkHealthOnce({ fetchImpl: bad, now: t0 + i * 5 * MIN });
     expect(emails).toHaveLength(1);
+  });
+});
+
+/**
+ * P38b — the other two alarms follow the same rule, the markers are swept,
+ * and our own dev store is not a paying merchant.
+ */
+describe("P38b — admin-shell and degraded alarms: once, recovery, one reminder a day", () => {
+  it("the admin shell: 1 on break, 1 per 24 h, 1 on recovery — over two days, not 48", async () => {
+    const shell = (status) => vi.fn(async () => ({ status }));
+    const t0 = 980_000_000_000;
+    await checkAppShellOnce({ fetchImpl: shell(302), now: t0 - 5 * MIN });
+    emails.length = 0;
+    for (let i = 0; i < (48 * HOUR) / (5 * MIN); i++) await checkAppShellOnce({ fetchImpl: shell(500), now: t0 + i * 5 * MIN });
+    expect(emails.filter((e) => /admin is broken/i.test(e.subject))).toHaveLength(2); // the break, then at 24 h
+    await checkAppShellOnce({ fetchImpl: shell(302), now: t0 + 48 * HOUR });
+    expect(emails.at(-1).subject).toMatch(/serving again/i);
+    expect(emails).toHaveLength(3);
+  });
+
+  it("degraded: alerts at 15 minutes, reminds once a day, says so when it clears", async () => {
+    const degraded = vi.fn(async () => res(200, { status: "degraded", checks: { redis: "degraded" } }));
+    const ok = vi.fn(async () => res(200, { status: "ok" }));
+    const t0 = 990_000_000_000;
+    await checkHealthOnce({ fetchImpl: ok, now: t0 - 5 * MIN });
+    emails.length = 0;
+    for (let i = 0; i < (30 * HOUR) / (5 * MIN); i++) await checkHealthOnce({ fetchImpl: degraded, now: t0 + i * 5 * MIN });
+    const alarms = emails.filter((e) => /DEGRADED/.test(e.subject));
+    expect(alarms).toHaveLength(2);
+    expect(alarms[0].subject).toMatch(/15 minutes/);
+    // The reminder states how long it has really lasted, not "15 minutes" again.
+    expect(alarms[1].subject).not.toMatch(/ 15 minutes/);
+    await checkHealthOnce({ fetchImpl: ok, now: t0 + 30 * HOUR });
+    expect(emails.at(-1).subject).toMatch(/back to normal/i);
+  });
+});
+
+describe("P38b — ScheduledRun markers older than 30 days are swept, nightly", () => {
+  it("deletes only what is past the cutoff", async () => {
+    const deleteMany = vi.fn(async () => ({ count: 4 }));
+    const now = new Date("2026-11-10T18:00:00Z");
+    const out = await sweepOldScheduledRuns({ now, db: { scheduledRun: { deleteMany } } });
+    expect(out.deleted).toBe(4);
+    expect(deleteMany).toHaveBeenCalledWith({ where: { claimedAt: { lt: new Date("2026-10-11T18:00:00Z") } } });
+  });
+
+  it("runs once in its hour (05:00 Sydney), never at any other", async () => {
+    const sweep = vi.fn(async () => ({ deleted: 0 }));
+    // 05:00 Sydney on 8 Oct 2026 (AEDT) is 18:00Z on 7 Oct.
+    const start = Date.parse("2026-10-07T17:00:00Z");
+    let ran = 0;
+    for (let m = 0; m < 180; m++) if ((await maybeSweepScheduledRuns({ now: new Date(start + m * MIN), sweep })).ran) ran++;
+    expect(ran).toBe(1);
+    expect(sweep).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("P38b — our own dev store is never a paid, live or ever shop in the digest", () => {
+  const db = {
+    shop: {
+      count: vi.fn(async () => 0),
+      findMany: vi.fn(async () => [
+        { shop: "contentpilot-dev2.myshopify.com", kind: "unclassified", uninstalledAt: null }, // ours by OURS_PATTERN, whatever the row says
+        { shop: "hark-fauy0olp.myshopify.com", kind: "unclassified", uninstalledAt: null },
+        { shop: "mars-demo.myshopify.com", kind: "shopify", uninstalledAt: null },
+      ]),
+    },
+    plan: { findMany: vi.fn(async () => [{ shop: "contentpilot-dev2.myshopify.com" }]) },
+    generationJob: { count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _sum: { quotaSkipped: 0 } })) },
+    usageRecord: { count: vi.fn(async () => 0) },
+  };
+
+  it("'shops on a paid plan' reads 0 when the only paid plan is contentpilot-dev2", async () => {
+    const { data, text } = await buildDailyDigest({ now: new Date("2026-10-06T20:00:00Z"), db });
+    expect(data.paidShops).toBe(0);
+    expect(text).toMatch(/\s0 {2}shops on a paid plan/);
+    expect(data.liveShops).toBe(1); // hark only — not ours, not Shopify's
+    expect(data.totalShops).toBe(1);
+    expect(data.excludedShops).toBe(2);
   });
 });

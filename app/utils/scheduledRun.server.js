@@ -21,6 +21,16 @@ import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { sendOperatorEmail } from "./notify.server.js";
 
+/** P38b — markers are only needed for the period they guard; a month is plenty of history. */
+export const SCHEDULED_RUN_RETENTION_DAYS = 30;
+
+/** Delete markers older than the retention window. Returns how many went. */
+export async function sweepOldScheduledRuns({ now = new Date(), db = prisma } = {}) {
+  const cutoff = new Date(now.getTime() - SCHEDULED_RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.scheduledRun.deleteMany({ where: { claimedAt: { lt: cutoff } } });
+  return { deleted: count, cutoff: cutoff.toISOString() };
+}
+
 /** Set while an unreadable-marker alert is outstanding; cleared by the next good claim. */
 let _markerAlerted = false;
 

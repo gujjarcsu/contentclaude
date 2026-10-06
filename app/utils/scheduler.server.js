@@ -22,7 +22,7 @@
 import logger from "./logger.server.js";
 import { sendOperatorEmail } from "./notify.server.js";
 import { buildDailyDigest } from "./digest.server.js";
-import { claimScheduledRun } from "./scheduledRun.server.js";
+import { claimScheduledRun, sweepOldScheduledRuns } from "./scheduledRun.server.js";
 import { runNightlyBackup } from "./backup.server.js";
 import { sweepUnfinishedWebhookWork } from "./webhookWork.server.js";
 import { sweepOldLogs, RETENTION_DAYS } from "./logSink.server.js";
@@ -50,14 +50,13 @@ const APP_URL = `${BASE_URL}/app`;
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-/** Do not send the same alarm every five minutes for hours. */
-const REALERT_AFTER_MS = 60 * 60 * 1000;
 /**
- * P38 — the DOWN alert: once when it breaks, once when it recovers, and one
- * reminder a day while it stays broken. Hourly sent ~100 identical emails
- * between 1 and 5 October, which teaches the owner to stop reading them.
+ * P38 — every alarm here (DOWN, DEGRADED, the admin shell): once when it
+ * breaks, once when it recovers, and one reminder a day while it stays broken.
+ * Hourly sent 129 identical DOWN emails between 1 and 6 October, which teaches
+ * the owner to stop reading them.
  */
-const DOWN_REMINDER_AFTER_MS = 24 * 60 * 60 * 1000;
+const REMINDER_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How long `degraded` may persist before it is treated as an outage.
@@ -77,6 +76,8 @@ const BACKUP_HOUR_SYDNEY = 3;
 /** P27 item 2 - the billing reconciliation runs at 04:00 Sydney: after the backup,
     well clear of the digest, and quiet hours for the merchants it queries. */
 const RECONCILE_HOUR_SYDNEY = 4;
+/** P38b — the ScheduledRun retention sweep, 05:00 Sydney, after the night's jobs have claimed. */
+export const MARKER_SWEEP_HOUR_SYDNEY = 5;
 
 let _healthTimer = null;
 let _digestTimer = null;
@@ -88,6 +89,7 @@ let _lastAlertAt = 0;
 let _lastStatus = "ok";
 let _degradedStreak = 0;
 let _degradedAlerted = false;
+let _degradedAlertAt = 0;
 let _lastShellAlertAt = 0;
 let _shellBroken = false;
 
@@ -147,10 +149,13 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
   // minutes, which is past self-healing.
   if (!bad && status === "degraded") {
     _degradedStreak += 1;
-    if (_degradedStreak >= DEGRADED_PROBES_BEFORE_ALERT && !_degradedAlerted) {
+    // P38b — and one reminder a day while it lasts, the same rule as DOWN.
+    const remind = _degradedAlerted && now - _degradedAlertAt > REMINDER_AFTER_MS;
+    if (_degradedStreak >= DEGRADED_PROBES_BEFORE_ALERT && (!_degradedAlerted || remind)) {
       _degradedAlerted = true;
+      _degradedAlertAt = now;
       alerted = true;
-      const minutes = Math.round((DEGRADED_PROBES_BEFORE_ALERT * HEALTH_INTERVAL_MS) / 60000);
+      const minutes = Math.round((_degradedStreak * HEALTH_INTERVAL_MS) / 60000);
       await sendOperatorEmail({
         subject: `Navaal has been DEGRADED for ${minutes} minutes`,
         text: [
@@ -197,7 +202,7 @@ export async function checkHealthOnce({ fetchImpl = fetch, now = Date.now() } = 
 
   if (bad) {
     const recovered = _lastStatus === "ok";
-    const stale = now - _lastAlertAt > DOWN_REMINDER_AFTER_MS;
+    const stale = now - _lastAlertAt > REMINDER_AFTER_MS;
     // Alert on the transition into trouble, then once a day while it lasts.
     if (recovered || stale) {
       _lastAlertAt = now;
@@ -295,6 +300,19 @@ export async function maybeReconcileBilling({ now = new Date(), run = null } = {
   return { ran: true, day, ...result };
 }
 
+/** P38b — once a night, drop ScheduledRun markers older than the retention window. */
+export async function maybeSweepScheduledRuns({ now = new Date(), sweep = sweepOldScheduledRuns } = {}) {
+  const { day, hour } = sydneyParts(now);
+  if (hour !== MARKER_SWEEP_HOUR_SYDNEY) return { ran: false, reason: "not the hour" };
+
+  const claim = await claimScheduledRun("scheduledRunSweep", day);
+  if (!claim.run) return { ran: false, reason: claim.reason };
+
+  const result = await sweep({ now });
+  logger.info({ event: "scheduled_run_swept", day, ...result }, "Swept old scheduled-run markers");
+  return { ran: true, day, ...result };
+}
+
 /**
  * Is the embedded admin still serving? — the fourth question the brief asks.
  *
@@ -341,7 +359,7 @@ export async function checkAppShellOnce({ fetchImpl = fetch, now = Date.now() } 
   let alerted = false;
 
   if (broken) {
-    const stale = now - _lastShellAlertAt > REALERT_AFTER_MS;
+    const stale = now - _lastShellAlertAt > REMINDER_AFTER_MS;
     if (!_shellBroken || stale) {
       _lastShellAlertAt = now;
       alerted = true;
@@ -420,6 +438,7 @@ export function startScheduler() {
     // appears in the job table the deep health check reads: a reconciliation that
     // silently stopped running would be the same shape of failure it exists to catch.
     runScheduled("billingReconcile", () => maybeReconcileBilling(), "billing reconcile threw");
+    runScheduled("scheduledRunSweep", () => maybeSweepScheduledRuns(), "scheduled-run sweep threw");
   }, 60_000);
   _digestTimer.unref?.();
 

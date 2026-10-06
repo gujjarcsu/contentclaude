@@ -19,6 +19,10 @@
 import prisma from "../db.server.js";
 import logger from "./logger.server.js";
 import { describeSource } from "./installChannels.js";
+import { kindOf } from "./shopKind.js";
+
+/** Our own stores and Shopify's are never a paid, live or ever-installed merchant. */
+const NOT_A_MERCHANT = new Set(["ours", "shopify"]);
 
 /** Formats a count and its comparison honestly, including when it is zero. */
 function line(label, value, extra = "") {
@@ -59,9 +63,8 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     jobsComplete,
     quotaSkipped,
     generations,
-    paidShops,
-    totalShops,
-    liveShops,
+    shopRows,
+    paidPlanRows,
   ] = await Promise.all([
     zero(db.shop.count({ where: { installedAt: { gte: since } } })),
     zero(db.shop.count({ where: { uninstalledAt: { gte: since } } })),
@@ -79,10 +82,26 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
         .then((r) => r?._sum?.quotaSkipped ?? 0),
     ),
     zero(db.usageRecord.count({ where: { createdAt: { gte: since } } })),
-    zero(db.plan.count({ where: { planName: { not: "free" }, status: "active" } })),
-    zero(db.shop.count()),
-    zero(db.shop.count({ where: { uninstalledAt: null } })),
+    // P38b — paid, live and ever are counted per shop KIND, not per row. The
+    // digest said "1 shop on a paid plan" while that shop was our own dev store
+    // (contentpilot-dev2, kind "ours" by OURS_PATTERN). Guarded like groupBy
+    // below: a missing method throws before there is a promise to catch.
+    zero(typeof db.shop?.findMany === "function" ? db.shop.findMany({ select: { shop: true, kind: true, uninstalledAt: true } }) : Promise.resolve([]), []),
+    zero(
+      typeof db.plan?.findMany === "function"
+        ? db.plan.findMany({ where: { planName: { not: "free" }, status: "active" }, select: { shop: true } })
+        : Promise.resolve([]),
+      [],
+    ),
   ]);
+
+  const kindByShop = new Map((shopRows ?? []).map((r) => [r.shop, kindOf(r)]));
+  const isMerchant = (shop) => !NOT_A_MERCHANT.has(kindByShop.get(shop) ?? kindOf({ shop }));
+  const merchantRows = (shopRows ?? []).filter((r) => isMerchant(r.shop));
+  const totalShops = merchantRows.length;
+  const liveShops = merchantRows.filter((r) => !r.uninstalledAt).length;
+  const paidShops = (paidPlanRows ?? []).filter((p) => isMerchant(p.shop)).length;
+  const excludedShops = (shopRows ?? []).length - totalShops;
 
   // "Jobs that failed" is only alarming relative to how many ran.
   const jobsRun = jobsFailed + jobsComplete;
@@ -108,6 +127,7 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     paidShops,
     totalShops,
     liveShops,
+    excludedShops,
     month,
   };
 
@@ -148,7 +168,7 @@ export async function buildDailyDigest({ now = new Date(), db = prisma } = {}) {
     line("uninstalls", uninstalls),
     line("reinstalls", reinstalls),
     line("net", net >= 0 ? `+${net}` : String(net)),
-    line("live shops", liveShops, `(${totalShops} ever)`),
+    line("live shops", liveShops, `(${totalShops} ever; ${excludedShops} of ours or Shopify's not counted)`),
     "",
     "WHERE THEY CAME FROM",
     ...(sourceSplit.length
