@@ -5,8 +5,7 @@ import {
   BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
-import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
-import prisma from "./db.server.js";
+import { sessionStorage as selfHealingSessionStorage } from "./utils/sessionStorage.server.js";
 import { BILLING_PLANS as BILLING_PLAN_BASE, TRIAL_DAYS } from "./utils/billing-plans.js";
 import { buildBillingConfig } from "./utils/billing-config.js";
 import { refreshOfflineToken } from "./utils/offlineToken.server.js";
@@ -75,7 +74,7 @@ const shopify = shopifyApp({
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
-  sessionStorage: new PrismaSessionStorage(prisma),
+  sessionStorage: selfHealingSessionStorage,
   distribution: AppDistribution.AppStore,
   hooks: {
     // Fires when a NEW session is created for a shop (install, reinstall, or an

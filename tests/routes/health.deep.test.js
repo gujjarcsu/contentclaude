@@ -45,6 +45,11 @@ vi.mock("../../app/utils/schemaDrift.server.js", () => ({
 vi.mock("../../app/queues/generationQueue.server.js", () => ({ getQueueHealth: queueHealth }));
 vi.mock("../../app/utils/ai.server.js", () => ({ getCircuitBreakerState: breaker }));
 
+// 2026-10-28 — the shallow check also asks Shopify's session storage whether
+// it can reach its table. That has its own suite (tests/utils/sessionStorage.test.js);
+// stub it here so these assertions stay about what this file is testing.
+vi.mock("../../app/utils/sessionStorage.server.js", () => ({ checkSessionStorage: vi.fn(async () => true) }));
+
 const { loader } = await import("../../app/routes/api.health.jsx");
 
 const code = (f) =>

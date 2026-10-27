@@ -1,4 +1,4 @@
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData, useMatches } from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData, useMatches, useRouteError, isRouteErrorResponse } from "react-router";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import mobileStyles from "./mobile.css?url";
 
@@ -83,6 +83,68 @@ export default function App() {
       <body>
         <Outlet />
         <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+/**
+ * Last-resort error screen (incident 2026-10-28).
+ *
+ * Errors that no route boundary handles — app.jsx's boundary hands anything
+ * that is not a Shopify auth response up to here — used to fall through to
+ * React Router's built-in page: "Application Error" over an empty pink box,
+ * with no way forward. Merchants and testers saw exactly that.
+ *
+ * This renders a full document (the root has no Layout export), keeps App
+ * Bridge in the head so the embedded admin frame still works, and offers a
+ * reload, which re-enters the app through the normal auth path. It deliberately
+ * uses no Polaris or i18n providers: those live below the root, and an error
+ * page must not depend on the tree that may have just failed. Error details
+ * are never shown in production; they are already logged by handleError in
+ * entry.server.jsx.
+ */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const { shopifyApiKey } = useRouteLoaderData("root") ?? {};
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const notFound = status === 404;
+  const title = notFound ? "Page not found" : "Something went wrong";
+  const message = notFound
+    ? "This page doesn't exist. Use the menu to get back to the app."
+    : "Navaal hit a problem loading this page. Reloading usually fixes it, and your data is safe.";
+
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        {shopifyApiKey ? <meta name="shopify-api-key" content={shopifyApiKey} /> : null}
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
+        <title>{`${title} · Navaal: AI SEO, AEO & GEO`}</title>
+        <Meta />
+        <Links />
+      </head>
+      <body style={{ margin: 0, background: "#f1f1f1", fontFamily: "Inter, -apple-system, 'Segoe UI', Roboto, sans-serif", color: "#303030" }}>
+        <main style={{ maxWidth: 560, margin: "48px auto", padding: "0 16px" }}>
+          <div role="alert" style={{ background: "#ffffff", border: "1px solid #e3e3e3", borderRadius: 12, padding: 24 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 650, margin: "0 0 8px" }}>{title}</h1>
+            <p style={{ fontSize: 14, lineHeight: 1.5, margin: "0 0 16px" }}>{message}</p>
+            {notFound ? null : (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                style={{ background: "#303030", color: "#ffffff", border: 0, borderRadius: 8, padding: "8px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+              >
+                Reload
+              </button>
+            )}
+            <p style={{ fontSize: 13, color: "#616161", margin: "16px 0 0" }}>
+              Still stuck? Email <a href="mailto:hello@navaal.ai">hello@navaal.ai</a> and we&apos;ll sort it out.
+            </p>
+          </div>
+        </main>
         <Scripts />
       </body>
     </html>

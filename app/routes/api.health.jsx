@@ -58,6 +58,33 @@ export const loader = async ({ request }) => {
     logger.error({ err: err.message }, "Health check: database ping failed");
   }
 
+  // ── Shopify session storage ─────────────────────────────────────────────
+  //
+  // Incident 2026-10-28: on one web machine Shopify's session storage gave up
+  // on the `session` table at boot (a database blip) and never looked again, so
+  // every admin page load on that machine failed while this endpoint said "ok"
+  // — SELECT 1 above does not go through session storage. This asks the same
+  // object authenticate.admin() uses, and a failing check also re-checks, so a
+  // machine that was stuck recovers here once the database is back.
+  // Only when the database itself is fine: if it is down, that is already the
+  // failure, and a second probe against it adds nothing.
+  if (checks.database === "ok") {
+    try {
+      const { checkSessionStorage } = await import("../utils/sessionStorage.server.js");
+      if (await withTimeout(checkSessionStorage(), DB_TIMEOUT_MS, "session storage")) {
+        checks.sessionStorage = "ok";
+      } else {
+        checks.sessionStorage = "error";
+        healthy = false;
+        logger.error("Health check: session storage cannot reach the session table");
+      }
+    } catch (err) {
+      checks.sessionStorage = "error";
+      healthy = false;
+      logger.error({ err: err.message }, "Health check: session storage probe failed");
+    }
+  }
+
   // ── Redis ───────────────────────────────────────────────────────────────
   if (process.env.REDIS_URL) {
     try {
