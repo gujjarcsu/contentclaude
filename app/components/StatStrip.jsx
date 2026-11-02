@@ -10,11 +10,14 @@
  * Every value is a string the caller has already formatted; the strip never
  * rounds, sums or invents (L3, L5). A value of null renders as a dash.
  */
+import { isValidElement } from "react";
 import { Card, InlineGrid, Box, BlockStack, Text, Link } from "@shopify/polaris";
 
 /**
  * @param {object} props
- * @param {Array<{id: string, label: string, value: string|number|null, hint?: string, url?: string, onClick?: () => void}>} props.items
+ * @param {Array<{id: string, label: string, value: string|number|null|import("react").ReactElement, hint?: string, url?: string, onClick?: () => void,
+ *   extra?: import("react").ReactNode}>} props.items
+ *   value may be an element when the number needs an id (a progress bar in `extra` labelled by it).
  */
 export function StatStrip({ items }) {
   const cells = Array.isArray(items) ? items.filter(Boolean) : [];
@@ -28,7 +31,7 @@ export function StatStrip({ items }) {
       <Box background="bg-surface-secondary-active">
         <InlineGrid columns={columns} gap="025">
           {cells.map((cell, i) => {
-            const value = cell.value === null || cell.value === undefined || cell.value === "" ? "–" : String(cell.value);
+            const value = isValidElement(cell.value) ? cell.value : cell.value === null || cell.value === undefined || cell.value === "" ? "–" : String(cell.value);
             return (
               <Box key={cell.id ?? i} padding="400" background="bg-surface" minHeight="100%">
                 <BlockStack gap="100">
@@ -49,6 +52,7 @@ export function StatStrip({ items }) {
                       {cell.hint}
                     </Text>
                   ) : null}
+                  {cell.extra ?? null}
                 </BlockStack>
               </Box>
             );

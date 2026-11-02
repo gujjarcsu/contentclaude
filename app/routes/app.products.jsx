@@ -11,10 +11,12 @@ import { useT } from "../i18n/react.jsx";
 import { tForRequest } from "../i18n/index.js";
 import {
   Page,
-  Layout,
   Card,
-  ResourceList,
-  ResourceItem,
+  IndexTable,
+  IndexFilters,
+  useSetIndexFiltersMode,
+  useIndexResourceState,
+  useBreakpoints,
   Text,
   Thumbnail,
   Badge,
@@ -22,21 +24,20 @@ import {
   InlineStack,
   Button,
   EmptyState,
-  Filters,
   Checkbox,
   Banner,
   Box,
-  Tabs,
   Modal,
   SkeletonPage,
   SkeletonBodyText,
   SkeletonDisplayText,
   SkeletonThumbnail,
   ProgressBar,
-  Icon,
 } from "@shopify/polaris";
-import { useState, useCallback, useMemo } from "react";
-import { CheckCircleIcon, ClockIcon, AlertCircleIcon } from "@shopify/polaris-icons";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { ImageIcon } from "@shopify/polaris-icons";
+import { StatStrip } from "../components/StatStrip.jsx";
+import { ScoreRing } from "../components/ScoreRing.jsx";
 import { authenticate } from "../shopify.server.js";
 import { LIST_SCOPE_QUERY } from "../utils/candidates.js";
 import prisma from "../db.server.js";
@@ -498,31 +499,30 @@ export const action = async ({ request }) => {
 function ProductListSkeleton() {
   return (
     <SkeletonPage primaryAction>
-      <Layout>
-        {[1, 2, 3].map((i) => (
-          <Layout.Section key={i} variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <SkeletonDisplayText size="small" />
+      <BlockStack gap="500">
+        <Card>
+          <InlineStack gap="800">
+            {[1, 2, 3, 4].map((i) => (
+              <BlockStack key={i} gap="200">
                 <SkeletonBodyText lines={1} />
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        ))}
-      </Layout>
-      <Card>
-        <BlockStack gap="400">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <InlineStack key={i} gap="400" blockAlign="center">
-              <SkeletonThumbnail size="medium" />
-              <BlockStack gap="200">
                 <SkeletonDisplayText size="small" />
-                <SkeletonBodyText lines={1} />
               </BlockStack>
-            </InlineStack>
-          ))}
-        </BlockStack>
-      </Card>
+            ))}
+          </InlineStack>
+        </Card>
+        <Card>
+          <BlockStack gap="400">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <InlineStack key={i} gap="400" blockAlign="center">
+                <SkeletonThumbnail size="small" />
+                <Box width="100%">
+                  <SkeletonBodyText lines={2} />
+                </Box>
+              </InlineStack>
+            ))}
+          </BlockStack>
+        </Card>
+      </BlockStack>
     </SkeletonPage>
   );
 }
@@ -556,7 +556,6 @@ export default function ProductsPage() {
     productScores,
     catalogError,
     monthlyCredits,
-    planName,
     entitlements,
     publishWithoutReview,
   } = useLoaderData();
@@ -573,7 +572,8 @@ export default function ProductsPage() {
   // Phase 4 item 7 — which product the merchant is being asked to confirm a
   // restore for. Null when the modal is closed.
   const [restoring, setRestoring] = useState(null);
-  const [selectedItems, setSelectedItems] = useState([]);
+  // Selection is Polaris' own (useIndexResourceState, below), so the table's
+  // checkboxes, the "n selected" header and the bulk action agree by construction.
   const [bulkDesc, setBulkDesc] = useState(true);
   const [bulkMeta, setBulkMeta] = useState(true);
   const [bulkFaq, setBulkFaq] = useState(false);
@@ -644,53 +644,23 @@ export default function ProductsPage() {
     if (!countsOk || totalStoreProducts === null) {
       return t("We could not read your catalogue totals from Shopify just now.");
     }
-    const total = totalExact ? `${totalStoreProducts}` : `${totalStoreProducts}+`;
-    const cand = candidateExact ? `${candidateProducts}` : `${candidateProducts}+`;
+    const total = totalExact ? t.number(totalStoreProducts) : `${t.number(totalStoreProducts)}+`;
+    const cand = candidateExact ? t.number(candidateProducts) : `${t.number(candidateProducts)}+`;
     const scope = candidateProducts === totalStoreProducts ? "" : t(" · {n} {label}", { n: cand, label: candidateLabel });
-    // P5.1 — "live" was the wrong word and it produced an impossible sentence.
+    // Redesign (Nov 2026): the subtitle names the catalogue and its scope;
+    // the published / ready-to-review / not-yet-optimized counts moved into the
+    // strip under it, each with its own scope line, so the title row is one
+    // sentence instead of six clauses. Part B's rule holds: `total` is
+    // non-archived, and the archived count is stated so "15" beside a Shopify
+    // admin showing 32 is not a contradiction.
     //
-    // Read on the live store 2026-09-14: "32 products in your catalog · 15
-    // active and draft products published to your online store · 30 LIVE".
-    // Thirty of fifteen. Even counting the 13 demo products published before
-    // any of this, 28 — the arithmetic never closes.
-    //
-    // The number is not wrong; the word is. `publishedProducts` counts DISTINCT
-    // productIds in our own GeneratedContent table whose state is published. It
-    // is a record of what THIS APP has done, and it asks Shopify nothing — so
-    // it keeps counting a product after the merchant archives it, and after
-    // they delete it. That is correct for "how much have you published for me",
-    // and beside a catalogue total the word "live" turns it into a claim about
-    // the storefront that we have not checked and cannot support.
-    //
-    // The count stays (the stat card "AI Content Published" is exactly right).
-    // The word goes.
-    // Part B — one population. `total` is non-archived; every count after the
-    // scope clause is about the candidates it names. The archived count is
-    // stated so "15" beside a Shopify admin showing 32 is not a contradiction.
-    const archivedNote = archivedProducts > 0 ? t(" · {n} archived not shown", { n: archivedProducts }) : "";
-    return t("{total} products in your catalog{scope} · {published} with content published · {drafts} ready to review{outside} · {notOptimized} not yet optimized{archived}", {
-      total,
-      scope,
-      published: publishedProducts,
-      drafts: draftProducts,
-      outside: draftsOutsideScope > 0 ? t(" ({n, plural, one {# on a product} other {# on products}} not on your Online Store)", { n: draftsOutsideScope }) : "",
-      notOptimized,
-      archived: archivedNote,
-    });
-  }, [
-    t,
-    countsOk,
-    totalStoreProducts,
-    totalExact,
-    candidateProducts,
-    candidateExact,
-    candidateLabel,
-    publishedProducts,
-    draftProducts,
-    draftsOutsideScope,
-    notOptimized,
-    archivedProducts,
-  ]);
+    // P5.1 — the published count is never called "live": it is a record of
+    // what THIS APP has published (our own table), and it keeps counting a
+    // product after the merchant archives or deletes it. See the strip's
+    // hint, which says whose products it is "of".
+    const archivedNote = archivedProducts > 0 ? t(" · {n} archived not shown", { n: t.number(archivedProducts) }) : "";
+    return t("{total} products in your catalog{scope}{archived}", { total, scope, archived: archivedNote });
+  }, [t, countsOk, totalStoreProducts, totalExact, candidateProducts, candidateExact, candidateLabel, archivedProducts]);
 
   // Tab counts are scoped to the CURRENT page (the tabs filter only the
   // visible 50-product page). Using store-wide counts here made labels like
@@ -741,7 +711,6 @@ export default function ProductsPage() {
     (index) => {
       const tabId = tabs[index].id;
       setSearchParams({ status: tabId });
-      setSelectedItems([]);
     },
     [tabs, setSearchParams],
   );
@@ -807,19 +776,24 @@ export default function ProductsPage() {
   /**
    * Phase 4 item 4.3 — what this product scored before we touched it, and now.
    *
-   * Renders NOTHING unless there is a real, positive change. A product we have
-   * only ever seen once has a before equal to its after, and "67 -> 67" is
-   * noise on every row of a long list. A product that went DOWN is not
-   * advertised either — it is shown on the product page where there is room to
-   * explain, not as a red number in a list the merchant is scanning.
+   * Redesign (Nov 2026): the latest score as a small ring, as every top app's
+   * product list shows it, and the gain beside it only when there is a real,
+   * positive one. A product that went DOWN is not advertised here — it is
+   * shown on the product page where there is room to explain. A product we
+   * have never scored shows nothing, never a dash pretending to be a column.
    */
-  function getScoreDelta(productId) {
+  function getScoreCell(productId) {
     const sc = productScores?.[productId];
-    if (!sc || !Number.isFinite(sc.delta) || sc.delta <= 0) return null;
+    if (!sc || !Number.isFinite(sc.after)) return null;
     return (
-      <Text as="span" variant="bodySm" tone="success">
-        {t("SEO {before} → {after}", { before: sc.before, after: sc.after })}
-      </Text>
+      <InlineStack gap="200" blockAlign="center" wrap={false}>
+        <ScoreRing value={sc.after} size="xs" label={t("Score")} />
+        {Number.isFinite(sc.delta) && sc.delta > 0 ? (
+          <Text as="span" variant="bodySm" tone="success">
+            {t("+{delta}", { delta: sc.delta })}
+          </Text>
+        ) : null}
+      </InlineStack>
     );
   }
 
@@ -836,50 +810,42 @@ export default function ProductsPage() {
     return desc.status === "published" || desc.status === "published_unverified";
   }
 
-  function getContentTypePills(productId) {
+  /**
+   * What we hold for this product, as words, only where something exists.
+   * A badge means the content is actually LIVE (published); a draft says
+   * "draft". Rejected or never written → no badge at all. (These were three
+   * pills on every row, two of them grey and empty on most stores.)
+   */
+  function getContentBadges(productId) {
     const m = contentMap[productId] || {};
     const types = [
-      { key: "description", label: t("Desc") },
+      { key: "description", label: t("Description") },
       { key: "metaTitle", label: t("Meta") },
       { key: "faq", label: "FAQ" },
     ];
+    const badges = types
+      .map(({ key, label }) => {
+        const st = m[key]?.status;
+        if (st === "published" || st === "published_unverified") return <Badge key={key} tone="success">{label}</Badge>;
+        if (st === "draft") return <Badge key={key} tone="info">{t("{label} · draft", { label })}</Badge>;
+        return null;
+      })
+      .filter(Boolean);
+    if (badges.length === 0) return null;
     return (
-      <InlineStack gap="100">
-        {types.map(({ key, label }) => {
-          const s = m[key]?.status;
-          // A "✓" must mean the content is actually LIVE (published) — for FAQ that
-          // is exactly when the faq_schema metafield is written. Draft = generated
-          // but not yet live (info, no ✓). Rejected / none = not covered (muted, no
-          // ✓). Showing "FAQ ✓" for a rejected or unpublished row overclaims.
-          if (s === "published") {
-            return (
-              <Box key={key} padding="100" background="bg-surface-success" borderRadius="100">
-                <Text as="span" variant="bodySm" tone="success">
-                  {label} ✓
-                </Text>
-              </Box>
-            );
-          }
-          if (s === "draft") {
-            return (
-              <Box key={key} padding="100" background="bg-surface-info" borderRadius="100">
-                <Text as="span" variant="bodySm" tone="info">
-                  {t("{label} · draft", { label })}
-                </Text>
-              </Box>
-            );
-          }
-          // rejected, or no content generated → muted, never a checkmark
-          return (
-            <Box key={key} padding="100" background="bg-surface-secondary" borderRadius="100">
-              <Text as="span" variant="bodySm" tone="subdued">
-                {label}
-              </Text>
-            </Box>
-          );
-        })}
+      <InlineStack gap="100" wrap>
+        {badges}
       </InlineStack>
     );
+  }
+
+  /** When we last wrote anything for this product, from the page's own content map. */
+  function lastWritten(productId) {
+    const m = contentMap[productId] || {};
+    const latest = Object.values(m)
+      .map((v) => (v?.updatedAt ? new Date(v.updatedAt).getTime() : 0))
+      .reduce((a, b) => Math.max(a, b), 0);
+    return latest > 0 ? t.date(new Date(latest)) : null;
   }
 
   const buildBulkFormData = useCallback(
@@ -896,22 +862,38 @@ export default function ProductsPage() {
     [bulkDesc, bulkMeta, bulkFaq],
   );
 
+  // Polaris' selection, over the rows on screen. The table's checkboxes, the
+  // "n selected" header and the bulk action all read the same state.
+  const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } = useIndexResourceState(filteredProducts);
+  const selectedItems = selectedResources;
+  // The tab and the search change what is on screen; a selection made on the
+  // old rows must not survive into the new ones.
+  useEffect(() => {
+    clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, searchValue]);
+  // Redesign (Nov 2026): the content-type choice for a selection lives in the
+  // same confirmation the bulk run uses, opened by the table's bulk action —
+  // not in a panel that appeared above the list.
+  const [selectionModal, setSelectionModal] = useState(false);
+
   const handleBulkGenerate = useCallback(() => {
     if (!bulkDesc && !bulkMeta && !bulkFaq) {
-      setBulkError("Select at least one content type to generate.");
+      setBulkError(t("Select at least one content type to generate."));
       return;
     }
     setBulkError("");
+    setSelectionModal(false);
     if (publishWithoutReview) {
       setPublishConfirm({ actionType: "generateSelected", ids: selectedItems });
       return;
     }
     submit(buildBulkFormData("generateSelected", selectedItems), { method: "POST" });
-  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview]);
+  }, [selectedItems, bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview, t]);
 
   const handleGenerateAll = useCallback(() => {
     if (!bulkDesc && !bulkMeta && !bulkFaq) {
-      setBulkError("Select at least one content type to generate.");
+      setBulkError(t("Select at least one content type to generate."));
       return;
     }
     setBulkError("");
@@ -921,15 +903,188 @@ export default function ProductsPage() {
       return;
     }
     submit(buildBulkFormData("generateAll", null), { method: "POST" });
-  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview]);
+  }, [bulkDesc, bulkMeta, bulkFaq, buildBulkFormData, submit, publishWithoutReview, t]);
+
+  // The filter bar: the four page-scoped tabs and the search, in Polaris' own
+  // IndexFilters so the list reads like the admin's product list.
+  const { mode, setMode } = useSetIndexFiltersMode();
+  const { smDown } = useBreakpoints();
+
+  // The headline numbers, one divided strip (as on Home), each cell a link to
+  // the list behind it. Store-wide; the tabs below count only this page.
+  const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : t.number(Number(v)));
+  const stats = [
+    {
+      id: "published",
+      label: t("AI Content Published"),
+      value: num(publishedProducts),
+      hint: publishedSubtext({ ok: catalogueOk, inScope: publishedProducts, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
+      onClick: () => setSearchParams({ status: "published" }),
+    },
+    {
+      id: "drafts",
+      label: t("Ready to review"),
+      value: num(draftProducts),
+      hint: draftsOutsideScope > 0 ? t("{n, plural, one {# on a product} other {# on products}} not on your Online Store", { n: draftsOutsideScope }) : t("Waiting for you"),
+      url: "/app/review",
+    },
+    {
+      id: "notOptimized",
+      label: t("Not yet optimized"),
+      value: num(notOptimized),
+      hint: t("Products we have not written for"),
+      onClick: () => setSearchParams({ status: "needsContent" }),
+    },
+    {
+      id: "credits",
+      label: t("Monthly credits"),
+      value: (
+        <Text as="span" id="products-credit-usage">
+          {t("{usageCount} / {monthlyCredits} used", { usageCount: t.number(usageCount), monthlyCredits: t.number(monthlyCredits) })}
+        </Text>
+      ),
+      // FR14 — labelled by the count, never by the rounded percent alone.
+      extra: <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="products-credit-usage" />,
+    },
+  ];
 
   if (loadingThisRoute) return <ProductListSkeleton />;
+
+  const emptyState = (
+    <EmptyState
+      heading={statusFilter !== "all" ? t("No products match this filter") : totalStoreProducts === 0 ? t("No products yet") : t("Nothing on this page")}
+      image="/empty-products.svg"
+      action={
+        statusFilter !== "all"
+          ? { content: t("View all products"), onAction: () => setSearchParams({}) }
+          : { content: t("Go to Home"), onAction: () => navigate("/app") }
+      }
+    >
+      <p>
+        {statusFilter !== "all" ? t("Try another tab, or clear the filter.") : totalStoreProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Try clearing your search.")}
+      </p>
+    </EmptyState>
+  );
+
+  const pagination =
+    pageInfo?.hasPreviousPage || pageInfo?.hasNextPage
+      ? {
+          hasPrevious: !!pageInfo.hasPreviousPage,
+          hasNext: !!pageInfo.hasNextPage,
+          onPrevious: () => setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter }),
+          onNext: () => setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter }),
+          label: t("Showing {length} products", { length: filteredProducts.length }),
+        }
+      : undefined;
+
+  /* One row. The title, the vendor or type under it, what we hold as badges,
+     the state badge, the score where we have one, when we last wrote, and the
+     one action the state calls for. On a phone the same facts stack. */
+  const rowAction = (id, numericId, description) => (
+    <Button
+      size="slim"
+      onClick={(e) => {
+        // FR13, third time (Phase 12 A1). This handler always ran — and
+        // then the click BUBBLED into the row's own onClick, which navigated
+        // to /app/products/<id> last. The route was right twice over and the
+        // click still landed on the product page. Stop the bubble; then
+        // navigate once.
+        e?.stopPropagation?.();
+        e?.preventDefault?.();
+        navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId));
+      }}
+    >
+      {rowActionLabel(id, description)}
+    </Button>
+  );
+
+  const rows = filteredProducts.map((product, index) => {
+    const { id, numericId, title, imageUrl, productType, vendor, description } = product;
+    const subline = [vendor, productType].filter(Boolean).join(" · ");
+    const written = lastWritten(id);
+    if (smDown) {
+      return (
+        <IndexTable.Row id={id} key={id} position={index} selected={selectedResources.includes(id)} onClick={() => navigate(`/app/products/${numericId}`)}>
+          <Box padding="300" width="100%">
+            <BlockStack gap="200">
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <Thumbnail source={imageUrl || ImageIcon} alt="" size="small" />
+                <Box width="100%">
+                  <BlockStack gap="050">
+                    <Text as="span" variant="bodyMd" fontWeight="medium">
+                      {title}
+                    </Text>
+                    {subline ? (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {subline}
+                      </Text>
+                    ) : null}
+                  </BlockStack>
+                </Box>
+                {getScoreCell(id)}
+              </InlineStack>
+              <InlineStack gap="200" blockAlign="center" wrap>
+                {getStatusBadge(id, description)}
+                {getContentBadges(id)}
+              </InlineStack>
+              <InlineStack gap="200" blockAlign="center">
+                {rowAction(id, numericId, description)}
+                {canRestore(id) && (
+                  <Button size="slim" variant="plain" onClick={(e) => { e?.stopPropagation?.(); setRestoring({ id, title }); }}>
+                    {t("Restore original")}
+                  </Button>
+                )}
+              </InlineStack>
+            </BlockStack>
+          </Box>
+        </IndexTable.Row>
+      );
+    }
+    return (
+      <IndexTable.Row id={id} key={id} position={index} selected={selectedResources.includes(id)} onClick={() => navigate(`/app/products/${numericId}`)}>
+        <IndexTable.Cell>
+          <Thumbnail source={imageUrl || ImageIcon} alt="" size="small" />
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <BlockStack gap="050">
+            <Text as="span" variant="bodyMd" fontWeight="medium">
+              {title}
+            </Text>
+            {subline ? (
+              <Text as="span" variant="bodySm" tone="subdued">
+                {subline}
+              </Text>
+            ) : null}
+          </BlockStack>
+        </IndexTable.Cell>
+        <IndexTable.Cell>{getStatusBadge(id, description)}</IndexTable.Cell>
+        <IndexTable.Cell>{getContentBadges(id)}</IndexTable.Cell>
+        <IndexTable.Cell>{getScoreCell(id)}</IndexTable.Cell>
+        <IndexTable.Cell>
+          {written ? (
+            <Text as="span" variant="bodySm" tone="subdued">
+              {written}
+            </Text>
+          ) : null}
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <InlineStack align="end" gap="200" blockAlign="center" wrap={false}>
+            {canRestore(id) && (
+              <Button size="slim" variant="plain" onClick={(e) => { e?.stopPropagation?.(); setRestoring({ id, title }); }}>
+                {t("Restore original")}
+              </Button>
+            )}
+            {rowAction(id, numericId, description)}
+          </InlineStack>
+        </IndexTable.Cell>
+      </IndexTable.Row>
+    );
+  });
 
   return (
     <Page
       title={t("Products")}
       subtitle={subtitleText}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
       /* Phase 2 item 2.3 — ONE bulk action, with ONE name.
          There were six labels for this job on this page alone: "Generate All
          (17)", "Quick Generate", "Generate {n} Products", "Generate for {n}
@@ -959,7 +1114,7 @@ export default function ProductsPage() {
               // three credits, to Review. The bulk run is offered as a secondary
               // action that names what it needs, and the modal explains.
               ...(entitlements?.bulkJobs
-                ? { content: t("Optimize store ({notOptimized})", { notOptimized }), onAction: () => setGenerateAllModal(true) }
+                ? { content: t("Optimize store ({notOptimized})", { notOptimized: t.number(notOptimized) }), onAction: () => setGenerateAllModal(true) }
                 : {
                     content: quickBatch > 0 ? t("Write the next {n, plural, one {# draft} other {# drafts}}", { n: quickBatch }) : t("Review your drafts"),
                     onAction: () => (quickBatch > 0 ? handleQuickBatch() : navigate("/app/review")),
@@ -969,10 +1124,10 @@ export default function ProductsPage() {
       }
       secondaryActions={[
         ...(notOptimized > 0 && !entitlements?.bulkJobs
-          ? [{ content: t("Optimize all {notOptimized} at once · needs Starter", { notOptimized }), onAction: () => setGenerateAllModal(true) }]
+          ? [{ content: t("Optimize all {notOptimized} at once · needs Starter", { notOptimized: t.number(notOptimized) }), onAction: () => setGenerateAllModal(true) }]
           : []),
         ...(draftProducts > 0
-          ? [{ content: t("Review {draftProducts} drafts", { draftProducts }), onAction: () => navigate("/app/review") }]
+          ? [{ content: t("Review {draftProducts} drafts", { draftProducts: t.number(draftProducts) }), onAction: () => navigate("/app/review") }]
           : []),
         // Phase 2 item 2.2 — these left the sidebar, so they need a way back in
         // from the screen that absorbed them. Nothing became unreachable.
@@ -1007,161 +1162,13 @@ export default function ProductsPage() {
         )}
 
         <QuotaWarningBanner warning={quotaWarning} />
-        {/* Stat bar */}
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={CheckCircleIcon} tone="success" />
-                  <Text as="p" variant="headingXl" fontWeight="bold" tone="success">
-                    {publishedProducts}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("AI Content Published")}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {publishedSubtext({
-                    ok: catalogueOk,
-                    inScope: publishedProducts,
-                    candidateCount: candidateProducts,
-                    candidateLabel,
-                    record: recordPublished,
-                  }, t)}
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ClockIcon} tone="info" />
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {draftProducts}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Drafts to Review")}
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  {/* Group 4.1 — this said "Need Content" in critical red on a
-                      store where all 100 sampled products already had a
-                      description, an SEO title and an SEO description. The
-                      number was never "products with no content"; it was
-                      "products WE have not written for", which is not a fault
-                      of the merchant's and is not red. */}
-                  <Icon source={AlertCircleIcon} tone="subdued" />
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {notOptimized === null ? "—" : notOptimized}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Not yet optimized")}
-                </Text>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
 
-        {/* Usage mini-bar "" show for free plan or when usage is above half */}
-        {(planName === "free" || usagePct >= 50) && (
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="p" variant="bodySm" fontWeight="semibold">
-                  {t("Monthly credits")}
-                </Text>
-                <InlineStack gap="200" blockAlign="center">
-                  <Text id="products-credit-usage" as="p" variant="bodySm" tone="subdued">
-                    {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits })}
-                  </Text>
-                </InlineStack>
-              </InlineStack>
-              {/* FR14 — labelled by the count, never by the rounded percent alone. */}
-              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="products-credit-usage" />
-            </BlockStack>
-          </Card>
-        )}
-
-        {/* Bulk generation panel */}
-        {selectedItems.length > 0 && (
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  {t("Optimize {n, plural, one {# selected product} other {# selected products}}", { n: selectedItems.length })}
-                </Text>
-                <Button variant="plain" tone="critical" onClick={() => setSelectedItems([])}>
-                  {t("Clear selection")}
-                </Button>
-              </InlineStack>
-
-              {isOutOfUsage ? (
-                <QuotaReachedCard upsell={upsell} surface="products" />
-              ) : (
-                <>
-                  {bulkError && (
-                    <Banner tone="critical">
-                      <p>{bulkError}</p>
-                    </Banner>
-                  )}
-
-                  <Banner tone="warning">
-                    <p>
-                      <strong>{t("This will replace existing product descriptions entirely.")}</strong>
-                      {t("{v} Original content is saved automatically and can be restored from each product's History tab. If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.", { v: "" })}
-                    </p>
-                  </Banner>
-
-                  {/* BlockStack + minHeight 44px = Apple/Google touch-target minimum */}
-                  <BlockStack gap="200">
-                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox
-                        label={t("Description")}
-                        checked={bulkDesc}
-                        onChange={setBulkDesc}
-                        helpText={t("Full product description")}
-                      />
-                    </Box>
-                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox
-                        label={t("Meta Title & Description")}
-                        checked={bulkMeta}
-                        onChange={setBulkMeta}
-                        helpText={t("SEO meta tags")}
-                      />
-                    </Box>
-                    <Box minHeight="44px" paddingBlockStart="100" paddingBlockEnd="100">
-                      <Checkbox
-                        label={t("FAQ Content")}
-                        checked={bulkFaq}
-                        onChange={setBulkFaq}
-                        helpText={t("Q&A pairs")}
-                      />
-                    </Box>
-                  </BlockStack>
-
-                  <InlineStack gap="300" blockAlign="center">
-                    <Button variant="primary" onClick={handleBulkGenerate}>
-                      {t("Optimize {n, plural, one {# product} other {# products}}", { n: selectedItems.length })}
-                    </Button>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {t("~{minutes} min estimated · runs in background", { minutes: Math.ceil((selectedItems.length * 3.5) / 60) })}
-                    </Text>
-                  </InlineStack>
-                </>
-              )}
-            </BlockStack>
-          </Card>
-        )}
+        {/* The headline numbers. Group 4.1 — the third cell said "Need Content"
+            in critical red on a store where all 100 sampled products already
+            had a description. The number was never "products with no content";
+            it was "products WE have not written for", which is not a fault of
+            the merchant's and is not red. */}
+        <StatStrip items={stats} />
 
         {/* Phase 4 item 7 — restoring puts the merchant's own words back on a
             LIVE storefront, so it asks first. The copy says exactly what will
@@ -1195,175 +1202,119 @@ export default function ProductsPage() {
           </Modal.Section>
         </Modal>
 
-        {/* Product list with status tabs */}
+        {/* The list: page-scoped tabs and search in one bar, then the table. */}
         <Card padding="0">
-          <Tabs tabs={tabs} selected={activeTab} onSelect={handleTabChange} fitted />
+          <IndexFilters
+            tabs={tabs}
+            selected={activeTab}
+            onSelect={handleTabChange}
+            queryValue={searchValue}
+            queryPlaceholder={t("Search products on this page")}
+            onQueryChange={handleSearchChange}
+            onQueryClear={handleSearchClear}
+            onClearAll={handleSearchClear}
+            filters={[]}
+            appliedFilters={[]}
+            mode={mode}
+            setMode={setMode}
+            hideFilters
+            canCreateNewView={false}
+            cancelAction={{ onAction: handleSearchClear, disabled: false, loading: false }}
+          />
           {/* Frame 03 — the sentence that makes the tab counts and the header
               add up. Shown only when the page actually contains such a row, and
               it names the reason rather than the difference: "on this page"
               explains pagination, and this is not pagination. */}
           {pageCounts.offStorefront > 0 && (
-            <Box paddingInline="400" paddingBlockStart="200">
+            <Box paddingInline="400" paddingBlock="200">
               <Text as="p" variant="bodySm" tone="subdued">
                 {t("{n, plural, one {# product here is not on your Online Store, so it is listed but not counted in the totals above. Publish it in Shopify and it joins the counts.} other {# products here are not on your Online Store, so they are listed but not counted in the totals above. Publish them in Shopify and they join the counts.}}", { n: pageCounts.offStorefront })}
               </Text>
             </Box>
           )}
-          <ResourceList
-            resourceName={{ singular: "product", plural: "products" }}
-            items={filteredProducts}
-            selectedItems={selectedItems}
-            onSelectionChange={setSelectedItems}
-            selectable
-            filterControl={
-              <Filters
-                queryValue={searchValue}
-                queryPlaceholder="Search products..."
-                onQueryChange={handleSearchChange}
-                onQueryClear={handleSearchClear}
-                filters={[]}
-                onClearAll={handleSearchClear}
-              />
-            }
+          <IndexTable
+            resourceName={{ singular: t("product"), plural: t("products") }}
+            itemCount={filteredProducts.length}
+            selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
+            onSelectionChange={handleSelectionChange}
+            condensed={smDown}
+            emptyState={emptyState}
+            pagination={pagination}
+            headings={[
+              { id: "thumb", title: "", hidden: true },
+              { id: "product", title: t("Product") },
+              { id: "state", title: t("Content") },
+              { id: "written", title: t("Written") },
+              { id: "score", title: t("Score") },
+              { id: "updated", title: t("Updated") },
+              { id: "action", title: "", hidden: true },
+            ]}
             promotedBulkActions={[
               {
-                content: t("Optimize {length} selected", { length: selectedItems.length }),
-                onAction: handleBulkGenerate,
+                content: t("Optimize {length} selected", { length: t.number(selectedResources.length) }),
+                onAction: () => {
+                  if (isOutOfUsage) {
+                    setBulkError(t("You have no credits left this month."));
+                  }
+                  setSelectionModal(true);
+                },
               },
             ]}
-            renderItem={(product) => {
-              const { id, numericId, title, imageUrl, price, productType, description } = product;
-              return (
-                <ResourceItem
-                  id={id}
-                  media={
-                    <Thumbnail
-                      source={
-                        imageUrl ||
-                        "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png"
-                      }
-                      alt={title}
-                      size="medium"
-                    />
-                  }
-                  onClick={() => navigate(`/app/products/${numericId}`)}
-                  shortcutActions={[
-                    {
-                      // Phase 2 item 2.3 - this used to be 'Quick Generate'
-                      // and it submitted a BULK job, so on Free and Starter
-                      // the most obvious button on the row answered 'Bulk
-                      // generation requires Growth'. It now opens the product
-                      // page, where a single generation is something every
-                      // plan can do. One action, because the row itself
-                      // already opens the same page.
-                      content: t("Generate"),
-                      onAction: () => navigate(`/app/products/${numericId}`),
-                    },
-                  ]}
-                >
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="100">
-                      <Text as="h3" variant="bodyMd" fontWeight="bold">
-                        {title}
-                      </Text>
-                      <InlineStack gap="200">
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          ${price}
-                        </Text>
-                        {productType && (
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            · {productType}
-                          </Text>
-                        )}
-                      </InlineStack>
-                      {getContentTypePills(id)}
-                    </BlockStack>
-                    <BlockStack gap="200" inlineAlign="end">
-                      {getStatusBadge(id, description)}
-                      {getScoreDelta(id)}
-                      <InlineStack gap="200">
-                        {canRestore(id) && (
-                          <Button size="slim" variant="plain" onClick={() => setRestoring({ id, title })}>
-                            {t("Restore original")}
-                          </Button>
-                        )}
-                        {/* A4.2 / A4.3 — this said "Generate" on every row, including
-                            rows whose description the merchant wrote themselves. On a
-                            store where all 100 sampled products had one, every row
-                            offered to generate over their own writing.
-                            The badge was split in Group 1; the ACTION was not, so the
-                            screen told the merchant two different things about the same
-                            product. Routing, not new work: the product page already has
-                            a real `enhance` action. */}
-                        <Button
-                          size="slim"
-                          onClick={(e) => {
-                            // FR13, third time (Phase 12 A1). This handler always ran — and
-                            // then the click BUBBLED into the ResourceItem's own onClick,
-                            // which navigated to /app/products/<id> last. The route was
-                            // right twice over and the click still landed on the product
-                            // page. Stop the bubble; then navigate once.
-                            e?.stopPropagation?.();
-                            e?.preventDefault?.();
-                            navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId));
-                          }}
-                        >
-                          {rowActionLabel(id, description)}
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
-                  </InlineStack>
-                </ResourceItem>
-              );
-            }}
-            emptyState={
-              <EmptyState
-                heading={statusFilter !== "all" ? t("No products match this filter") : totalStoreProducts === 0 ? t("No products yet") : t("Nothing on this page")}
-                image="/empty-products.svg"
-                action={
-                  statusFilter !== "all"
-                    ? { content: t("View all products"), onAction: () => setSearchParams({}) }
-                    : { content: t("Go to Dashboard"), onAction: () => navigate("/app") }
-                }
-              >
-                <p>
-                  {statusFilter !== "all" ? t("Try another tab, or clear the filter.") : totalStoreProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Try clearing your search.")}
-                </p>
-              </EmptyState>
-            }
-          />
-          {(pageInfo?.hasPreviousPage || pageInfo?.hasNextPage) && (
-            <Box padding="400" borderBlockStartWidth="025" borderColor="border">
-              <InlineStack align="center" gap="300">
-                <Button
-                  disabled={!pageInfo.hasPreviousPage}
-                  onClick={() =>
-                    setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter })
-                  }
-                >
-                  {t("Previous")}
-                </Button>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Showing {length} products", { length: filteredProducts.length })}
-                </Text>
-                <Button
-                  disabled={!pageInfo.hasNextPage}
-                  onClick={() =>
-                    setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter })
-                  }
-                >
-                  {t("Next")}
-                </Button>
-              </InlineStack>
-            </Box>
-          )}
+          >
+            {rows}
+          </IndexTable>
         </Card>
+
+        {/* The selection's confirmation: what will be written for the selected
+            products, and the one warning that matters. */}
+        <Modal
+          open={selectionModal}
+          onClose={() => setSelectionModal(false)}
+          title={t("Optimize {n, plural, one {# selected product} other {# selected products}}", { n: selectedItems.length })}
+          primaryAction={
+            isOutOfUsage
+              ? { content: t("See plans"), onAction: () => navigate("/app/plans") }
+              : { content: t("Optimize {n, plural, one {# product} other {# products}}", { n: selectedItems.length }), onAction: handleBulkGenerate }
+          }
+          secondaryActions={[{ content: t("Cancel"), onAction: () => setSelectionModal(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              {isOutOfUsage ? (
+                <QuotaReachedCard upsell={upsell} surface="products" />
+              ) : (
+                <>
+                  <Banner tone="warning">
+                    <p>
+                      <strong>{t("This will replace existing product descriptions entirely.")}</strong>
+                      {t("{v} Original content is saved automatically and can be restored from each product's History tab. If a product has custom HTML, embedded videos, or widgets in its description, they will be removed.", { v: "" })}
+                    </p>
+                  </Banner>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                    {t("Content to generate:")}
+                  </Text>
+                  <Checkbox label={t("Description")} checked={bulkDesc} onChange={setBulkDesc} helpText={t("Full product description")} />
+                  <Checkbox label={t("Meta Title & Description")} checked={bulkMeta} onChange={setBulkMeta} helpText={t("SEO meta tags")} />
+                  <Checkbox label={t("FAQ Content")} checked={bulkFaq} onChange={setBulkFaq} helpText={t("Q&A pairs")} />
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("~{minutes} min estimated · runs in background", { minutes: Math.ceil((selectedItems.length * 3.5) / 60) })}
+                  </Text>
+                  {bulkError && (
+                    <Banner tone="critical">
+                      <p>{bulkError}</p>
+                    </Banner>
+                  )}
+                </>
+              )}
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
 
         {/* Generate All confirmation modal */}
         <Modal
           open={generateAllModal}
           onClose={() => setGenerateAllModal(false)}
-          title={entitlements?.bulkJobs ? t("Optimize {willProcessNow} products now?", { willProcessNow }) : t("Bulk optimize is on Starter")}
+          title={entitlements?.bulkJobs ? t("Optimize {willProcessNow} products now?", { willProcessNow: t.number(willProcessNow) }) : t("Bulk optimize is on Starter")}
           primaryAction={
             entitlements?.bulkJobs
               ? { content: t("Optimize store"), onAction: handleGenerateAll }
@@ -1388,11 +1339,11 @@ export default function ProductsPage() {
                       cut the run to whatever quota remained. The app knew before
                       the click and promised the whole catalogue anyway. */}
                   <Text as="p" variant="bodyMd">
-                    {t("This starts a background job for {willProcessNow} of the {notOptimized} products not yet optimized. Estimated time: ~{minutes} minutes.", { willProcessNow, notOptimized, minutes: Math.max(1, Math.ceil((willProcessNow * 3.5) / 60)) })}
+                    {t("This starts a background job for {willProcessNow} of the {notOptimized} products not yet optimized. Estimated time: ~{minutes} minutes.", { willProcessNow: t.number(willProcessNow), notOptimized: t.number(notOptimized), minutes: Math.max(1, Math.ceil((willProcessNow * 3.5) / 60)) })}
                   </Text>
                   {waitingForQuota > 0 && (
                     <Text as="p" variant="bodyMd" tone="subdued">
-                      {t("The remaining {waitingForQuota} need more generations than your plan has left this month. They stay untouched — nothing is lost, and you can run this again after your quota resets or on a larger plan.", { waitingForQuota })}
+                      {t("The remaining {waitingForQuota} need more generations than your plan has left this month. They stay untouched — nothing is lost, and you can run this again after your quota resets or on a larger plan.", { waitingForQuota: t.number(waitingForQuota) })}
                     </Text>
                   )}
                 </>

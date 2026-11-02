@@ -99,14 +99,18 @@ describe('the Products subtitle no longer says "30 live" about 15 products', () 
     // false as a claim about the storefront.
     // D6: the sentence is a t() key with {published} where it used to be a template with ${publishedProducts}
     expect(code(PRODUCTS)).not.toMatch(/\{published\} live|\$\{publishedProducts\} live/);
-    expect(code(PRODUCTS)).toMatch(/\{published\} with content published/);
+    // Redesign (Nov 2026): the count left the subtitle for the strip's first
+    // cell, whose hint (publishedSubtext) says whose products it is "of" —
+    // never "live". The subtitle names the catalogue and its scope only.
+    expect(code(PRODUCTS)).toMatch(/\{total\} products in your catalog\{scope\}\{archived\}/);
+    expect(code(PRODUCTS)).not.toMatch(/subtitleText[\s\S]{0,1200}\blive\b/);
   });
 
   it("the stat card keeps the number, because the number is right", () => {
     // "AI Content Published: 30" is an accurate statement about our own work.
     // Only the word beside the catalogue total was the lie.
     expect(code(PRODUCTS)).toMatch(/AI Content Published/);
-    expect(code(PRODUCTS)).toMatch(/\{publishedProducts\}/);
+    expect(code(PRODUCTS)).toMatch(/value: num\(publishedProducts\)/); // the strip's first cell, grouped digits
   });
 
   it("NO screen calls that count 'live' or 'on your storefront'", () => {
