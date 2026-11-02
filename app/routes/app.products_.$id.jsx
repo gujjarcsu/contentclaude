@@ -5,7 +5,8 @@ import { PLAN_LABELS } from "../utils/planFit.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
-  Layout,
+  InlineGrid,
+  Link,
   Card,
   Text,
   BlockStack,
@@ -20,14 +21,14 @@ import {
   Divider,
   TextField,
   Select,
-  Tabs,
   ProgressBar,
   Collapsible,
   Modal,
   Icon,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { CheckCircleIcon, AlertCircleIcon, ChevronDownIcon, ChevronUpIcon, LockIcon } from "@shopify/polaris-icons";
+import { ScoreRing } from "../components/ScoreRing.jsx";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
@@ -85,6 +86,7 @@ export async function loader({ request, params }) {
     usageCount,
     publishWithoutReview,
     { scoreContent },
+    { calculateGeoScore },
   ] = await Promise.all([
     admin
       .graphql(
@@ -121,6 +123,7 @@ export async function loader({ request, params }) {
     getMonthlyUsageCount(shop),
     publishesWithoutReview(shop),
     import("../utils/contentScorer.server.js"),
+    import("../utils/geo.server.js"),
   ]);
 
   const product = productPayload?.data?.product;
@@ -143,6 +146,37 @@ export async function loader({ request, params }) {
   });
 
   // Group versions by content type, keep last 5 per type
+  // Redesign (Nov 2026) — the product's OWN score on the one rubric Home and
+  // the Audit use (A2), from what is on the store right now, plus the feed's
+  // view of it from the daily walk's grader. The left rail's ring and
+  // checklist read these; the product page therefore agrees with the list
+  // that opened it and with the audit that ranked it.
+  const images = mediaToImages(product.media);
+  const publishedFaq = contentMap.faq?.status === "published" ? contentMap.faq.generatedContent : "";
+  const rubric = calculateGeoScore({
+    description: product.description || "",
+    seoTitle: product.seo?.title || "",
+    seoDescription: product.seo?.description || "",
+    productType: product.productType || "",
+    vendor: product.vendor || "",
+    tags: product.tags || [],
+    images: images.map((i) => ({ altText: i.altText || "" })),
+    variants: product.variants.edges.map((e) => ({ price: e.node.price })),
+    faq: publishedFaq,
+  });
+  const { gradeProduct } = await import("../utils/catalogueWatch.js");
+  const feed = gradeProduct(
+    {
+      title: product.title,
+      description: product.description,
+      vendor: product.vendor,
+      productType: product.productType,
+      status: "ACTIVE",
+      featuredImage: product.featuredImage ? { url: product.featuredImage.url, altText: product.featuredImage.altText ?? "" } : null,
+    },
+    { storefrontPublic: false },
+  ).findings.filter((f) => f.surface === "openai");
+
   const versionsByType = {};
   for (const v of versions) {
     if (!versionsByType[v.contentType]) versionsByType[v.contentType] = [];
@@ -167,7 +201,7 @@ export async function loader({ request, params }) {
       seoDescription: product.seo?.description || "",
       imageUrl: product.featuredImage?.url || "",
       imageAlt: product.featuredImage?.altText || "",
-      images: mediaToImages(product.media),
+      images,
       hasMoreImages: product.media?.pageInfo?.hasNextPage ?? false,
       variants: product.variants.edges.map((e) => ({
         title: e.node.title,
@@ -194,6 +228,8 @@ export async function loader({ request, params }) {
       return acc;
     }, {}),
     hasBrandVoice: !!brandVoice,
+    productScore: { score: rubric.score, checks: rubric.checks, breakdown: rubric.breakdown },
+    feedFindings: feed.map((f) => ({ field: f.field, grade: f.grade })),
 
     qualityScore,
     versionsByType,
@@ -1258,13 +1294,41 @@ function OriginalContentSection({ original, contentType, revertFetcher }) {
   );
 }
 
+/**
+ * A gated feature, the category's way: a lock, one sentence naming the plan,
+ * and a plain link — never a full-width button that looks like the primary
+ * action, and NOT disabled (a disabled Polaris button never fires onClick,
+ * which once made this upsell a dead control).
+ */
+function LockRow({ sentence, onSeePlans }) {
+  const t = useT();
+  return (
+    <BlockStack gap="100">
+      <InlineStack gap="200" blockAlign="start" wrap={false}>
+        <Box paddingBlockStart="050">
+          <Icon source={LockIcon} tone="subdued" accessibilityLabel={t("Locked")} />
+        </Box>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {sentence}
+        </Text>
+      </InlineStack>
+      <Box paddingInlineStart="600">
+        <Button variant="plain" size="slim" onClick={onSeePlans}>
+          {t("See plans")}
+        </Button>
+      </Box>
+    </BlockStack>
+  );
+}
+
 export default function ProductGeneratePage() {
   const t = useT();
   const {
     product,
     existingContent,
     hasBrandVoice,
-    qualityScore,
+    productScore,
+    feedFindings,
     versionsByType,
     templates,
     entitlements,
@@ -1318,7 +1382,6 @@ export default function ProductGeneratePage() {
   }, [isGenerating, isEnhancing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate panel state
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [genDescription, setGenDescription] = useState(true);
   const [genMetaTitle, setGenMetaTitle] = useState(true);
   const [genMetaDescription, setGenMetaDescription] = useState(true);
@@ -1533,26 +1596,7 @@ export default function ProductGeneratePage() {
     fetcher.submit(fd, { method: "POST" });
   }, [editedDescription, editedMetaTitle, editedMetaDescription, fetcher]);
 
-  // Tab state for right column
-  const [selectedTab, setSelectedTab] = useState(0);
-  const productDetailTabs = [
-    { id: "generate", content: t("Generate") },
-    { id: "content", content: t("Content") },
-    { id: "history", content: t("History") },
-    { id: "images", content: t("Alt Text") },
-  ];
-
-  // Auto-switch to Content tab when generation completes
   const loadingThisRoute = useRouteLoading();
-  const prevGeneratingRef = useRef(false);
-
-  useEffect(() => {
-    if (prevGeneratingRef.current && !isGenerating && !isEnhancing && actionData?.success) {
-      setSelectedTab(1);
-    }
-    prevGeneratingRef.current = isGenerating || isEnhancing;
-  }, [isGenerating, isEnhancing, actionData]);
-
   const noneSelected = !genDescription && !genMetaTitle && !genMetaDescription && !genFaq && !genAltText;
   const noImages = product.images.length === 0;
 
@@ -1575,409 +1619,312 @@ export default function ProductGeneratePage() {
     { label: t("Detailed (~400-500 words) — complex/high-value products"), value: "detailed" },
   ];
 
+  // ── Redesign (Nov 2026): the three-column editor ──────────────────────────
+  // Left rail: the product's score on the shared rubric, a pass/fail checklist
+  // and the Google listing preview. Centre: each field — what is on the store
+  // now, the draft under it, its own Write/Rewrite button and a character bar.
+  // Right rail: images and alt text, history, the two-options compare, social
+  // captions, product facts. One primary action: Generate, or Publish draft
+  // once a draft exists.
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const wordCount = (html) => String(html ?? "").replace(/<[^>]+>/g, "").trim().split(/\s+/).filter(Boolean).length;
+  const plainChars = (html) => String(html ?? "").replace(/<[^>]+>/g, "").length;
+  const descWords = wordCount(product.description);
+  const imagesWithoutAlt = product.images.filter((i) => !String(i.altText ?? "").trim()).length;
+  const feedBlocking = feedFindings.filter((f) => f.grade === "blocking");
+  const checklist = [
+    { id: "desc", pass: descWords >= 50, label: t("Description of at least 50 words"), detail: descWords > 0 ? t("{n, plural, one {# word} other {# words}} now", { n: descWords }) : t("No description yet") },
+    { id: "title", pass: product.seoTitle.length > 0 && product.seoTitle.length <= 60, label: t("Page title within 60 characters"), detail: product.seoTitle ? t("{length}/60 characters", { length: product.seoTitle.length }) : t("Using the product title") },
+    { id: "metaDesc", pass: product.seoDescription.length > 0 && product.seoDescription.length <= 155, label: t("Search description within 155 characters"), detail: product.seoDescription ? t("{length}/155 characters", { length: product.seoDescription.length }) : t("None set") },
+    { id: "faq", pass: existingContent.faq?.status === "published", label: t("Questions and answers on the page"), detail: existingContent.faq?.status === "published" ? t("Published") : existingContent.faq?.generated ? t("Draft") : t("None yet") },
+    { id: "alt", pass: !noImages && imagesWithoutAlt === 0, label: t("Every image has alt text"), detail: noImages ? t("No images on this product") : imagesWithoutAlt === 0 ? t("All {n} images", { n: product.images.length }) : t("{n, plural, one {# image} other {# images}} without alt text", { n: imagesWithoutAlt }) },
+    { id: "feed", pass: feedBlocking.length === 0, label: t("Everything the OpenAI product feed requires"), detail: feedBlocking.length === 0 ? t("Title, description, brand and image") : t("Missing: {list}", { list: feedBlocking.map((f) => ({ description: t("description"), image_link: t("image"), brand: t("brand"), title: t("title") })[f.field] ?? f.field).join(", ") }) },
+  ];
+  const passedCount = checklist.filter((c) => c.pass).length;
+  const clip = (text, n) => (String(text).length > n ? `${String(text).slice(0, n).trimEnd()}…` : String(text));
+  const previewTitle = clip(editedMetaTitle || product.seoTitle || product.title, 70);
+  const previewDesc = clip(editedMetaDescription || product.seoDescription || String(product.description).replace(/<[^>]+>/g, ""), 160);
+  const storeUrl = shopDomain && product.handle ? `https://${shopDomain}/products/${product.handle}` : null;
+
+  const busyMessage = isGeneratingVariants ? t("Writing 2 different versions...") : loadingMessages[loadingMsgIdx];
+  const hasDraft = hasGeneratedContent && !actionData?.autoPublished;
+  const primaryAction = hasDraft
+    ? { content: isPublishing ? t("Publishing...") : t("Publish draft"), onAction: handlePublish, loading: isPublishing, disabled: isLoading }
+    : { content: isGenerating ? t("Generating...") : t("Generate"), onAction: () => handleGenerate(), loading: isGenerating, disabled: isLoading };
+  const secondaryActions = [
+    ...(hasDraft ? [{ content: t("Rewrite all"), onAction: () => handleGenerate(), loading: isGenerating, disabled: isLoading }] : []),
+    ...(storeUrl ? [{ content: t("View on store"), url: storeUrl, external: true }] : []),
+  ];
+
+  /** One field of the centre column. */
+  const fieldCard = ({ key, title, current, currentEmpty, draft, onChange, multiline, limit, hint, regenerateType, canWrite = true, extraFooter = null }) => {
+    const hasDraftText = !!draft;
+    const over = limit ? draft.length > limit : false;
+    const near = limit ? draft.length >= Math.round(limit * 0.8) : false;
+    const writing = isGenerating && (fetcher.formData?.get(`gen_${regenerateType}`) === "true");
+    const status = existingContent[key]?.status;
+    return (
+      <Card key={key}>
+        <BlockStack gap="300">
+          <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                {title}
+              </Text>
+              {hasDraftText && status ? (
+                <Badge tone={status === "published" || status === "published_unverified" ? "success" : "info"}>
+                  {/* A7 (Phase 8) — published content on a product Shopify holds as a draft or archived has no storefront page. Say both things. */}
+                  {status === "published" || status === "published_unverified" ? (String(product.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? t("Published") : t("Published · product is a Shopify {v}, not on your storefront", { v: String(product.status).toLowerCase() })) : t("Draft")}
+                </Badge>
+              ) : null}
+            </InlineStack>
+            {canWrite ? (
+              <Button size="slim" onClick={() => handleRegenerateSection(regenerateType)} loading={writing} disabled={isLoading}>
+                {hasDraftText ? t("Rewrite") : t("Write")}
+              </Button>
+            ) : null}
+          </InlineStack>
+
+          {/* Group 4.4 — whose copy this is: the merchant's. */}
+          <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+            <BlockStack gap="100">
+              <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                {t("Currently on your store")}
+              </Text>
+              {current}
+              {currentEmpty}
+            </BlockStack>
+          </Box>
+
+          {writing ? (
+            <InlineStack gap="200" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="p" variant="bodySm" tone="subdued">
+                {busyMessage}
+              </Text>
+            </InlineStack>
+          ) : null}
+
+          {hasDraftText ? (
+            <BlockStack gap="100">
+              <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                {t("Draft (yours to edit)")}
+              </Text>
+              <TextField label={title} labelHidden value={draft} onChange={onChange} multiline={multiline} autoComplete="off" error={over ? t("Over {limit} characters — shorten before publishing", { limit }) : ""} helpText={hint} />
+              {limit ? (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone={over ? "critical" : "subdued"}>
+                    {t("{length}/{limit} characters", { length: draft.length, limit })}
+                  </Text>
+                  <ProgressBar progress={Math.min(100, Math.round((draft.length / limit) * 100))} tone={over ? "critical" : near ? "highlight" : "success"} size="small" />
+                </BlockStack>
+              ) : (
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("{words, plural, one {# word} other {# words}} · {chars} characters", { words: wordCount(draft), chars: plainChars(draft) })}
+                  </Text>
+                  <Button
+                    size="slim"
+                    variant="plain"
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(draft).replace(/<[^>]+>/g, ""));
+                      window.shopify?.toast?.show(t("Copied"), { duration: 1500 });
+                    }}
+                  >
+                    {t("Copy text")}
+                  </Button>
+                </InlineStack>
+              )}
+            </BlockStack>
+          ) : null}
+
+          {extraFooter}
+          {existingContent[key]?.original ? (
+            <>
+              <Divider />
+              <OriginalContentSection original={existingContent[key].original} contentType={key} revertFetcher={revertFetcher} />
+            </>
+          ) : null}
+          {entitlements?.versionHistory && versionsByType[key]?.length > 0 ? (
+            <VersionHistorySection versions={versionsByType[key]} contentType={key} restoreFetcher={restoreFetcher} />
+          ) : null}
+        </BlockStack>
+      </Card>
+    );
+  };
+
   return loadingThisRoute ? (
     <AppSkeleton title={t("Product")} sections={3} layout="full" />
   ) : (
     <Page
       title={product.title}
+      subtitle={[product.vendor, product.productType, product.variants[0]?.price ? `$${product.variants[0].price}` : null].filter(Boolean).join(" · ") || undefined}
       backAction={{ content: t("Products"), onAction: () => navigate("/app/products") }}
+      primaryAction={primaryAction}
+      secondaryActions={secondaryActions}
+      fullWidth
     >
       <BlockStack gap="500">
         <ReviewRequest ask={reviewAsk} />
-        {actionData?.error && (
+        {/* One notice at most: an error first; otherwise the brand-voice nudge. */}
+        {actionData?.error ? (
           <Banner tone="critical" title={t("Error")}>
             <p>{actionData.error}</p>
             {actionData.limitReached && (
               <Box paddingBlockStart="200">
                 <Button variant="plain" onClick={() => navigate("/app/plans")}>
-                 {t("View Plans & Billing")}
+                  {t("View Plans & Billing")}
                 </Button>
               </Box>
             )}
           </Banner>
-        )}
-        {revertFetcher.data?.error && (
+        ) : revertFetcher.data?.error ? (
           <Banner tone="critical">
             <p>{revertFetcher.data.error}</p>
           </Banner>
-        )}
-        {!hasBrandVoice && (
+        ) : !hasBrandVoice ? (
           <Banner tone="warning">
             <p>
-             {t("No brand voice configured — content will use a default tone.{v}", { v: "" })}
+              {t("No brand voice configured — content will use a default tone.{v}", { v: " " })}
               <Button variant="plain" onClick={() => navigate("/app/settings")}>
-               {t("Set up brand voice")}
+                {t("Set up brand voice")}
               </Button>
             </p>
           </Banner>
-        )}
+        ) : null}
 
-        <Layout>
-          {/* ── Left: product info + controls ─────────────────────────────── */}
-          <Layout.Section variant="oneThird">
+        {/* Three columns, as the category's editors: rails of one part each
+            side of a centre of two. Under 1040px the right rail drops below
+            the centre; on a phone everything stacks. */}
+        <InlineGrid columns={{ xs: 1, md: "minmax(0, 1fr) minmax(0, 2fr)", lg: "minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)" }} gap="400" alignItems="start">
+          {/* ── Left rail: score, checklist, listing preview ─────────────── */}
+          <div>
             <BlockStack gap="400">
               <Card>
                 <BlockStack gap="300">
-                  {product.imageUrl && (
-                    <Thumbnail source={product.imageUrl} alt={product.title} size="large" />
-                  )}
                   <Text as="h2" variant="headingMd">
-                    {product.title}
+                    {t("Search readiness")}
                   </Text>
-                  <InlineStack gap="200">
-                    <Badge>{product.status}</Badge>
-                    {product.productType && <Badge tone="info">{product.productType}</Badge>}
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    ${product.variants[0]?.price || "0.00"} · {product.vendor || "No vendor"}
-                  </Text>
-                  {product.tags.length > 0 && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                     {t("Tags:")} {product.tags.join(",")}
-                    </Text>
-                  )}
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                     {t("Generate Content")}
-                    </Text>
-                    {qualityScore.score > 0 && (
-                      <Badge
-                        tone={
-                          qualityScore.grade === "Excellent"
-                            ? "success"
-                            : qualityScore.grade === "Good"
-                              ? "info"
-                              : qualityScore.grade === "Fair"
-                                ? "attention"
-                                : "critical"
-                        }
-                      >
-                        {t("Content quality: {grade} · {score}/100", { grade: qualityScore.grade, score: qualityScore.score })}
-                      </Badge>
-                    )}
-                  </InlineStack>
-
-                  <Text as="p" variant="bodySm" tone="subdued">
-                   {t("Select what to generate:")}
-                  </Text>
-                  <Checkbox
-                    label={t("Product Description")}
-                    checked={genDescription}
-                    onChange={setGenDescription}
-                    helpText={t("Answer-first & keyword-rich — so Google ranks it and AI engines can quote it.")}
-                  />
-                  <Checkbox
-                    label={t("Meta Title")}
-                    checked={genMetaTitle}
-                    onChange={setGenMetaTitle}
-                    helpText={t("≤60 chars, keyword front-loaded — wins the click in search results.")}
-                  />
-                  <Checkbox
-                    label={t("Meta Description")}
-                    checked={genMetaDescription}
-                    onChange={setGenMetaDescription}
-                    helpText={t("≤155 chars — lifts your click-through from search.")}
-                  />
-                  <Checkbox
-                    label={t("FAQ Content")}
-                    checked={genFaq}
-                    onChange={setGenFaq}
-                    helpText={t("Adds a question-and-answer section AI assistants can quote.")}
-                  />
-                  <Checkbox
-                    label={t("Image Alt Text")}
-                    checked={genAltText}
-                    onChange={setGenAltText}
-                    disabled={noImages}
-                    helpText={noImages ? t("No images on this product") : t("Applied directly to {n, plural, one {# image} other {# images}}{more} — alt text costs no credits", { n: product.images.length, more: product.hasMoreImages ? t(" (first 50)") : "" })}
-                  />
-
-                  <Divider />
-
-                  {/* Advanced options — collapsible */}
-                  <Button
-                    variant="plain"
-                    size="slim"
-                    icon={advancedOpen ? ChevronUpIcon : ChevronDownIcon}
-                    onClick={() => setAdvancedOpen((v) => !v)}
-                  >
-                   {t("Advanced Options")}
-                  </Button>
-                  <Collapsible open={advancedOpen} id="advanced-options">
-                    <BlockStack gap="300">
-                      {entitlements?.contentTemplates && templates.length > 0 && (
-                        <Select
-                          label={t("Apply Template")}
-                          options={[
-                            { label: t("— No template —"), value: "" },
-                            ...templates.map((t) => ({
-                              label: t.name + (t.isDefault ? " (Default)" : ""),
-                              value: t.id,
-                            })),
-                          ]}
-                          value={selectedTemplate}
-                          onChange={applyTemplate}
-                          helpText={t("Pre-fills the options below")}
-                        />
-                      )}
-                      <Select
-                        label={t("Description Length")}
-                        options={lengthOptions}
-                        value={contentLength}
-                        onChange={setContentLength}
-                      />
-                      <TextField
-                        label={t("Target Keywords (optional)")}
-                        value={targetKeywords}
-                        onChange={setTargetKeywords}
-                        placeholder={t("e.g., organic skincare Australia, Vitamin C")}
-                        helpText={t("Overrides global keywords for this product")}
-                        autoComplete="off"
-                      />
-                      {entitlements?.contentTemplates &&
-                        (genDescription || genMetaTitle || genMetaDescription || genFaq) && (
-                          <Button
-                            variant="plain"
-                            size="slim"
-                            onClick={() => {
-                              const templateFd = new FormData();
-                              templateFd.append("actionType", "saveTemplate");
-                              templateFd.append(
-                                "contentTypes",
-                                [
-                                  genDescription && "description",
-                                  genMetaTitle && "metaTitle",
-                                  genMetaDescription && "metaDescription",
-                                  genFaq && "faq",
-                                ]
-                                  .filter(Boolean)
-                                  .join(","),
-                              );
-                              templateFd.append("contentLength", contentLength);
-                              templateFd.append("keywords", targetKeywords);
-                              fetcher.submit(templateFd, { method: "POST" });
-                            }}
-                          >
-                           {t("Save current settings as template")}
-                          </Button>
-                        )}
+                  <InlineStack gap="400" blockAlign="center" wrap={false}>
+                    <ScoreRing value={productScore.score} size="medium" label={t("Search readiness")} />
+                    <BlockStack gap="050">
+                      <Text as="p" variant="bodyMd" fontWeight="medium">
+                        {t("{passed} of {total} checks pass", { passed: passedCount, total: checklist.length })}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Scored on what is on your store now, the same way as Home and the Audit.")}
+                      </Text>
                     </BlockStack>
-                  </Collapsible>
-
+                  </InlineStack>
                   <Divider />
-
-                  {/* Animated progress bar during generation */}
-                  {(isGenerating || isEnhancing) && (
-                    <Box padding="300" background="bg-surface-info" borderRadius="200">
-                      <BlockStack gap="200">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Spinner size="small" />
-                          <Text as="p" variant="bodySm" fontWeight="semibold">
-                            {loadingMessages[loadingMsgIdx]}
-                          </Text>
-                        </InlineStack>
-                        <ProgressBar
-                          progress={((loadingMsgIdx + 1) / 5) * 85}
-                          tone="highlight"
-                          size="small"
-                          animated
-                        />
-                        <Text as="p" variant="bodySm" tone="subdued">
-                         {t("Takes 10–30 seconds — you can stay on this page")}
-                        </Text>
-                      </BlockStack>
-                    </Box>
-                  )}
-
-                  {(upsell || actionData?.limitReached) && (
-                    <QuotaReachedCard upsell={upsell} surface="product_page" />
-                  )}
-                </BlockStack>
-              </Card>
-              {/* What the generated content actually does for the merchant (GEO/SEO/AI) */}
-            </BlockStack>
-          </Layout.Section>
-
-          {/* ── Right: tabbed content sections ───────────────────────────── */}
-          <Layout.Section>
-            <Card padding="0">
-              <Tabs tabs={productDetailTabs} selected={selectedTab} onSelect={setSelectedTab} fitted />
-            </Card>
-            <Box paddingBlockStart="400">
-              <BlockStack gap="400">
-                {/* ── Tab 0: Generate controls ── */}
-                {selectedTab === 0 && (
-                  <>
-                    {/* Success state after generation */}
-                    {actionData?.success && !isGenerating && !isEnhancing && (
-                      <Box padding="400" background="bg-surface-success" borderRadius="200">
-                        <BlockStack gap="200">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Icon source={CheckCircleIcon} tone="success" />
-                            <Text as="p" variant="headingSm" fontWeight="semibold">
-                              {actionData.autoPublished ? t("Content published to your store!") : t("Content generated — review & publish")}
-                            </Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {actionData.message}
-                          </Text>
-                          {!actionData.autoPublished && (
-                            <Button size="slim" onClick={() => setSelectedTab(1)}>
-                             {t("Review Generated Content")}
-                            </Button>
-                          )}
-                          {(actionData.autoPublished || actionData.published) &&
-                            product.handle &&
-                            shopDomain && (
-                              <Button
-                                variant="plain"
-                                size="slim"
-                                url={`https://${shopDomain}/products/${product.handle}`}
-                                external
-                                target="_blank"
-                              >
-                               {t("Preview in store")}
-                              </Button>
-                            )}
-                        </BlockStack>
-                      </Box>
-                    )}
-
-                    <Card>
-                      <BlockStack gap="300">
-                        <Text as="h2" variant="headingMd">
-                          {hasGeneratedContent ? t("Regenerate Content") : t("Ready to Generate")}
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {hasGeneratedContent ? t("Your product already has AI content. Generate again to create a fresh version.") : t("Select your content types in the left panel, then click Generate Content.")}
-                        </Text>
-
-                        {(isGenerating || isGeneratingVariants || isEnhancing) && (
-                          <Box padding="300" background="bg-surface-info" borderRadius="200">
-                            <BlockStack gap="200">
-                              <InlineStack gap="200" blockAlign="center">
-                                <Spinner size="small" />
-                                <Text as="p" variant="bodySm" fontWeight="semibold">
-                                  {isGeneratingVariants ? t("Writing 2 different versions...") : loadingMessages[loadingMsgIdx]}
-                                </Text>
-                              </InlineStack>
-                              <ProgressBar
-                                progress={isGeneratingVariants ? 60 : ((loadingMsgIdx + 1) / 5) * 85}
-                                tone="highlight"
-                                size="small"
-                                animated
-                              />
+                  <BlockStack gap="0">
+                    {checklist.map((c, i) => (
+                      <Box key={c.id}>
+                        {i > 0 ? <Divider /> : null}
+                        <Box paddingBlock="200">
+                          <InlineStack gap="200" blockAlign="start" wrap={false}>
+                            <Box paddingBlockStart="050">
+                              <Icon source={c.pass ? CheckCircleIcon : AlertCircleIcon} tone={c.pass ? "success" : "caution"} accessibilityLabel={c.pass ? t("Passed") : t("Not yet")} />
+                            </Box>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="bodySm" fontWeight="medium">
+                                {c.label}
+                              </Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                               {t("{v} — you can stay on this page", { v: isGeneratingVariants ? t("20–40 seconds") : t("10–30 seconds") })}
+                                {c.detail}
                               </Text>
                             </BlockStack>
-                          </Box>
-                        )}
+                          </InlineStack>
+                        </Box>
+                      </Box>
+                    ))}
+                  </BlockStack>
+                </BlockStack>
+              </Card>
 
-                        <Button
-                          variant="primary"
-                          size="large"
-                          onClick={() => handleGenerate()}
-                          loading={isGenerating}
-                          disabled={isLoading}
-                          fullWidth
-                        >
-                          {isGenerating ? t("Generating...") : t("Generate Content")}
-                        </Button>
-                        {!isGenerating && !isEnhancing && (
-                          <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                           {t("Tip: press Cmd+Enter (Mac) or Ctrl+Enter (Windows) to generate")}
-                          </Text>
-                        )}
-                        {(product.descriptionHtml || product.seoTitle) && (
-                          <BlockStack gap="100">
-                            <Button
-                              size="large"
-                              onClick={handleEnhance}
-                              loading={isEnhancing}
-                              disabled={
-                                isLoading ||
-                                isGeneratingVariants ||
-                                (!genDescription && !genMetaTitle && !genMetaDescription)
-                              }
-                              fullWidth
-                            >
-                              {isEnhancing ? t("Enhancing...") : t("Enhance Existing Content")}
-                            </Button>
-                            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                             {t("Improves what's already there — structure, SEO keywords, and AI-search readiness — without losing your facts or voice")}
-                            </Text>
-                          </BlockStack>
-                        )}
-                        {entitlements?.abVariants ? (
-                          <Button
-                            size="large"
-                            onClick={handleGenerateVariants}
-                            loading={isGeneratingVariants}
-                            disabled={isLoading || isGeneratingVariants || noneSelected}
-                            fullWidth
-                          >
-                            {isGeneratingVariants ? t("Generating 2 options...") : t("Generate two options to compare")}
-                          </Button>
+              {/* How the page will read in a Google result, from the draft when
+                  there is one and from the store when there is not. */}
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    {t("Google listing preview")}
+                  </Text>
+                  <Box padding="300" background="bg-surface" borderWidth="025" borderColor="border" borderRadius="200">
+                    <BlockStack gap="050">
+                      <Text as="p" variant="bodySm" tone="subdued" truncate>
+                        {storeUrl ?? `${shopDomain ?? ""}/products/${product.handle}`}
+                      </Text>
+                      <Text as="p" variant="bodyLg" fontWeight="medium">
+                        {storeUrl ? (
+                          <Link url={storeUrl} external removeUnderline>
+                            {previewTitle}
+                          </Link>
                         ) : (
-                          // NOT disabled — a disabled Polaris button never fires
-                          // onClick, which made this upsell a dead control. It
-                          // looks locked but genuinely navigates to Plans.
-                          <Button size="large" fullWidth onClick={() => navigate("/app/plans")}>
-                           {t("Two options to compare — upgrade to Growth")}
-                          </Button>
+                          previewTitle
                         )}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {previewDesc || t("No description yet — nothing is on your store for this product.")}
+                      </Text>
+                    </BlockStack>
+                  </Box>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("Google shows about 60 characters of the title and 155 of the description.")}
+                  </Text>
+                </BlockStack>
+              </Card>
+            </BlockStack>
+          </div>
 
-                        {(upsell || actionData?.limitReached) && (
-                          <QuotaReachedCard upsell={upsell} surface="product_page" />
-                        )}
-                      </BlockStack>
-                    </Card>
-                  </>
-                )}
+          {/* ── Centre: the fields ───────────────────────────────────────── */}
+          <div>
+            <BlockStack gap="400">
+              {(isGenerating || isEnhancing || isGeneratingVariants) && (
+                <Card>
+                  <BlockStack gap="200">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Spinner size="small" />
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        {busyMessage}
+                      </Text>
+                    </InlineStack>
+                    <ProgressBar progress={isGeneratingVariants ? 60 : ((loadingMsgIdx + 1) / 5) * 85} tone="highlight" size="small" animated />
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("{v} — you can stay on this page", { v: isGeneratingVariants ? t("20–40 seconds") : t("10–30 seconds") })}
+                    </Text>
+                  </BlockStack>
+                </Card>
+              )}
 
-                {/* ── A/B Variant comparison ── */}
-                {selectedTab === 0 && variants && (
-                  <BlockStack gap="400">
-                    <Banner tone="info" title={t("2 Options Generated")}>
-                     {t("Compare both versions and click \"Use This One\" to save your favorite as a draft.")}
-                    </Banner>
+              {(upsell || actionData?.limitReached) && <QuotaReachedCard upsell={upsell} surface="product_page" />}
+
+              {/* ── Two options to compare ── */}
+              {variants && (
+                <Card>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">
+                      {t("Two options — pick one to keep as the draft")}
+                    </Text>
                     {variants.map((v, idx) => (
-                      <Card key={idx}>
-                        <BlockStack gap="300">
+                      <Box key={idx} padding="300" background="bg-surface-secondary" borderRadius="200">
+                        <BlockStack gap="200">
                           <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h3" variant="headingMd">
-                             {t("Option {v}", { v: idx === 0 ? "A" : "B" })}
+                            <Text as="h3" variant="headingSm">
+                              {t("Option {v}", { v: idx === 0 ? "A" : "B" })}
                             </Text>
-                            <Button
-                              size="slim"
-                              onClick={() => handleSaveVariant(v)}
-                              loading={isLoading}
-                              disabled={isLoading}
-                            >
-                             {t("Use This One")}
+                            <Button size="slim" onClick={() => handleSaveVariant(v)} loading={isLoading} disabled={isLoading}>
+                              {t("Use This One")}
                             </Button>
                           </InlineStack>
                           {v.description && (
-                            <Box padding="200" background="bg-surface-secondary" borderRadius="100">
-                              <span
-                                // Phase 2 item 2.12 - sanitized in the action
-                                // before it is returned, not here. sanitizeHtml
-                                // lives in a .server module, and calling it from
-                                // the component pulls that module into the
-                                // client bundle.
-                                dangerouslySetInnerHTML={{
-                                  __html:
-                                    v.description.substring(0, 600) +
-                                    (v.description.length > 600 ? "..." : ""),
-                                }}
-                              />
-                            </Box>
+                            <span
+                              // Phase 2 item 2.12 - sanitized in the action
+                              // before it is returned, not here. sanitizeHtml
+                              // lives in a .server module, and calling it from
+                              // the component pulls that module into the
+                              // client bundle.
+                              dangerouslySetInnerHTML={{ __html: v.description.substring(0, 600) + (v.description.length > 600 ? "..." : "") }}
+                            />
                           )}
                           {v.metaTitle && (
                             <Text as="p" variant="bodySm">
@@ -1990,609 +1937,362 @@ export default function ProductGeneratePage() {
                             </Text>
                           )}
                         </BlockStack>
-                      </Card>
+                      </Box>
                     ))}
                   </BlockStack>
-                )}
+                </Card>
+              )}
 
-                {/* ── Tab 1: Generated content + publish ── */}
-                {selectedTab === 1 && (
-                  <>
-                    {/* Group 4.4 — this said "All content below was generated by
-                        AI" directly above three fields each headed "CURRENT:",
-                        holding the merchant's OWN copy. On the one screen
-                        dedicated to their content, the app claimed authorship of
-                        their work.
-                        The banner now says what is actually true: the proposals
-                        are ours, and what sits under CURRENT is theirs. */}
-                    <Banner tone="info">
-                     {t("The")} <strong>{t("proposed")}</strong> {t("content on this page was written by AI. Anything shown under “Currently on your store” is your own copy and is not changed until you publish.")}
-                    </Banner>
+              {fieldCard({
+                key: "description",
+                title: t("Description"),
+                regenerateType: "description",
+                current: product.descriptionHtml ? <span dangerouslySetInnerHTML={{ __html: product.descriptionHtml.substring(0, 500) }} /> : null,
+                currentEmpty: product.descriptionHtml ? null : (
+                  /* Group 4.1 — "needs content" is only true when there genuinely is none, which is exactly this branch. */
+                  <Text as="p" tone="critical">
+                    {t("No description yet — nothing is on your store for this product.")}
+                  </Text>
+                ),
+                draft: editedDescription,
+                onChange: setEditedDescription,
+                multiline: 8,
+                hint: t("Edit the HTML directly — changes are saved when you publish"),
+                extraFooter:
+                  (product.descriptionHtml || product.seoTitle) && !rawDescription ? (
+                    <InlineStack gap="300" blockAlign="center" wrap>
+                      <Button size="slim" onClick={handleEnhance} loading={isEnhancing} disabled={isLoading || isGeneratingVariants || (!genDescription && !genMetaTitle && !genMetaDescription)}>
+                        {isEnhancing ? t("Enhancing...") : t("Enhance what is there")}
+                      </Button>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Improves what's already there — structure, SEO keywords, and AI-search readiness — without losing your facts or voice")}
+                      </Text>
+                    </InlineStack>
+                  ) : null,
+              })}
 
-                    {/* Description */}
-                    <Card>
-                      <BlockStack gap="300">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h2" variant="headingMd">
-                           {t("Product Description")}
-                          </Text>
-                          {rawDescription && (
-                            <Button
-                              size="slim"
-                              variant="plain"
-                              onClick={() => handleRegenerateSection("description")}
-                              loading={isGenerating}
-                            >
-                             {t("Regenerate")}
-                            </Button>
-                          )}
-                        </InlineStack>
+              {fieldCard({
+                key: "metaTitle",
+                title: t("Page title"),
+                regenerateType: "metaTitle",
+                current: (
+                  <Text as="p" variant="bodySm">
+                    {product.seoTitle || t("(using product title)")}
+                  </Text>
+                ),
+                draft: editedMetaTitle,
+                onChange: setEditedMetaTitle,
+                multiline: false,
+                limit: 60,
+              })}
 
-                        <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                          <BlockStack gap="100">
-                            {/* Group 4.4 — "CURRENT:" is ambiguous about WHOSE
-                                copy this is, which is what let the banner above
-                                read as a claim over it. */}
-                            <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
-                             {t("Currently on your store")}
-                            </Text>
-                            {product.descriptionHtml ? (
-                              <span
-                                dangerouslySetInnerHTML={{
-                                  __html: product.descriptionHtml.substring(0, 500),
-                                }}
-                              />
-                            ) : (
-                              /* Group 4.1 — "needs content" is only true when
-                                 there genuinely is none, which is exactly this
-                                 branch, so the wording stays. */
-                              <Text as="p" tone="critical">
-                               {t("No description yet — nothing is on your store for this product.")}
-                              </Text>
-                            )}
-                          </BlockStack>
-                        </Box>
+              {fieldCard({
+                key: "metaDescription",
+                title: t("Search description"),
+                regenerateType: "metaDescription",
+                current: (
+                  <Text as="p" variant="bodySm">
+                    {product.seoDescription || t("(none set)")}
+                  </Text>
+                ),
+                draft: editedMetaDescription,
+                onChange: setEditedMetaDescription,
+                multiline: 2,
+                limit: 155,
+              })}
 
-                        {isGenerating && (
-                          <Box padding="400">
-                            <InlineStack align="center" gap="200">
-                              <Spinner size="small" />
-                              <Text as="p" variant="bodyMd">
-                               {t("Generating... this takes 10–20 seconds")}
-                              </Text>
-                            </InlineStack>
-                          </Box>
-                        )}
-
-                        {rawDescription && (
-                          <BlockStack gap="200">
-                            <InlineStack align="space-between">
-                              <Text as="p" variant="bodySm" fontWeight="bold" tone="success">
-                               {t("AI-GENERATED (editable):")}
-                              </Text>
-                              <Badge
-                                tone={
-                                  existingContent.description?.status === "published" ? "success" : "info"
-                                }
-                              >
-                                {existingContent.description?.status === "published" ? String(product.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? t("Published") : t("Published · product is a Shopify {v}, not on your storefront", { v: String(product.status).toLowerCase() }) : t("Draft")}
-                              </Badge>
-                            </InlineStack>
-                            <TextField
-                              label={t("Product description")}
-                              labelHidden
-                              value={editedDescription}
-                              onChange={setEditedDescription}
-                              multiline={8}
-                              helpText={t("Edit the HTML directly — changes are saved when you click Publish")}
-                              autoComplete="off"
-                            />
-                            {editedDescription && (
-                              <InlineStack align="space-between">
-                                <Text as="p" variant="bodySm" tone="subdued">
-                                 {t("{length}{v} words {v1} {length1} characters", { length: editedDescription
-                                      .replace(/<[^>]+>/g, "")
-                                      .trim()
-                                      .split(/\s+/)
-                                      .filter(Boolean).length, v: " ", v1: " ·", length1: editedDescription.replace(/<[^>]+>/g, "").length })}
-                                </Text>
-                                <Button
-                                  size="slim"
-                                  variant="plain"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(editedDescription.replace(/<[^>]+>/g, ""));
-                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                                  }}
-                                >
-                                 {t("Copy text")}
-                                </Button>
-                              </InlineStack>
-                            )}
-                          </BlockStack>
-                        )}
-
-                        {!rawDescription && !isGenerating && (
-                          <Text as="p" variant="bodySm" tone="subdued">
-                           {t("Click \"Generate Content\" to create an AI-optimized description.")}
-                          </Text>
-                        )}
-
-                        {existingContent.description?.original && (
-                          <>
-                            <Divider />
-                            <OriginalContentSection
-                              original={existingContent.description.original}
-                              contentType="description"
-                              revertFetcher={revertFetcher}
-                            />
-                          </>
-                        )}
-                        {entitlements?.versionHistory && versionsByType.description?.length > 0 && (
-                          <VersionHistorySection
-                            versions={versionsByType.description}
-                            contentType="description"
-                            restoreFetcher={restoreFetcher}
-                          />
-                        )}
-                      </BlockStack>
-                    </Card>
-
-                    {/* Meta Title */}
-                    {(rawMetaTitle || genMetaTitle) && (
-                      <Card>
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h2" variant="headingMd">
-                             {t("Meta Title")}
-                            </Text>
-                            <InlineStack gap="200">
-                              {rawMetaTitle && (
-                                <Button
-                                  size="slim"
-                                  variant="plain"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(editedMetaTitle);
-                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                                  }}
-                                >
-                                 {t("Copy")}
-                                </Button>
-                              )}
-                              {rawMetaTitle && (
-                                <Button
-                                  size="slim"
-                                  variant="plain"
-                                  onClick={() => handleRegenerateSection("metaTitle")}
-                                  loading={isGenerating}
-                                >
-                                 {t("Regenerate")}
-                                </Button>
-                              )}
-                            </InlineStack>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                           {t("Current:")} {product.seoTitle || "(using product title)"}
-                          </Text>
-                          {rawMetaTitle && (
-                            <BlockStack gap="100">
-                              <TextField
-                                label={t("Page title")}
-                                labelHidden
-                                value={editedMetaTitle}
-                                onChange={setEditedMetaTitle}
-                                error={editedMetaTitle.length > 60 ? t("Over 60 characters — shorten before publishing") : ""}
-                                autoComplete="off"
-                              />
-                              <InlineStack align="space-between">
-                                <Text
-                                  as="p"
-                                  variant="bodySm"
-                                  tone={editedMetaTitle.length > 60 ? "critical" : "subdued"}
-                                >
-                                 {t("{length}/60 characters", { length: editedMetaTitle.length })}
-                                </Text>
-                              </InlineStack>
-                              <ProgressBar
-                                progress={Math.min(100, Math.round((editedMetaTitle.length / 60) * 100))}
-                                tone={
-                                  editedMetaTitle.length > 60
-                                    ? "critical"
-                                    : editedMetaTitle.length >= 48
-                                      ? "highlight"
-                                      : "success"
-                                }
-                                size="small"
-                              />
-                            </BlockStack>
-                          )}
-                          {existingContent.metaTitle?.original && (
-                            <>
-                              <Divider />
-                              <OriginalContentSection
-                                original={existingContent.metaTitle.original}
-                                contentType="metaTitle"
-                                revertFetcher={revertFetcher}
-                              />
-                            </>
-                          )}
-                          {entitlements?.versionHistory && versionsByType.metaTitle?.length > 0 && (
-                            <VersionHistorySection
-                              versions={versionsByType.metaTitle}
-                              contentType="metaTitle"
-                              restoreFetcher={restoreFetcher}
-                            />
-                          )}
-                        </BlockStack>
-                      </Card>
-                    )}
-
-                    {/* Meta Description */}
-                    {(rawMetaDescription || genMetaDescription) && (
-                      <Card>
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h2" variant="headingMd">
-                             {t("Meta Description")}
-                            </Text>
-                            <InlineStack gap="200">
-                              {rawMetaDescription && (
-                                <Button
-                                  size="slim"
-                                  variant="plain"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(editedMetaDescription);
-                                    window.shopify?.toast?.show("Copied!", { duration: 1500 });
-                                  }}
-                                >
-                                 {t("Copy")}
-                                </Button>
-                              )}
-                              {rawMetaDescription && (
-                                <Button
-                                  size="slim"
-                                  variant="plain"
-                                  onClick={() => handleRegenerateSection("metaDescription")}
-                                  loading={isGenerating}
-                                >
-                                 {t("Regenerate")}
-                                </Button>
-                              )}
-                            </InlineStack>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                           {t("Current:")} {product.seoDescription || "(none set)"}
-                          </Text>
-                          {rawMetaDescription && (
-                            <BlockStack gap="100">
-                              <TextField
-                                label={t("Search description")}
-                                labelHidden
-                                value={editedMetaDescription}
-                                onChange={setEditedMetaDescription}
-                                multiline={2}
-                                error={editedMetaDescription.length > 155 ? t("Over 155 characters — shorten before publishing") : ""}
-                                autoComplete="off"
-                              />
-                              <InlineStack align="space-between">
-                                <Text
-                                  as="p"
-                                  variant="bodySm"
-                                  tone={editedMetaDescription.length > 155 ? "critical" : "subdued"}
-                                >
-                                 {t("{length}/155 characters", { length: editedMetaDescription.length })}
-                                </Text>
-                              </InlineStack>
-                              <ProgressBar
-                                progress={Math.min(
-                                  100,
-                                  Math.round((editedMetaDescription.length / 155) * 100),
-                                )}
-                                tone={
-                                  editedMetaDescription.length > 155
-                                    ? "critical"
-                                    : editedMetaDescription.length >= 124
-                                      ? "highlight"
-                                      : "success"
-                                }
-                                size="small"
-                              />
-                            </BlockStack>
-                          )}
-                          {existingContent.metaDescription?.original && (
-                            <>
-                              <Divider />
-                              <OriginalContentSection
-                                original={existingContent.metaDescription.original}
-                                contentType="metaDescription"
-                                revertFetcher={revertFetcher}
-                              />
-                            </>
-                          )}
-                          {entitlements?.versionHistory && versionsByType.metaDescription?.length > 0 && (
-                            <VersionHistorySection
-                              versions={versionsByType.metaDescription}
-                              contentType="metaDescription"
-                              restoreFetcher={restoreFetcher}
-                            />
-                          )}
-                        </BlockStack>
-                      </Card>
-                    )}
-
-                    {/* FAQ */}
-                    {faq && (
-                      <Card>
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h2" variant="headingMd">
-                             {t("FAQ Content")}
-                            </Text>
-                            <Button
-                              size="slim"
-                              variant="plain"
-                              onClick={() => handleRegenerateSection("faq")}
-                              loading={isGenerating}
-                            >
-                             {t("Regenerate")}
-                            </Button>
-                          </InlineStack>
-                          <Box padding="200" background="bg-surface-success" borderRadius="200">
-                            <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>
-                              {faq}
-                            </pre>
-                          </Box>
-                          {existingContent.faq?.original && (
-                            <>
-                              <Divider />
-                              <OriginalContentSection
-                                original={existingContent.faq.original}
-                                contentType="faq"
-                                revertFetcher={revertFetcher}
-                              />
-                            </>
-                          )}
-                        </BlockStack>
-                      </Card>
-                    )}
-
-                    {/* Image Alt Text — the badge reflects the ACTUAL outcome:
-                  all applied / partially applied / failed. Never claim success
-                  for an operation that failed. */}
-                    {(altTextResults.length > 0 || genAltText) && (
-                      <Card>
-                        <BlockStack gap="300">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h2" variant="headingMd">
-                             {t("Image Alt Text")}
-                            </Text>
-                            <AltTextBadge results={altTextResults} />
-                          </InlineStack>
-                          {actionData?.altTextTruncated && (
-                            <Banner tone="info">
-                              <p>
-                               {t("This product has more images than one run covers — the first{v} {length} were processed. Run again after reviewing to cover the rest, or edit the remaining images in Shopify admin.", { v: " ", length: altTextResults.length })}
-                              </p>
-                            </Banner>
-                          )}
-                          {isGenerating && genAltText && (
-                            <InlineStack gap="200">
-                              <Spinner size="small" />
-                              <Text as="p" variant="bodySm" tone="subdued">
-                               {t("Generating alt text for {n, plural, one {# image} other {# images}}...", { n: product.images.length })}
-                              </Text>
-                            </InlineStack>
-                          )}
-                          <AltTextResultList results={altTextResults} />
-                          {!altTextResults.length && !isGenerating && (
-                            <Text as="p" variant="bodySm" tone="subdued">
-                             {t("Check \"Image Alt Text\" and click Generate to create alt text for all images.")}
-                            </Text>
-                          )}
-                        </BlockStack>
-                      </Card>
-                    )}
-
-                    {/* Publish button */}
-                    {hasGeneratedContent && !actionData?.autoPublished && (
-                      <Card>
-                        <BlockStack gap="200">
-                          <Text as="p" variant="bodySm" tone="subdued">
-                           {t("Content generated by AI • Review before publishing")}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                           {t("Your edits above will be published — not the original AI output.")}
-                          </Text>
-                          <Button
-                            variant="primary"
-                            size="large"
-                            onClick={handlePublish}
-                            loading={isPublishing}
-                            disabled={isLoading}
-                            fullWidth
-                          >
-                            {isPublishing ? t("Publishing...") : t("Publish to Store")}
-                          </Button>
-                        </BlockStack>
-                      </Card>
-                    )}
-
-                    {/* Social Media Content */}
-                    <Card>
-                      <BlockStack gap="300">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h2" variant="headingMd">
-                           {t("Social Media Content")}
-                          </Text>
-                          <Button
-                            size="slim"
-                            loading={socialFetcher.state !== "idle"}
-                            onClick={() => {
-                              const fd = new FormData();
-                              fd.append("actionType", "generateSocial");
-                              socialFetcher.submit(fd, { method: "POST" });
-                            }}
-                          >
-                           {t("Generate")}
-                          </Button>
-                        </InlineStack>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                         {t("Ready-to-post captions for Instagram, Facebook, and TikTok.")}
-                        </Text>
-                        {socialFetcher.data?.social && (
-                          <BlockStack gap="300">
-                            {[
-                              { key: "instagram", label: t("Instagram") },
-                              { key: "facebook", label: t("Facebook") },
-                              { key: "tiktok", label: t("TikTok") },
-                            ].map(({ key, label }) =>
-                              socialFetcher.data.social[key] ? (
-                                <Box
-                                  key={key}
-                                  padding="300"
-                                  background="bg-surface-secondary"
-                                  borderRadius="200"
-                                >
-                                  <BlockStack gap="200">
-                                    <InlineStack align="space-between" blockAlign="center">
-                                      <Text as="p" variant="bodySm" fontWeight="semibold">
-                                        {label}
-                                      </Text>
-                                      <Button
-                                        size="slim"
-                                        variant="plain"
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(socialFetcher.data.social[key]);
-                                          if (window.shopify?.toast) {
-                                            window.shopify.toast.show(`${label} caption copied!`, {
-                                              duration: 2000,
-                                            });
-                                          }
-                                        }}
-                                      >
-                                       {t("Copy")}
-                                      </Button>
-                                    </InlineStack>
-                                    <Text as="p" variant="bodySm">
-                                      {socialFetcher.data.social[key]}
-                                    </Text>
-                                  </BlockStack>
-                                </Box>
-                              ) : null,
-                            )}
-                          </BlockStack>
-                        )}
-                        {socialFetcher.data?.error && (
-                          <Text as="p" variant="bodySm" tone="critical">
-                            {socialFetcher.data.error}
-                          </Text>
-                        )}
-                      </BlockStack>
-                    </Card>
-                  </>
-                )}
-
-                {/* ── Tab 2: Version history ── */}
-                {selectedTab === 2 && (
-                  <Card>
-                    <BlockStack gap="400">
+              {/* FAQ: not editable inline (it is a structured list); shown as written. */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+                    <InlineStack gap="200" blockAlign="center">
                       <Text as="h2" variant="headingMd">
-                       {t("Version History")}
+                        {t("Questions and answers")}
                       </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                       {t("Previous versions of your generated content. Click Restore to roll back.")}
-                      </Text>
-                      {["description", "metaTitle", "metaDescription", "faq"].map((type) =>
-                        versionsByType[type]?.length > 0 ? (
-                          <BlockStack key={type} gap="200">
-                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                              {type === "description" ? t("Description") : type === "metaTitle" ? t("Meta Title") : type === "metaDescription" ? t("Meta Description") : "FAQ"}
-                            </Text>
-                            {entitlements?.versionHistory && (
-                              <VersionHistorySection
-                                versions={versionsByType[type]}
-                                contentType={type}
-                                restoreFetcher={restoreFetcher}
-                              />
-                            )}
-                          </BlockStack>
-                        ) : null,
-                      )}
-                      {Object.values(versionsByType).every((v) => !v?.length) && (
-                        <Text as="p" variant="bodySm" tone="subdued">
-                         {t("No version history yet. Generate content to start building history.")}
-                        </Text>
-                      )}
-                    </BlockStack>
-                  </Card>
-                )}
+                      {faq && existingContent.faq?.status ? <Badge tone={existingContent.faq.status === "published" ? "success" : "info"}>{existingContent.faq.status === "published" ? t("Published") : t("Draft")}</Badge> : null}
+                    </InlineStack>
+                    <Button size="slim" onClick={() => handleRegenerateSection("faq")} loading={isGenerating && fetcher.formData?.get("gen_faq") === "true"} disabled={isLoading}>
+                      {faq ? t("Rewrite") : t("Write")}
+                    </Button>
+                  </InlineStack>
+                  {faq ? (
+                    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>{faq}</pre>
+                    </Box>
+                  ) : (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("Real questions a customer asks, answered on the page. Shown on your product page by the FAQ (Navaal) theme block.")}
+                    </Text>
+                  )}
+                  {existingContent.faq?.original ? (
+                    <>
+                      <Divider />
+                      <OriginalContentSection original={existingContent.faq.original} contentType="faq" revertFetcher={revertFetcher} />
+                    </>
+                  ) : null}
+                </BlockStack>
+              </Card>
 
-                {/* ── Tab 3: Alt text ── */}
-                {selectedTab === 3 && (
-                  <Card>
+              {/* Options, once, under the fields: what Generate writes and how. */}
+              <Card>
+                <BlockStack gap="300">
+                  <Button variant="plain" size="slim" icon={optionsOpen ? ChevronUpIcon : ChevronDownIcon} onClick={() => setOptionsOpen((v) => !v)} ariaExpanded={optionsOpen} ariaControls="generate-options">
+                    {t("Options")}
+                  </Button>
+                  <Collapsible open={optionsOpen} id="generate-options">
                     <BlockStack gap="300">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h2" variant="headingMd">
-                         {t("Image Alt Text")}
-                        </Text>
-                        <AltTextBadge results={altTextResults} />
-                      </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
-                       {t("AI-generated accessibility descriptions applied directly to your product images.")}
+                        {t("What Generate writes (Cmd+Enter / Ctrl+Enter):")}
                       </Text>
-                      {product.images.length > 0 && (
+                      <Checkbox label={t("Description")} checked={genDescription} onChange={setGenDescription} />
+                      <Checkbox label={t("Page title")} checked={genMetaTitle} onChange={setGenMetaTitle} />
+                      <Checkbox label={t("Search description")} checked={genMetaDescription} onChange={setGenMetaDescription} />
+                      <Checkbox label={t("Questions and answers")} checked={genFaq} onChange={setGenFaq} />
+                      <Checkbox
+                        label={t("Image Alt Text")}
+                        checked={genAltText}
+                        onChange={setGenAltText}
+                        disabled={noImages}
+                        helpText={noImages ? t("No images on this product") : t("Applied directly to {n, plural, one {# image} other {# images}}{more} — alt text costs no credits", { n: product.images.length, more: product.hasMoreImages ? t(" (first 50)") : "" })}
+                      />
+                      <Divider />
+                      {entitlements?.contentTemplates && templates.length > 0 && (
+                        <Select
+                          label={t("Apply Template")}
+                          options={[{ label: t("— No template —"), value: "" }, ...templates.map((tpl) => ({ label: tpl.name + (tpl.isDefault ? " (Default)" : ""), value: tpl.id }))]}
+                          value={selectedTemplate}
+                          onChange={applyTemplate}
+                          helpText={t("Pre-fills the options below")}
+                        />
+                      )}
+                      <Select label={t("Description Length")} options={lengthOptions} value={contentLength} onChange={setContentLength} />
+                      <TextField
+                        label={t("Target Keywords (optional)")}
+                        value={targetKeywords}
+                        onChange={setTargetKeywords}
+                        placeholder={t("e.g., organic skincare Australia, Vitamin C")}
+                        helpText={t("Overrides global keywords for this product")}
+                        autoComplete="off"
+                      />
+                      {entitlements?.contentTemplates && (genDescription || genMetaTitle || genMetaDescription || genFaq) && (
                         <Button
+                          variant="plain"
+                          size="slim"
                           onClick={() => {
-                            setGenAltText(true);
-                            handleGenerate({
-                              description: false,
-                              metaTitle: false,
-                              metaDescription: false,
-                              faq: false,
-                              altText: true,
-                            });
+                            const templateFd = new FormData();
+                            templateFd.append("actionType", "saveTemplate");
+                            templateFd.append("contentTypes", [genDescription && "description", genMetaTitle && "metaTitle", genMetaDescription && "metaDescription", genFaq && "faq"].filter(Boolean).join(","));
+                            templateFd.append("contentLength", contentLength);
+                            templateFd.append("keywords", targetKeywords);
+                            fetcher.submit(templateFd, { method: "POST" });
                           }}
-                          loading={isGenerating && genAltText}
-                          disabled={isLoading}
                         >
-                         {t("Generate Alt Text for {n, plural, one {# Image} other {# Images}}", { n: product.images.length })}
+                          {t("Save current settings as template")}
                         </Button>
                       )}
-                      <AltTextResultList results={altTextResults} />
-                      {/* What Shopify ACTUALLY holds right now — read live from the
-                      product's media on every page load. Lets a merchant (and
-                      the E2E ground-truth check) confirm the alt text really
-                      reached Shopify, independent of any generation result. */}
-                      {product.images.some((img) => img.altText) && (
-                        <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                          <BlockStack gap="150">
-                            <Text as="p" variant="bodySm" fontWeight="semibold">
-                             {t("Currently on Shopify")}
-                            </Text>
-                            {product.images
-                              .filter((img) => img.altText)
-                              .map((img, i) => (
-                                <InlineStack key={img.id ?? i} gap="200" blockAlign="start" wrap={false}>
-                                  <Thumbnail source={img.url} alt="" size="small" />
-                                  <Text as="p" variant="bodySm" tone="subdued">
-                                    {img.altText}
-                                  </Text>
-                                </InlineStack>
-                              ))}
-                          </BlockStack>
-                        </Box>
-                      )}
-                      {!altTextResults.length && !isGenerating && (
+                    </BlockStack>
+                  </Collapsible>
+                </BlockStack>
+              </Card>
+            </BlockStack>
+          </div>
+
+          {/* ── Right rail: images, history, compare, social, facts ─────── */}
+          <div>
+            <BlockStack gap="400">
+              {/* Image Alt Text — the badge reflects the ACTUAL outcome: all
+                  applied / partially applied / failed. Never claim success for
+                  an operation that failed. */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+                    <Text as="h2" variant="headingMd">
+                      {t("Images")}
+                    </Text>
+                    <AltTextBadge results={altTextResults} />
+                  </InlineStack>
+                  {noImages ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("No images on this product")}
+                    </Text>
+                  ) : (
+                    <BlockStack gap="200">
+                      {product.images.slice(0, 6).map((img, i) => (
+                        <InlineStack key={img.id ?? i} gap="200" blockAlign="start" wrap={false}>
+                          <Thumbnail source={img.url} alt="" size="small" />
+                          <Text as="p" variant="bodySm" tone={img.altText ? undefined : "subdued"}>
+                            {img.altText || t("No alt text")}
+                          </Text>
+                        </InlineStack>
+                      ))}
+                      {product.images.length > 6 ? (
                         <Text as="p" variant="bodySm" tone="subdued">
-                         {t("Click Generate Alt Text to create accessibility descriptions for all product images.")}
+                          {t("and {n} more", { n: product.images.length - 6 })}
                         </Text>
+                      ) : null}
+                      <Button
+                        size="slim"
+                        onClick={() => {
+                          setGenAltText(true);
+                          handleGenerate({ description: false, metaTitle: false, metaDescription: false, faq: false, altText: true });
+                        }}
+                        loading={isGenerating && genAltText}
+                        disabled={isLoading}
+                      >
+                        {t("Write alt text for all {n, plural, one {# image} other {# images}}", { n: product.images.length })}
+                      </Button>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Applied straight to Shopify. Costs no credits.")}
+                      </Text>
+                    </BlockStack>
+                  )}
+                  {actionData?.altTextTruncated && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("This product has more images than one run covers — the first{v} {length} were processed. Run again after reviewing to cover the rest, or edit the remaining images in Shopify admin.", { v: " ", length: altTextResults.length })}
+                    </Text>
+                  )}
+                  <AltTextResultList results={altTextResults} />
+                </BlockStack>
+              </Card>
+
+              {/* Two options to compare: the feature, or the one-line lock. */}
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    {t("Two options to compare")}
+                  </Text>
+                  {entitlements?.abVariants ? (
+                    <>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Write two different versions of the selected fields and keep the one you prefer.")}
+                      </Text>
+                      <Button size="slim" onClick={handleGenerateVariants} loading={isGeneratingVariants} disabled={isLoading || isGeneratingVariants || noneSelected}>
+                        {isGeneratingVariants ? t("Generating 2 options...") : t("Write two options")}
+                      </Button>
+                    </>
+                  ) : (
+                    <LockRow sentence={t("Two drafts to compare is on {plan} and above.", { plan: PLAN_LABELS.growth })} onSeePlans={() => navigate("/app/plans")} />
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Version history: per field under the field, and the summary here. */}
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    {t("Version History")}
+                  </Text>
+                  {!entitlements?.versionHistory ? (
+                    <LockRow sentence={t("Restoring earlier versions is on {plan} and above.", { plan: PLAN_LABELS.starter })} onSeePlans={() => navigate("/app/plans")} />
+                  ) : Object.values(versionsByType).every((v) => !v?.length) ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("No version history yet. Generate content to start building history.")}
+                    </Text>
+                  ) : (
+                    ["description", "metaTitle", "metaDescription", "faq"].map((type) =>
+                      versionsByType[type]?.length > 0 ? (
+                        <BlockStack key={type} gap="100">
+                          <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                            {type === "description" ? t("Description") : type === "metaTitle" ? t("Page title") : type === "metaDescription" ? t("Search description") : "FAQ"}
+                          </Text>
+                          <VersionHistorySection versions={versionsByType[type]} contentType={type} restoreFetcher={restoreFetcher} />
+                        </BlockStack>
+                      ) : null,
+                    )
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Social captions */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      {t("Social captions")}
+                    </Text>
+                    <Button
+                      size="slim"
+                      loading={socialFetcher.state !== "idle"}
+                      onClick={() => {
+                        const fd = new FormData();
+                        fd.append("actionType", "generateSocial");
+                        socialFetcher.submit(fd, { method: "POST" });
+                      }}
+                    >
+                      {t("Write")}
+                    </Button>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("Ready-to-post captions for Instagram, Facebook, and TikTok.")}
+                  </Text>
+                  {socialFetcher.data?.social && (
+                    <BlockStack gap="200">
+                      {[
+                        { key: "instagram", label: t("Instagram") },
+                        { key: "facebook", label: t("Facebook") },
+                        { key: "tiktok", label: t("TikTok") },
+                      ].map(({ key, label }) =>
+                        socialFetcher.data.social[key] ? (
+                          <Box key={key} padding="300" background="bg-surface-secondary" borderRadius="200">
+                            <BlockStack gap="100">
+                              <InlineStack align="space-between" blockAlign="center">
+                                <Text as="p" variant="bodySm" fontWeight="semibold">
+                                  {label}
+                                </Text>
+                                <Button
+                                  size="slim"
+                                  variant="plain"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(socialFetcher.data.social[key]);
+                                    window.shopify?.toast?.show(t("Copied"), { duration: 1500 });
+                                  }}
+                                >
+                                  {t("Copy")}
+                                </Button>
+                              </InlineStack>
+                              <Text as="p" variant="bodySm">
+                                {socialFetcher.data.social[key]}
+                              </Text>
+                            </BlockStack>
+                          </Box>
+                        ) : null,
                       )}
                     </BlockStack>
-                  </Card>
-                )}
-              </BlockStack>
-            </Box>
-          </Layout.Section>
-        </Layout>
+                  )}
+                  {socialFetcher.data?.error && (
+                    <Text as="p" variant="bodySm" tone="critical">
+                      {socialFetcher.data.error}
+                    </Text>
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Product facts, as Shopify holds them. */}
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    {t("In Shopify")}
+                  </Text>
+                  <InlineStack gap="200" wrap>
+                    <Badge tone={String(product.status).toUpperCase() === "ACTIVE" ? "success" : "attention"}>{product.status}</Badge>
+                    {product.productType ? <Badge>{product.productType}</Badge> : null}
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {[`$${product.variants[0]?.price || "0.00"}`, product.vendor || t("No vendor")].join(" · ")}
+                  </Text>
+                  {product.tags.length > 0 && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("Tags:")} {product.tags.join(", ")}
+                    </Text>
+                  )}
+                  <Button variant="plain" size="slim" url={`shopify://admin/products/${product.id.split("/").pop()}`} target="_top">
+                    {t("Open in Shopify")}
+                  </Button>
+                </BlockStack>
+              </Card>
+            </BlockStack>
+          </div>
+        </InlineGrid>
       </BlockStack>
 
       <Modal
@@ -2611,7 +2311,7 @@ export default function ProductGeneratePage() {
       >
         <Modal.Section>
           <Text as="p" variant="bodyMd">
-           {t("This will publish straight to your live storefront without a review step. You can turn this off in Settings.")}
+            {t("This will publish straight to your live storefront without a review step. You can turn this off in Settings.")}
           </Text>
         </Modal.Section>
       </Modal>
