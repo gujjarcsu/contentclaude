@@ -48,9 +48,11 @@ describe("every Optimize entry point goes to the same place", () => {
     ).toBe(0);
   });
 
-  it("both Home entry points use the shared deep link", () => {
+  it("Home's one Optimize entry point uses the shared deep link", () => {
+    // Redesign (Nov 2026): the "Optimize your store" strip under the stats is
+    // gone (it duplicated the primary); the primary is the single entry point.
     const deepLinks = [...home.matchAll(/navigate\("\/app\/products\?optimize=1"\)/g)];
-    expect(deepLinks.length).toBe(2);
+    expect(deepLinks.length).toBe(1);
   });
 
   it("the deep link actually opens the confirmation", () => {
