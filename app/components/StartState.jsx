@@ -382,7 +382,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
               <InlineStack key={b.key} align="space-between" blockAlign="center" wrap gap="300">
                 <BlockStack gap="050">
                   <Text as="p" variant="bodyMd">
-                    {blockerLine(b, t)}
+                    {blockerLine(b, t, { draftsBelow: true })}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     {b.grade === "blocking" ? t("A surface cannot list these as they stand.") : t("Listed, but shown worse.")}

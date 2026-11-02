@@ -12,7 +12,7 @@
  *   - severity is a word, not only a colour: the icon has an accessible label;
  *   - a row with nothing to do has no button, never a disabled one.
  */
-import { BlockStack, InlineStack, Box, Text, Button, Icon, Divider } from "@shopify/polaris";
+import { BlockStack, InlineStack, InlineGrid, Box, Text, Button, Icon, Divider } from "@shopify/polaris";
 import { AlertDiamondIcon, AlertTriangleIcon, InfoIcon, CheckCircleIcon } from "@shopify/polaris-icons";
 import { useT } from "../i18n/react.jsx";
 
@@ -60,7 +60,11 @@ export function IssueList({ items, emptyText }) {
                   <Icon source={sev.icon} tone={sev.tone} accessibilityLabel={severityLabel[row.severity] ?? severityLabel.info} />
                 </Box>
                 <Box width="100%">
-                  <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+                  {/* Text grows, the action hugs the right edge on every row —
+                      a button that sits beside a short sentence and under a
+                      long one reads as two different components. On a phone
+                      the action drops under the text. */}
+                  <InlineGrid columns={{ xs: "1fr", sm: "1fr auto" }} gap="300" alignItems="center">
                     <BlockStack gap="050">
                       <Text as="p" variant="bodyMd" fontWeight="medium">
                         {row.title}
@@ -83,7 +87,7 @@ export function IssueList({ items, emptyText }) {
                         </Button>
                       ) : null}
                     </InlineStack>
-                  </InlineStack>
+                  </InlineGrid>
                 </Box>
               </InlineStack>
             </Box>

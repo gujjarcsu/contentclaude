@@ -29,7 +29,8 @@ export const BLOCKER_GROUPS = Object.freeze([
   {
     key: "openai·description·blocking",
     grade: "blocking",
-    line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no description — the OpenAI product feed cannot list {n, plural, one {it} other {them}}. The first three are being written below.", { n }),
+    line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no description — the OpenAI product feed cannot list {n, plural, one {it} other {them}}.", { n }),
+    draftsFirst: true,
     fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
@@ -59,7 +60,8 @@ export const BLOCKER_GROUPS = Object.freeze([
   {
     key: "openai·description·degrading",
     grade: "degrading",
-    line: (n, t = enT) => t("{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote. The first three are being written below.", { n }),
+    line: (n, t = enT) => t("{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote.", { n }),
+    draftsFirst: true,
     fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
@@ -128,12 +130,19 @@ export function blockerLines(tally, { passwordProtected = false, max = 3, t = en
  * copy is English (and the start payload is cached), so a screen translates
  * here from the blocker's key and count rather than trusting a stored line.
  */
-export function blockerLine(b, t = enT) {
+export function blockerLine(b, t = enT, { draftsBelow = false } = {}) {
   if (!b) return "";
   if (b.key === PASSWORD_BLOCKER.key) return t(PASSWORD_BLOCKER.line);
   const g = BLOCKER_GROUPS.find((x) => x.key === b.key);
-  return g ? g.line(Number(b.count) || 0, t) : (b.line ?? "");
+  if (!g) return b.line ?? "";
+  const line = g.line(Number(b.count) || 0, t);
+  // Only the first-run screen has the drafts under this sentence; Home does
+  // not, so Home never says "below" (L5 — a sentence is true where it is shown).
+  return draftsBelow && g.draftsFirst ? `${line} ${t(FIRST_THREE_NOTE)}` : line;
 }
+
+/** Appended to a description blocker on the screen where the three drafts really are underneath. */
+export const FIRST_THREE_NOTE = T("The first three drafts are being written below.");
 
 /** The sentence that names the subscription. One place, so every screen agrees. */
 export const WATCH_FROM_HERE = Object.freeze({

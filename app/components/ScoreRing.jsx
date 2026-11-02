@@ -42,7 +42,9 @@ export function ScoreRing({ value, size = "medium", label, caption }) {
   const font = FONT[size] ?? FONT.medium;
   const r = (px - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const n = Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Math.round(Number(value)))) : null;
+  // null, undefined and "" are "not scored" — Number(null) is 0, and a ring
+  // that says 0 for a store never scored is a measurement that was never made (L3).
+  const n = value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Math.max(0, Math.min(100, Math.round(Number(value))));
   const band = n === null ? null : scoreBand(n);
   const dash = n === null ? 0 : (c * n) / 100;
   const name = n === null ? t("{label}: not scored yet", { label: label ?? t("Score") }) : t("{label}: {n} out of 100", { label: label ?? t("Score"), n });
@@ -51,7 +53,8 @@ export function ScoreRing({ value, size = "medium", label, caption }) {
     <BlockStack gap="100" inlineAlign="center">
       <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`} role="img" aria-label={name}>
         <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={stroke} style={{ stroke: "var(--p-color-border-secondary)" }} />
-        {n !== null && (
+        {/* No arc at 0: a zero-length round-capped stroke still draws a dot. */}
+        {n !== null && n > 0 && (
           <circle
             cx={px / 2}
             cy={px / 2}

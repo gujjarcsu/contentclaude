@@ -96,7 +96,8 @@ describe("wiring", () => {
     // Redesign (Nov 2026): Home leads with "what to fix first" on every load,
     // so the blockers are read unconditionally (one indexed query, never throws).
     expect(home).toMatch(/const blockers = await blockersFor\(shop\);/);
-    expect(start).toMatch(/\{blockerLine\(b, t\)\}/); // D1: the line is made where it is shown, in the merchant\'s language // Phase 12 A4: also until the first publish, for the findings card
+    expect(start).toMatch(/\{blockerLine\(b, t, \{ draftsBelow: true \}\)\}/); // D1: the line is made where it is shown, in the merchant's language; the "written below" note only where the drafts are below
+    expect(home).not.toMatch(/draftsBelow/); // Home has no drafts under the line, so it never says "below"
   });
 
   it("blockersFor never throws — the first run must render whether or not the walk finished", () => {
@@ -105,5 +106,17 @@ describe("wiring", () => {
     expect(m).not.toBeNull();
     expect(m[0]).toMatch(/try \{/);
     expect(m[0]).toMatch(/return \[\];/);
+  });
+});
+
+describe("the 'written below' note", () => {
+  it("is appended only where the drafts really are below, and only to the description groups", async () => {
+    const { blockerLine, FIRST_THREE_NOTE } = await import("../../app/utils/firstRun.js");
+    const desc = { key: "openai·description·blocking", grade: "blocking", count: 2 };
+    const gtin = { key: "openai·gtin·degrading", grade: "degrading", count: 3 };
+    expect(blockerLine(desc)).toBe("2 products have no description — the OpenAI product feed cannot list them.");
+    expect(blockerLine(desc, undefined, { draftsBelow: true })).toBe(`2 products have no description — the OpenAI product feed cannot list them. ${FIRST_THREE_NOTE}`);
+    expect(blockerLine(gtin, undefined, { draftsBelow: true })).not.toContain(FIRST_THREE_NOTE);
+    expect(BLOCKER_GROUPS.filter((g) => g.draftsFirst).map((g) => g.key)).toEqual(["openai·description·blocking", "openai·description·degrading"]);
   });
 });

@@ -235,29 +235,16 @@ describe("what the dashboard is given to render", () => {
     hasSeenADraft();
   });
 
-  it("reports the shop's own name, not a placeholder", async () => {
-    prisma.brandVoice.findUnique.mockResolvedValue({
-      storeName: "A shop",
-      targetAudience: "",
-      sampleContent: "",
-    });
+  // Redesign (Nov 2026): Home no longer names the store anywhere (no greeting,
+  // no name in the subtitle), so the loader returns no storeName and makes no
+  // live-name call. The two tests that guarded the greeting's name — "the shop's
+  // own name, not a placeholder" and "NO name rather than the raw handle" — are
+  // retired with it; tests/routes/firstRunClasses.test.js pins the absence.
+  it("gives the dashboard no store name at all and never looks one up", async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue({ storeName: "A shop", targetAudience: "", sampleContent: "" });
     const r = await land();
-    expect(r.data.storeName).toBe("A shop");
+    expect("storeName" in r.data).toBe(false);
     expect(r.data.hasBrandVoice).toBe(true);
-  });
-
-  it("gives the hero NO name rather than the raw handle when none is known", async () => {
-    // CHANGED 2026-09-14. This test previously asserted `storeName === "brand-new"`
-    // — the shop handle — and so encoded the bug rather than guarding against it.
-    // Seen in production: navaal-ttv-03 was greeted "Welcome back, navaal-ttv-03!".
-    // The same value also authors published blog posts, so the handle reached a
-    // merchant's public storefront.
-    //
-    // Now the loader returns null when neither Shopify's live name nor a brand
-    // name the merchant chose is available, and the hero renders "Welcome back!",
-    // which is always true.
-    const r = await land();
-    expect(r.data.storeName).toBeNull();
   });
 
   it("a brand voice of empty strings is not reported as configured", async () => {
