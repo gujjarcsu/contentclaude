@@ -64,6 +64,7 @@ const CATALOGUE_ONLY = [
   "app/utils/support.js",
   "app/utils/jobMessages.js",
   "app/utils/geoRubric.js",
+  "app/utils/fixRows.js",
   "app/utils/productState.js",
   "app/utils/language.js",
   "app/utils/weeklyReport.server.js",

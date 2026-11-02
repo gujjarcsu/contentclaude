@@ -31,7 +31,7 @@ export const BLOCKER_GROUPS = Object.freeze([
     grade: "blocking",
     line: (n, t = enT) => t("{n, plural, one {# product has} other {# products have}} no description — the OpenAI product feed cannot list {n, plural, one {it} other {them}}.", { n }),
     draftsFirst: true,
-    fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
+    fix: { label: T("Write descriptions in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·image_link·blocking",
@@ -62,7 +62,7 @@ export const BLOCKER_GROUPS = Object.freeze([
     grade: "degrading",
     line: (n, t = enT) => t("{n, plural, one {# description is} other {# descriptions are}} too short for an answer to quote.", { n }),
     draftsFirst: true,
-    fix: { label: T("Write the rest in bulk"), to: "/app/fix", needsBulk: true },
+    fix: { label: T("Rewrite them in bulk"), to: "/app/fix", needsBulk: true },
   },
   {
     key: "openai·image alt·degrading",

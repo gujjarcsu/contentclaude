@@ -16,9 +16,10 @@ import { Text, BlockStack } from "@shopify/polaris";
 import { scoreBand } from "../utils/scoreBands.js";
 import { useT } from "../i18n/react.jsx";
 
-const SIZES = { small: 56, medium: 80, large: 112 };
-const STROKE = { small: 5, medium: 7, large: 9 };
-const FONT = { small: 16, medium: 22, large: 30 };
+// xs is for a table row (the Audit's product breakdown); it has no caption.
+const SIZES = { xs: 36, small: 56, medium: 80, large: 112 };
+const STROKE = { xs: 4, small: 5, medium: 7, large: 9 };
+const FONT = { xs: 12, small: 16, medium: 22, large: 30 };
 
 /** The fill colour for a band — Polaris tokens so the ring matches the admin's badges. */
 const BAND_COLOR = {
@@ -30,7 +31,7 @@ const BAND_COLOR = {
 /**
  * @param {object} props
  * @param {number|null} props.value  0–100, or null for "not scored yet" (an empty ring and a dash)
- * @param {"small"|"medium"|"large"} [props.size]
+ * @param {"xs"|"small"|"medium"|"large"} [props.size]
  * @param {string} [props.label]   what the number is ("Search readiness"); read by screen readers
  * @param {string} [props.caption] the scope, shown under the ring in six words or fewer
  * @param {string} [props.max]     the text after the number inside the ring; default none

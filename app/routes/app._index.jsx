@@ -27,8 +27,8 @@ import { ScoreRing } from "../components/ScoreRing.jsx";
 import { IssueList } from "../components/IssueList.jsx";
 import { StatStrip } from "../components/StatStrip.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
-import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
-import { canRunFix, blockerLine } from "../utils/firstRun.js";
+import { getEntitlements } from "../utils/billing-plans.js";
+import { blockerRows } from "../utils/fixRows.js";
 import { authenticate } from "../shopify.server.js";
 import { GeoRubric } from "../components/GeoRubric.jsx";
 import prisma from "../db.server.js";
@@ -448,31 +448,10 @@ function ScoreSummary({ score, navigate }) {
  * refuses is worse than an honest label.
  */
 function whatToFixFirst({ blockers, attention, entitlements, t, navigate }) {
-  const rows = [];
+  // The blocker rows are built by the one mapping every screen shares
+  // (utils/fixRows.js), so Home and the Audit say the same thing the same way.
+  const rows = blockerRows(blockers, { entitlements, t, navigate });
   const list = Array.isArray(blockers) ? blockers : [];
-  for (const b of list) {
-    const fix = b.fix;
-    let action = null;
-    let lockedPlan = null;
-    if (fix) {
-      if (canRunFix(fix, entitlements)) {
-        action = fix.external ? { content: t(fix.label), url: fix.to, external: true } : { content: t(fix.label), onAction: () => navigate(fix.to) };
-      } else {
-        // A fix this plan cannot run: the row says which plan can, in words,
-        // and the button goes to the plans page — never a dark button that
-        // refuses (Phase 15, firstRun.js).
-        lockedPlan = cheapestPlanLabelWith("bulkJobs");
-        action = { content: t("See plans"), onAction: () => navigate("/app/plans") };
-      }
-    }
-    rows.push({
-      id: b.key,
-      severity: b.grade === "blocking" ? "critical" : "warning",
-      title: blockerLine(b, t),
-      detail: lockedPlan ? t("Fixing many products at once is on {plan} and above. Everything listed here stays visible on every plan, and you can still write for one product at a time from its own page.", { plan: lockedPlan }) : undefined,
-      action,
-    });
-  }
 
   if (attention?.available) {
     const lines = homeAttentionLines(attention, t);

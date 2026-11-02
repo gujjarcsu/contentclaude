@@ -103,22 +103,17 @@ describe("the empty states point somewhere", () => {
 });
 
 describe("status is never carried by colour or a glyph alone", () => {
-  it("the audit table's pass and fail badges carry words", () => {
+  it("the audit table says what a product is missing, in words, and never a bare glyph", () => {
+    // Redesign (Nov 2026): the four pass/fail columns (roughly 400 badges on a
+    // 100-product store) became one "Missing" column that names only what is
+    // wrong, and a row with nothing wrong says "Nothing missing". Status is
+    // still a word, never a tick or a cross.
     const src = code(SCREENS.audit);
-    expect(src).toMatch(/label\}: yes/);
-    expect(src).toMatch(/label\}: no/);
-    // The bare glyphs are gone. Roughly 400 of them rendered on a 100-product
-    // store, with nothing for a screen reader to announce.
-    expect(src).not.toMatch(/<Badge tone="success">✓<\/Badge>/);
-    expect(src).not.toMatch(/<Badge tone="critical">✗<\/Badge>/);
-  });
-
-  it("every badge is given a label by its caller", () => {
-    const src = code(SCREENS.audit);
-    const uses = src.match(/<CheckIcon[^/]*\/>/g) || [];
-    expect(uses.length).toBeGreaterThan(0);
-    for (const u of uses) {
-      expect(u, `a CheckIcon has no label: ${u}`).toMatch(/label="/);
+    for (const label of ["No description", "No page title", "No search description", "No images", "Alt text missing", "Nothing missing"]) {
+      expect(src, `the Missing column no longer says "${label}"`).toContain(label);
     }
+    expect(src).not.toMatch(/<Badge[^>]*>✓<\/Badge>/);
+    expect(src).not.toMatch(/<Badge[^>]*>✗<\/Badge>/);
+    expect(src).not.toMatch(/CheckIcon/);
   });
 });
