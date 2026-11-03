@@ -148,14 +148,11 @@ describe("one bulk action, one name", () => {
   it("the row action opens the product page instead of submitting a bulk job", () => {
     // It used to submit a bulk job, so on Free and Starter the most obvious
     // button on the row answered "Bulk generation requires Growth".
-    // Redesign (Nov 2026): the list is an IndexTable; the row's one button is
-    // rowAction(), which navigates by state (rowActionHref) and never submits.
     const src = read("app/routes/app.products.jsx");
-    const block = src.slice(src.indexOf("const rowAction = ("), src.indexOf("const rowAction = (") + 900);
-    expect(block).toContain("navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId))");
-    expect(block).toContain("rowActionLabel(id, description)");
+    const block = src.slice(src.indexOf("shortcutActions={["), src.indexOf("shortcutActions={[") + 900);
+    expect(block).toContain('content: "Generate"');
+    expect(block).toContain("navigate(`/app/products/${numericId}`)");
     expect(block).not.toContain("buildBulkFormData");
-    expect(src).toContain("onClick={() => navigate(`/app/products/${numericId}`)}"); // the row itself opens the product page
   });
 
   it("Products has exactly one page primary action, and it is the bulk action", () => {
