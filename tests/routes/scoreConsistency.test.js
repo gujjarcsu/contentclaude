@@ -83,9 +83,7 @@ describe("A2 — one rubric behind the store score", () => {
 
 describe("A2 — the audit reads the same rubric, fields and mapper as Home", () => {
   it("the audit scores with calculateGeoScore, not calculateSeoScore", () => {
-    // The rubric result is kept (its breakdown feeds the dimension rows), and
-    // the score is read from it — never from calculateSeoScore.
-    expect(AUDIT_SRC).toMatch(/const geo = calculateGeoScore\(scorable\);\s*const score = geo\.score;/);
+    expect(AUDIT_SRC).toMatch(/const score = calculateGeoScore\(scorable\)\.score/);
     // calculateSeoScore may still be called, but only for its CHECKS.
     expect(AUDIT_SRC).not.toMatch(/const \{ score, checks \} = calculateSeoScore/);
   });

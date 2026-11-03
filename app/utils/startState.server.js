@@ -69,7 +69,7 @@ export const START_SCAN_TTL_S = 120;
 export const SCORED_PRODUCT_FIELDS = `
       id title description productType vendor tags
       seo { title description }
-      featuredMedia { preview { image { url altText } } }
+      featuredMedia { preview { image { url } } }
       media(first: 3) { edges { node { mediaContentType ... on MediaImage { image { altText } } } } }
       variants(first: 3) { edges { node { price } } }`;
 
