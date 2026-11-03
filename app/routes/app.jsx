@@ -3,7 +3,7 @@ import { useT } from "../i18n/react.jsx";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { FooterHelp, Link, Box, ProgressBar, InlineStack, Badge, Button } from "@shopify/polaris";
+import { FooterHelp, Link, Banner, Box, ProgressBar } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { I18nProvider, useLocaleLoaded } from "../i18n/react.jsx";
 import { normaliseUiLocale, createT, polarisFor } from "../i18n/index.js";
@@ -152,25 +152,21 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
      percentage — a screen reader announced a long string that changed every 3.5
      seconds.
 
-     Redesign (Nov 2026) — it was then a full-width info Banner on every page,
-     the loudest thing on the screen for the whole length of a run. The top
-     apps show background work as one small indicator (Avada: a "1 running"
-     button with a popover). This is that: one line, right-aligned, a Badge
-     with the count and the percent, a progress bar the width of the text, and
-     a plain button to the Bulk runs page. Same data, same polling. */
+     It is now a Polaris Banner with a Polaris ProgressBar and a real Button.
+     The rotating messages are gone: five emoji sentences cycling every 3.5
+     seconds said nothing the progress bar does not, and "Almost there" was a
+     claim the code had no basis for. */
   return (
     <Box paddingBlockStart="200" paddingInlineStart="400" paddingInlineEnd="400">
-      <InlineStack align="end" blockAlign="center" gap="300">
-        <Badge tone="info" progress="partiallyComplete">
-          {totalProducts > 0 ? t("Writing {completedProducts} of {totalProducts} products", { completedProducts, totalProducts }) : t("Writing content")}
-        </Badge>
-        <Box width="120px">
+      <Banner
+        tone="info"
+        title={totalProducts > 0 ? t("Generating content — {completedProducts} of {totalProducts} products", { completedProducts, totalProducts }) : t("Generating content")}
+        action={{ content: t("View progress"), onAction: () => navigate("/app/jobs") }}
+      >
+        <Box paddingBlockStart="200">
           <ProgressBar progress={pct} size="small" tone="primary" />
         </Box>
-        <Button variant="plain" onClick={() => navigate("/app/jobs")}>
-          {t("View progress")}
-        </Button>
-      </InlineStack>
+      </Banner>
     </Box>
   );
 }
@@ -202,21 +198,15 @@ export default function App() {
               both pointed at /app, so the sidebar offered the same destination
               twice under two different words.
 
-              Redesign (Nov 2026) — five became six: Audit joined the sidebar.
-              All five top apps in the category (Tapita, Avada, Smart SEO,
-              StoreSEO, SEOWILL) put score → issues → fix as its own
-              destination; here it was a card on Home, and Home now leads with
-              the findings instead. Recorded in tests/routes/navigation.test.js.
-
-              Home · Audit · Products · Review · Blog · Settings.
+              Home · Products · Review · Blog · Settings.
 
               NOTHING IS DELETED. Every merged route still exists, still works,
               and is still reachable from inside the app: Optimize is the primary
-              action on Products, Collections is a tab there, Results and
-              Analytics are reached from Audit, Jobs is reached from the
-              progress indicator, and Plans is a section in Settings and the
-              target of every usage card. Removing the routes themselves is the
-              owner's call and waits for it.
+              action on Products, Collections is a tab there, SEO Audit and
+              Results and Analytics are cards on Home, Jobs is reached from the
+              progress banner, and Plans is a section in Settings and the target
+              of every usage card. Removing the routes themselves is the owner's
+              call and waits for it.
 
               rel="home" stays on the first item: without a home link Shopify
               points the app title at "/", and a bare "/" used to reach the login
@@ -224,17 +214,15 @@ export default function App() {
           <s-link href="/app" rel="home">
            {t("Home")}
           </s-link>
-          <s-link href="/app/seo-audit">{t("Audit")}</s-link>
           <s-link href="/app/products">{t("Products")}</s-link>
           <s-link href="/app/review">{t("Review")}</s-link>
           <s-link href="/app/blog">{t("Blog")}</s-link>
           <s-link href="/app/settings">{t("Settings")}</s-link>
-          {/* NO "Get help" here, deliberately. The sidebar is six items and
+          {/* NO "Get help" here, deliberately. The sidebar is five items and
               every label is one plain word — a decision from an earlier phase
               that cut it from thirteen, and navigation.test.js enforces both.
-              Audit is the one addition since, made as a recorded decision in
-              that test, not by loosening it; a "Get help" item was tried once,
-              two tests went red, and that is how false green #3 is made.
+              I added a sixth item, two tests went red, and loosening them to fit
+              my change is exactly how false green #3 is manufactured.
 
               Support is reachable from the FOOTER, which renders on every page
               of the app, and from the Settings page. That is the conventional

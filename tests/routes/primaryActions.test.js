@@ -53,7 +53,7 @@ describe("no screen renders a crowd of primaries", () => {
   it("Home has none of its own — its primary is the Page action", () => {
     // Six at once, for the merchant least able to tell them apart.
     expect(primaryCount("app/routes/app._index.jsx")).toBe(0);
-    expect(code("app/routes/app._index.jsx")).toMatch(/<Page title="Home" subtitle=\{subtitle\} primaryAction=\{primaryAction\}/); // `code` unwraps title={t("Home")} to title="Home"
+    expect(code("app/routes/app._index.jsx")).toMatch(/<Page primaryAction=\{primaryAction\}/);
   });
 
   it("the theme-editor action is not a primary in two components at once", () => {

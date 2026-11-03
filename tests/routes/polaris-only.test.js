@@ -61,18 +61,14 @@ describe("2.4 — the marketing components are gone, with no references left", (
     expect(offenders).toEqual([]);
   });
 
-  it("no explainer banner survives anywhere — Home shows the result, not the pitch", () => {
-    // Redesign (Nov 2026): the last explainer ("Written for Google and for AI
-    // search") left Home too. A merchant who has installed does not need the
-    // app described to them; the five top apps open with a score and a list.
+  it("one explainer banner survives, and it is on Home only", () => {
     const withBanner = shipped().filter((f) => read(f).includes("Written for Google and for AI search"));
-    expect(withBanner).toEqual([]);
+    expect(withBanner).toEqual(["app/routes/app._index.jsx"]);
   });
 
-  it("the setup guide's dismissal sticks for good, not just for this page view", () => {
-    // A card that returns on every load is not dismissible. The flag is
+  it("the explainer can be dismissed for good, not just for this page view", () => {
+    // A banner that returns on every load is not dismissible. The flag is
     // stored per shop, so it also stays dismissed on the merchant's phone.
-    // (geoNoteDismissedAt: the explainer's flag, repurposed for the guide.)
     const src = read("app/routes/app._index.jsx");
     expect(src).toMatch(/geoNoteDismissed/);
     expect(src).toMatch(/geoNoteDismissedAt/);

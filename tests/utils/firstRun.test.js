@@ -93,9 +93,7 @@ describe("wiring", () => {
     expect(start).toMatch(/start\.blockers/);
     expect(start).toMatch(/holding this store back/);
     const home = code(readFileSync("app/routes/app._index.jsx", "utf8"));
-    // Redesign (Nov 2026): Home leads with "what to fix first" on every load,
-    // so the blockers are read unconditionally (one indexed query, never throws).
-    expect(home).toMatch(/const blockers = await blockersFor\(shop\);/);
+    expect(home).toMatch(/isFirstRun \|\| beforeFirstPublish \? await blockersFor\(shop\) : \[\]/);
     expect(start).toMatch(/\{blockerLine\(b, t\)\}/); // D1: the line is made where it is shown, in the merchant\'s language // Phase 12 A4: also until the first publish, for the findings card
   });
 

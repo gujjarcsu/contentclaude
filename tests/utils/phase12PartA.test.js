@@ -179,21 +179,13 @@ describe("A3 — one change window on Home", () => {
 });
 
 describe("A4 — the first screen is a result, never a task", () => {
-  it("Home leads with the score and what to fix first; the theme step is the last setup-guide step, open only once the earlier ones are done", () => {
-    // Redesign (Nov 2026): the findings card and the two theme notices became
-    // rows of one setup guide. The guide opens its first unfinished step, and
-    // the theme step is fourth, so before the first publish it is a closed
-    // line (A4: a result before a task) and after it, the open step with the
-    // same deep links and the same confirm post (App Store 5.1.3).
+  it("before the first publish Home leads with the findings card and the theme step is one dismissible line; after it, the setup card", () => {
     const h = src("app/routes/app._index.jsx");
     expect(h).toMatch(/const beforeFirstPublish = !!shopRow && !shopRow\.firstPublishAt;/);
-    expect(h).toMatch(/<ScoreSummary score=\{storeScore\}/);
-    expect(h).toMatch(/<IssueList items=\{fixRows\}/);
-    expect(h).toMatch(/id: "theme",[\s\S]{0,400}done: embedConfirmed,[\s\S]{0,100}extra: <ThemeStepActions shopDomain=\{shopDomain\} \/>/);
-    expect(h.indexOf('id: "review"')).toBeLessThan(h.indexOf('id: "theme"'));
+    expect(h).toMatch(/\{beforeFirstPublish && <FirstRunFindingsCard findings=\{findings\} blockers=\{blockers\} scanned=\{storeScore\?\.scanned \?\? null\} navigate=\{navigate\} \/>\}/);
+    expect(h).toMatch(/\{beforeFirstPublish \? <EmbedLaterNote confirmed=\{embedConfirmed\} \/> : <EmbedSetupCard shopDomain=\{shopDomain\} confirmed=\{embedConfirmed\} \/>\}/);
+    expect(h.indexOf("<FirstRunFindingsCard")).toBeLessThan(h.indexOf("<EmbedLaterNote"));
     const e = src("app/components/EmbedSetupCard.jsx");
-    expect(e).toMatch(/export function ThemeStepActions/);
-    expect(e).toMatch(/action="\/app\/embed-status"/);
     expect(e).toMatch(/export function EmbedLaterNote/);
     expect(e).toMatch(/onDismiss=\{\(\) => setDismissed\(true\)\}/);
     const c = src("app/components/FirstRunFindingsCard.jsx");

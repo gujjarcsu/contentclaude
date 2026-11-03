@@ -97,14 +97,8 @@ describe("FR8 — a row must not assert a live per-product number that is the st
     expect(uniformScoreNote([{ scoreBefore: 21 }, { scoreBefore: 34 }], 12)).toBeNull();
   });
 
-  it("the findings card left Home; its three drafts are the page's primary action instead", () => {
-    // Redesign (Nov 2026): three rows that all scored the same carried no
-    // information (see the uniformScoreNote above). Home now leads with the
-    // score ring and "what to fix first"; the three first-run drafts surface as
-    // the primary "Review N drafts". The card itself stays for the Start state.
-    const home = strip(read("app/routes/app._index.jsx"));
-    expect(home).not.toMatch(/<FirstRunFindingsCard/);
-    expect(home).toMatch(/Review \{n, plural, one \{# draft\} other \{# drafts\}\}/);
+  it("Home hands the card the sampled count the note needs", () => {
+    expect(strip(read("app/routes/app._index.jsx"))).toMatch(/<FirstRunFindingsCard[^>]*scanned=\{storeScore\?\.scanned/);
   });
 });
 

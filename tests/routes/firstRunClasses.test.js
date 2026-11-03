@@ -38,16 +38,12 @@ describe("A2 — the name comes from Shopify, per session; a first visit is not 
     expect(s).not.toMatch(/SHOP_NAME_TTL_SECONDS = 3600/);
   });
 
-  it("Home passes the session id and names the store in the title row; there is no greeting at all", () => {
-    // Redesign (Nov 2026): the greeting band is gone (a noun title, as the
-    // studied admin screens and the five top apps' inner pages do). The live
-    // store name still comes from Shopify per session and sits in the subtitle,
-    // so a renamed store is never addressed by its old name.
+  it("Home passes the session id and greets a first visit with Welcome, not Welcome back", () => {
     const h = src("app/routes/app._index.jsx");
     expect(h).toMatch(/getLiveShopName\(admin, shop, \{ sessionId: session\?\.id/);
-    expect(h).not.toMatch(/Welcome back/);
+    expect(h).toMatch(/firstVisit \? "Welcome" : "Welcome back"/);
     expect(h).toMatch(/FIRST_VISIT_MS = 24 \* 3600 \* 1000/);
-    expect(h).toMatch(/const subtitle = \[\s*storeName/);
+    expect(h).not.toMatch(/`Welcome back, \$\{storeName\}!`/);
   });
 });
 
