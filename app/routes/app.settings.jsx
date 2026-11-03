@@ -378,7 +378,8 @@ export default function SettingsPage() {
   return (
     <Page
       title={t("Settings")}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      subtitle={t("Brand voice, autopilot, and content templates")}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         {actionData?.error && !actionData?.success && (

@@ -451,7 +451,7 @@ export default function CollectionsPage() {
 
   if (collections.length === 0) {
     return (
-      <Page title={t("Collections")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
+      <Page title={t("Collections")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
         <EmptyState heading={t("No collections found")} image="/empty-collections.svg">
           <p>{t("Create collections in your Shopify admin, then come back to generate descriptions.")}</p>
         </EmptyState>
@@ -463,7 +463,7 @@ export default function CollectionsPage() {
     <Page
       title={t("Collections")}
       subtitle={collectionsSubtitle}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
         {/* Group 2.1 — a throttled or failed read used to render an empty list

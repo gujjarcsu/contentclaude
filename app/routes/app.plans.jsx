@@ -718,7 +718,7 @@ export default function PlansPage() {
     <Page
       title={t("Plans & Billing")}
       subtitle={t("Upgrade anytime · {trialLine} on all paid plans · Cancel anytime", { trialLine: featureText(trialLine, t) })}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
         {billingNotice === "upgraded" && plan.planName !== "free" && (

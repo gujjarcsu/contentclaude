@@ -20,10 +20,9 @@ import {
   Checkbox,
   ButtonGroup,
   Icon,
-  Collapsible,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
-import { BlogIcon, FileIcon, CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { BlogIcon, FileIcon, CheckCircleIcon, LightbulbIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import { getLiveShopName } from "../utils/shopName.server.js";
 import { authorName as resolveAuthorName } from "../utils/shopName.js";
@@ -375,7 +374,6 @@ export default function BlogPage() {
   const [addFaq, setAddFaq] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [blogView, setBlogView] = useState("preview"); // "preview" | "html"
-  const [tipsOpen, setTipsOpen] = useState(false);
 
   // Combine the free-text instructions with the optional toggles into one field.
   const combinedInstructions = [
@@ -440,14 +438,15 @@ export default function BlogPage() {
   ];
 
   return loadingThisRoute ? (
-    <AppSkeleton title={t("Blog")} sections={2} layout="twoThird" />
+    <AppSkeleton title={t("Blog Generator")} sections={2} layout="twoThird" />
   ) : (
     <Page
-      title={t("Blog")}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      title={t("Blog Post Generator")}
+      subtitle={t("Generate SEO-friendly blog posts in your brand voice")}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
       secondaryActions={[
         {
-          content: t("Posts ({length})", { length: t.number(recentPosts.length) }),
+          content: t("My Blog Posts ({length})", { length: recentPosts.length }),
           onAction: () => navigate("/app/blog/posts"),
         },
       ]}
@@ -459,12 +458,12 @@ export default function BlogPage() {
           </Banner>
         )}
         {actionData?.published && (
-          <Banner tone="success" title={t("Blog post published")}>
+          <Banner tone="success" title={t("Blog Post Published!")}>
             <p>{t("Your blog post has been published to your Shopify store.")}</p>
           </Banner>
         )}
         {actionData?.success && !actionData?.published && (
-          <Banner tone="success" title={t("Draft saved")}>
+          <Banner tone="success" title={t("Blog post generated!")}>
             <p>
              {t("Saved as a draft. Review and edit below, then publish when ready.")}
               {actionData.remaining !== undefined && t(" · {remaining} credits left this month.", { remaining: actionData.remaining })}
@@ -609,14 +608,15 @@ export default function BlogPage() {
                 </BlockStack>
               </Card>
 
-              {/* Tips, behind a plain disclosure — the advice is there when wanted,
-                  not a blue box on every visit. */}
-              <Card>
+              {/* Tips for great posts */}
+              <Box padding="400" background="bg-surface-info" borderRadius="300">
                 <BlockStack gap="200">
-                  <Button variant="plain" size="slim" icon={tipsOpen ? ChevronUpIcon : ChevronDownIcon} onClick={() => setTipsOpen((v) => !v)} ariaExpanded={tipsOpen} ariaControls="blog-tips">
-                    {t("Tips for great posts")}
-                  </Button>
-                  <Collapsible open={tipsOpen} id="blog-tips">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={LightbulbIcon} tone="info" />
+                    <Text as="h2" variant="headingSm">
+                     {t("Tips for great posts")}
+                    </Text>
+                  </InlineStack>
                   <BlockStack gap="100">
                     {/* Group 7.6 — this told a plumbing merchant that "How to wax
                         a snowboard for beginners" beats "snowboards". The example
@@ -640,9 +640,8 @@ export default function BlogPage() {
                      {t("• Turn on")} <strong>FAQ</strong> {t("to add a question-and-answer section.")}
                     </Text>
                   </BlockStack>
-                  </Collapsible>
                 </BlockStack>
-              </Card>
+              </Box>
 
               {/* Usage mini-bar */}
               {(planName === "free" || usagePct >= 50) && (

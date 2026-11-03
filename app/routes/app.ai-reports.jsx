@@ -113,7 +113,7 @@ export default function AiReportsPage() {
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) return <AppSkeleton />;
   return (
-    <Page title={t("The two AI reports you read yourself")} subtitle={t("Neither has an API. We show you where they are and what they mean; what you read is yours.")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
+    <Page title={t("The two AI reports you read yourself")} subtitle={t("Neither has an API. We show you where they are and what they mean; what you read is yours.")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
       <BlockStack gap="400">
         {AI_REPORTS.map((r) => (
           <ReportCard key={r.key} report={r} readings={readings} />

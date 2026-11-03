@@ -41,7 +41,7 @@ import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
-import { ThemeStepActions } from "../components/EmbedSetupCard.jsx";
+import { EmbedSetupCard } from "../components/EmbedSetupCard.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
@@ -823,7 +823,7 @@ export default function ReviewPage() {
 
   if (products.length === 0) {
     return (
-      <Page title={t("Review")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
+      <Page title={t("Review & Publish")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
         {/* After publishing all drafts we land here with a success actionData —
             still the right moment to ask for a review. */}
         <ReviewRequest ask={actionData?.reviewAsk} />
@@ -839,50 +839,41 @@ export default function ReviewPage() {
   }
 
   return loadingThisRoute ? (
-    <AppSkeleton title={t("Review")} sections={2} layout="full" />
+    <AppSkeleton title={t("Review & Publish")} sections={2} layout="full" />
   ) : (
     <Page
-      title={t("Review")}
-      subtitle={t("{n, plural, one {# draft ready} other {# drafts ready}}", { n: products.length })}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      title={t("Review & Publish")}
+      subtitle={t("{n, plural, one {# product} other {# products}} with draft content ready to review", { n: products.length })}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
-        {/* Redesign (Nov 2026): the one-time theme setup lives in Home's setup
-            guide now; here it is a single info row with the same three
-            controls, shown only while the block is not confirmed and no
-            other notice is up. The sentence that explained the interface
-            ("Review each draft, then publish…") is gone. */}
-        {actionData?.error ? (
-          <Banner tone="critical">
-            <p>{actionData.error}</p>
-          </Banner>
-        ) : scopeRefused ? (
+        {scopeRefused && (
           <Banner tone="warning" title={t("That product link was malformed — showing all your drafts")}>
             <Text as="p" variant="bodySm">
               {t("Review scopes to one product by its numeric id (?product=123), not a GID or a handle. Every draft is listed below, so nothing is hidden behind a wrong link.")}
             </Text>
           </Banner>
-        ) : needsCheck?.length > 0 ? (
-          <NeedsCheckBanner items={needsCheck} navigate={navigate} />
-        ) : scopedTo ? (
+        )}
+        {scopedTo && (
           <Banner tone="info" title={t("Showing one product")} action={{ content: t("Show all drafts"), onAction: () => navigate("/app/review") }}>
             <Text as="p" variant="bodySm">
               {t("Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.")}
             </Text>
           </Banner>
-        ) : !embedConfirmed ? (
-          <Banner tone="info" title={t("Show your FAQ content on your product pages")}>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm">
-                {t("The FAQ answers are stored on your products; the FAQ (Navaal) block puts them on the page. The button opens your theme editor with the block ready to add — click Save there, then confirm here.")}
-              </Text>
-              <ThemeStepActions shopDomain={shopDomain} />
-            </BlockStack>
-          </Banner>
-        ) : null}
+        )}
+        <NeedsCheckBanner items={needsCheck} navigate={navigate} />
+        <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />
+        <Banner tone="info">
+          {t("Review each draft, then publish. Published content goes live in your store with AI-search (GEO) FAQ schema attached, in the structured format search engines and AI answer engines read and quote from.")}
+        </Banner>
 
         {actionData?.success && <PublishFailures errors={actionData.errors} />}
+        {actionData?.error && (
+          <Banner tone="critical">
+            <p>{actionData.error}</p>
+          </Banner>
+        )}
 
         {/* Action bar */}
         <Card>
@@ -1056,7 +1047,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
                   </Tooltip>
                 )}
               </InlineStack>
-              <InlineStack gap="100" align="start" wrap>
+              <InlineStack gap="200">
                 {/* Merchant-facing names. These badges used to print the raw
                     storage keys — "metaTitle", "metaDescription". */}
                 {contentTypes.map((ct) => (

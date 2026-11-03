@@ -338,7 +338,7 @@ export default function OptimizePage() {
     <Page
       title={t("Optimize store")}
       subtitle={t("Generate AI content for products missing a description — or improve the descriptions you already have")}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
+      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         {actionData?.error && (
