@@ -116,17 +116,6 @@ function pluralCategory(locale, n) {
   }
 }
 
-/** A plural count with the locale's digit grouping; anything that is not a finite number is left alone. */
-function formatCount(n, locale) {
-  const num = typeof n === "number" ? n : Number(n);
-  if (!Number.isFinite(num) || typeof n === "boolean" || n === "" || n === null) return String(n);
-  try {
-    return new Intl.NumberFormat(locale).format(num);
-  } catch {
-    return String(n);
-  }
-}
-
 /** Fill `{name}` and `{n, plural, …}` in a catalogue value. Pure. */
 export function interpolate(value, vars = {}, locale = DEFAULT_UI_LOCALE) {
   let s = String(value ?? "");
@@ -136,9 +125,7 @@ export function interpolate(value, vars = {}, locale = DEFAULT_UI_LOCALE) {
     for (const m of forms.matchAll(/(=?\w+)\s*\{([^{}]*)\}/g)) table[m[1]] = m[2];
     const exact = table[`=${n}`];
     const chosen = exact ?? table[pluralCategory(locale, n)] ?? table.other ?? "";
-    // `#` is always a count, so it takes the locale's digit grouping
-    // ("10,843 products", "10.843 Produkte"); a non-number passes through as is.
-    return chosen.replace(/#/g, formatCount(n, locale));
+    return chosen.replace(/#/g, String(n));
   });
   s = s.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? String(vars[name]) : m));
   return s;

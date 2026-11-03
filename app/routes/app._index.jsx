@@ -30,7 +30,9 @@ import { SetupGuide } from "../components/SetupGuide.jsx";
 import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { canRunFix, blockerLine } from "../utils/firstRun.js";
 import { authenticate } from "../shopify.server.js";
+import { getLiveShopName } from "../utils/shopName.server.js";
 import { GeoRubric } from "../components/GeoRubric.jsx";
+import { greetingName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -302,12 +304,15 @@ export const loader = async ({ request }) => {
       }
     : null;
 
-  // Redesign (Nov 2026): Home no longer addresses the store by name — not in a
-  // greeting (gone: it greeted renamed stores by their old name, and unnamed
-  // ones by their handle) and not in the subtitle (the admin's own chrome
-  // already names the store, and a long name pushed the subtitle under the
-  // page actions). So the live-name lookup is not made here at all; Blog still
-  // uses it for the author line. See app/utils/shopName.js.
+  // The greeting used to read brandVoice.storeName, captured ONCE at install
+  // and never refreshed, so a renamed store was greeted by its old name for
+  // ever and an unnamed one by its raw handle. Shopify's live name is
+  // authoritative for identifying the store; brandVoice.storeName stays the
+  // merchant's editable brand-voice field. greetingName() returns null when
+  // neither is real, and the hero greets without a name rather than with a bad
+  // one. See app/utils/shopName.js.
+  const liveShopName = await getLiveShopName(admin, shop, { sessionId: session?.id ?? null });
+  const storeName = greetingName(liveShopName, brandVoice?.storeName, shop);
 
   const payload = {
     shopDomain: shop,
@@ -338,6 +343,7 @@ export const loader = async ({ request }) => {
     proof,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
+    storeName,
     firstVisit,
     recentlyCompletedJob: recentlyCompletedJob
       ? {
@@ -429,11 +435,7 @@ function ScoreSummary({ score, navigate }) {
       <ScoreRing value={available ? score.current : null} size="large" label={t("Search readiness")} caption={scopeLine ?? t("Not scored yet")} />
       {changeBadge}
       <GeoRubric />
-      {/* A plain link, not a second dark button: when nothing is waiting the
-          page's own primary action is already "Run audit". */}
-      <Button variant="plain" onClick={() => navigate("/app/seo-audit")}>
-        {available ? t("See the full audit") : t("Score my catalogue")}
-      </Button>
+      <Button onClick={() => navigate("/app/seo-audit")}>{available ? t("Run full audit") : t("Score my catalogue")}</Button>
     </BlockStack>
   );
 }
@@ -453,23 +455,18 @@ function whatToFixFirst({ blockers, attention, entitlements, t, navigate }) {
   for (const b of list) {
     const fix = b.fix;
     let action = null;
-    let lockedPlan = null;
     if (fix) {
       if (canRunFix(fix, entitlements)) {
         action = fix.external ? { content: t(fix.label), url: fix.to, external: true } : { content: t(fix.label), onAction: () => navigate(fix.to) };
       } else {
-        // A fix this plan cannot run: the row says which plan can, in words,
-        // and the button goes to the plans page — never a dark button that
-        // refuses (Phase 15, firstRun.js).
-        lockedPlan = cheapestPlanLabelWith("bulkJobs");
-        action = { content: t("See plans"), onAction: () => navigate("/app/plans") };
+        const plan = cheapestPlanLabelWith("bulkJobs");
+        action = { content: plan ? t("On {plan}", { plan }) : t("See plans"), onAction: () => navigate("/app/plans") };
       }
     }
     rows.push({
       id: b.key,
       severity: b.grade === "blocking" ? "critical" : "warning",
       title: blockerLine(b, t),
-      detail: lockedPlan ? t("Fixing many products at once is on {plan} and above. Everything listed here stays visible on every plan, and you can still write for one product at a time from its own page.", { plan: lockedPlan }) : undefined,
       action,
     });
   }
@@ -588,13 +585,11 @@ function CreditsCard({ plan, usageCount, remaining, usagePct, planLabel }) {
           <Badge tone={plan.planName === "free" ? "attention" : "success"}>{t("{plan} plan", { plan: planLabel })}</Badge>
         </InlineStack>
         <Text id="home-credit-usage" as="p" variant="headingLg" fontWeight="semibold">
-          {t("{usageCount} / {monthlyCredits} used", { usageCount: t.number(usageCount), monthlyCredits: t.number(plan.monthlyCredits) })}
+          {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits: plan.monthlyCredits })}
         </Text>
         <ProgressBar progress={usagePct} tone={usageTone} size="small" ariaLabelledBy="home-credit-usage" />
         <Text as="p" variant="bodySm" tone="subdued">
-          {remaining === 0
-            ? t("You've used all {monthlyCredits} credits for this month. They reset on the 1st.", { monthlyCredits: t.number(plan.monthlyCredits) })
-            : t("{remaining} of {monthlyCredits} left this month.", { remaining: t.number(remaining), monthlyCredits: t.number(plan.monthlyCredits) })}
+          {remaining === 0 ? t("You've used all {monthlyCredits} credits for this month. They reset on the 1st.", { monthlyCredits: plan.monthlyCredits }) : t("{remaining} of {monthlyCredits} left this month.", { remaining, monthlyCredits: plan.monthlyCredits })}
         </Text>
       </BlockStack>
     </Card>
@@ -647,6 +642,7 @@ export default function Dashboard() {
     proof,
     plan,
     usageCount,
+    storeName,
     recentlyCompletedJob,
     shopDomain,
     embedConfirmed,
@@ -705,10 +701,8 @@ export default function Dashboard() {
 
   // The title row names the store, the catalogue and the plan — the facts the
   // greeting band used to carry, without the greeting.
-  // The merchant is inside their own store; the store's name is already on
-  // the admin's own chrome, and with it here the subtitle wraps under the
-  // page actions. Two facts, one line.
   const subtitle = [
+    storeName,
     totalProducts === null ? null : t("{n, plural, one {# product} other {# products}}", { n: totalProducts }),
     t("{plan} plan", { plan: planLabel }),
   ]
@@ -770,25 +764,23 @@ export default function Dashboard() {
           ? t("No products yet")
           : t("Nothing waiting"));
 
-  // Grouped digits ("10,000"), and a count we do not have stays a dash — never "0".
-  const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : t.number(Number(v)));
   const stats = [
-    { id: "ready", label: t("Ready to review"), value: num(draftCount), hint: readyHint, url: "/app/review" },
+    { id: "ready", label: t("Ready to review"), value: draftCount, hint: readyHint, url: "/app/review" },
     {
       id: "published",
       label: t("Published"),
-      value: num(generatedCount),
+      value: generatedCount,
       hint: publishedSubtext({ ok: catalogueOk, inScope: generatedCount, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
       url: "/app/products?tab=published",
     },
-    { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
+    { id: "unwritten", label: t("Not yet written"), value: notOptimizedCount, hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
     {
       id: "catalogue",
       label: t("In your catalogue"),
-      value: num(totalProducts),
+      value: totalProducts === null ? null : totalProducts,
       hint: !countsOk
         ? t("We could not read this from Shopify just now")
-        : [candidateProducts === totalProducts ? null : t("{n} {label}", { n: t.number(candidateProducts), label: candidateLabel }), archivedProducts > 0 ? t("{n} archived not counted", { n: t.number(archivedProducts) }) : null].filter(Boolean).join(" · ") || t("Active products on your Online Store"),
+        : [candidateProducts === totalProducts ? null : t("{n} {label}", { n: candidateProducts, label: candidateLabel }), archivedProducts > 0 ? t("{n} archived not counted", { n: archivedProducts }) : null].filter(Boolean).join(" · ") || t("Active products on your Online Store"),
     },
   ];
 

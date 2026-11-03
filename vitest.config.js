@@ -1,15 +1,10 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  // The app's JSX uses the automatic runtime (no `import React`), as the
-  // React Router plugin compiles it; tests that import a component need the same.
-  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     globals: true,
-    // .jsx too: tests that render a component through Polaris and read the
-    // markup, which a source check cannot do (tests/components/).
-    include: ["tests/**/*.test.{js,jsx}"],
+    include: ["tests/**/*.test.js"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

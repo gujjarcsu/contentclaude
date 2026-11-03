@@ -202,10 +202,6 @@ describe("the runtime", () => {
     expect(interpolate("{n, plural, =0 {none} one {one} other {many}}", { n: 0 }, "en")).toBe("none");
     expect(interpolate("{n, plural, one {# product has} other {# products have}} no title, {n, plural, one {it} other {they}} …", { n: 2 })).toBe("2 products have no title, they …");
     expect(interpolate("Hello {name}", {})).toBe("Hello {name}");
-    // A plural count takes the locale's digit grouping; a plain {var} is left exactly as given (it may be an id, a seed, a year).
-    expect(interpolate("{n, plural, one {# product} other {# products}}", { n: 10843 })).toBe("10,843 products");
-    expect(interpolate("{n, plural, one {# Produkt} other {# Produkte}}", { n: 10843 }, "de")).toBe("10.843 Produkte");
-    expect(interpolate("seed {seed}", { seed: 20261102 })).toBe("seed 20261102");
   });
 
   it("numbers, dates and currency follow the locale", () => {

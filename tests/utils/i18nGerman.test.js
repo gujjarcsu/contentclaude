@@ -130,7 +130,7 @@ describe("the pure utils: the same English by default, German when asked", () =>
   it("first-run blockers and the sentence that names the subscription", () => {
     const tally = { "openai·description·blocking": 2, "openai·link·blocking": 1 };
     expect(blockerLines(tally).map((b) => b.line)).toEqual([
-      "2 products have no description — the OpenAI product feed cannot list them.",
+      "2 products have no description — the OpenAI product feed cannot list them. The first three are being written below.",
       "1 product is not on your Online Store channel, so it has no public page.",
     ]);
     const german = blockerLines(tally, { t: de });

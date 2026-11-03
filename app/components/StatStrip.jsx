@@ -20,41 +20,37 @@ export function StatStrip({ items }) {
   const cells = Array.isArray(items) ? items.filter(Boolean) : [];
   if (cells.length === 0) return null;
   const columns = { xs: Math.min(2, cells.length), sm: Math.min(2, cells.length), md: cells.length };
-  /* The hairlines are a 1px grid gap over a border-coloured ground, so they
-     run both ways and follow the columns at every width — a per-cell border
-     cannot know where the phone's two-column layout wraps. */
   return (
     <Card padding="0">
-      <Box background="bg-surface-secondary-active">
-        <InlineGrid columns={columns} gap="025">
-          {cells.map((cell, i) => {
-            const value = cell.value === null || cell.value === undefined || cell.value === "" ? "–" : String(cell.value);
-            return (
-              <Box key={cell.id ?? i} padding="400" background="bg-surface" minHeight="100%">
-                <BlockStack gap="100">
+      <InlineGrid columns={columns}>
+        {cells.map((cell, i) => {
+          const last = i === cells.length - 1;
+          const value = cell.value === null || cell.value === undefined || cell.value === "" ? "–" : String(cell.value);
+          return (
+            <Box key={cell.id ?? i} padding="400" borderInlineEndWidth={last ? "0" : "025"} borderColor="border-secondary">
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {cell.label}
+                </Text>
+                <Text as="p" variant="headingLg" fontWeight="semibold">
+                  {cell.url || cell.onClick ? (
+                    <Link url={cell.url} onClick={cell.onClick} removeUnderline monochrome>
+                      {value}
+                    </Link>
+                  ) : (
+                    value
+                  )}
+                </Text>
+                {cell.hint ? (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {cell.label}
+                    {cell.hint}
                   </Text>
-                  <Text as="p" variant="headingLg" fontWeight="semibold">
-                    {cell.url || cell.onClick ? (
-                      <Link url={cell.url} onClick={cell.onClick} removeUnderline monochrome>
-                        {value}
-                      </Link>
-                    ) : (
-                      value
-                    )}
-                  </Text>
-                  {cell.hint ? (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {cell.hint}
-                    </Text>
-                  ) : null}
-                </BlockStack>
-              </Box>
-            );
-          })}
-        </InlineGrid>
-      </Box>
+                ) : null}
+              </BlockStack>
+            </Box>
+          );
+        })}
+      </InlineGrid>
     </Card>
   );
 }
