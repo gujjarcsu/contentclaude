@@ -21,7 +21,8 @@ vi.mock("../../app/utils/startState.server.js", () => ({ SCORED_PRODUCT_FIELDS: 
 vi.mock("../../app/utils/logger.server.js", () => ({ default: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { AppProvider } from "@shopify/polaris";
-import { AuditBody } from "../../app/routes/app.seo-audit.jsx";
+import { AuditBody } from "../../app/components/AuditBody.jsx";
+import { readFileSync } from "node:fs";
 
 const product = (i, over = {}) => ({
   id: `gid://shopify/Product/${i}`,
@@ -118,6 +119,48 @@ describe("the Audit screen", () => {
     const html = render(<AuditBody data={data({ catalogueCount: null })} />);
     expect(html).toContain("Scored 2 products");
     expect(html).not.toMatch(/of (0|null) products/);
+  });
+
+  it("a locked bulk fix is a lock, one sentence naming the plan and a plain link — no paragraph", () => {
+    const html = render(<AuditBody data={data()} />);
+    expect(html).toContain(">Locked<"); // the lock icon's accessible label
+    expect(html).not.toContain("Everything listed here stays visible on every plan");
+  });
+
+  it("the eligibility card names each feed field with how many scanned products lack it", () => {
+    const html = render(<AuditBody data={data()} />);
+    expect(html).toContain("Required by the OpenAI feed");
+    expect(html).toContain("Recommended");
+    expect(html).toContain("Image alt text");
+    // description and image each lack on 1 product; title and brand lack on none — a real zero
+    expect((html.match(/>1 missing</g) ?? []).length).toBe(2);
+    expect(html).toContain(">0 missing<");
+  });
+
+  it("no sentence explains the interface; the rubric rows are the dimensions and their points", () => {
+    const html = render(<AuditBody data={data()} />);
+    expect(html).not.toContain("Average points per dimension");
+    expect(html).not.toContain("Home samples 30");
+    expect(html).toContain("Description depth and specifics");
+    expect(html).toContain("9 of 25");
+  });
+
+  it("an issue's count opens the scanned products it is about; a row shows the product's own photo", () => {
+    const withImages = data({
+      products: [
+        product(1, { imageUrl: "https://cdn.shopify.com/s/files/p1.jpg", findingKeys: ["openai·description·blocking"], checks: { hasDescription: false, hasMetaTitle: false, hasMetaDesc: true, hasAltText: true, noImages: false, missingAltText: false }, feedBlocking: 1, score: 12 }),
+        product(2),
+      ],
+    });
+    const html = render(<AuditBody data={withImages} />);
+    expect(html).toContain("https://cdn.shopify.com/s/files/p1.jpg");
+    expect(html).toMatch(/aria-expanded="false"[^>]*>[\s\S]{0,400}1 of 2 scanned/);
+  });
+
+  it("the route module exports only route members — the screen lives in a component", () => {
+    const src = readFileSync("app/routes/app.seo-audit.jsx", "utf8");
+    const exported = [...src.matchAll(/^export\s+(?:const|function|async function|\{[^}]*\})\s*(\w+)?/gm)].map((m) => m[0]);
+    expect(exported.join("\n")).not.toMatch(/AuditBody/);
   });
 
   it("an empty store gets the shared empty state and no rings", () => {

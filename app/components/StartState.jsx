@@ -6,24 +6,36 @@
  * Home so there is no redirect and no extra top-level route in the embedded
  * chain.
  *
- * The shape, and why:
+ * Redesign (Nov 2026) — three screens ending in a number, the shape every top
+ * app in the category uses (StoreSEO, Avada, SEOWILL: goal → scan → score):
  *
- *  - **No forms.** The old `/app/setup` asked five questions before the
- *    merchant saw anything the app could do. Brand voice is inferred and can be
- *    corrected later in Settings; nothing here blocks on input.
- *  - **The score reveal is the headline**, streamed behind a skeleton so the
- *    shell paints immediately. A real number about the merchant's own store,
- *    computed from their own catalogue — never a placeholder.
- *  - **Generation starts on its own**, three products in parallel, one fetcher
- *    each, so one slow product cannot hold up the other two and the first draft
- *    lands in seconds rather than after a form.
+ *   1. Goal. One click between two outcomes. Nothing is typed and nothing
+ *      waits on it: the scan was started by the loader and streams in
+ *      behind this screen. The choice is not stored; it orders the "what to
+ *      fix first" rows on the result and nothing else, so it promises nothing.
+ *   2. Scan. The real scan, as a list of what it reads. All rows share the one
+ *      state the promise has (reading → done); no step is ticked on a timer,
+ *      because no step reports its own progress and a ticked row would be a
+ *      claim nobody measured.
+ *   3. Result. The score ring with its scope ("across 30 of 10,000+
+ *      products"), the same number under the same name as Home's ring; what
+ *      to fix first; and one primary: write the first three drafts.
+ *
+ * What did not change, and why it matters:
+ *
+ *  - **No forms.** Brand voice is inferred and can be corrected later in
+ *    Settings; nothing here blocks on input.
  *  - **The cost is stated before it is spent**, in the same sentence as the
- *    remaining quota. Auto-spending a merchant's credits without saying so
- *    would be indefensible; saying so plainly is the difference.
+ *    remaining credits, directly under the button that spends them.
+ *  - **Generation is per product**, one fetcher each, so one slow product
+ *    cannot hold up the other two. It now starts when the merchant presses
+ *    "Write the first 3 drafts" rather than on arrival.
  *  - **Refreshing never re-charges.** The idempotency is server-side, keyed by
  *    shop + product (`reserveCredit` in quickStart.server.js): a recent draft is
  *    returned as-is, an in-flight credit is waited on, and a credit whose
- *    request died is reused rather than charged twice.
+ *    request died is reused rather than charged twice. A merchant who comes
+ *    back with drafts already inside that window lands on the result with the
+ *    drafts showing.
  *  - **A 55 s watchdog** turns a hung generation into a retry button rather
  *    than a spinner that never resolves.
  */
@@ -38,6 +50,7 @@ import {
   Text,
   BlockStack,
   InlineStack,
+  InlineGrid,
   Button,
   Box,
   Badge,
@@ -45,36 +58,125 @@ import {
   Spinner,
   Layout,
   EmptyState,
-  SkeletonBodyText,
-  SkeletonDisplayText,
+  Icon,
+  Divider,
   ProgressBar,
 } from "@shopify/polaris";
+import { CheckCircleIcon } from "@shopify/polaris-icons";
 import { GeoRubric } from "./GeoRubric.jsx";
-import { WATCH_FROM_HERE, blockerLine, canRunFix, primaryFixIndex } from "../utils/firstRun.js";
+import { ScoreRing } from "./ScoreRing.jsx";
+import { IssueList } from "./IssueList.jsx";
+import { ProductThumb } from "./ProductThumb.jsx";
+import { WATCH_FROM_HERE, blockerLine, canRunFix } from "../utils/firstRun.js";
+import { blockerRows } from "../utils/fixRows.js";
 import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
 
-function ScanSkeleton() {
+/** The two outcomes the goal screen offers. Search reads page content; AI shopping lists from feed fields. */
+const GOALS = Object.freeze({ search: "search", shopping: "shopping" });
+
+function usePlanLabel(planName) {
+  const t = useT();
+  const labels = { free: t("Free"), starter: t("Starter"), growth: t("Growth"), pro: t("Professional") };
+  return labels[planName] ?? planName;
+}
+
+/** "10,000+ products · Free plan" — the same two facts Home's title row states. */
+function useSubtitle(start) {
+  const t = useT();
+  const planLabel = usePlanLabel(start?.planName ?? "free");
+  const n = Number(start?.totalProducts);
+  const products = Number.isFinite(n) ? (start?.totalExact === false ? t("{count}+ products", { count: t.number(n) }) : t("{n, plural, one {# product} other {# products}}", { n })) : null;
+  return [products, t("{plan} plan", { plan: planLabel })].filter(Boolean).join(" · ");
+}
+
+/* ── Screen 1 — goal ─────────────────────────────────────────────────────── */
+
+function GoalScreen({ start, onChoose }) {
+  const t = useT();
+  const subtitle = useSubtitle(start);
+  const options = [
+    { id: GOALS.search, title: t("Found in search"), body: t("Google, Bing and AI answers read your product pages."), cta: t("Start with search") },
+    { id: GOALS.shopping, title: t("Listed in AI shopping"), body: t("ChatGPT and Shop list products from your catalogue's fields."), cta: t("Start with AI shopping") },
+  ];
   return (
-    <BlockStack gap="400">
+    <Page title={t("Home")} subtitle={subtitle}>
       <Card>
         <BlockStack gap="400">
-          <SkeletonDisplayText size="medium" />
-          <SkeletonBodyText lines={2} />
+          <Text as="h2" variant="headingLg">
+            {t("What do you want more of?")}
+          </Text>
+          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+            {options.map((o) => (
+              <Box key={o.id} padding="400" borderWidth="025" borderColor="border" borderRadius="200">
+                <BlockStack gap="300">
+                  <BlockStack gap="100">
+                    <Text as="h3" variant="headingMd">
+                      {o.title}
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      {o.body}
+                    </Text>
+                  </BlockStack>
+                  <InlineStack>
+                    <Button onClick={() => onChoose(o.id)}>{o.cta}</Button>
+                  </InlineStack>
+                </BlockStack>
+              </Box>
+            ))}
+          </InlineGrid>
         </BlockStack>
       </Card>
-      <Card>
-        <BlockStack gap="400">
-          <SkeletonDisplayText size="small" />
-          <SkeletonBodyText lines={3} />
-        </BlockStack>
-      </Card>
-    </BlockStack>
+    </Page>
   );
 }
+
+/* ── Screen 2 — scan ─────────────────────────────────────────────────────── */
+
+/** What the scan reads, in order. One state for all of them: the promise's. */
+function ScanList({ done, scanned }) {
+  const t = useT();
+  const rows = [
+    t("Reading your active products"),
+    t("Scoring descriptions, page titles and search descriptions"),
+    t("Checking the fields the OpenAI product feed requires"),
+    t("Picking the three products to start with"),
+  ];
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingLg">
+            {done ? t("Scan complete") : t("Reading your catalogue")}
+          </Text>
+          <Text as="p" variant="bodyMd" tone="subdued">
+            {done ? t("{n, plural, one {# product} other {# products}} read and scored", { n: scanned }) : t("Started when you opened the app")}
+          </Text>
+        </BlockStack>
+        <BlockStack gap="0">
+          {rows.map((label, i) => (
+            <Box key={label}>
+              {i > 0 ? <Divider /> : null}
+              <Box paddingBlock="300">
+                <InlineStack gap="300" blockAlign="center" wrap={false}>
+                  {done ? <Icon source={CheckCircleIcon} tone="success" accessibilityLabel={t("Done")} /> : <Spinner size="small" accessibilityLabel={t("In progress")} />}
+                  <Text as="p" variant="bodyMd" tone={done ? undefined : "subdued"}>
+                    {label}
+                  </Text>
+                </InlineStack>
+              </Box>
+            </Box>
+          ))}
+        </BlockStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
+/* ── Screen 3 — the drafts ───────────────────────────────────────────────── */
 
 /**
  * One of the three products, with its own fetcher.
@@ -117,7 +219,7 @@ function TargetCard({ target, autoStart, onDraft }) {
   const data = fetcher.data;
 
   // Tell the parent the moment a real draft exists, so the primary action can
-  // become "Review your drafts" without waiting for the other two.
+  // become "Review drafts" without waiting for the other two.
   useEffect(() => {
     if (data?.ok) onDraft?.(target.productId);
   }, [data, onDraft, target.productId]);
@@ -128,70 +230,64 @@ function TargetCard({ target, autoStart, onDraft }) {
   return (
     <Card>
       <BlockStack gap="400">
-        <InlineStack align="space-between" blockAlign="center" wrap>
-          <Text as="h3" variant="headingMd">
-            {target.title}
-          </Text>
+        <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
+            <ProductThumb url={target.imageUrl} />
+            <Text as="h3" variant="headingMd">
+              {target.title}
+            </Text>
+          </InlineStack>
           <InlineStack gap="200">
             <Badge tone={scoreTone(target.scoreBefore)}>{t("At first run: {scoreBefore}/100", { scoreBefore: target.scoreBefore })}</Badge>
             {lift != null && lift > 0 && <Badge tone="success">{t("+{lift}", { lift })}</Badge>}
           </InlineStack>
         </InlineStack>
 
-        <Layout>
-          <Layout.Section variant="oneHalf">
-            <Box padding="400" background="bg-surface-secondary" borderRadius="200">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  {t("BEFORE")}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {target.beforeSnippet || t("No description — invisible to AI answer engines.")}
-                </Text>
-              </BlockStack>
-            </Box>
-          </Layout.Section>
+        <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+          <BlockStack gap="100">
+            <Text as="p" variant="bodySm" tone="subdued">
+              {t("On your store now")}
+            </Text>
+            <Text as="p" variant="bodyMd" tone={target.beforeSnippet ? undefined : "subdued"}>
+              {target.beforeSnippet || t("No description yet")}
+            </Text>
+          </BlockStack>
 
-          <Layout.Section variant="oneHalf">
-            <Box padding="400" background="bg-surface-success-subdued" borderRadius="200">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">
-                  {t("AFTER")}
+          <BlockStack gap="100">
+            <Text as="p" variant="bodySm" tone="subdued">
+              {t("Draft")}
+            </Text>
+            {busy && !timedOut ? (
+              <InlineStack gap="200" blockAlign="center">
+                <Spinner size="small" accessibilityLabel={t("Writing a draft")} />
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  {t("Writing a draft from your product…")}
                 </Text>
-
-                {busy && !timedOut ? (
-                  <InlineStack gap="200" blockAlign="center">
-                    <Spinner size="small" accessibilityLabel={t("Writing a draft")} />
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {t("Writing a draft from your product…")}
-                    </Text>
-                  </InlineStack>
-                ) : after ? (
-                  <Text as="p" variant="bodySm">
-                    {after.slice(0, 320)}…
-                  </Text>
-                ) : data?.limitReached ? (
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {t("Saved for later — you are out of credits this month.")}
-                  </Text>
-                ) : timedOut || data?.error || data?.inFlight ? (
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {timedOut ? t("This one is taking longer than expected — no credit was used.") : st(data?.error) || t("Still working on this one.")}
-                    </Text>
-                    <InlineStack>
-                      <Button onClick={run}>{t("Retry")}</Button>
-                    </InlineStack>
-                  </BlockStack>
-                ) : (
-                  <InlineStack>
-                    <Button onClick={run}>{t("Write a draft")}</Button>
-                  </InlineStack>
-                )}
+              </InlineStack>
+            ) : after ? (
+              <Text as="p" variant="bodyMd">
+                {after.slice(0, 320)}…
+              </Text>
+            ) : data?.limitReached ? (
+              <Text as="p" variant="bodyMd" tone="subdued">
+                {t("Saved for later — you are out of credits this month.")}
+              </Text>
+            ) : timedOut || data?.error || data?.inFlight ? (
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  {timedOut ? t("This one is taking longer than expected — no credit was used.") : st(data?.error) || t("Still working on this one.")}
+                </Text>
+                <InlineStack>
+                  <Button onClick={run}>{t("Retry")}</Button>
+                </InlineStack>
               </BlockStack>
-            </Box>
-          </Layout.Section>
-        </Layout>
+            ) : (
+              <InlineStack>
+                <Button onClick={run}>{t("Write a draft")}</Button>
+              </InlineStack>
+            )}
+          </BlockStack>
+        </InlineGrid>
       </BlockStack>
     </Card>
   );
@@ -213,14 +309,34 @@ function ScanFailed({ onRetry }) {
   );
 }
 
-function StartBody({ scan, start, navigate, onRetry }) {
+/**
+ * Search reads page content first; AI shopping lists from the feed's required
+ * fields first. Only the order of the rows changes — the rows themselves are
+ * the walk's, unchanged. Stable for everything else.
+ */
+function orderForGoal(blockers, goal) {
+  const list = Array.isArray(blockers) ? [...blockers] : [];
+  if (goal !== GOALS.search) return list;
+  const content = (b) => (/description|alt/.test(String(b?.key)) ? 0 : 1);
+  return list.map((b, i) => ({ b, i })).sort((x, y) => content(x.b) - content(y.b) || x.i - y.i).map((x) => x.b);
+}
+
+function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, resume }) {
   const t = useT();
+  const subtitle = useSubtitle(start);
   const [drafted, setDrafted] = useState(() => new Set());
+  const [writing, setWriting] = useState(!!resume);
   const onDraft = useCallback((id) => {
     setDrafted((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
 
-  if (scan?.error) return <ScanFailed onRetry={onRetry} />;
+  if (scan?.error) {
+    return (
+      <Page title={t("Home")} subtitle={subtitle}>
+        <ScanFailed onRetry={onRetry} />
+      </Page>
+    );
+  }
 
   // Phase 2 item 2.10 — a store with no products is told the truth and given
   // the one action that helps, rather than a score of zero.
@@ -231,43 +347,56 @@ function StartBody({ scan, start, navigate, onRetry }) {
     // the one thing that changes it.
     const n = Number(start.totalProducts);
     return (
-      <Card>
-        <EmptyState
-          heading={t("Your products aren't on your Online Store yet")}
-          image="/empty-products.svg"
-          action={{
-            content: t("Open products in Shopify"),
-            url: "shopify://admin/products",
-            target: "_blank",
-          }}
-          secondaryAction={{ content: t("I've published one — check again"), onAction: onRetry }}
-        >
-          <p>
-            {t("Navaal scores and writes for products that are Active and available on the Online Store sales channel — that is where AI search reads them. Your store has {n, plural, one {# product} other {# products}} and none is there yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it available to the Online Store, and check again.", { n })}
-          </p>
-        </EmptyState>
-      </Card>
+      <Page title={t("Home")} subtitle={subtitle}>
+        <Card>
+          <EmptyState
+            heading={t("Your products aren't on your Online Store yet")}
+            image="/empty-products.svg"
+            action={{
+              content: t("Open products in Shopify"),
+              url: "shopify://admin/products",
+              target: "_blank",
+            }}
+            secondaryAction={{ content: t("I've published one — check again"), onAction: onRetry }}
+          >
+            <p>
+              {t("Navaal scores and writes for products that are Active and available on the Online Store sales channel — that is where AI search reads them. Your store has {n, plural, one {# product} other {# products}} and none is there yet: they are drafts, archived, or sold through another channel only. Set one to Active, make it available to the Online Store, and check again.", { n })}
+            </p>
+          </EmptyState>
+        </Card>
+      </Page>
     );
   }
 
   if (scan?.empty) {
     return (
-      <Card>
-        <EmptyState
-          heading={t("Add a product and we'll get started")}
-          image="/empty-products.svg"
-          action={{
-            content: t("Add a product in Shopify"),
-            url: "shopify://admin/products/new",
-            target: "_blank",
-          }}
-          secondaryAction={{ content: t("I've added one — check again"), onAction: onRetry }}
-        >
-          <p>
-            {t("Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one, we'll score it and write the first draft for you. Adding a product opens Shopify in a new tab; come back to this one when it is saved and press check again — or just reopen the app, we look every time.")}
-          </p>
-        </EmptyState>
-      </Card>
+      <Page title={t("Home")} subtitle={subtitle}>
+        <Card>
+          <EmptyState
+            heading={t("Add a product and we'll get started")}
+            image="/empty-products.svg"
+            action={{
+              content: t("Add a product in Shopify"),
+              url: "shopify://admin/products/new",
+              target: "_blank",
+            }}
+            secondaryAction={{ content: t("I've added one — check again"), onAction: onRetry }}
+          >
+            <p>
+              {t("Navaal writes AI-search-ready descriptions from your own products. As soon as your store has one, we'll score it and write the first draft for you. Adding a product opens Shopify in a new tab; come back to this one when it is saved and press check again — or just reopen the app, we look every time.")}
+            </p>
+          </EmptyState>
+        </Card>
+      </Page>
+    );
+  }
+
+  // Screen 2, finished: the list ticked, and the one step forward.
+  if (step === "scan") {
+    return (
+      <Page title={t("Home")} subtitle={subtitle} primaryAction={{ content: t("See your score"), onAction: onSeeResult }}>
+        <ScanList done scanned={scan.totalScanned} />
+      </Page>
     );
   }
 
@@ -283,6 +412,7 @@ function StartBody({ scan, start, navigate, onRetry }) {
   const canStart = Math.max(0, Math.min(fresh, start.remaining));
   let freshStarted = 0;
   const autoStartFor = (t) => {
+    if (!writing) return false;
     if (draftedIds.has(t.productId)) return true;
     if (freshStarted < canStart) {
       freshStarted += 1;
@@ -306,182 +436,179 @@ function StartBody({ scan, start, navigate, onRetry }) {
   // every row equals the store score by arithmetic; say so.
   const uniformNote = uniformScoreNote(targets, scan.totalScanned, t);
   const done = drafted.size;
-  // P2.7 — the specific things holding this store back, from the first walk.
-  const blockers = Array.isArray(start.blockers) ? start.blockers : [];
-  // Phase 15 (CW's third count) — the dark control on a brand-new FREE store
-  // was "Write the rest in bulk", and every bulk run is a Starter feature. The
-  // primary now goes to the first fix this plan can actually run, and a fix it
-  // cannot run says so on the button instead of leading nowhere.
+  // P2.7 — the specific things holding this store back, from the first walk,
+  // in the order the merchant's goal reads them.
+  const blockers = orderForGoal(Array.isArray(start.blockers) ? start.blockers : [], goal);
+  // Phase 15 — a fix this plan cannot run says which plan can (fixRows: one
+  // sentence naming it, and a plain "See plans" link). None of these rows is
+  // the page's primary: that is writing the drafts, which every plan with
+  // credits can run, so the one dark button never refuses.
   const entitlements = getEntitlements(start.planName ?? "free");
-  const primaryIndex = primaryFixIndex(blockers, entitlements);
   const bulkPlanLabel = cheapestPlanLabelWith("bulkJobs");
+  const rows = blockerRows(blockers, { entitlements, t, navigate }).map((row, i) => {
+    const b = blockers[i];
+    return {
+      ...row,
+      // The "being written below" note only once the drafts really are below.
+      title: blockerLine(b, t, { draftsBelow: writing }),
+      detail: b?.fix && !canRunFix(b.fix, entitlements) ? t("{plan} and above", { plan: bulkPlanLabel }) : row.detail,
+    };
+  });
+
+  const nTotal = Number(start.totalProducts);
+  const totalText = Number.isFinite(nTotal) ? (start.totalExact === false ? `${t.number(nTotal)}+` : t.number(nTotal)) : null;
+  const scope = totalText
+    ? t("across {scanned} of {total} products", { scanned: t.number(scan.totalScanned), total: totalText })
+    : t("across {n, plural, one {# product} other {# products}} scanned", { n: scan.totalScanned });
+
+  // One primary, by state; never disabled, absent while nothing is ready.
+  let primaryAction;
+  if (done > 0) {
+    primaryAction = { content: t("Review {n, plural, one {# draft} other {# drafts}}", { n: done }), onAction: () => navigate("/app/review") };
+  } else if (!writing && canStart > 0) {
+    primaryAction = { content: t("Write the first {n, plural, one {# draft} other {# drafts}}", { n: canStart }), onAction: () => setWriting(true) };
+  } else if (!writing && fresh > 0 && canStart === 0) {
+    primaryAction = { content: t("See plans"), onAction: () => navigate("/app/plans") };
+  } else if (!writing && fresh === 0 && targets.length > 0) {
+    // Every target already has a draft from the reuse window: show them, free.
+    primaryAction = { content: t("Show my drafts"), onAction: () => setWriting(true) };
+  }
 
   return (
-    <BlockStack gap="500">
-      {/* The reveal */}
-      <Card>
-        <BlockStack gap="400">
-          <BlockStack gap="200">
-            {/* A6 (Phase 8) — the headline is labelled for what it is (the GEO
-                number), not painted red above the fold, and framed as a
-                starting point: the score measures the page, and every draft
-                below moves it. Traditional SEO is shown for comparison and
-                said to be excluded. */}
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("Your AI-search (GEO) score, from the products we scanned just now")}
-            </Text>
-            <Text as="h2" variant="heading2xl" fontWeight="bold">
-              {scan.storeScore}/100
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              {t("Most stores start here: the score measures what is on your product pages, and every draft below moves it. These {v} products hurt it most; we scanned {totalScanned} of your products.", { v: Math.min(targets.length, start.targetCount), totalScanned: scan.totalScanned })}
-            </Text>
-            {scan.language?.code && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("Drafts are written in {languageName} — {languageSourceLabel}. Change it in Settings.", { languageName: t(languageName(scan.language.code)), languageSourceLabel: t(languageSourceLabel(scan.language.source)) })}
-              </Text>
-            )}
-          </BlockStack>
-
-          <InlineStack gap="600" wrap>
-            <BlockStack gap="050">
-              <Text as="p" variant="headingLg" tone={scoreTone(scan.storeGeo)}>
-                {scan.storeGeo}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("AI search (GEO) — the score above")}
-              </Text>
-            </BlockStack>
-            <BlockStack gap="050">
-              <Text as="p" variant="headingLg" tone={scoreTone(scan.storeSeo)}>
-                {scan.storeSeo}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("Traditional SEO — for comparison, not part of the score")}
-              </Text>
-            </BlockStack>
-          </InlineStack>
-
-          <Text as="p" variant="bodySm" tone="subdued">
-            {t("GEO scores what is on your product pages. It scores your content, not whether you were cited — nothing inside an app can see that.")}
-          </Text>
-
-          <GeoRubric />
-        </BlockStack>
-      </Card>
-
-      {/* P2.7 — the three specific things holding THIS store back, each with
-          the one action that fixes it. The first is the primary action. */}
-      {blockers.length > 0 && (
+    <Page title={t("Home")} subtitle={subtitle} primaryAction={primaryAction}>
+      <BlockStack gap="500">
         <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              {blockers.length === 1 ? t("The one thing holding this store back") : t("The {length} things holding this store back", { length: blockers.length })}
-            </Text>
-            {blockers.map((b, i) => (
-              <InlineStack key={b.key} align="space-between" blockAlign="center" wrap gap="300">
-                <BlockStack gap="050">
-                  <Text as="p" variant="bodyMd">
-                    {blockerLine(b, t, { draftsBelow: true })}
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {b.grade === "blocking" ? t("A surface cannot list these as they stand.") : t("Listed, but shown worse.")}
-                  </Text>
-                </BlockStack>
-                {b.fix &&
-                  (b.fix.external ? (
-                    <Button url={b.fix.to} target="_top" variant={i === primaryIndex ? "primary" : undefined}>
-                      {t(b.fix.label)}
-                    </Button>
-                  ) : (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Button variant={i === primaryIndex ? "primary" : undefined} onClick={() => navigate(b.fix.to)}>
-                        {t(b.fix.label)}
-                      </Button>
-                      {!canRunFix(b.fix, entitlements) && (
-                        <Badge tone="info">{t("{plan} and above", { plan: bulkPlanLabel })}</Badge>
-                      )}
-                    </InlineStack>
-                  ))}
-              </InlineStack>
-            ))}
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("From the fields the OpenAI product feed and Google Search ask for, read from your own catalogue just now. A description of what is missing, not a promise about results.")}
-            </Text>
-          </BlockStack>
+          <Layout>
+            <Layout.Section variant="oneThird">
+              <BlockStack gap="300" inlineAlign="center">
+                <ScoreRing value={scan.storeScore} size="large" label={t("Search readiness")} caption={scope} />
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                  {t("Most stores start here. Every draft you publish moves it.")}
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                  {t("GEO scores what is on your product pages. It scores your content, not whether you were cited — nothing inside an app can see that.")}
+                </Text>
+                {/* A6 (Phase 8) — the number is the GEO score, and Traditional
+                    SEO is shown beside it and said to be excluded. */}
+                <InlineStack gap="600" align="center" wrap>
+                  <BlockStack gap="050" inlineAlign="center">
+                    <Text as="p" variant="headingMd" tone={scoreTone(scan.storeGeo)}>
+                      {scan.storeGeo}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                      {t("AI search (GEO) — the score above")}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="050" inlineAlign="center">
+                    <Text as="p" variant="headingMd" tone={scoreTone(scan.storeSeo)}>
+                      {scan.storeSeo}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                      {t("Traditional SEO — for comparison, not part of the score")}
+                    </Text>
+                  </BlockStack>
+                </InlineStack>
+                <GeoRubric />
+              </BlockStack>
+            </Layout.Section>
+            <Layout.Section>
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingMd">
+                  {t("What to fix first")}
+                </Text>
+                <IssueList items={rows} emptyText={t("Nothing in your catalogue blocks a listing right now.")} />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {t("Read from your catalogue just now. What is missing, not a promise about results.")}
+                </Text>
+              </BlockStack>
+            </Layout.Section>
+          </Layout>
         </Card>
-      )}
 
-      {/* What this costs, said before it is spent */}
-      <Box paddingInlineStart="200" paddingInlineEnd="200">
+        {/* What this costs, said before it is spent, under the button that spends it. */}
         <BlockStack gap="200">
           <Text as="p" variant="bodySm" tone="subdued">
             {sentence}
           </Text>
-          {done > 0 && (
-            <ProgressBar
-              progress={Math.round((done / Math.max(1, canStart)) * 100)}
-              size="small"
-              tone="success"
-            />
+          {scan.language?.code && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              {t("Drafts are written in {languageName} — {languageSourceLabel}. Change it in Settings.", { languageName: t(languageName(scan.language.code)), languageSourceLabel: t(languageSourceLabel(scan.language.source)) })}
+            </Text>
+          )}
+          {writing && done > 0 && (
+            <BlockStack gap="100">
+              <Text id="start-drafts-ready" as="p" variant="bodySm">
+                {t("{n, plural, one {# draft} other {# drafts}} ready to review", { n: done })}
+              </Text>
+              <ProgressBar progress={Math.round((done / Math.max(1, canStart + alreadyDrafted)) * 100)} size="small" tone="success" ariaLabelledBy="start-drafts-ready" />
+            </BlockStack>
           )}
         </BlockStack>
-      </Box>
 
-      {targets.map((t) => (
-        <TargetCard key={t.productId} target={t} autoStart={autoStartFor(t)} onDraft={onDraft} />
-      ))}
-      {uniformNote && (
-        <Box paddingInlineStart="200" paddingInlineEnd="200">
+        {writing &&
+          targets.map((t) => <TargetCard key={t.productId} target={t} autoStart={autoStartFor(t)} onDraft={onDraft} />)}
+        {writing && uniformNote && (
           <Text as="p" variant="bodySm" tone="subdued">
             {uniformNote}
           </Text>
-        </Box>
-      )}
+        )}
 
-      {done > 0 && (
+        {/* P2.7 — the sentence that names the subscription, on the screen a
+            merchant sees once. */}
         <Card>
-          <InlineStack align="space-between" blockAlign="center" wrap gap="300">
-            <BlockStack gap="100">
-              <Text as="h2" variant="headingMd">
-                {t("{n, plural, one {# draft} other {# drafts}} ready to review", { n: done })}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("Read them, edit anything you want, then publish. Nothing is live until you say so.")}
-              </Text>
-            </BlockStack>
-            <Button variant="primary" size="large" onClick={() => navigate("/app/review")}>
-              {t("Review and publish")}
-            </Button>
-          </InlineStack>
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingMd">
+              {t(WATCH_FROM_HERE.title)}
+            </Text>
+            <Text as="p" variant="bodyMd">
+              {t(WATCH_FROM_HERE.body)}
+            </Text>
+          </BlockStack>
         </Card>
-      )}
-
-      {/* P2.7 — the sentence that names the subscription, on the screen a
-          merchant sees once. */}
-      <Card>
-        <BlockStack gap="200">
-          <Text as="h2" variant="headingMd">
-            {t(WATCH_FROM_HERE.title)}
-          </Text>
-          <Text as="p" variant="bodySm">
-            {t(WATCH_FROM_HERE.body)}
-          </Text>
-        </BlockStack>
-      </Card>
-    </BlockStack>
+      </BlockStack>
+    </Page>
   );
 }
 
 export function StartState({ start, navigate, onRetry }) {
   const t = useT();
+  const subtitle = useSubtitle(start);
+  // A merchant who comes back with drafts already written (inside the reuse
+  // window) skips straight to the result with them showing — no charge.
+  const resume = Array.isArray(start?.draftedIds) && start.draftedIds.length > 0;
+  const [step, setStep] = useState(resume ? "result" : "goal");
+  const [goal, setGoal] = useState(null);
+
+  if (step === "goal") {
+    return (
+      <GoalScreen
+        start={start}
+        onChoose={(g) => {
+          setGoal(g);
+          setStep("scan");
+        }}
+      />
+    );
+  }
+
   return (
-    <Page title={t("Let's get your store found by AI")}>
-      <Suspense fallback={<ScanSkeleton />}>
-        <Await resolve={start.scan} errorElement={<ScanFailed onRetry={onRetry} />}>
-          {(scan) => <StartBody scan={scan} start={start} navigate={navigate} onRetry={onRetry} />}
-        </Await>
-      </Suspense>
-    </Page>
+    <Suspense
+      fallback={
+        <Page title={t("Home")} subtitle={subtitle}>
+          <ScanList done={false} />
+        </Page>
+      }
+    >
+      <Await
+        resolve={start.scan}
+        errorElement={
+          <Page title={t("Home")} subtitle={subtitle}>
+            <ScanFailed onRetry={onRetry} />
+          </Page>
+        }
+      >
+        {(scan) => <StartBody scan={scan} start={start} navigate={navigate} onRetry={onRetry} step={step} goal={goal} onSeeResult={() => setStep("result")} resume={resume} />}
+      </Await>
+    </Suspense>
   );
 }

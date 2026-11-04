@@ -113,13 +113,17 @@ describe("the Products list", () => {
     expect(html).not.toMatch(/\blive\b/);
   });
 
-  it("the tabs count this page and say so; the Frame 03 sentence names the row the totals exclude", () => {
+  it("the tabs filter without counting; the pager says how many rows this page holds; the row the totals exclude is marked on itself", () => {
     const html = render(payload());
-    expect(html).toContain("All (3 on page)");
-    expect(html).toContain("Not optimized on this page (2)");
-    expect(html).toContain("Draft on this page (1)"); // published description + draft meta title → draft, by the shared rule
-    expect(html).toContain("Published on this page (0)");
-    expect(html).toContain("1 product here is not on your Online Store, so it is listed but not counted in the totals above.");
+    // plain filters, no number on any tab
+    for (const tab of ["All", "Not optimized", "Draft", "Published"]) expect(html).toContain(`>${tab}<`);
+    expect(html).not.toMatch(/on this page \(\d+\)|\(\d+ on page\)/);
+    // the one page-scoped number names its scope
+    expect(html).toContain("3 products on this page");
+    // Frame 03: product 3 is off the Online Store and holds nothing of ours —
+    // it carries the marker, once; the on-storefront rows do not
+    expect(html.match(/Not on your Online Store</g) ?? []).toHaveLength(1);
+    expect(html).not.toContain("so it is listed but not counted in the totals above");
   });
 
   it("a row says its state, what we hold for it, its score and gain, and offers the one action its state calls for", () => {

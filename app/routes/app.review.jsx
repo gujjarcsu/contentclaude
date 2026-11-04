@@ -21,8 +21,8 @@ import {
   Button,
   ButtonGroup,
   Checkbox,
-  Thumbnail,
   Badge,
+  Link,
   Banner,
   EmptyState,
   TextField,
@@ -41,7 +41,7 @@ import { decodeHtmlEntities } from "../utils/text.js";
 import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
-import { ThemeStepActions } from "../components/EmbedSetupCard.jsx";
+import { ProductThumb } from "../components/ProductThumb.jsx";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
@@ -663,7 +663,7 @@ function NeedsCheckBanner({ items, navigate }) {
 
 export default function ReviewPage() {
   const t = useT();
-  const { products, page, totalPages, needsCheck, embedConfirmed, shopDomain, scopedTo, scopeRefused } = useLoaderData();
+  const { products, page, totalPages, needsCheck, embedConfirmed, scopedTo, scopeRefused } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const loadingThisRoute = useRouteLoading();
@@ -768,6 +768,7 @@ export default function ReviewPage() {
   );
 
   const approvedCount = [...approved].filter((id) => products.some((p) => p.productId === id)).length;
+  const hasFaqDrafts = products.some((p) => !!p.content?.faq);
 
   // Keyboard review: arrow right steps to the next product, Enter approves the
   // one you are on. -1 means "nobody yet" — Enter must never approve something
@@ -832,7 +833,7 @@ export default function ReviewPage() {
           image="/empty-review.svg"
           action={{ content: t("Go to Products"), onAction: () => navigate("/app/products") }}
         >
-          <p>{t("Generate content from the Products page, then come back here to review and publish.")}</p>
+          <p>{t("No drafts are waiting. Nothing goes live until you publish it here.")}</p>
         </EmptyState>
       </Page>
     );
@@ -848,15 +849,17 @@ export default function ReviewPage() {
     >
       <BlockStack gap="500">
         <ReviewRequest ask={actionData?.reviewAsk} />
-        {/* Redesign (Nov 2026): the one-time theme setup lives in Home's setup
-            guide now; here it is a single info row with the same three
-            controls, shown only while the block is not confirmed and no
-            other notice is up. The sentence that explained the interface
-            ("Review each draft, then publish…") is gone. */}
+        {/* Redesign (Nov 2026) — ONE notice at most, chosen in this order:
+            a failed action, publish failures, a malformed link, a mismatch
+            Shopify stored, then the one-product scope. The one-time theme step
+            lives in Home's setup guide; here it is a single quiet line under
+            the action bar, and only while a draft carries FAQ answers. */}
         {actionData?.error ? (
           <Banner tone="critical">
             <p>{actionData.error}</p>
           </Banner>
+        ) : actionData?.success && actionData.errors?.length > 0 ? (
+          <PublishFailures errors={actionData.errors} />
         ) : scopeRefused ? (
           <Banner tone="warning" title={t("That product link was malformed — showing all your drafts")}>
             <Text as="p" variant="bodySm">
@@ -866,38 +869,29 @@ export default function ReviewPage() {
         ) : needsCheck?.length > 0 ? (
           <NeedsCheckBanner items={needsCheck} navigate={navigate} />
         ) : scopedTo ? (
-          <Banner tone="info" title={t("Showing one product")} action={{ content: t("Show all drafts"), onAction: () => navigate("/app/review") }}>
-            <Text as="p" variant="bodySm">
-              {t("Opened from its row on Products. Approve and publish here; the rest of your drafts are one click away.")}
-            </Text>
-          </Banner>
-        ) : !embedConfirmed ? (
-          <Banner tone="info" title={t("Show your FAQ content on your product pages")}>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm">
-                {t("The FAQ answers are stored on your products; the FAQ (Navaal) block puts them on the page. The button opens your theme editor with the block ready to add — click Save there, then confirm here.")}
-              </Text>
-              <ThemeStepActions shopDomain={shopDomain} />
-            </BlockStack>
-          </Banner>
+          <Banner tone="info" title={t("Showing one product")} action={{ content: t("Show all drafts"), onAction: () => navigate("/app/review") }} />
         ) : null}
 
-        {actionData?.success && <PublishFailures errors={actionData.errors} />}
-
-        {/* Action bar */}
+        {/* Action bar: the count, the two bulk choices, one primary. The
+            keyboard still steps and approves (arrow keys, Enter); it is not
+            narrated on the screen. */}
         <Card>
           <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="300" blockAlign="center">
+            <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+              <InlineStack gap="300" blockAlign="center" wrap>
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
                   {t("{approvedCount} of {length} approved", { approvedCount, length: products.length })}
                 </Text>
+                {/* With more than one page, "all" is this page's drafts and the
+                    label says so; on a single page it is every draft. */}
                 <Button variant="plain" size="slim" onClick={approveAllOnPage}>
-                  {t("Approve all on this page")}
+                  {totalPages > 1 ? t("Approve all on this page") : t("Approve all")}
                 </Button>
-                <Button variant="plain" size="slim" onClick={clearSelection}>
-                  {t("Clear selection")}
-                </Button>
+                {approvedCount > 0 && (
+                  <Button variant="plain" size="slim" onClick={clearSelection}>
+                    {t("Clear selection")}
+                  </Button>
+                )}
               </InlineStack>
               <ButtonGroup>
                 <Button
@@ -910,11 +904,11 @@ export default function ReviewPage() {
                 </Button>
                 {/* No disabled primary: with nothing approved there is nothing
                     to publish, so the slot stays empty rather than dangling a
-                    button the merchant cannot press. */}
+                    button the merchant cannot press. Near-black, like every
+                    primary in the app, never a second colour. */}
                 {approvedCount > 0 && (
                   <Button
                     variant="primary"
-                    tone="success"
                     onClick={handlePublish}
                     loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
                     disabled={isSubmitting}
@@ -936,9 +930,14 @@ export default function ReviewPage() {
               autoComplete="off"
             />
 
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("Keyboard: press the right arrow key to step to the next product, Enter to approve it.")}
-            </Text>
+            {!embedConfirmed && hasFaqDrafts ? (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {t("FAQ answers stay off your product pages until the FAQ (Navaal) theme block is added.")}{" "}
+                <Link onClick={() => navigate("/app")} removeUnderline>
+                  {t("Add it from Home")}
+                </Link>
+              </Text>
+            ) : null}
           </BlockStack>
         </Card>
 
@@ -1019,18 +1018,13 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
     // anyone who cannot tell those two apart. Polaris Card carries the
     // state as a background token, and the Approve checkbox below states it
     // in words and in its own checked state.
-    <Card background={isApproved ? "bg-surface-success" : "bg-surface-secondary"}>
+    // Redesign (Nov 2026): no tinted card either. The state is the
+    // checkbox's own checked state and, once approved, one badge in words.
+    <Card>
       <BlockStack gap="400">
         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
           <InlineStack gap="300" blockAlign="center">
-            <Thumbnail
-              source={
-                product.imageUrl ||
-                "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png"
-              }
-              alt={product.productTitle}
-              size="medium"
-            />
+            <ProductThumb url={product.imageUrl} size="medium" />
             <BlockStack gap="100">
               <InlineStack gap="200" blockAlign="center">
                 <Text as="h3" variant="headingMd">
@@ -1060,10 +1054,9 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
                 {/* Merchant-facing names. These badges used to print the raw
                     storage keys — "metaTitle", "metaDescription". */}
                 {contentTypes.map((ct) => (
-                  <Badge key={ct} tone="info">
-                    {t(CONTENT_LABELS[ct] || ct)}
-                  </Badge>
+                  <Badge key={ct}>{t(CONTENT_LABELS[ct] || ct)}</Badge>
                 ))}
+                {isApproved ? <Badge tone="success">{t("Approved")}</Badge> : null}
               </InlineStack>
             </BlockStack>
           </InlineStack>
@@ -1176,7 +1169,7 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
               onChange={handleChange}
               onBlur={handleBlur}
               multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? t(" — too long") : "" }) : t("Edits are saved when you leave the field")}
+              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? t(" — too long") : "" }) : undefined}
               error={overLimit ? t("Shorten to under {charLimit} characters", { charLimit }) : ""}
               autoComplete="off"
             />

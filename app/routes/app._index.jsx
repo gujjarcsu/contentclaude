@@ -27,6 +27,7 @@ import { ScoreRing } from "../components/ScoreRing.jsx";
 import { IssueList } from "../components/IssueList.jsx";
 import { StatStrip } from "../components/StatStrip.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
+import { ProductThumb } from "../components/ProductThumb.jsx";
 import { getEntitlements } from "../utils/billing-plans.js";
 import { blockerRows } from "../utils/fixRows.js";
 import { authenticate } from "../shopify.server.js";
@@ -39,7 +40,7 @@ import { getCandidateCounts, notOptimizedFrom } from "../utils/candidates.server
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
 import { publishedSubtext } from "../utils/catalogueContent.js";
 import { attentionFor, blockersFor } from "../utils/catalogueWatch.server.js";
-import { recentDraftIds } from "../utils/quickStart.server.js";
+import { recentDraftIds, fetchCardInfo } from "../utils/quickStart.server.js";
 import { proofSummary } from "../utils/proofCard.server.js";
 import { proofCardLines } from "../utils/proofCard.js";
 import { homeAttentionLines } from "../utils/catalogueWatch.js";
@@ -87,13 +88,20 @@ export const loader = async ({ request }) => {
       _count: { status: true },
     }),
   ])
-    .then(([recent, blogStats]) => {
+    .then(async ([recent, blogStats]) => {
       const blogsPublished = blogStats.find((s) => s.status === "published")?._count.status ?? 0;
       const blogsDraft = blogStats.find((s) => s.status === "draft")?._count.status ?? 0;
+      // Redesign (Nov 2026) — each row shows the product's own photo, as every
+      // list in the category does. One nodes() lookup for at most five ids,
+      // inside this streamed promise, never thrown: a failed lookup costs the
+      // thumbnails (the rows fall back to Polaris's image icon), not the card.
+      const productIds = recent.map((r) => r.productId).filter((id) => String(id).startsWith("gid://shopify/Product/"));
+      const cards = await fetchCardInfo(admin, productIds);
       return {
         recentActivity: recent.map((r) => ({
           productId: r.productId,
           productTitle: r.productTitle || "Product",
+          imageUrl: cards[r.productId]?.imageUrl || "",
           contentTypesCount: r._count.contentType,
           updatedAt: r._max.updatedAt.toISOString(),
         })),
@@ -296,6 +304,8 @@ export const loader = async ({ request }) => {
         // channel) scans as EMPTY. The empty screen then said "add a product"
         // to a merchant who has forty. These two counts let it say the true
         // thing: the products exist; none is where AI search can read it.
+        // The ring's scope reads "across 30 of 10,000+ products" when Shopify capped the count.
+        totalExact: candidateCounts.total?.exact ?? true,
         totalProducts,
         candidateProducts,
         scan: scanStoreForStart(admin, shop, { adminLocale }),
@@ -320,6 +330,13 @@ export const loader = async ({ request }) => {
     recordPublished,
     catalogueOk,
     candidateProducts,
+    // Shopify caps productsCount (precision AT_LEAST, readCount in
+    // candidates.js). Products already says "10,000+"; Home said "10,000",
+    // which sat under "10,843 products need attention" from the nightly walk
+    // over the whole catalogue (EBS, Nov 2026) — the walk was right and the
+    // capped count was presented as a total (L5). Read here, shown with "+".
+    totalExact: candidateCounts.total?.exact ?? true,
+    candidateExact: candidateCounts.candidates?.exact ?? true,
     candidateLabel: candidateCounts.label,
     countsOk: candidateCounts.ok,
     geoNoteDismissed: !!growthState?.geoNoteDismissedAt,
@@ -523,14 +540,17 @@ function RecentActivityCard({ items, navigate }) {
                 {i > 0 ? <Divider /> : null}
                 <Box paddingBlock="300">
                   <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
-                    <BlockStack gap="050">
-                      <Text as="p" variant="bodyMd" fontWeight="medium" truncate>
-                        {item.productTitle}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {isProduct ? typeLabel : t("Collection · {typeLabel}", { typeLabel })} · {timeAgo(item.updatedAt, t)}
-                      </Text>
-                    </BlockStack>
+                    <InlineStack gap="300" blockAlign="center" wrap={false}>
+                      <ProductThumb url={item.imageUrl} />
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodyMd" fontWeight="medium" truncate>
+                          {item.productTitle}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {isProduct ? typeLabel : t("Collection · {typeLabel}", { typeLabel })} · {timeAgo(item.updatedAt, t)}
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
                     <Button size="slim" onClick={() => navigate(target)}>
                       {t("View")}
                     </Button>
@@ -564,7 +584,8 @@ function CreditsCard({ plan, usageCount, remaining, usagePct, planLabel }) {
           <Text as="h2" variant="headingMd">
             {t("Monthly credits")}
           </Text>
-          <Badge tone={plan.planName === "free" ? "attention" : "success"}>{t("{plan} plan", { plan: planLabel })}</Badge>
+          {/* A plan is a fact, not a warning: no tone (colour is for meaning). */}
+          <Badge>{t("{plan} plan", { plan: planLabel })}</Badge>
         </InlineStack>
         <Text id="home-credit-usage" as="p" variant="headingLg" fontWeight="semibold">
           {t("{usageCount} / {monthlyCredits} used", { usageCount: t.number(usageCount), monthlyCredits: t.number(plan.monthlyCredits) })}
@@ -612,6 +633,8 @@ export default function Dashboard() {
     recordPublished,
     catalogueOk,
     candidateProducts,
+    totalExact,
+    candidateExact,
     candidateLabel,
     countsOk,
     activeJobCount,
@@ -667,7 +690,9 @@ export default function Dashboard() {
         }
       : notOptimizedCount > 0
         ? {
-            content: t("Optimize {n, plural, one {# product} other {# products}}", { n: notOptimizedCount }),
+            // Above Shopify's count ceiling the candidates are a floor, so the
+            // difference is one too, and the button says so with "+".
+            content: candidateExact === false ? t("Optimize {count}+ products", { count: t.number(notOptimizedCount) }) : t("Optimize {n, plural, one {# product} other {# products}}", { n: notOptimizedCount }),
             // A3.2 — every Optimize entry point lands on the same confirmation
             // on Products, the one that states what will run against the
             // quota (A3.3) and names the plan before the click (A3.1).
@@ -688,7 +713,7 @@ export default function Dashboard() {
   // the admin's own chrome, and with it here the subtitle wraps under the
   // page actions. Two facts, one line.
   const subtitle = [
-    totalProducts === null ? null : t("{n, plural, one {# product} other {# products}}", { n: totalProducts }),
+    totalProducts === null ? null : totalExact === false ? t("{count}+ products", { count: t.number(totalProducts) }) : t("{n, plural, one {# product} other {# products}}", { n: totalProducts }),
     t("{plan} plan", { plan: planLabel }),
   ]
     .filter(Boolean)
@@ -703,29 +728,29 @@ export default function Dashboard() {
   const steps = [
     {
       id: "scan",
-      title: t("Score your catalogue"),
-      description: t("We read a sample of your products and score what search engines and AI shopping feeds will find."),
+      title: t("Scan your catalogue"),
+      description: t("A score for what search engines and AI shopping feeds find on your product pages."),
       done: !!storeScore?.available,
       action: { content: t("Score my catalogue"), onAction: () => navigate("/app/seo-audit") },
     },
     {
       id: "voice",
       title: t("Set your brand voice"),
-      description: t("Tone, audience and what sets you apart, so every draft reads like you wrote it."),
+      description: t("Tone, audience and what sets you apart, so every draft sounds like you."),
       done: hasBrandVoice,
       action: { content: t("Open settings"), onAction: () => navigate("/app/settings") },
     },
     {
       id: "review",
-      title: t("Review and publish your first drafts"),
-      description: t("Read each draft beside the current text, edit if you like, and publish. Nothing goes live without you."),
+      title: t("Review your first drafts"),
+      description: t("Nothing goes live until you publish it."),
       done: generatedCount > 0,
       action: { content: draftCount > 0 ? t("Review {n, plural, one {# draft} other {# drafts}}", { n: draftCount }) : t("Open products"), onAction: () => navigate(draftCount > 0 ? "/app/review" : "/app/products") },
     },
     {
       id: "theme",
-      title: t("Show your FAQ content on your product pages"),
-      description: t("The FAQ answers are stored on your products; the FAQ (Navaal) block puts them on the page. The button opens your theme editor with the block ready to add — click Save there, then confirm here."),
+      title: t("Show FAQ on product pages"),
+      description: t("The FAQ (Navaal) theme block puts the answers on your product pages, where shoppers and search engines read them."),
       done: embedConfirmed,
       extra: <ThemeStepActions shopDomain={shopDomain} />,
     },
@@ -750,7 +775,8 @@ export default function Dashboard() {
           : t("Nothing waiting"));
 
   // Grouped digits ("10,000"), and a count we do not have stays a dash — never "0".
-  const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : t.number(Number(v)));
+  // A capped count keeps its "+" (Shopify's AT_LEAST precision): a floor is never shown as a total.
+  const num = (v, exact = true) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : exact === false ? `${t.number(Number(v))}+` : t.number(Number(v)));
   const stats = [
     { id: "ready", label: t("Ready to review"), value: num(draftCount), hint: readyHint, url: "/app/review" },
     {
@@ -760,14 +786,14 @@ export default function Dashboard() {
       hint: publishedSubtext({ ok: catalogueOk, inScope: generatedCount, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
       url: "/app/products?tab=published",
     },
-    { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
+    { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount, candidateExact), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
     {
       id: "catalogue",
       label: t("In your catalogue"),
-      value: num(totalProducts),
+      value: num(totalProducts, totalExact),
       hint: !countsOk
         ? t("We could not read this from Shopify just now")
-        : [candidateProducts === totalProducts ? null : t("{n} {label}", { n: t.number(candidateProducts), label: candidateLabel }), archivedProducts > 0 ? t("{n} archived not counted", { n: t.number(archivedProducts) }) : null].filter(Boolean).join(" · ") || t("Active products on your Online Store"),
+        : [candidateProducts === totalProducts ? null : t("{n} {label}", { n: num(candidateProducts, candidateExact), label: candidateLabel }), archivedProducts > 0 ? t("{n} archived not counted", { n: t.number(archivedProducts) }) : null].filter(Boolean).join(" · ") || t("Active products on your Online Store"),
     },
   ];
 

@@ -342,12 +342,18 @@ describe("the Free first screen's dark button is something Free can press", () =
     expect(primaryFixIndex(null, getEntitlements("free"))).toBe(-1);
   });
 
-  it("the first-run screen binds the primary to that index, not to the first row", () => {
+  it("the first-run screen's one dark button is writing the drafts, which the credits can pay for — never a fix row", () => {
+    // Redesign (Nov 2026), from the brief: the result screen's primary is
+    // "Write the first 3 drafts". It is offered only when the credits can pay
+    // for at least one (canStart > 0); with none left it becomes "See plans".
+    // No fix row is primary any more, so a bulk fix Free cannot run can never
+    // be the dark button — the property primaryFixIndex protected, kept by
+    // construction instead of by index.
     const src = strip(read("app/components/StartState.jsx"));
-    expect(src).toMatch(/primaryFixIndex\(blockers, entitlements\)/);
-    expect(src).toMatch(/variant=\{i === primaryIndex \? "primary" : undefined\}/);
-    // the old, unconditional form is gone
-    expect(src).not.toMatch(/variant=\{i === 0 \? "primary" : undefined\}/);
+    expect(src).toMatch(/!writing && canStart > 0\) \{\s*primaryAction = \{ content: t\("Write the first \{n, plural/);
+    expect(src).toMatch(/fresh > 0 && canStart === 0\) \{\s*primaryAction = \{ content: t\("See plans"\)/);
+    expect(src).not.toMatch(/variant=\{i === \w+ \? "primary"/);
+    expect(src).not.toMatch(/variant="primary"/);
   });
 
   it("a fix this plan cannot run carries a marker naming the plan that can", () => {

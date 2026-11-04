@@ -8,6 +8,7 @@ import {
   useNavigate,
   useRevalidator,
   useFetcher,
+  useSubmit,
   Form,
 } from "react-router";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
@@ -27,15 +28,9 @@ import {
   DataTable,
   Icon,
   InlineGrid,
+  Modal,
 } from "@shopify/polaris";
-import {
-  CheckIcon,
-  XIcon,
-  PlanIcon,
-  StarFilledIcon,
-  ChartHistogramGrowthIcon,
-  OrganizationIcon,
-} from "@shopify/polaris-icons";
+import { CheckIcon, XIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server.js";
 import { quotaPct } from "../utils/quota.js";
 import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePrompts.server.js";
@@ -287,8 +282,6 @@ const PLAN_DISPLAY = [
     price: formatPrice(FREE_PLAN.amount),
     period: T("forever"),
     monthlyCredits: FREE_PLAN.monthlyCredits,
-    icon: PlanIcon,
-    iconTone: "subdued",
     highlight: false,
     planKey: null,
     features: [
@@ -308,8 +301,6 @@ const PLAN_DISPLAY = [
     price: formatPrice(BILLING_PLANS.starter.amount),
     period: T("/ month"),
     monthlyCredits: BILLING_PLANS.starter.monthlyCredits,
-    icon: StarFilledIcon,
-    iconTone: "info",
     highlight: false,
     planKey: BILLING_PLANS.starter.key,
     annualPlanKey: BILLING_PLANS.starter.annualKey,
@@ -335,12 +326,10 @@ const PLAN_DISPLAY = [
   {
     planName: "growth",
     label: T("Growth"),
-    tagline: T("Most popular · scales with you"),
+    tagline: T("Scales with you"),
     price: formatPrice(BILLING_PLANS.growth.amount),
     period: T("/ month"),
     monthlyCredits: BILLING_PLANS.growth.monthlyCredits,
-    icon: ChartHistogramGrowthIcon,
-    iconTone: "info",
     highlight: true,
     planKey: BILLING_PLANS.growth.key,
     annualPlanKey: BILLING_PLANS.growth.annualKey,
@@ -367,8 +356,6 @@ const PLAN_DISPLAY = [
     price: formatPrice(BILLING_PLANS.pro.amount),
     period: T("/ month"),
     monthlyCredits: BILLING_PLANS.pro.monthlyCredits,
-    icon: OrganizationIcon,
-    iconTone: "info",
     highlight: false,
     planKey: BILLING_PLANS.pro.key,
     annualPlanKey: BILLING_PLANS.pro.annualKey,
@@ -522,6 +509,7 @@ function PlanCard({
   isCurrent,
   isUpgrade,
   isDowngrade,
+  isRecommended,
   isSubmitting,
   submittingPlan,
   billingPeriod,
@@ -540,31 +528,24 @@ function PlanCard({
   return (
     <Card>
       <BlockStack gap="400">
-        {/* Status badges in normal flow. The old pills were both absolutely
-            positioned at top:-12px and overlapped each other on the Growth
+        {/* Header. Status badges in normal flow, beside the name — the old
+            absolutely-positioned pills overlapped each other on the Growth
             card whenever Growth was also the current plan. */}
-        {(isCurrent || displayPlan.highlight) && (
-          <InlineStack gap="200" blockAlign="center" wrap>
-            {isCurrent && <Badge tone="success">{t("Current plan")}</Badge>}
-            {displayPlan.highlight && <Badge tone="info">{t("Most popular")}</Badge>}
-          </InlineStack>
-        )}
-
-        {/* Header */}
         <BlockStack gap="100">
-          <InlineStack gap="200" blockAlign="center" wrap={false}>
-            <Box minWidth="20px">
-              <Icon source={displayPlan.icon} tone={displayPlan.iconTone} />
-            </Box>
+          <InlineStack gap="200" blockAlign="center" wrap>
             <Text as="h3" variant="headingMd">
               {t(displayPlan.label)}
             </Text>
+            {isCurrent && <Badge tone="success">{t("Current plan")}</Badge>}
+            {displayPlan.highlight && !isCurrent && <Badge>{t("Most popular")}</Badge>}
           </InlineStack>
           <Text as="p" variant="bodySm" tone="subdued">
             {t(displayPlan.tagline)}
           </Text>
+        </BlockStack>
+        <BlockStack gap="050">
           <InlineStack gap="100" blockAlign="baseline" wrap={false}>
-            <Text as="span" variant="heading2xl">
+            <Text as="span" variant="headingXl">
               {shownPrice}
             </Text>
             <Text as="span" variant="bodySm" tone="subdued">
@@ -572,50 +553,30 @@ function PlanCard({
             </Text>
           </InlineStack>
           {isAnnual && (
-            /* 14-PRICING.md §4 bans "2 months free" BY NAME: it is 16.7%, it is
-               what every competitor displays, and a merchant who checks the
-               arithmetic and finds it wrong will not believe the next number we
-               show them. This card rendered that exact phrase while the real
-               discount was 20%. Computed from the two prices now, so the badge
-               cannot disagree with the charge. */
-            <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
+            /* 14-PRICING.md §4 bans "2 months free" BY NAME: it is 16.7%, and a
+               merchant who checks the arithmetic and finds it wrong will not
+               believe the next number we show them. Computed from the two
+               prices, so the line cannot disagree with the charge. */
+            <Text as="p" variant="bodySm" tone="success">
               {t("Save {annualSavingPct}% vs monthly", { annualSavingPct: annualSavingPct(BILLING_PLANS[displayPlan.planName]) })}
             </Text>
           )}
         </BlockStack>
 
-        {/* Features */}
-        <BlockStack gap="200">
-          {displayPlan.features.map((f) => (
-            <InlineStack key={featureKey(f)} gap="200" blockAlign="start" wrap={false}>
-              <Box minWidth="20px">
-                <Icon source={CheckIcon} tone="success" accessibilityLabel={t("Included")} />
-              </Box>
-              <Text as="span" variant="bodySm">
-                {featureText(f, t)}
-              </Text>
-            </InlineStack>
-          ))}
-        </BlockStack>
-
-        {/* CTA */}
+        {/* CTA. One dark button on the page: the recommended next plan. Every
+            other plan is a plain button, so the page has one primary action. */}
         <BlockStack gap="200">
           {isCurrent ? (
-            <InlineStack gap="100" align="center" blockAlign="center" wrap={false}>
-              <Box minWidth="20px">
-                <Icon source={CheckIcon} tone="success" accessibilityLabel={t("Active")} />
-              </Box>
-              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                {t("Active plan")}
-              </Text>
-            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+              {t("Active plan")}
+            </Text>
           ) : displayPlan.planKey && isUpgrade ? (
             <Form method="post">
               <input type="hidden" name="actionType" value="subscribe" />
               <input type="hidden" name="planKey" value={activeKey} />
               {promptId && <input type="hidden" name="promptId" value={promptId} />}
               <Button
-                variant="primary"
+                variant={isRecommended ? "primary" : undefined}
                 submit
                 fullWidth
                 loading={isSubmittingThisPlan}
@@ -628,8 +589,7 @@ function PlanCard({
             /* Phase 3 item 3.4 — this used to say "Cancel current plan to
                switch", which was not true. Shopify REPLACES an app
                subscription when the merchant approves a new one; there is no
-               cancellation step, and telling a merchant to cancel first would
-               have left them with no plan at all if they stopped there. */
+               cancellation step. */
             <Form method="post">
               <input type="hidden" name="actionType" value="subscribe" />
               <input type="hidden" name="planKey" value={activeKey} />
@@ -654,11 +614,36 @@ function PlanCard({
             </Text>
           )}
         </BlockStack>
+
+        <Divider />
+
+        {/* Features. Every line on a card is included, so the check carries no
+            news: it is grey. Green is kept for the comparison table, where a
+            check stands against a cross. */}
+        <BlockStack gap="200">
+          {displayPlan.features.map((f) => (
+            <InlineStack key={featureKey(f)} gap="200" blockAlign="start" wrap={false}>
+              <Box minWidth="20px">
+                <Icon source={CheckIcon} tone="subdued" accessibilityLabel={t("Included")} />
+              </Box>
+              <Text as="span" variant="bodySm">
+                {featureText(f, t)}
+              </Text>
+            </InlineStack>
+          ))}
+        </BlockStack>
       </BlockStack>
     </Card>
   );
 }
 
+/*
+ * Redesign (Nov 2026) — Plans, in the order every top app in the category
+ * uses (Avada's subscription, Tapita's pricing, Smart SEO's plans): the plan
+ * the merchant is on and what is left of it, then the plans with a monthly /
+ * annual switch, then the full comparison. One notice at most; the dark
+ * button only on the plan we would recommend next.
+ */
 export default function PlansPage() {
   const t = useT();
   const { plan, usageCount, monthAt, billingNotice, promptId } = useLoaderData();
@@ -668,7 +653,9 @@ export default function PlansPage() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const reconcileFetcher = useFetcher();
+  const submit = useSubmit();
   const [billingPeriod, setBillingPeriod] = useState("monthly");
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   // Post-paint billing reconciliation. Fires once after the page has rendered, so
   // the Shopify billing.check() round-trip never blocks first paint. Revalidates
@@ -704,7 +691,7 @@ export default function PlansPage() {
   const isSubmitting = navigation.state === "submitting";
 
   if (loadingThisRoute) {
-    return <AppSkeleton title={t("Plans & Billing")} sections={3} layout="full" />;
+    return <AppSkeleton title={t("Plans")} sections={3} layout="full" />;
   }
   const submittingPlan = navigation.formData?.get("planKey");
   const isCancelling = navigation.formData?.get("actionType") === "cancel";
@@ -713,87 +700,77 @@ export default function PlansPage() {
   const usageRemaining = Math.max(0, plan.monthlyCredits - usageCount);
   const currentPlanIndex = PLAN_ORDER.indexOf(plan.planName);
   const currentDisplay = PLAN_DISPLAY.find((p) => p.planName === plan.planName);
+  const currentLabel = t(currentDisplay?.label ?? plan.planName);
+
+  // The one dark button: the highlighted plan when it is an upgrade from here,
+  // otherwise the next plan up. On the top plan there is none.
+  const upgrades = PLAN_DISPLAY.filter((p) => p.planKey && PLAN_ORDER.indexOf(p.planName) > currentPlanIndex);
+  const recommended = (upgrades.find((p) => p.highlight) ?? upgrades[0])?.planName ?? null;
+
+  // At most one notice: what just happened outranks what the URL carried back.
+  const notice = actionData?.error
+    ? { tone: "critical", title: null, body: actionData.error }
+    : actionData?.cancelled
+      ? { tone: "info", title: t("Subscription cancelled"), body: t("Your plan has been cancelled and you've been moved to the Free plan.") }
+      : billingNotice === "upgraded" && plan.planName !== "free"
+        ? { tone: "success", title: t("You're on the {v} plan", { v: currentLabel }), body: t("Your subscription is active. Your new monthly credits are live.") }
+        : billingNotice === "declined"
+          ? { tone: "warning", title: t("Charge not approved"), body: t("The subscription charge was declined or wasn't completed, so you're still on your current plan. You can try upgrading again anytime.") }
+          : billingNotice === "error"
+            ? { tone: "warning", title: t("We couldn't confirm the change just now"), body: t("Your plan will update automatically within a few moments if the charge went through. Refresh this page shortly, or contact hello@navaal.ai if it doesn't.") }
+            : null;
 
   return (
-    <Page
-      title={t("Plans & Billing")}
-      subtitle={t("Upgrade anytime · {trialLine} on all paid plans · Cancel anytime", { trialLine: featureText(trialLine, t) })}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
-    >
-      <BlockStack gap="600">
-        {billingNotice === "upgraded" && plan.planName !== "free" && (
-          <Banner
-            tone="success"
-            title={t("You're on the {v} plan", { v: t(PLAN_DISPLAY.find((p) => p.planName === plan.planName)?.label ?? plan.planName) })}
-          >
-            <p>{t("Your subscription is active. Your new monthly credits are live.")}</p>
-          </Banner>
-        )}
-        {billingNotice === "declined" && (
-          <Banner tone="warning" title={t("Charge not approved")}>
-            <p>
-              {t("The subscription charge was declined or wasn't completed, so you're still on your current plan. You can try upgrading again anytime.")}
-            </p>
-          </Banner>
-        )}
-        {billingNotice === "error" && (
-          <Banner tone="warning" title={t("We couldn't confirm the change just now")}>
-            <p>
-              {t("Your plan will update automatically within a few moments if the charge went through. Refresh this page shortly, or contact hello@navaal.ai if it doesn't.")}
-            </p>
+    <Page title={t("Plans")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
+      <BlockStack gap="500">
+        {notice && (
+          <Banner tone={notice.tone} title={notice.title ?? undefined}>
+            <p>{notice.body}</p>
           </Banner>
         )}
 
-        {actionData?.cancelled && (
-          <Banner tone="info" title={t("Subscription cancelled")}>
-            <p>{t("Your plan has been cancelled and you've been moved to the Free plan.")}</p>
-          </Banner>
-        )}
-        {actionData?.error && (
-          <Banner tone="critical">
-            <p>{actionData.error}</p>
-          </Banner>
-        )}
-
-        {/* Usage summary — compact horizontal bar */}
+        {/* The plan the merchant is on, first: its name, its renewal, and the
+            month's credits as a bar labelled at both ends. No price here — the
+            loader does not know whether this subscription is monthly or
+            annual, and a guessed price is a number we did not measure (L3). */}
         <Card>
-          <InlineGrid columns={{ xs: 1, md: 2 }} gap="400" alignItems="center">
+          <InlineGrid columns={{ xs: 1, md: ["oneThird", "twoThirds"] }} gap="400" alignItems="center">
             <BlockStack gap="100">
-              <InlineStack gap="200" blockAlign="center" wrap>
-                <Text as="h2" variant="headingMd">
-                  {t("Monthly credits")}
-                </Text>
-                <Badge tone={plan.planName === "free" ? "attention" : "success"}>
-                  {t(currentDisplay?.label ?? plan.planName)} {t("Plan")}
-                </Badge>
-                {plan.currentPeriodEnd && (
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {t("Renews")} {t.date(plan.currentPeriodEnd, { day: "numeric", month: "long", year: "numeric" })}
-                  </Text>
-                )}
-              </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t.date(monthAt, { month: "long", year: "numeric" })}
+              <Text as="h2" variant="headingSm" tone="subdued">
+                {t("Current plan")}
               </Text>
+              <InlineStack gap="200" blockAlign="center" wrap>
+                <Text as="p" variant="headingLg">
+                  {currentLabel}
+                </Text>
+                {plan.planName !== "free" && plan.status && plan.status.toLowerCase() === "active" && <Badge tone="success">{t("Active")}</Badge>}
+              </InlineStack>
+              {plan.currentPeriodEnd && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {t("Renews {date}", { date: t.date(plan.currentPeriodEnd, { day: "numeric", month: "long", year: "numeric" }) })}
+                </Text>
+              )}
             </BlockStack>
 
-            <BlockStack gap="100">
+            <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("{usageCount} used", { usageCount })}
+                <Text as="h3" variant="headingSm">
+                  {t("Monthly credits")}
                 </Text>
-                <Text
-                  id="plans-credit-usage"
-                  as="p"
-                  variant="bodySm"
-                  fontWeight="semibold"
-                  tone={usagePct >= 90 ? "critical" : usagePct >= 70 ? undefined : "success"}
-                >
-                  {t("{usageRemaining} remaining of {monthlyCredits}", { usageRemaining, monthlyCredits: plan.monthlyCredits })}
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {t.date(monthAt, { month: "long", year: "numeric" })}
                 </Text>
               </InlineStack>
               {/* FR14 — labelled by the count, never by the rounded percent alone. */}
-              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="plans-credit-usage" />
+              <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "primary"} size="small" ariaLabelledBy="plans-credit-usage" />
+              <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {t("{usageCount} used", { usageCount: t.number(usageCount) })}
+                </Text>
+                <Text id="plans-credit-usage" as="p" variant="bodySm" fontWeight="semibold" tone={usagePct >= 90 ? "critical" : undefined}>
+                  {t("{usageRemaining} remaining of {monthlyCredits}", { usageRemaining: t.number(usageRemaining), monthlyCredits: t.number(plan.monthlyCredits) })}
+                </Text>
+              </InlineStack>
               {usagePct >= 70 && plan.planName !== "pro" && (
                 <Text as="p" variant="bodySm" tone={usagePct >= 90 ? "critical" : undefined}>
                   {usagePct >= 90 ? t("Nearly at limit") : t("Usage climbing — consider upgrading")}
@@ -802,11 +779,12 @@ export default function PlansPage() {
             </BlockStack>
           </InlineGrid>
         </Card>
-        {/* Horizontal plan cards */}
+
+        {/* The plans */}
         <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-            <Text as="h2" variant="headingLg">
-              {t("Choose Your Plan")}
+            <Text as="h2" variant="headingMd">
+              {t("Choose a plan")}
             </Text>
             <ButtonGroup variant="segmented">
               <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
@@ -817,7 +795,7 @@ export default function PlansPage() {
               </Button>
             </ButtonGroup>
           </InlineStack>
-          <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
+          <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
             {PLAN_DISPLAY.map((displayPlan) => {
               const isCurrent = displayPlan.planName === plan.planName;
               const planIndex = PLAN_ORDER.indexOf(displayPlan.planName);
@@ -831,6 +809,7 @@ export default function PlansPage() {
                   isCurrent={isCurrent}
                   isUpgrade={isUpgrade}
                   isDowngrade={isDowngrade}
+                  isRecommended={displayPlan.planName === recommended}
                   promptId={promptId}
                   isSubmitting={isSubmitting}
                   submittingPlan={submittingPlan}
@@ -844,22 +823,15 @@ export default function PlansPage() {
         {/* Feature comparison table */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-              {t("Full Feature Comparison")}
+            <Text as="h2" variant="headingMd">
+              {t("Compare plans")}
             </Text>
             <DataTable
               columnContentTypes={["text", "text", "text", "text", "text"]}
-              headings={[
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued" key="feature">
-                  {t("Feature")}
-                </Text>,
-                "Free",
-                "Starter",
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="success" key="growth">
-                  {t("Growth")}
-                </Text>,
-                "Professional",
-              ]}
+              headings={[t("Feature"), ...PLAN_ORDER.map((name) => {
+                const label = t(PLAN_DISPLAY.find((p) => p.planName === name).label);
+                return name === plan.planName ? t("{label} (current)", { label }) : label;
+              })]}
               rows={FEATURE_TABLE.map((row) => [
                 t(row.feature, row.vars),
                 <FeatureCell key="free" value={row.free} />,
@@ -874,8 +846,8 @@ export default function PlansPage() {
         {/* FAQ */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-              {t("Frequently Asked Questions")}
+            <Text as="h2" variant="headingMd">
+              {t("Frequently asked questions")}
             </Text>
             {FAQ_ITEMS.map((item, i) => (
               <BlockStack key={i} gap="100">
@@ -891,28 +863,47 @@ export default function PlansPage() {
           </BlockStack>
         </Card>
 
-        {/* Cancel */}
+        {/* Cancel — last, in its own section, and it asks first, naming the
+            plan that ends. The action posts exactly what it always did. */}
         {plan.planName !== "free" && (
           <Card>
-            <InlineStack align="space-between" blockAlign="center">
+            <InlineStack align="space-between" blockAlign="center" gap="300">
               <BlockStack gap="100">
                 <Text as="h2" variant="headingMd">
-                  {t("Cancel Subscription")}
+                  {t("Cancel subscription")}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   {t("You'll be moved to the Free plan. Unused time is prorated automatically.")}
                 </Text>
               </BlockStack>
-              <Form method="post">
-                <input type="hidden" name="actionType" value="cancel" />
-                <Button tone="critical" variant="plain" submit loading={isSubmitting && isCancelling}>
-                  {t("Cancel Subscription")}
-                </Button>
-              </Form>
+              <Button tone="critical" variant="plain" onClick={() => setConfirmCancel(true)} loading={isSubmitting && isCancelling}>
+                {t("Cancel subscription")}
+              </Button>
             </InlineStack>
           </Card>
         )}
       </BlockStack>
+      <Modal
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        title={t("Cancel your {plan} subscription?", { plan: currentLabel })}
+        primaryAction={{
+          content: t("Cancel subscription"),
+          destructive: true,
+          loading: isSubmitting && isCancelling,
+          onAction: () => {
+            setConfirmCancel(false);
+            submit({ actionType: "cancel" }, { method: "post" });
+          },
+        }}
+        secondaryActions={[{ content: t("Keep my plan"), onAction: () => setConfirmCancel(false) }]}
+      >
+        <Modal.Section>
+          <Text as="p" variant="bodyMd">
+            {t("You'll be moved to the Free plan. Unused time is prorated automatically.")}
+          </Text>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

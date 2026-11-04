@@ -111,8 +111,8 @@ async function fetchProduct(admin, productId) {
   return data?.product ?? null;
 }
 
-/** Title + image for a few product ids (for cards rebuilt from the DB). Never throws → {}. */
-async function fetchCardInfo(admin, ids) {
+/** Title + image for a few product ids (for cards rebuilt from the DB). Never throws → {}. Home's recent activity reads it for thumbnails. */
+export async function fetchCardInfo(admin, ids) {
   if (!admin?.graphql || !ids.length) return {};
   try {
     const r = await admin.graphql(CARDS_QUERY, { variables: { ids } });

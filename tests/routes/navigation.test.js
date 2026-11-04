@@ -116,6 +116,7 @@ describe("one bulk action, one name", () => {
     "app/routes/app.optimize.jsx",
     "app/routes/app._index.jsx",
     "app/routes/app.seo-audit.jsx",
+    "app/components/AuditBody.jsx", // the Audit screen, moved out of its route module
   ];
 
   const RETIRED = [
@@ -142,7 +143,7 @@ describe("one bulk action, one name", () => {
     // Home's one Optimize control is the Page primary, which counts the work
     // ("Optimize {n} products") rather than repeating the bulk action's name.
     expect(code("app/routes/app._index.jsx")).toMatch(/Optimize \{n, plural/);
-    expect(code("app/routes/app.seo-audit.jsx")).toMatch(/Optimize store/);
+    expect(code("app/components/AuditBody.jsx")).toMatch(/Optimize store/); // the Audit screen, moved out of its route module
   });
 
   it("the row action opens the product page instead of submitting a bulk job", () => {

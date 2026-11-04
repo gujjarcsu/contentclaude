@@ -134,4 +134,59 @@ describe("the product editor", () => {
     );
     expect(html).toContain("Published · product is a Shopify draft, not on your storefront");
   });
+
+  it("the description draft reads as words, not HTML; the HTML opens only behind Edit", () => {
+    const html = render(
+      payload({
+        existingContent: {
+          description: { generated: "<p>A basin mixer that earns its place.</p><ul><li>WELS 5 star</li><li>35 mm cartridge</li></ul>", original: "", status: "draft", version: 1, id: "c1" },
+        },
+      }),
+    );
+    expect(html).toContain("A basin mixer that earns its place.");
+    expect(html).toContain("WELS 5 star");
+    // No tag is shown as text anywhere (escaped, as a textarea or text node would carry it).
+    expect(html).not.toContain("&lt;p&gt;");
+    expect(html).not.toContain("&lt;li&gt;");
+    expect(html).toContain(">Edit<");
+  });
+
+  it("the store's own description is shown as words too, never as a slice of HTML", () => {
+    const html = render(payload({ product: { ...payload().product, descriptionHtml: "<p>One.</p><p>Two.</p><p>Three.</p><p>Four.</p>" } }));
+    expect(html).toContain("One.");
+    expect(html).toContain("Three.");
+    expect(html).not.toContain("Four.");
+    expect(html).toContain("Show all");
+  });
+
+  it("carries no sentence that explains the interface", () => {
+    const html = render(payload({ existingContent: { description: { generated: "<p>A draft.</p>", original: "", status: "draft", version: 1, id: "c1" } } }));
+    for (const line of [
+      "Edit the HTML directly",
+      "Google shows about 60 characters",
+      "Scored on what is on your store now",
+      "you can stay on this page",
+      "Improves what's already there",
+      "Write two different versions",
+      "Cmd+Enter",
+    ]) {
+      expect(html, line).not.toContain(line);
+    }
+  });
+
+  it("the check that keeps a product out of the feed is red; the rest are yellow until they pass", () => {
+    const html = render(payload({ feedFindings: [{ surface: "openai", field: "brand", grade: "blocking" }] }));
+    expect(html).toContain("Missing: brand");
+    expect(html).toMatch(/Polaris-Icon--toneCritical/);
+    expect(html).toMatch(/Polaris-Icon--toneCaution/);
+  });
+
+  it("the primary action is never disabled", () => {
+    const primary = (html) => /Polaris-Page-Header__PrimaryActionWrapper.*?(<button[^>]*>)/.exec(html)?.[1] ?? "";
+    for (const html of [render(payload()), render(payload({ existingContent: { description: { generated: "<p>A draft.</p>", original: "", status: "draft", version: 1, id: "c1" } } }))]) {
+      const button = primary(html);
+      expect(button).toContain('aria-disabled="false"');
+      expect(button).not.toMatch(/\sdisabled(=|\s|>)/);
+    }
+  });
 });

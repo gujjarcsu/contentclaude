@@ -22,7 +22,11 @@ import {
   Checkbox,
   Divider,
   Badge,
+  Link,
 } from "@shopify/polaris";
+import { LockedRow } from "../components/LockedRow.jsx";
+import { cheapestPlanLabelWith } from "../utils/billing-plans.js";
+import { CONTACT_EMAIL } from "../utils/legal.js";
 import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -311,6 +315,30 @@ const lengthOptions = [
   { label: T("Detailed (~400-500 words)"), value: "detailed" },
 ];
 
+
+/** "description,metaTitle,metaDescription,faq" → the words a merchant chose, deduped. */
+function templateTypes(csv, t) {
+  const words = [];
+  for (const type of String(csv ?? "").split(",")) {
+    const w = type === "description" ? t("Description") : type === "metaTitle" || type === "metaDescription" ? t("Meta Title & Description") : type === "faq" ? "FAQ" : null;
+    if (w && !words.includes(w)) words.push(w);
+  }
+  return words.join(" · ");
+}
+
+/*
+ * Redesign (Nov 2026) — Settings is one view in the admin's annotated layout:
+ * each section's title and a one-line description on the left, its card on the
+ * right (Avada's settings, Polaris's own pattern). The right-hand column of
+ * "Tips for Better Content" and "Tone Guide" is gone: each tip now sits on the
+ * field it is about, as that field's help text, and the tone guide was a copy
+ * of the tone list's own descriptions.
+ *
+ * No tabs, deliberately. The brand-voice form posts every field in one submit;
+ * a tab that unmounted its fields would post them empty and blank the saved
+ * values. Every field stays mounted, in one form, with one Save at its foot.
+ * The key, template and help sections below it keep their own forms.
+ */
 export default function SettingsPage() {
   const t = useT();
   const { languageMismatch: mismatch = null, uiLocale: savedUiLocale = "" } = useLoaderData();
@@ -325,6 +353,8 @@ export default function SettingsPage() {
   // read for the actionType only; the key field itself is never touched here.
   const isSavingAiKey = navigation.formData?.get("actionType") === "saveAiKey";
   const isSavingBing = navigation.formData?.get("actionType") === "saveBingKey";
+  const isSavingVoice = isSaving && (navigation.formData?.get("actionType") ?? "saveBrandVoice") === "saveBrandVoice";
+  const isSavingTemplate = isSaving && navigation.formData?.get("actionType") === "saveTemplate";
 
   const [storeName, setStoreName] = useState(brandVoice.storeName);
   const [brandTone, setBrandTone] = useState(brandVoice.brandTone);
@@ -375,15 +405,27 @@ export default function SettingsPage() {
     return <AppSkeleton title={t("Settings")} sections={3} layout="twoThird" />;
   }
 
+  // Autopilot is gated server-side (the action refuses it below Growth). The
+  // checkbox used to be offered on every plan and the save then said it was
+  // refused. On a plan without it, the control is a lock row — unless it is
+  // already on, in which case the merchant must still be able to turn it off.
+  const autopilotLocked = !entitlements?.autopilot && !autopilotEnabled;
+  const autopilotPlan = cheapestPlanLabelWith("autopilot");
+  const templatesPlan = cheapestPlanLabelWith("contentTemplates");
+  // Errors from the Bing forms are shown inside the Bing card; everything else
+  // is the page's one notice.
+  const bingFormActive = isSavingBing || navigation.formData?.get("actionType") === "setBingEnabled";
+  const pageError = actionData?.error && !actionData?.success && !actionData?.bingSaved ? actionData.error : null;
+
   return (
     <Page
       title={t("Settings")}
       backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
-        {actionData?.error && !actionData?.success && (
+        {pageError && (
           <Banner tone="critical">
-            <p>{actionData.error}</p>
+            <p>{pageError}</p>
           </Banner>
         )}
 
@@ -399,263 +441,190 @@ export default function SettingsPage() {
           <input type="hidden" name="ap_metaTitle" value={apMeta.toString()} />
           <input type="hidden" name="ap_metaDescription" value={apMeta.toString()} />
           <input type="hidden" name="ap_faq" value={apFaq.toString()} />
+          <input type="hidden" name="brandTone" value={brandTone} />
 
           <Layout>
-            <Layout.Section>
-              <BlockStack gap="400">
-                {mismatch && (
-                  <Banner tone="warning" title={t("Your content language setting looks wrong")}>
-                    <Text as="p" variant="bodySm">
-                      {t("Content Language is set to {languageName}, but the copy we read from your store looks like {languageName1}. If your products are written in {languageName2}, change Content Language below before you publish.", { languageName: languageName(mismatch.setting), languageName1: languageName(mismatch.detected), languageName2: languageName(mismatch.detected) })}
-                    </Text>
-                  </Banner>
-                )}
-                {/* Store Identity */}
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">
-                        {t("Store Identity")}
+            <Layout.AnnotatedSection title={t("Store")} description={t("Who you are, who you sell to, and the language you write in.")}>
+              <Card>
+                <BlockStack gap="400">
+                  {/* Phase 12 A6 — said where the setting is, not as a page banner. */}
+                  {mismatch && (
+                    <Banner tone="warning" title={t("Your content language setting looks wrong")}>
+                      <Text as="p" variant="bodySm">
+                        {t("Content Language is set to {languageName}, but the copy we read from your store looks like {languageName1}. If your products are written in {languageName2}, change Content Language below before you publish.", { languageName: languageName(mismatch.setting), languageName1: languageName(mismatch.detected), languageName2: languageName(mismatch.detected) })}
                       </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("Tell the AI who you are — the more specific, the better the output.")}
-                      </Text>
-                    </BlockStack>
-                    <TextField
-                      name="storeName"
-                      label={t("Store Name")}
-                      value={storeName}
-                      onChange={setStoreName}
-                      placeholder={t("e.g., Elite Botanics Australia")}
-                      autoComplete="off"
-                    />
-                    <Select
-                      name="language"
-                      label={t("Content Language")}
-                      options={languageOptions.map((o) => ({ ...o, label: t(o.label) }))}
-                      value={language}
-                      onChange={setLanguage}
-                    />
-                    <Select
-                      name="uiLocale"
-                      label={t("App language")}
-                      helpText={t("The language of these screens. Content Language above is what we write in.")}
-                      options={[{ label: t("Follow my Shopify admin language"), value: "" }, ...LIVE_UI_LOCALES.map((l) => ({ label: UI_LOCALE_NAMES[l] ?? l, value: l }))]}
-                      value={uiLocale}
-                      onChange={setUiLocale}
-                    />
-                    <TextField
-                      name="targetAudience"
-                      label={t("Target Audience")}
-                      value={targetAudience}
-                      onChange={setTargetAudience}
-                      multiline={3}
-                      autoComplete="off"
-                      placeholder={t("e.g., Health-conscious Australians aged 25-55")}
-                    />
-                  </BlockStack>
-                </Card>
+                    </Banner>
+                  )}
+                  <TextField
+                    name="storeName"
+                    label={t("Store Name")}
+                    value={storeName}
+                    onChange={setStoreName}
+                    placeholder={t("e.g., Elite Botanics Australia")}
+                    autoComplete="off"
+                  />
+                  <Select
+                    name="language"
+                    label={t("Content Language")}
+                    options={languageOptions.map((o) => ({ ...o, label: t(o.label) }))}
+                    value={language}
+                    onChange={setLanguage}
+                  />
+                  <Select
+                    name="uiLocale"
+                    label={t("App language")}
+                    helpText={t("The language of these screens. Content Language above is what we write in.")}
+                    options={[{ label: t("Follow my Shopify admin language"), value: "" }, ...LIVE_UI_LOCALES.map((l) => ({ label: UI_LOCALE_NAMES[l] ?? l, value: l }))]}
+                    value={uiLocale}
+                    onChange={setUiLocale}
+                  />
+                  <TextField
+                    name="targetAudience"
+                    label={t("Target Audience")}
+                    value={targetAudience}
+                    onChange={setTargetAudience}
+                    multiline={3}
+                    autoComplete="off"
+                    placeholder={t("e.g., Health-conscious Australians aged 25-55")}
+                    helpText={t("\"Active women aged 25-45 who love outdoor sports\" beats \"everyone.\"")}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.AnnotatedSection>
 
-                {/* Brand Tone — visual selector */}
-                <Card>
-                  <BlockStack gap="400">
-                    <input type="hidden" name="brandTone" value={brandTone} />
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">
-                        {t("Brand Tone")}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("How should your content sound? Click to select.")}
-                      </Text>
-                    </BlockStack>
-                    {/* Phase 2 item 2.5 — this was a CSS grid of nine raw
-                        <button style> elements with hard-coded hex, and the
-                        selected one was indicated by color alone: a 1px grey
-                        border became a 2px blue one and the background shifted
-                        to #f3f7ff. Color-only status fails contrast and fails
-                        anyone who cannot distinguish those two.
+            <Layout.AnnotatedSection title={t("Brand tone")} description={t("How every draft should sound.")}>
+              <Card>
+                {/* Phase 2 item 2.5 — a Polaris ChoiceList, a real radio group:
+                    keyboard arrows work and the selection is announced. */}
+                <ChoiceList
+                  title={t("Brand tone")}
+                  titleHidden
+                  choices={TONE_CARDS.map((card) => ({
+                    label: t(card.label),
+                    value: card.value,
+                    helpText: t(card.desc),
+                  }))}
+                  selected={[brandTone]}
+                  onChange={([value]) => setBrandTone(value)}
+                />
+              </Card>
+            </Layout.AnnotatedSection>
 
-                        A Polaris ChoiceList is the component for "pick exactly
-                        one of these", and it renders a real radio group: keyboard
-                        arrows work, the selection is announced, and it needs no
-                        styling at all. The emoji went with it (item 2.5) — a
-                        briefcase and a microscope were carrying meaning that the
-                        label and the description already carry. */}
-                    <ChoiceList
-                      title={t("Brand tone")}
-                      titleHidden
-                      choices={TONE_CARDS.map((card) => ({
-                        label: t(card.label),
-                        value: card.value,
-                        helpText: t(card.desc),
-                      }))}
-                      selected={[brandTone]}
-                      onChange={([value]) => setBrandTone(value)}
-                    />
-                  </BlockStack>
-                </Card>
+            <Layout.AnnotatedSection title={t("Keywords")} description={t("These keywords are woven naturally into all generated content.")}>
+              <Card>
+                <TextField
+                  name="targetKeywords"
+                  label={t("Target Keywords")}
+                  value={targetKeywords}
+                  onChange={setTargetKeywords}
+                  autoComplete="off"
+                  placeholder={t("e.g., organic skincare Australia, buy Vitamin C")}
+                  helpText={t("Comma-separated. Override per-product on the Generate page.")}
+                />
+              </Card>
+            </Layout.AnnotatedSection>
 
-                {/* SEO Keywords */}
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">
-                        {t("SEO Keyword Targeting")}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("These keywords are woven naturally into all generated content.")}
-                      </Text>
-                    </BlockStack>
-                    <TextField
-                      name="targetKeywords"
-                      label={t("Target Keywords")}
-                      value={targetKeywords}
-                      onChange={setTargetKeywords}
-                      autoComplete="off"
-                      placeholder={t("e.g., organic skincare Australia, buy Vitamin C")}
-                      helpText={t("Comma-separated. Override per-product on the Generate page.")}
-                    />
-                  </BlockStack>
-                </Card>
+            <Layout.AnnotatedSection title={t("What makes you different")} description={t("Facts every description can repeat, and words it must never use.")}>
+              <Card>
+                <BlockStack gap="400">
+                  <TextField
+                    name="keyDifferentiators"
+                    label={t("Key Differentiators")}
+                    value={keyDifferentiators}
+                    onChange={setKeyDifferentiators}
+                    multiline={3}
+                    autoComplete="off"
+                    placeholder={t("e.g., Australian lab tested, sustainably sourced, fast dispatch")}
+                    helpText={t("\"Lab tested with COA\" beats \"high quality.\"")}
+                  />
+                  <TextField
+                    name="avoidPhrases"
+                    label={t("Phrases & Styles to Avoid")}
+                    value={avoidPhrases}
+                    onChange={setAvoidPhrases}
+                    multiline={3}
+                    autoComplete="off"
+                    placeholder={t("e.g., No hype words. No emojis. Never say 'revolutionary'.")}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.AnnotatedSection>
 
-                {/* Differentiators */}
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">
-                        {t("What Makes You Unique")}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("These details are injected into every piece of content to reinforce your brand.")}
-                      </Text>
-                    </BlockStack>
-                    <TextField
-                      name="keyDifferentiators"
-                      label={t("Key Differentiators")}
-                      value={keyDifferentiators}
-                      onChange={setKeyDifferentiators}
-                      multiline={3}
-                      autoComplete="off"
-                      placeholder={t("e.g., Australian lab tested, sustainably sourced, fast dispatch")}
-                    />
-                    <TextField
-                      name="avoidPhrases"
-                      label={t("Phrases & Styles to Avoid")}
-                      value={avoidPhrases}
-                      onChange={setAvoidPhrases}
-                      multiline={3}
-                      autoComplete="off"
-                      placeholder={t("e.g., No hype words. No emojis. Never say 'revolutionary'.")}
-                    />
-                  </BlockStack>
-                </Card>
+            <Layout.AnnotatedSection title={t("Your voice")} description={t("Paste 2–3 of your best product descriptions. This is the most powerful way to match your exact voice.")}>
+              <Card>
+                <BlockStack gap="400">
+                  <TextField
+                    name="sampleContent"
+                    label={t("Your Best Product Descriptions")}
+                    value={sampleContent}
+                    onChange={setSampleContent}
+                    multiline={8}
+                    autoComplete="off"
+                    placeholder={t("Paste your favorite product descriptions here...")}
+                  />
+                  <TextField
+                    name="additionalNotes"
+                    label={t("Additional Guidelines")}
+                    value={additionalNotes}
+                    onChange={setAdditionalNotes}
+                    multiline={3}
+                    autoComplete="off"
+                    placeholder={t("e.g., Always mention free shipping. Never make unsubstantiated claims.")}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.AnnotatedSection>
 
-                {/* Sample Content */}
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="100">
-                      <Text as="h2" variant="headingLg">
-                        {t("Train the AI on Your Voice")}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("Paste 2–3 of your best product descriptions. This is the most powerful way to match your exact voice.")}
-                      </Text>
-                    </BlockStack>
-                    <TextField
-                      name="sampleContent"
-                      label={t("Your Best Product Descriptions")}
-                      value={sampleContent}
-                      onChange={setSampleContent}
-                      multiline={8}
-                      autoComplete="off"
-                      placeholder={t("Paste your favorite product descriptions here...")}
-                    />
-                    <TextField
-                      name="additionalNotes"
-                      label={t("Additional Guidelines")}
-                      value={additionalNotes}
-                      onChange={setAdditionalNotes}
-                      multiline={3}
-                      autoComplete="off"
-                      placeholder={t("e.g., Always mention free shipping. Never make unsubstantiated claims.")}
-                    />
-                  </BlockStack>
-                </Card>
-
-                {/* Phase 2 item 2.6 — auto-publish, in ONE place.
-
-                    It used to be a per-run checkbox in five: the product page,
-                    the Products bulk panel, the Generate All modal, and twice on
-                    Optimize. The bulk panel had no confirmation at all, and a
-                    bug on the product page skipped the confirm on five of its
-                    seven generate paths — so the small grey "Regenerate" link
-                    beside a description could overwrite the live storefront with
-                    no dialog and no undo.
-
-                    The App Store listing tells merchants nothing goes live until
-                    they approve it. That promise cannot depend on which of five
-                    checkboxes was last ticked. */}
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="100">
-                        <Text as="h2" variant="headingLg">
-                          {t("Review before publishing")}
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {t("Generated content is saved as a draft for you to read first.")}
-                        </Text>
-                      </BlockStack>
-                      {publishWithoutReview && <Badge tone="attention">{t("Review is off")}</Badge>}
+            {/* Phase 2 item 2.6 — auto-publish, in ONE place. It used to be a
+                per-run checkbox in five, and a bug skipped the confirm on five
+                of seven generate paths. The listing promises nothing goes live
+                until the merchant approves it; that cannot depend on which of
+                five checkboxes was last ticked. */}
+            <Layout.AnnotatedSection title={t("Review before publishing")} description={t("Generated content is saved as a draft for you to read first.")}>
+              <Card>
+                <BlockStack gap="400">
+                  {publishWithoutReview && (
+                    <InlineStack>
+                      <Badge tone="attention">{t("Review is off")}</Badge>
                     </InlineStack>
+                  )}
+                  <Checkbox
+                    label={t("Publish without review")}
+                    checked={publishWithoutReview}
+                    helpText={t("Content goes straight to your live storefront. Nothing is held for approval.")}
+                    onChange={(value) => {
+                      // Turning it ON asks first. Turning it OFF is the safe
+                      // direction and needs no ceremony.
+                      if (value) setConfirmPublishWithoutReview(true);
+                      else setPublishWithoutReview(false);
+                    }}
+                  />
 
-                    <Checkbox
-                      label={t("Publish without review")}
-                      checked={publishWithoutReview}
-                      helpText={t("Content goes straight to your live storefront. Nothing is held for approval.")}
-                      onChange={(value) => {
-                        // Turning it ON asks first. Turning it OFF is the safe
-                        // direction and needs no ceremony.
-                        if (value) setConfirmPublishWithoutReview(true);
-                        else setPublishWithoutReview(false);
-                      }}
-                    />
+                  {/* A1.2 — the drafts opt-in. Off by default because a draft
+                      has no public page; on for merchants who draft in bulk
+                      and publish in batches. Archived is deliberately NOT
+                      offered: an archived product has no storefront page. */}
+                  <Checkbox
+                    label={t("Include draft products")}
+                    checked={includeDraftProducts}
+                    helpText={t("Counts and optimizes products that are still drafts. Off by default, because a draft has no public page yet. Archived products are never included.")}
+                    onChange={setIncludeDraftProducts}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.AnnotatedSection>
 
-                    {/* A1.2 — the drafts opt-in.
-                        The column and the read path shipped in 2d9c37d; this is
-                        the half a merchant can reach. Without it the default was
-                        not a default, it was a law: no shop could ever include
-                        its drafts, however it merchandises.
-                        Off by default because a draft has no public page, so
-                        writing SEO copy for one spends a generation on a page
-                        nobody can reach. On for the merchants who draft in bulk
-                        and publish in batches — which is a real and ordinary way
-                        to run a store, not an edge case.
-                        Archived is deliberately NOT offered: an archived product
-                        is not for sale and has no storefront page at all. */}
-                    <Checkbox
-                      label={t("Include draft products")}
-                      checked={includeDraftProducts}
-                      helpText={t("Counts and optimizes products that are still drafts. Off by default, because a draft has no public page yet. Archived products are never included.")}
-                      onChange={setIncludeDraftProducts}
-                    />
-                  </BlockStack>
-                </Card>
-                {/* Autopilot */}
-                <Card>
+            <Layout.AnnotatedSection title={t("Autopilot")} description={t("Automatically generate content when a new product is added to your store.")}>
+              <Card>
+                {autopilotLocked ? (
+                  <LockedRow sentence={t("Autopilot is on {plan} and above.", { plan: autopilotPlan })} onSeePlans={() => navigate("/app/plans")} />
+                ) : (
                   <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="100">
-                        <Text as="h2" variant="headingLg">
-                          {t("Autopilot Mode")}
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {t("Automatically generate content when a new product is added to your store.")}
-                        </Text>
-                      </BlockStack>
-                      {autopilotEnabled && <Badge tone="success">{t("Active")}</Badge>}
-                    </InlineStack>
-
+                    {autopilotEnabled && (
+                      <InlineStack>
+                        <Badge tone="success">{t("Active")}</Badge>
+                      </InlineStack>
+                    )}
                     <Checkbox
                       label={t("Enable Autopilot")}
                       checked={autopilotEnabled}
@@ -683,325 +652,278 @@ export default function SettingsPage() {
                       </BlockStack>
                     )}
                   </BlockStack>
-                </Card>
+                )}
+              </Card>
+            </Layout.AnnotatedSection>
 
-                <Button variant="primary" size="large" submit loading={isSaving} fullWidth>
-                  {isSaving ? t("Saving...") : t("Save Settings")}
+            {/* One save for every section above: they are one form. */}
+            <Layout.Section>
+              <InlineStack align="end">
+                <Button variant="primary" submit loading={isSavingVoice}>
+                  {t("Save")}
                 </Button>
-              </BlockStack>
-            </Layout.Section>
-
-            {/* Sidebar */}
-            <Layout.Section variant="oneThird">
-              <BlockStack gap="400">
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">
-                      {t("Tips for Better Content")}
-                    </Text>
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodySm">
-                        <strong>{t("Be specific with your audience.")}</strong> {t("\"Active women aged 25-45 who love outdoor sports\" beats \"everyone.\"")}
-                      </Text>
-                      <Text as="p" variant="bodySm">
-                        <strong>{t("Add real keywords.")}</strong> {t("Woven naturally — no keyword stuffing.")}
-                      </Text>
-                      <Text as="p" variant="bodySm">
-                        <strong>{t("Real differentiators win.")}</strong> {t("\"Lab tested with COA\" beats \"high quality.\"")}
-                      </Text>
-                      <Text as="p" variant="bodySm">
-                        <strong>{t("Paste real examples.")}</strong> {t("The single most powerful way to clone your voice.")}
-                      </Text>
-                    </BlockStack>
-                  </BlockStack>
-                </Card>
-
-                <Card>
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">
-                      {t("Tone Guide")}
-                    </Text>
-                    <BlockStack gap="200">
-                      {TONE_CARDS.slice(0, 4).map((card) => (
-                        <Text key={card.value} as="p" variant="bodySm">
-                          <strong>{t(card.label)}</strong> — {t(card.desc)}
-                        </Text>
-                      ))}
-                    </BlockStack>
-                  </BlockStack>
-                </Card>
-              </BlockStack>
+              </InlineStack>
             </Layout.Section>
           </Layout>
         </Form>
 
-        {/* ── C0.7 / P5.5 — your own AI key, Professional only ──────────────
-            The input is deliberately write-only. There is nothing to prefill it
-            WITH: the loader never receives key material, so the field is empty
-            even when a key is saved, and the card says "a key is saved" rather
-            than showing any part of it. 04-DECISIONS.md: not the key, not a
-            prefix, not a length. */}
-        {aiKeyAvailable && (
-          <Card>
-            <BlockStack gap="300">
-              <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                <Text as="h2" variant="headingLg">
-                  {t("Use your own AI key")}
-                </Text>
-                {aiKey?.saved && !aiKey?.failing && (
-                  <Badge tone="success">{aiKey?.validatedAt ? t("Active") : t("Saved, not checked")}</Badge>
-                )}
-                {aiKey?.failing && <Badge tone="critical">{t("Not working")}</Badge>}
-              </InlineStack>
+        <Divider />
 
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("Paste an Anthropic API key and this app will generate on your account instead of ours.")} <b>{t("Content written with your key doesn't count against your monthly credits")}</b> {t("— you pay Anthropic for the usage and us for the software.")}
-              </Text>
+        <Layout>
+          {/* Content Templates — Starter+ (matches the pricing table) */}
+          <Layout.AnnotatedSection title={t("Content templates")} description={t("Save writing presets — apply from the product page with one click.")}>
+            <Card>
+              {!entitlements?.contentTemplates ? (
+                <LockedRow sentence={t("Content templates are on {plan} and above.", { plan: templatesPlan })} onSeePlans={() => navigate("/app/plans")} />
+              ) : (
+                <BlockStack gap="400">
+                  {templates.length > 0 && (
+                    <BlockStack gap="0">
+                      {templates.map((tpl, i) => (
+                        <Box key={tpl.id}>
+                          {i > 0 ? <Divider /> : null}
+                          <Box paddingBlock="300">
+                            <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                              <BlockStack gap="050">
+                                <InlineStack gap="200" blockAlign="center">
+                                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                    {tpl.name}
+                                  </Text>
+                                  {tpl.isDefault && <Badge>{t("Default")}</Badge>}
+                                </InlineStack>
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                  {[t(lengthOptions.find((o) => o.value === tpl.contentLength)?.label ?? tpl.contentLength), templateTypes(tpl.contentTypes, t)].filter(Boolean).join(" · ")}
+                                  {tpl.keywords && t(" · keywords: {keywords}", { keywords: tpl.keywords })}
+                                </Text>
+                              </BlockStack>
+                              <Form method="post">
+                                <input type="hidden" name="actionType" value="deleteTemplate" />
+                                <input type="hidden" name="templateId" value={tpl.id} />
+                                <Button tone="critical" variant="plain" size="slim" submit>
+                                  {t("Delete")}
+                                </Button>
+                              </Form>
+                            </InlineStack>
+                          </Box>
+                        </Box>
+                      ))}
+                      <Divider />
+                    </BlockStack>
+                  )}
 
-              {aiKey?.failing && (
-                <Banner tone="critical" title={t("Your key stopped working")}>
-                  <Text as="p" variant="bodySm">
-                    {t("Anthropic rejected it, so jobs are paused rather than quietly running on our key and your credits. Save a working key below to resume.")}
+                  <Text as="h3" variant="headingSm">
+                    {t("Add New Template")}
                   </Text>
-                </Banner>
-              )}
 
-              <Form method="post">
-                <input type="hidden" name="actionType" value="saveAiKey" />
-                <BlockStack gap="300">
-                  <TextField
-                    label={t("Anthropic API key")}
-                    name="aiKey"
-                    type="password"
-                    autoComplete="off"
-                    placeholder={aiKey?.saved ? t("A key is saved — paste a new one to replace it") : "sk-ant-..."}
-                    helpText={t("Checked against Anthropic when you save, so you find out now rather than halfway through a bulk job. Stored encrypted; never shown again, not even in part.")}
-                  />
-                  <InlineStack gap="200">
-                    <Button submit variant="primary" loading={isSaving && isSavingAiKey}>
-                      {aiKey?.saved ? t("Replace key") : t("Save key")}
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              </Form>
-
-              {aiKey?.saved && (
-                <Form method="post">
-                  <input type="hidden" name="actionType" value="removeAiKey" />
-                  <Button submit variant="plain" tone="critical">
-                    {t("Remove my key and use yours")}
-                  </Button>
-                </Form>
-              )}
-            </BlockStack>
-          </Card>
-        )}
-
-        {/* P3.2 (Phase 8) — the merchant's Bing Webmaster key, for the crawl-time
-            holdout. Stored like the AI key; the card only ever sees booleans. */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center" wrap={false}>
-              <Text as="h2" variant="headingLg">
-                {t("Measure crawl time with Bing")}
-              </Text>
-              {bing?.saved && bing?.siteUrl && <Badge tone={bing?.enabled ? "success" : "info"}>{bing?.enabled ? t("Measuring") : t("Key saved, switched off")}</Badge>}
-              {bing?.saved && !bing?.siteUrl && <Badge tone="critical">{t("Key cannot see this store")}</Badge>}
-            </InlineStack>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("Add your Bing Webmaster Tools API key (Bing Webmaster Tools, Settings, API access) and switch measurement on. Each batch of product pages we publish is then split at random: half submitted to Bing through your key, half withheld, and the time to Bing's first crawl recorded for both — a causal result about your own store, usually inside 72 hours. Nothing is sent to Bing until you switch it on. Stored encrypted; never shown again, not even in part.")}
-            </Text>
-            {actionData?.error && (isSavingBing || navigation.formData?.get("actionType") === "setBingEnabled") && (
-              <Banner tone="critical" title={actionData.error} />
-            )}
-            {actionData?.bingSaved && (
-              <Banner tone={actionData.bingSiteUrl ? "success" : "warning"} title={actionData.bingSiteUrl ? t("Key saved — Bing knows this store as {bingSiteUrl}", { bingSiteUrl: actionData.bingSiteUrl }) : t("Key saved, but none of its {bingSites} site(s) is this storefront", { bingSites: actionData.bingSites })}>
-                {!actionData.bingSiteUrl && (
-                  <Text as="p" variant="bodySm">
-                    {t("Add and verify your storefront domain in Bing Webmaster Tools, then save the key again.")}
-                  </Text>
-                )}
-              </Banner>
-            )}
-            <Form method="post">
-              <input type="hidden" name="actionType" value="saveBingKey" />
-              <BlockStack gap="300">
-                <TextField
-                  label={t("Bing Webmaster API key")}
-                  name="bingKey"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={bing?.saved ? t("A key is saved — paste a new one to replace it") : t("Paste your key")}
-                  helpText={t("Checked against Bing when you save. Stored encrypted; never logged, never shown again.")}
-                />
-                <InlineStack gap="200">
-                  <Button submit loading={isSaving && isSavingBing}>
-                    {bing?.saved ? t("Replace key") : t("Save key")}
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Form>
-            {bing?.saved && bing?.siteUrl && (
-              <Form method="post">
-                <input type="hidden" name="actionType" value="setBingEnabled" />
-                <input type="hidden" name="enabled" value={bing?.enabled ? "false" : "true"} />
-                <Button submit>
-                  {bing?.enabled ? t("Switch measurement off") : t("Switch measurement on")}
-                </Button>
-              </Form>
-            )}
-            {bing?.saved && (
-              <Form method="post">
-                <input type="hidden" name="actionType" value="removeBingKey" />
-                <Button submit variant="plain" tone="critical">
-                  {t("Remove my Bing key")}
-                </Button>
-              </Form>
-            )}
-          </BlockStack>
-        </Card>
-
-        {/* P6.2 — support, where a confused merchant actually looks.
-            It is NOT in the sidebar: that is five items by an earlier decision
-            and navigation.test.js enforces it. The footer carries it on every
-            page; this is the second place, because Settings is where someone
-            goes when something is not behaving. */}
-        <Card>
-          <BlockStack gap="200">
-            <Text as="h2" variant="headingMd">
-              {t("Something not working?")}
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("Ask us and a real person replies, within one business day.")}
-            </Text>
-            <InlineStack>
-              <Button onClick={() => navigate("/app/support")}>{t("Get help")}</Button>
-            </InlineStack>
-          </BlockStack>
-        </Card>
-
-        {/* Re-run wizard */}
-        {/* Content Templates — Starter+ (matches the pricing table) */}
-        {!entitlements?.contentTemplates ? (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingLg">
-                {t("Content Templates")}
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                {t("Save writing presets and apply them from any product page with one click. Available on the Starter plan and above.")}
-              </Text>
-              <InlineStack>
-                <Button onClick={() => (window.location.href = "/app/plans")}>{t("Upgrade to unlock")}</Button>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        ) : (
-          <Card>
-            <BlockStack gap="400">
-              <BlockStack gap="100">
-                <Text as="h2" variant="headingLg">
-                  {t("Content Templates")}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Save writing presets — apply from the product page with one click.")}
-                </Text>
-              </BlockStack>
-
-              {templates.length > 0 && (
-                <BlockStack gap="200">
-                  {templates.map((tpl) => (
-                    <Box key={tpl.id} padding="300" background="bg-surface-secondary" borderRadius="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Text as="p" variant="bodyMd" fontWeight="semibold">
-                              {tpl.name}
-                            </Text>
-                            {tpl.isDefault && <Badge tone="success">{t("Default")}</Badge>}
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {tpl.contentLength} · {tpl.contentTypes.replace(/,/g, ",")}
-                            {tpl.keywords && t(" · keywords: {keywords}", { keywords: tpl.keywords })}
-                          </Text>
-                        </BlockStack>
-                        <Form method="post">
-                          <input type="hidden" name="actionType" value="deleteTemplate" />
-                          <input type="hidden" name="templateId" value={tpl.id} />
-                          <Button tone="critical" variant="plain" size="slim" submit>
-                            {t("Delete")}
-                          </Button>
-                        </Form>
+                  <Form method="post">
+                    <input type="hidden" name="actionType" value="saveTemplate" />
+                    <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
+                    {/* Same defect as Autopilot's: the "Meta Title & Description"
+                      checkbox must submit both fields. */}
+                    <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
+                    <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
+                    <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
+                    <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
+                    <BlockStack gap="300">
+                      <TextField
+                        name="tplName"
+                        label={t("Template Name")}
+                        value={tplName}
+                        onChange={setTplName}
+                        placeholder={t("e.g., Full SEO Package")}
+                        autoComplete="off"
+                      />
+                      <Select
+                        name="tplLength"
+                        label={t("Description Length")}
+                        options={lengthOptions.map((o) => ({ ...o, label: t(o.label) }))}
+                        value={tplLength}
+                        onChange={setTplLength}
+                      />
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        {t("Content types:")}
+                      </Text>
+                      <InlineStack gap="400" wrap>
+                        <Checkbox label={t("Description")} checked={tplDesc} onChange={setTplDesc} />
+                        <Checkbox label={t("Meta Title & Description")} checked={tplMeta} onChange={setTplMeta} />
+                        <Checkbox label="FAQ" checked={tplFaq} onChange={setTplFaq} />
                       </InlineStack>
-                    </Box>
-                  ))}
+                      <TextField
+                        name="tplKeywords"
+                        label={t("Keywords (optional)")}
+                        value={tplKeywords}
+                        onChange={setTplKeywords}
+                        autoComplete="off"
+                        placeholder={t("Override global keywords for this template")}
+                      />
+                      <TextField
+                        name="tplInstructions"
+                        label={t("Custom Instructions (optional)")}
+                        value={tplInstructions}
+                        onChange={setTplInstructions}
+                        multiline={2}
+                        autoComplete="off"
+                        placeholder={t("e.g., Focus on clinical applications, always mention purity")}
+                      />
+                      <Checkbox label={t("Set as default template")} checked={tplDefault} onChange={setTplDefault} />
+                      {/* A name is the one thing a template needs; with none,
+                          the button stays and the field says why. */}
+                      <InlineStack align="end">
+                        <Button submit loading={isSavingTemplate} disabled={!tplName.trim()}>
+                          {t("Save Template")}
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Form>
                 </BlockStack>
               )}
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <Divider />
-              <Text as="h3" variant="headingMd">
-                {t("Add New Template")}
-              </Text>
-
-              <Form method="post">
-                <input type="hidden" name="actionType" value="saveTemplate" />
-                <input type="hidden" name="tpl_description" value={tplDesc.toString()} />
-                {/* Same defect as Autopilot's: the "Meta Title & Description"
-                  checkbox must submit both fields. */}
-                <input type="hidden" name="tpl_metaTitle" value={tplMeta.toString()} />
-                <input type="hidden" name="tpl_metaDescription" value={tplMeta.toString()} />
-                <input type="hidden" name="tpl_faq" value={tplFaq.toString()} />
-                <input type="hidden" name="tplDefault" value={tplDefault.toString()} />
+          {/* ── C0.7 / P5.5 — your own AI key, Professional only ──────────────
+              The input is deliberately write-only. The loader never receives
+              key material, so the field is empty even when a key is saved, and
+              the card says "a key is saved" rather than showing any part of
+              it. 04-DECISIONS.md: not the key, not a prefix, not a length. */}
+          {aiKeyAvailable && (
+            <Layout.AnnotatedSection title={t("Use your own AI key")} description={t("Generate on your Anthropic account instead of ours.")}>
+              <Card>
                 <BlockStack gap="300">
-                  <TextField
-                    name="tplName"
-                    label={t("Template Name")}
-                    value={tplName}
-                    onChange={setTplName}
-                    placeholder={t("e.g., Full SEO Package")}
-                    autoComplete="off"
-                  />
-                  <Select
-                    name="tplLength"
-                    label={t("Description Length")}
-                    options={lengthOptions.map((o) => ({ ...o, label: t(o.label) }))}
-                    value={tplLength}
-                    onChange={setTplLength}
-                  />
-                  <Text as="p" variant="bodySm" fontWeight="semibold">
-                    {t("Content types:")}
+                  {(aiKey?.saved || aiKey?.failing) && (
+                    <InlineStack gap="200">
+                      {aiKey?.saved && !aiKey?.failing && (
+                        <Badge tone="success">{aiKey?.validatedAt ? t("Active") : t("Saved, not checked")}</Badge>
+                      )}
+                      {aiKey?.failing && <Badge tone="critical">{t("Not working")}</Badge>}
+                    </InlineStack>
+                  )}
+
+                  <Text as="p" variant="bodySm">
+                    {t("Paste an Anthropic API key and this app will generate on your account instead of ours.")} <b>{t("Content written with your key doesn't count against your monthly credits")}</b> {t("— you pay Anthropic for the usage and us for the software.")}
                   </Text>
-                  <InlineStack gap="400" wrap>
-                    <Checkbox label={t("Description")} checked={tplDesc} onChange={setTplDesc} />
-                    <Checkbox label={t("Meta Title & Description")} checked={tplMeta} onChange={setTplMeta} />
-                    <Checkbox label="FAQ" checked={tplFaq} onChange={setTplFaq} />
-                  </InlineStack>
-                  <TextField
-                    name="tplKeywords"
-                    label={t("Keywords (optional)")}
-                    value={tplKeywords}
-                    onChange={setTplKeywords}
-                    autoComplete="off"
-                    placeholder={t("Override global keywords for this template")}
-                  />
-                  <TextField
-                    name="tplInstructions"
-                    label={t("Custom Instructions (optional)")}
-                    value={tplInstructions}
-                    onChange={setTplInstructions}
-                    multiline={2}
-                    autoComplete="off"
-                    placeholder={t("e.g., Focus on clinical applications, always mention purity")}
-                  />
-                  <Checkbox label={t("Set as default template")} checked={tplDefault} onChange={setTplDefault} />
-                  <Button submit loading={isSaving} disabled={!tplName.trim()}>
-                    {t("Save Template")}
-                  </Button>
+
+                  {aiKey?.failing && (
+                    <Banner tone="critical" title={t("Your key stopped working")}>
+                      <Text as="p" variant="bodySm">
+                        {t("Anthropic rejected it, so jobs are paused rather than quietly running on our key and your credits. Save a working key below to resume.")}
+                      </Text>
+                    </Banner>
+                  )}
+
+                  <Form method="post">
+                    <input type="hidden" name="actionType" value="saveAiKey" />
+                    <BlockStack gap="300">
+                      <TextField
+                        label={t("Anthropic API key")}
+                        name="aiKey"
+                        type="password"
+                        autoComplete="off"
+                        placeholder={aiKey?.saved ? t("A key is saved — paste a new one to replace it") : "sk-ant-..."}
+                        helpText={t("Checked against Anthropic when you save, so you find out now rather than halfway through a bulk job. Stored encrypted; never shown again, not even in part.")}
+                      />
+                      <InlineStack align="end">
+                        <Button submit loading={isSaving && isSavingAiKey}>
+                          {aiKey?.saved ? t("Replace key") : t("Save key")}
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Form>
+
+                  {aiKey?.saved && (
+                    <Form method="post">
+                      <input type="hidden" name="actionType" value="removeAiKey" />
+                      <Button submit variant="plain" tone="critical">
+                        {t("Remove my key and use yours")}
+                      </Button>
+                    </Form>
+                  )}
                 </BlockStack>
-              </Form>
-            </BlockStack>
-          </Card>
-        )}
+              </Card>
+            </Layout.AnnotatedSection>
+          )}
+
+          {/* P3.2 (Phase 8) — the merchant's Bing Webmaster key, for the
+              crawl-time holdout. Stored like the AI key; the card only ever
+              sees booleans. */}
+          <Layout.AnnotatedSection title={t("Measure crawl time with Bing")} description={t("A randomised test of how fast Bing crawls the pages we publish, on your own store.")}>
+            <Card>
+              <BlockStack gap="300">
+                {bing?.saved && (
+                  <InlineStack gap="200">
+                    {bing?.siteUrl && <Badge tone={bing?.enabled ? "success" : undefined}>{bing?.enabled ? t("Measuring") : t("Key saved, switched off")}</Badge>}
+                    {!bing?.siteUrl && <Badge tone="critical">{t("Key cannot see this store")}</Badge>}
+                  </InlineStack>
+                )}
+                <Text as="p" variant="bodySm">
+                  {t("Add your Bing Webmaster Tools API key (Bing Webmaster Tools, Settings, API access) and switch measurement on. Each batch of product pages we publish is then split at random: half submitted to Bing through your key, half withheld, and the time to Bing's first crawl recorded for both — a causal result about your own store, usually inside 72 hours. Nothing is sent to Bing until you switch it on. Stored encrypted; never shown again, not even in part.")}
+                </Text>
+                {actionData?.error && bingFormActive && (
+                  <Banner tone="critical" title={actionData.error} />
+                )}
+                {actionData?.bingSaved && (
+                  <Banner tone={actionData.bingSiteUrl ? "success" : "warning"} title={actionData.bingSiteUrl ? t("Key saved — Bing knows this store as {bingSiteUrl}", { bingSiteUrl: actionData.bingSiteUrl }) : t("Key saved, but none of its {bingSites} site(s) is this storefront", { bingSites: actionData.bingSites })}>
+                    {!actionData.bingSiteUrl && (
+                      <Text as="p" variant="bodySm">
+                        {t("Add and verify your storefront domain in Bing Webmaster Tools, then save the key again.")}
+                      </Text>
+                    )}
+                  </Banner>
+                )}
+                <Form method="post">
+                  <input type="hidden" name="actionType" value="saveBingKey" />
+                  <BlockStack gap="300">
+                    <TextField
+                      label={t("Bing Webmaster API key")}
+                      name="bingKey"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={bing?.saved ? t("A key is saved — paste a new one to replace it") : t("Paste your key")}
+                      helpText={t("Checked against Bing when you save. Stored encrypted; never logged, never shown again.")}
+                    />
+                    <InlineStack align="end">
+                      <Button submit loading={isSaving && isSavingBing}>
+                        {bing?.saved ? t("Replace key") : t("Save key")}
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                </Form>
+                {bing?.saved && bing?.siteUrl && (
+                  <Form method="post">
+                    <input type="hidden" name="actionType" value="setBingEnabled" />
+                    <input type="hidden" name="enabled" value={bing?.enabled ? "false" : "true"} />
+                    <Button submit>
+                      {bing?.enabled ? t("Switch measurement off") : t("Switch measurement on")}
+                    </Button>
+                  </Form>
+                )}
+                {bing?.saved && (
+                  <Form method="post">
+                    <input type="hidden" name="actionType" value="removeBingKey" />
+                    <Button submit variant="plain" tone="critical">
+                      {t("Remove my Bing key")}
+                    </Button>
+                  </Form>
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+
+          {/* P6.2 — support, where a confused merchant actually looks. Not in
+              the sidebar (navigation.test.js holds it to six one-word items);
+              the footer carries it on every page and this is the second
+              place, because Settings is where someone goes when something is
+              not behaving. */}
+          <Layout.AnnotatedSection title={t("Something not working?")} description={t("Ask us and a real person replies, within one business day.")}>
+            <Card>
+              <InlineStack align="space-between" blockAlign="center" gap="300">
+                <Link url={`mailto:${CONTACT_EMAIL}`} removeUnderline>
+                  {CONTACT_EMAIL}
+                </Link>
+                <Button onClick={() => navigate("/app/support")}>{t("Get help")}</Button>
+              </InlineStack>
+            </Card>
+          </Layout.AnnotatedSection>
+        </Layout>
       </BlockStack>
       {/* Phase 2 item 2.6 - turning review OFF is the consequential direction,
           so it asks once, in destructive tone, and says exactly what changes. */}

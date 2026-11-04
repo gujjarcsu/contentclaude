@@ -26,7 +26,9 @@ const SEVERITY = {
 /**
  * @param {object} props
  * @param {Array<{id: string, severity: "critical"|"warning"|"info"|"passed", title: string,
- *   detail?: string, count?: string, action?: {content: string, url?: string, onAction?: () => void, external?: boolean}}>} props.items
+ *   detail?: string, count?: string, action?: {content: string, url?: string, onAction?: () => void, external?: boolean, plain?: boolean}}>} props.items
+ *   action.plain, or row.locked (fixRows sets it) — a plain link instead of a button: for a locked fix,
+ *   "See plans" is not the way to fix it, so it must not look like one.
  * @param {string} [props.emptyText] shown when there is nothing in the list
  */
 export function IssueList({ items, emptyText }) {
@@ -82,7 +84,7 @@ export function IssueList({ items, emptyText }) {
                         </Text>
                       ) : null}
                       {row.action ? (
-                        <Button size="slim" url={row.action.url} onClick={row.action.onAction} external={row.action.external} target={row.action.external ? "_blank" : undefined}>
+                        <Button size="slim" variant={row.action.plain || row.locked ? "plain" : undefined} url={row.action.url} onClick={row.action.onAction} external={row.action.external} target={row.action.external ? "_blank" : undefined}>
                           {row.action.content}
                         </Button>
                       ) : null}

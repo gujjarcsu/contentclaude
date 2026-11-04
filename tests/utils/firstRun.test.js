@@ -91,12 +91,19 @@ describe("wiring", () => {
     const start = code(readFileSync("app/components/StartState.jsx", "utf8"));
     expect(start).toMatch(/WATCH_FROM_HERE/);
     expect(start).toMatch(/start\.blockers/);
-    expect(start).toMatch(/holding this store back/);
+    // Redesign (Nov 2026): the card is headed "What to fix first", the same
+    // words as Home's card for the same rows.
+    expect(start).toMatch(/What to fix first/);
     const home = code(readFileSync("app/routes/app._index.jsx", "utf8"));
     // Redesign (Nov 2026): Home leads with "what to fix first" on every load,
     // so the blockers are read unconditionally (one indexed query, never throws).
     expect(home).toMatch(/const blockers = await blockersFor\(shop\);/);
-    expect(start).toMatch(/\{blockerLine\(b, t, \{ draftsBelow: true \}\)\}/); // D1: the line is made where it is shown, in the merchant's language; the "written below" note only where the drafts are below
+    // D1: the line is made where it is shown, in the merchant's language. The
+    // "written below" note appears only once the drafts really are below:
+    // since the redesign they start when the merchant presses the button, so
+    // the flag is the writing state, not a constant true.
+    expect(start).toMatch(/blockerLine\(b, t, \{ draftsBelow: writing \}\)/);
+    expect(start).not.toMatch(/draftsBelow: true/);
     expect(home).not.toMatch(/draftsBelow/); // Home has no drafts under the line, so it never says "below"
   });
 

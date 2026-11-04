@@ -18,7 +18,6 @@ import {
   useIndexResourceState,
   useBreakpoints,
   Text,
-  Thumbnail,
   Badge,
   BlockStack,
   InlineStack,
@@ -35,9 +34,9 @@ import {
   ProgressBar,
 } from "@shopify/polaris";
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { ImageIcon } from "@shopify/polaris-icons";
 import { StatStrip } from "../components/StatStrip.jsx";
 import { ScoreRing } from "../components/ScoreRing.jsx";
+import { ProductThumb } from "../components/ProductThumb.jsx";
 import { authenticate } from "../shopify.server.js";
 import { LIST_SCOPE_QUERY } from "../utils/candidates.js";
 import prisma from "../db.server.js";
@@ -55,7 +54,7 @@ import { runQuickStartOne, PRODUCT_GID_RE } from "../utils/quickStart.server.js"
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
-import { publishedSubtext, offStorefrontRows } from "../utils/catalogueContent.js";
+import { publishedSubtext } from "../utils/catalogueContent.js";
 import {
   actionFor,
   hasRealContent,
@@ -662,10 +661,6 @@ export default function ProductsPage() {
     return t("{total} products in your catalog{scope}{archived}", { total, scope, archived: archivedNote });
   }, [t, countsOk, totalStoreProducts, totalExact, candidateProducts, candidateExact, candidateLabel, archivedProducts]);
 
-  // Tab counts are scoped to the CURRENT page (the tabs filter only the
-  // visible 50-product page). Using store-wide counts here made labels like
-  // "Draft (120)" sit above an empty list — the store-wide totals live in the
-  // stat cards above instead.
   const statusById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.status])), [products]);
   // Frame 03 — the badge and the count must key on the SAME fact. Shopify
   // status alone misses a product that is ACTIVE but unpublished from the
@@ -673,36 +668,23 @@ export default function ProductsPage() {
   // and it used to carry no marker at all.
   const onStorefrontById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.onStorefront])), [products]);
 
-  const pageCounts = useMemo(() => {
-    let draft = 0,
-      published = 0,
-      none = 0;
-    for (const p of products) {
-      const state = stateOfContentMap(contentMap[p.id]);
-      if (state === PRODUCT_STATE.PUBLISHED) published++;
-      else if (state === PRODUCT_STATE.DRAFT) draft++;
-      else if (state === PRODUCT_STATE.NEEDS_CONTENT) none++;
-      // rejected is deliberately in no tab; it is counted in the cards above.
-    }
-    // Frame 03 — how many rows on this page the header's population excludes,
-    // so the two can be reconciled on screen instead of by arithmetic.
-    return { draft, published, none, offStorefront: offStorefrontRows(products) };
-  }, [products, contentMap]);
-
+  /* The tabs FILTER; they do not count. Group 6.2 found the same defect three
+     times: the strip is store-wide, the tabs could only count the visible
+     page, and "Draft (0)" under "2 ready to review" read as a contradiction.
+     Labelling every tab "on this page" fixed the scope and cluttered the bar.
+     Redesign (Nov 2026): the category's list screens (Smart SEO's All · Active
+     · Draft · Archived) carry no number on a tab, so neither does this one. The
+     store-wide numbers live in the strip; the one page-scoped number, how many
+     rows are shown, sits beside the pager and says it is page-scoped
+     (tests/routes/numberScope.test.js). */
   const tabs = useMemo(
     () => [
-      // Group 6.2, third occurrence of this defect. The header and the stat
-      // cards are STORE-WIDE; these tabs count only the visible page. The screen
-      // read "2 ready to review" above "Draft (0)" and nothing said why.
-      //
-      // Both numbers were right. What was missing was the scope, so every
-      // page-scoped label now carries "on this page" — a guard asserts it.
-      { id: "all", content: t("All ({length} on page)", { length: products.length }), panelID: "all" },
-      { id: "needsContent", content: t("Not optimized on this page ({none})", { none: pageCounts.none }), panelID: "needsContent" },
-      { id: "draft", content: t("Draft on this page ({draft})", { draft: pageCounts.draft }), panelID: "draft" },
-      { id: "published", content: t("Published on this page ({published})", { published: pageCounts.published }), panelID: "published" },
+      { id: "all", content: t("All"), panelID: "all" },
+      { id: "needsContent", content: t("Not optimized"), panelID: "needsContent" },
+      { id: "draft", content: t("Draft"), panelID: "draft" },
+      { id: "published", content: t("Published"), panelID: "published" },
     ],
-    [products.length, pageCounts, t],
+    [t],
   );
   const selectedTabIndex = tabs.findIndex((t) => t.id === statusFilter);
   const activeTab = selectedTabIndex >= 0 ? selectedTabIndex : 0;
@@ -771,6 +753,26 @@ export default function ProductsPage() {
     // Whether this is a problem depends entirely on whose content is missing.
     const action = actionFor({ hasOwnContent: hasRealContent(description) });
     return <Badge tone={CONTENT_ACTION_TONE[action]}>{CONTENT_ACTION_LABEL[action]}</Badge>;
+  }
+
+  /**
+   * Frame 03 — the row the strip's totals leave out, marked on the row itself.
+   *
+   * The list is `-status:archived`; the strip counts the candidate scope, which
+   * requires the Online Store channel. The two used to be reconciled by a
+   * sentence above the table ("1 product here is not on your Online Store…").
+   * Redesign (Nov 2026): every such row says so in its own status cell, keyed
+   * on the SAME fact the count uses (onStorefront, from `publishedAt`), so the
+   * difference is seen where it is, not explained above it. A row whose state
+   * badge already says it (published content with no public page, above) gets
+   * no second mark.
+   */
+  function channelBadge(productId) {
+    if (onStorefrontById[productId] !== false) return null;
+    const state = stateOfContentMap(contentMap[productId]);
+    const live = state === PRODUCT_STATE.PUBLISHED || state === PRODUCT_STATE.UNVERIFIED;
+    if (live) return null;
+    return <Badge>{t("Not on your Online Store")}</Badge>;
   }
 
   /**
@@ -973,7 +975,13 @@ export default function ProductsPage() {
           hasNext: !!pageInfo.hasNextPage,
           onPrevious: () => setSearchParams({ cursor: pageInfo.startCursor, dir: "prev", status: statusFilter }),
           onNext: () => setSearchParams({ cursor: pageInfo.endCursor, dir: "next", status: statusFilter }),
-          label: t("Showing {length} products", { length: filteredProducts.length }),
+          // The one page-scoped number on the screen, so it says so: how many
+          // rows are shown, out of the page's own rows when a tab or the
+          // search narrows them (numberScope.test.js).
+          label:
+            filteredProducts.length === products.length
+              ? t("{n, plural, one {# product on this page} other {# products on this page}}", { n: products.length })
+              : t("{shown} of the {n} products on this page", { shown: filteredProducts.length, n: products.length }),
         }
       : undefined;
 
@@ -1008,7 +1016,7 @@ export default function ProductsPage() {
           <Box padding="300" width="100%">
             <BlockStack gap="200">
               <InlineStack gap="300" blockAlign="center" wrap={false}>
-                <Thumbnail source={imageUrl || ImageIcon} alt="" size="small" />
+                <ProductThumb url={imageUrl} />
                 <Box width="100%">
                   <BlockStack gap="050">
                     <Text as="span" variant="bodyMd" fontWeight="medium">
@@ -1025,6 +1033,7 @@ export default function ProductsPage() {
               </InlineStack>
               <InlineStack gap="200" blockAlign="center" wrap>
                 {getStatusBadge(id, description)}
+                {channelBadge(id)}
                 {getContentBadges(id)}
               </InlineStack>
               <InlineStack gap="200" blockAlign="center">
@@ -1043,7 +1052,7 @@ export default function ProductsPage() {
     return (
       <IndexTable.Row id={id} key={id} position={index} selected={selectedResources.includes(id)} onClick={() => navigate(`/app/products/${numericId}`)}>
         <IndexTable.Cell>
-          <Thumbnail source={imageUrl || ImageIcon} alt="" size="small" />
+          <ProductThumb url={imageUrl} />
         </IndexTable.Cell>
         <IndexTable.Cell>
           <BlockStack gap="050">
@@ -1057,7 +1066,12 @@ export default function ProductsPage() {
             ) : null}
           </BlockStack>
         </IndexTable.Cell>
-        <IndexTable.Cell>{getStatusBadge(id, description)}</IndexTable.Cell>
+        <IndexTable.Cell>
+          <InlineStack gap="100" blockAlign="center" wrap>
+            {getStatusBadge(id, description)}
+            {channelBadge(id)}
+          </InlineStack>
+        </IndexTable.Cell>
         <IndexTable.Cell>{getContentBadges(id)}</IndexTable.Cell>
         <IndexTable.Cell>{getScoreCell(id)}</IndexTable.Cell>
         <IndexTable.Cell>
@@ -1129,14 +1143,27 @@ export default function ProductsPage() {
         ...(draftProducts > 0
           ? [{ content: t("Review {draftProducts} drafts", { draftProducts: t.number(draftProducts) }), onAction: () => navigate("/app/review") }]
           : []),
-        // Phase 2 item 2.2 — these left the sidebar, so they need a way back in
-        // from the screen that absorbed them. Nothing became unreachable.
-        { content: t("Collections"), onAction: () => navigate("/app/collections") },
-        { content: t("Activity"), onAction: () => navigate("/app/jobs") },
+      ]}
+      /* Phase 2 item 2.2 — Collections and Activity left the sidebar, so they
+         need a way back in from the screen that absorbed them; nothing became
+         unreachable. Redesign (Nov 2026): they are destinations, not actions on
+         this list, so they sit in one menu instead of two more buttons in a
+         title row that already holds the primary and its alternatives. */
+      actionGroups={[
+        {
+          title: t("More actions"),
+          actions: [
+            { content: t("Collections"), onAction: () => navigate("/app/collections") },
+            { content: t("Activity"), onAction: () => navigate("/app/jobs") },
+          ],
+        },
       ]}
     >
       <BlockStack gap="500">
-        {actionData?.error && (
+        {/* At most one notice (the brief): what the merchant just did failed
+            beats a list that may be incomplete, which beats the 80–100% quota
+            warning. All three were able to stack. */}
+        {actionData?.error ? (
           <Banner
             tone={actionData.limitReached ? "warning" : "critical"}
             title={actionData.limitReached ? t("Plan upgrade required") : t("Could not start writing")}
@@ -1148,20 +1175,17 @@ export default function ProductsPage() {
           >
             <p>{actionData.error}</p>
           </Banner>
-        )}
-
-        {/* Phase 3 item 3.4, surface (a) — the only upsell banner on this
-            screen, 80%-100%, dismissible for a week. The critical "Monthly
-            generation limit reached" banner that used to sit here is gone:
-            reaching a quota is completion, not an error, and at 100% the
-            message belongs where the action was, not at the top of the page. */}
-        {catalogError && (
+        ) : catalogError ? (
           <Banner tone="warning" title={t("This list may be incomplete")}>
             <p>{catalogError === "throttled" ? t("Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly.") : t("We could not read your full product list from Shopify just now. This list may be incomplete.")}</p>
           </Banner>
+        ) : (
+          /* Phase 3 item 3.4, surface (a) — the only upsell banner on this
+             screen, 80%-100%, dismissible for a week. Reaching a quota is
+             completion, not an error; at 100% the message belongs where the
+             action was, not at the top of the page. */
+          <QuotaWarningBanner warning={quotaWarning} />
         )}
-
-        <QuotaWarningBanner warning={quotaWarning} />
 
         {/* The headline numbers. Group 4.1 — the third cell said "Need Content"
             in critical red on a store where all 100 sampled products already
@@ -1221,17 +1245,6 @@ export default function ProductsPage() {
             canCreateNewView={false}
             cancelAction={{ onAction: handleSearchClear, disabled: false, loading: false }}
           />
-          {/* Frame 03 — the sentence that makes the tab counts and the header
-              add up. Shown only when the page actually contains such a row, and
-              it names the reason rather than the difference: "on this page"
-              explains pagination, and this is not pagination. */}
-          {pageCounts.offStorefront > 0 && (
-            <Box paddingInline="400" paddingBlock="200">
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("{n, plural, one {# product here is not on your Online Store, so it is listed but not counted in the totals above. Publish it in Shopify and it joins the counts.} other {# products here are not on your Online Store, so they are listed but not counted in the totals above. Publish them in Shopify and they join the counts.}}", { n: pageCounts.offStorefront })}
-              </Text>
-            </Box>
-          )}
           <IndexTable
             resourceName={{ singular: t("product"), plural: t("products") }}
             itemCount={filteredProducts.length}
@@ -1243,10 +1256,10 @@ export default function ProductsPage() {
             headings={[
               { id: "thumb", title: "", hidden: true },
               { id: "product", title: t("Product") },
-              { id: "state", title: t("Content") },
-              { id: "written", title: t("Written") },
+              { id: "state", title: t("Status") },
+              { id: "written", title: t("Content") },
               { id: "score", title: t("Score") },
-              { id: "updated", title: t("Updated") },
+              { id: "updated", title: t("Last written") },
               { id: "action", title: "", hidden: true },
             ]}
             promotedBulkActions={[

@@ -33,7 +33,9 @@ const SCREENS = {
   home: "app/routes/app._index.jsx",
   products: "app/routes/app.products.jsx",
   optimize: "app/routes/app.optimize.jsx",
-  audit: "app/routes/app.seo-audit.jsx",
+  // Redesign (Nov 2026): the Audit screen moved out of the route module
+  // (route files export only route members); the guard follows the screen.
+  audit: "app/components/AuditBody.jsx",
 };
 
 describe("no screen congratulates a merchant who has done nothing", () => {
