@@ -162,7 +162,8 @@ function ScanList({ done, scanned }) {
               {i > 0 ? <Divider /> : null}
               <Box paddingBlock="300">
                 <InlineStack gap="300" blockAlign="center" wrap={false}>
-                  {done ? <Icon source={CheckCircleIcon} tone="success" accessibilityLabel={t("Done")} /> : <Spinner size="small" accessibilityLabel={t("In progress")} />}
+                  {/* Wrapped so the Polaris icon keeps its 20px and the label sits beside it, not across the row. */}
+                  <Box>{done ? <Icon source={CheckCircleIcon} tone="success" accessibilityLabel={t("Done")} /> : <Spinner size="small" accessibilityLabel={t("In progress")} />}</Box>
                   <Text as="p" variant="bodyMd" tone={done ? undefined : "subdued"}>
                     {label}
                   </Text>
@@ -430,6 +431,7 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, re
     monthlyCredits: start.monthlyCredits,
     planName: start.planName,
     alreadyDrafted,
+    pending: !writing,
     t,
   });
   // FR8 (Phase 10) — on a uniform catalogue every product scores the same and
@@ -490,24 +492,29 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, re
                 </Text>
                 {/* A6 (Phase 8) — the number is the GEO score, and Traditional
                     SEO is shown beside it and said to be excluded. */}
-                <InlineStack gap="600" align="center" wrap>
-                  <BlockStack gap="050" inlineAlign="center">
-                    <Text as="p" variant="headingMd" tone={scoreTone(scan.storeGeo)}>
-                      {scan.storeGeo}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                      {t("AI search (GEO) — the score above")}
-                    </Text>
+                {/* Two compact label · figure rows, not two more centred
+                    headline numbers under the ring that already shows the first. */}
+                <Box width="100%">
+                  <BlockStack gap="100">
+                    <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("AI search (GEO) — the score above")}
+                      </Text>
+                      <Text as="p" variant="bodyMd" fontWeight="semibold" numeric tone={scoreTone(scan.storeGeo)}>
+                        {scan.storeGeo}
+                      </Text>
+                    </InlineStack>
+                    <Divider />
+                    <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {t("Traditional SEO — for comparison, not part of the score")}
+                      </Text>
+                      <Text as="p" variant="bodyMd" fontWeight="semibold" numeric tone={scoreTone(scan.storeSeo)}>
+                        {scan.storeSeo}
+                      </Text>
+                    </InlineStack>
                   </BlockStack>
-                  <BlockStack gap="050" inlineAlign="center">
-                    <Text as="p" variant="headingMd" tone={scoreTone(scan.storeSeo)}>
-                      {scan.storeSeo}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                      {t("Traditional SEO — for comparison, not part of the score")}
-                    </Text>
-                  </BlockStack>
-                </InlineStack>
+                </Box>
                 <GeoRubric />
               </BlockStack>
             </Layout.Section>

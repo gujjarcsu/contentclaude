@@ -157,7 +157,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
   const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading" || revalidator.state === "loading";
   const entitlements = getEntitlements(planName);
-  const [tab, setTab] = useState(0);
+  const [chosenTab, setTab] = useState(null);
   const [page, setPage] = useState(0);
   const [openRow, setOpenRow] = useState(null);
   const [filter, setFilter] = useState(null); // { id, label } — the issue the breakdown is narrowed to
@@ -208,6 +208,9 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
     { id: "warning", content: t("Warning ({n})", { n: warning.length }), rows: warning, empty: t("Nothing is holding a scanned product back.") },
     { id: "passed", content: t("Passed ({n})", { n: passed.length }), rows: passed, empty: t("No check is passed by every scanned product yet.") },
   ];
+  // Open on the first tab with something in it: an empty "Critical (0)" as the
+  // first thing a merchant sees hides the two warnings beside it.
+  const tab = chosenTab ?? Math.max(0, tabs.findIndex((x) => x.id !== "passed" && x.rows.length > 0));
   const activeTab = tabs[Math.min(tab, tabs.length - 1)];
 
   const eligiblePct = scannedCount > 0 ? Math.round((eligibleCount / scannedCount) * 100) : null;
@@ -413,7 +416,6 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                     selectable={false}
                     condensed={smDown}
                     headings={[
-                      { id: "thumb", title: t("Image"), hidden: true },
                       { id: "product", title: t("Product") },
                       { id: "score", title: t("Score") },
                       { id: "missing", title: t("Missing") },
@@ -443,12 +445,13 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                       ) : (
                         <IndexTable.Row id={p.id} key={p.id} position={index}>
                           <IndexTable.Cell>
-                            <ProductThumb url={p.imageUrl} />
-                          </IndexTable.Cell>
-                          <IndexTable.Cell>
-                            <Text as="span" variant="bodyMd" fontWeight="medium">
-                              {p.title}
-                            </Text>
+                            {/* Photo and name in one cell, as the category's lists do. */}
+                            <InlineStack gap="300" blockAlign="center" wrap={false}>
+                              <ProductThumb url={p.imageUrl} />
+                              <Text as="span" variant="bodyMd" fontWeight="medium">
+                                {p.title}
+                              </Text>
+                            </InlineStack>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
                             <ScoreRing value={p.score} size="xs" label={t("Score")} />
@@ -505,9 +508,12 @@ function FeedFieldGroup({ heading, fields, tally }) {
             <Text as="span" variant="bodySm">
               {t(f.label)}
             </Text>
-            <Text as="span" variant="bodySm" numeric tone={n === 0 ? "subdued" : f.required ? "critical" : "caution"}>
-              {t("{n} missing", { n: t.number(n) })}
-            </Text>
+            {/* The count never wraps: "0 / missing" on two lines reads as two values. */}
+            <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+              <Text as="span" variant="bodySm" numeric tone={n === 0 ? "subdued" : f.required ? "critical" : "caution"}>
+                {t("{n} missing", { n: t.number(n) })}
+              </Text>
+            </span>
           </InlineStack>
         );
       })}

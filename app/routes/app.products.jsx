@@ -752,7 +752,7 @@ export default function ProductsPage() {
     // sampled products had one, every row still showed a red "Needs content".
     // Whether this is a problem depends entirely on whose content is missing.
     const action = actionFor({ hasOwnContent: hasRealContent(description) });
-    return <Badge tone={CONTENT_ACTION_TONE[action]}>{CONTENT_ACTION_LABEL[action]}</Badge>;
+    return <Badge tone={CONTENT_ACTION_TONE[action]}>{t(CONTENT_ACTION_LABEL[action])}</Badge>;
   }
 
   /**
@@ -829,7 +829,7 @@ export default function ProductsPage() {
       .map(({ key, label }) => {
         const st = m[key]?.status;
         if (st === "published" || st === "published_unverified") return <Badge key={key} tone="success">{label}</Badge>;
-        if (st === "draft") return <Badge key={key} tone="info">{t("{label} · draft", { label })}</Badge>;
+        if (st === "draft") return <Badge key={key}>{t("{label} · draft", { label })}</Badge>;
         return null;
       })
       .filter(Boolean);

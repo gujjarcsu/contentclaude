@@ -495,8 +495,10 @@ function FeatureCell({ value }) {
   // Never color- or glyph-only: Polaris Icon renders accessibilityLabel as
   // visually-hidden text, so a screen reader hears "Included" / "Not included"
   // instead of a bare check glyph or an em dash.
-  if (value === true) return <Icon source={CheckIcon} tone="success" accessibilityLabel={t("Included")} />;
-  if (value === false) return <Icon source={XIcon} tone="subdued" accessibilityLabel={t("Not included")} />;
+  // A 20px box keeps the glyph on the column's left edge, under its heading and
+  // in line with the text values; a bare Polaris Icon centres itself.
+  if (value === true) return <Box width="20px"><Icon source={CheckIcon} tone="success" accessibilityLabel={t("Included")} /></Box>;
+  if (value === false) return <Box width="20px"><Icon source={XIcon} tone="subdued" accessibilityLabel={t("Not included")} /></Box>;
   return (
     <Text as="span" variant="bodySm" fontWeight="semibold">
       {featureText(value, t)}

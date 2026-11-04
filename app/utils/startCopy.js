@@ -26,7 +26,7 @@ export function creditsLeft(monthlyCredits, used) {
  *   monthlyCredits?: number, planName?: string, alreadyDrafted?: number, t?: Function}} p
  *   `t` (D1): the screen's translator; English by default.
  */
-export function costSentence({ targets, fresh, canStart, remaining, monthlyCredits = null, planName = "free", alreadyDrafted = 0, t = enT }) {
+export function costSentence({ targets, fresh, canStart, remaining, monthlyCredits = null, planName = "free", alreadyDrafted = 0, pending = false, t = enT }) {
   if (!targets) return "";
   if (fresh === 0) {
     return t("Your {n, plural, one {# draft is} other {# drafts are}} below — written earlier, no credits charged again. Nothing is published until you approve it.", { n: targets });
@@ -36,6 +36,11 @@ export function costSentence({ targets, fresh, canStart, remaining, monthlyCredi
   const of = Number.isFinite(Number(monthlyCredits)) && monthlyCredits !== null ? t(" of {monthlyCredits}", { monthlyCredits }) : "";
   const plan = planName === "free" ? t(" on the Free plan") : "";
   const reused = alreadyDrafted > 0 ? t(" {m, plural, one {# is} other {# are}} already written and shown at no charge.", { m: alreadyDrafted }) : "";
+  // Before the merchant presses "Write the first 3 drafts", nothing is being
+  // written: the sentence states what the press will cost (L5).
+  if (pending) {
+    return t("Writing {n, plural, one {# draft} other {# drafts}} uses {n, plural, one {# credit} other {# credits}}; {after}{of} left after that{plan}. Nothing is published until you approve it.{reused}", { n: canStart, after, of, plan, reused });
+  }
   return t("Writing {n, plural, one {# draft} other {# drafts}} now — {n, plural, one {# credit} other {# credits}}; {after}{of} left after this{plan}. Nothing is published until you approve it.{reused}", { n: canStart, after, of, plan, reused });
 }
 
