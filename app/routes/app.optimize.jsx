@@ -554,7 +554,7 @@ export default function OptimizePage() {
         {/* Enhance existing panel — improves live descriptions instead of
             generating from scratch. Hidden when there's nothing it could run on
             or the quota banner above already explains why nothing can run. */}
-        {totalProducts > 0 && remaining > 0 && (
+        {bulkAllowed && totalProducts > 0 && remaining > 0 && (
           <BulkGate>
           <Card>
             <BlockStack gap="400">
