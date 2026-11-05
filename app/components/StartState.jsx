@@ -69,7 +69,7 @@ import { GeoRubric } from "./GeoRubric.jsx";
 import { ScoreRing } from "./ScoreRing.jsx";
 import { IssueList } from "./IssueList.jsx";
 import { ProductThumb } from "./ProductThumb.jsx";
-import { WATCH_FROM_HERE, BLOCKER_GROUPS, PASSWORD_BLOCKER, blockerLine, canRunFix } from "../utils/firstRun.js";
+import { WATCH_FROM_HERE, BLOCKER_GROUPS, PASSWORD_BLOCKER, FIRST_RUN_GOALS, validGoal, blockerLine, canRunFix } from "../utils/firstRun.js";
 import { blockerRows } from "../utils/fixRows.js";
 import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
@@ -88,7 +88,7 @@ export function severityCounts(all) {
 }
 
 /** The two outcomes the goal screen offers. Search reads page content; AI shopping lists from feed fields. */
-const GOALS = Object.freeze({ search: "search", shopping: "shopping" });
+const GOALS = FIRST_RUN_GOALS;
 
 function usePlanLabel(planName) {
   const t = useT();
@@ -638,14 +638,26 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, on
   );
 }
 
+/**
+ * Where the first run opens. Drafts already written, or a goal already chosen
+ * (saved per shop by Home's action), resume at the result: a reload used to
+ * send the merchant back to the goal question. Pure.
+ */
+export function firstStep(start) {
+  const resume = Array.isArray(start?.draftedIds) && start.draftedIds.length > 0;
+  return resume || validGoal(start?.goal) ? "result" : "goal";
+}
+
 export function StartState({ start, navigate, onRetry }) {
   const t = useT();
   const subtitle = useSubtitle(start);
   // A merchant who comes back with drafts already written (inside the reuse
   // window) skips straight to the result with them showing — no charge.
   const resume = Array.isArray(start?.draftedIds) && start.draftedIds.length > 0;
-  const [step, setStep] = useState(resume ? "result" : "goal");
-  const [goal, setGoal] = useState(null);
+  const savedGoal = validGoal(start?.goal);
+  const [step, setStep] = useState(firstStep(start));
+  const [goal, setGoal] = useState(savedGoal);
+  const goalFetcher = useFetcher();
 
   if (step === "goal") {
     return (
@@ -654,6 +666,7 @@ export function StartState({ start, navigate, onRetry }) {
         onChoose={(g) => {
           setGoal(g);
           setStep("scan");
+          goalFetcher.submit({ actionType: "setFirstRunGoal", goal: g }, { method: "post", action: "/app?index" });
         }}
       />
     );

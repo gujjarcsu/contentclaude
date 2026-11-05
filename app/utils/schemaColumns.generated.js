@@ -134,6 +134,7 @@ export const EXPECTED_COLUMNS = Object.freeze([
   "GrowthState.aiReportReadings",
   "GrowthState.createdAt",
   "GrowthState.embedConfirmedAt",
+  "GrowthState.firstRunGoal",
   "GrowthState.geoNoteDismissedAt",
   "GrowthState.gscAiControl",
   "GrowthState.gscAiControlAt",

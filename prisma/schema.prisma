@@ -325,6 +325,10 @@ model GrowthState {
   // generative-AI performance report, Bing's AI Performance). We teach the
   // merchant to read them and keep what THEY read, dated, as JSON. Never scraped.
   aiReportReadings   String    @default("{}")
+  // The first-run goal ("search" | "shopping"), so a reload after picking it
+  // resumes at the result instead of asking again. Per shop, like the rest of
+  // this row; deleted on uninstall, so a fresh install asks again.
+  firstRunGoal       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

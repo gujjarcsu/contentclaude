@@ -184,3 +184,10 @@ export function primaryFixIndex(blockers, entitlements) {
   const list = Array.isArray(blockers) ? blockers : [];
   return list.findIndex((b) => b?.fix && canRunFix(b.fix, entitlements));
 }
+
+/** The first-run goals. Shared by the goal screen and Home's action, which saves the choice. */
+export const FIRST_RUN_GOALS = Object.freeze({ search: "search", shopping: "shopping" });
+/** A stored goal, or null if it is not one of FIRST_RUN_GOALS. Pure. */
+export function validGoal(g) {
+  return Object.values(FIRST_RUN_GOALS).includes(g) ? g : null;
+}

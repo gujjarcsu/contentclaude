@@ -8,6 +8,7 @@ import { changeWindowFor, autopilotBannerTitle, windowLabel, sinceLabelFor } fro
 import { StartState } from "../components/StartState.jsx";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
 import { quotaPct } from "../utils/quota.js";
+import { validGoal } from "../utils/firstRun.js";
 import {
   Page,
   Layout,
@@ -168,7 +169,7 @@ export const loader = async ({ request }) => {
     // embedConfirmedAt drives the theme-embed setup card (requirement 5.1.3).
     prisma.growthState.findUnique({
       where: { shop },
-      select: { embedConfirmedAt: true, geoNoteDismissedAt: true },
+      select: { embedConfirmedAt: true, geoNoteDismissedAt: true, firstRunGoal: true },
     }),
     // Phase 3 item 3.2 — the ONE fact that decides whether this is a first run.
     // Not "has no content" (a merchant who deleted every draft is not new) and
@@ -311,6 +312,8 @@ export const loader = async ({ request }) => {
         // Every finding, for the result screen's severity cards and its headline count.
         allBlockers,
         draftedIds,
+        // The goal picked on an earlier load, so a reload resumes at the result.
+        goal: validGoal(growthState?.firstRunGoal),
         // Phase 10 Part C (F1, the ALL_DRAFT / B2B_ONLY cells) — the scan is
         // scoped to Active products on the Online Store, so a store being
         // built (every product a draft) or a trade-only store (nothing on the
@@ -742,6 +745,16 @@ function CreditsCard({ plan, usageCount, remaining, usagePct, planLabel }) {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
+  if (form.get("actionType") === "setFirstRunGoal") {
+    const goal = validGoal(form.get("goal"));
+    if (!goal) return Response.json({ ok: false }, { status: 400 });
+    await prisma.growthState.upsert({
+      where: { shop: session.shop },
+      create: { shop: session.shop, firstRunGoal: goal },
+      update: { firstRunGoal: goal },
+    });
+    return Response.json({ ok: true });
+  }
   if (form.get("actionType") !== "dismissGeoNote") {
     return Response.json({ ok: false }, { status: 400 });
   }
