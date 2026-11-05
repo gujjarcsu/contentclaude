@@ -93,7 +93,7 @@ describe("4. Asset API — not used", () => {
 
 describe("5. Polaris and the design guidelines — the tests already holding them", () => {
   it("the five-item nav, the primary-action rule and the no-incentive review ask are enforced by tests that exist", () => {
-    expect(readFileSync("tests/routes/navigation.test.js", "utf8")).toMatch(/it\("has exactly five"/);
+    expect(readFileSync("tests/routes/navigation.test.js", "utf8")).toMatch(/it\("has exactly six"/); // Redesign (Nov 2026): Audit joined the sidebar
     expect(readFileSync("tests/routes/navigation.test.js", "utf8")).toMatch(/Products has exactly one page primary action/);
     expect(readFileSync("tests/utils/reviewAskRules.test.js", "utf8")).toMatch(/no route or component pairs a review with an incentive/);
     expect(readFileSync("tests/routes/polaris-only.test.js", "utf8")).toMatch(/Polaris only/);

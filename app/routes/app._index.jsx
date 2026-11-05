@@ -1,13 +1,11 @@
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { useT } from "../i18n/react.jsx";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { AppSkeleton } from "../components/AppSkeleton.jsx";
-import { EmbedSetupCard, EmbedLaterNote, embedDeepLink } from "../components/EmbedSetupCard.jsx";
-import { FirstRunFindingsCard } from "../components/FirstRunFindingsCard.jsx";
+import { ThemeStepActions } from "../components/EmbedSetupCard.jsx";
 import { changeWindowFor, autopilotBannerTitle, windowLabel, sinceLabelFor } from "../utils/homeCopy.js";
 import { StartState } from "../components/StartState.jsx";
-import { scoreTone } from "../utils/scoreBands.js";
 import { QuotaWarningBanner } from "../components/UpgradePrompt.jsx";
 import { quotaPct } from "../utils/quota.js";
 import {
@@ -21,25 +19,18 @@ import {
   Box,
   Badge,
   ProgressBar,
-  Banner,
-  Icon,
+  Divider,
   SkeletonBodyText,
   SkeletonDisplayText,
 } from "@shopify/polaris";
-import {
-  ProductIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  PlanIcon,
-  ChartHistogramGrowthIcon,
-  BlogIcon,
-  SearchIcon,
-  MagicIcon,
-} from "@shopify/polaris-icons";
+import { ScoreRing } from "../components/ScoreRing.jsx";
+import { IssueList } from "../components/IssueList.jsx";
+import { StatStrip } from "../components/StatStrip.jsx";
+import { SetupGuide } from "../components/SetupGuide.jsx";
+import { getEntitlements } from "../utils/billing-plans.js";
+import { blockerRows } from "../utils/fixRows.js";
 import { authenticate } from "../shopify.server.js";
-import { getLiveShopName } from "../utils/shopName.server.js";
 import { GeoRubric } from "../components/GeoRubric.jsx";
-import { greetingName } from "../utils/shopName.js";
 import prisma from "../db.server.js";
 import logger from "../utils/logger.server.js";
 import { getOrCreatePlan, getMonthlyUsageCount } from "../utils/plans.server.js";
@@ -281,7 +272,10 @@ export const loader = async ({ request }) => {
   // ProductScore) and the specific things the walk found. The theme step
   // waits until there is published content to show.
   const beforeFirstPublish = !!shopRow && !shopRow.firstPublishAt;
-  const blockers = isFirstRun || beforeFirstPublish ? await blockersFor(shop) : [];
+  // Redesign (Nov 2026) — Home leads with "what to fix first" for every shop,
+  // not only before the first publish, so the blockers are read on every load.
+  // One indexed query over ProductWatch; never throws.
+  const blockers = await blockersFor(shop);
   const findings = beforeFirstPublish && !isFirstRun ? await firstRunFindings(shop) : [];
   // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
   const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
@@ -308,15 +302,12 @@ export const loader = async ({ request }) => {
       }
     : null;
 
-  // The greeting used to read brandVoice.storeName, captured ONCE at install
-  // and never refreshed, so a renamed store was greeted by its old name for
-  // ever and an unnamed one by its raw handle. Shopify's live name is
-  // authoritative for identifying the store; brandVoice.storeName stays the
-  // merchant's editable brand-voice field. greetingName() returns null when
-  // neither is real, and the hero greets without a name rather than with a bad
-  // one. See app/utils/shopName.js.
-  const liveShopName = await getLiveShopName(admin, shop, { sessionId: session?.id ?? null });
-  const storeName = greetingName(liveShopName, brandVoice?.storeName, shop);
+  // Redesign (Nov 2026): Home no longer addresses the store by name — not in a
+  // greeting (gone: it greeted renamed stores by their old name, and unnamed
+  // ones by their handle) and not in the subtitle (the admin's own chrome
+  // already names the store, and a long name pushed the subtitle under the
+  // page actions). So the live-name lookup is not made here at all; Blog still
+  // uses it for the author line. See app/utils/shopName.js.
 
   const payload = {
     shopDomain: shop,
@@ -347,7 +338,6 @@ export const loader = async ({ request }) => {
     proof,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
     usageCount,
-    storeName,
     firstVisit,
     recentlyCompletedJob: recentlyCompletedJob
       ? {
@@ -385,185 +375,105 @@ export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
   return defaultShouldRevalidate;
 }
 
+
 /**
- * Phase 4 item 4.3 — "Store SEO score 61 -> 84 since install".
+ * Redesign (Nov 2026) — Home answers one question: "is my catalogue ready
+ * for search and AI shopping, and what do I fix first?"
  *
- * Renders nothing at all when the score is unavailable: a store never scanned,
- * a scan that failed, or a catalogue with no products. It does NOT fall back to
- * zero. "0 -> 84" would be the most persuasive lie the app could tell, and a
- * merchant who checked it against their own catalogue would never trust another
- * number here.
+ * The five top apps in the category (Tapita, Avada, Smart SEO, StoreSEO,
+ * SEOWILL; walked on EBS, 2 Nov 2026) all open the same way: a score ring with
+ * its scope under it, the findings as rows with one button each, a setup
+ * checklist with progress while setup is unfinished, and one small strip of
+ * numbers. This screen had eleven blocks, four stacked notices, a dark greeting
+ * band and no title. The data below it is the same loader; what changed is the
+ * arrangement and the copy.
  *
- * The delta is only shown once there is a real one. On the day of install the
- * before and the after are the same number, and an arrow pointing at itself
- * reads as broken — so the first view says what the store scores, and the
- * comparison appears when it has something to say.
+ * What is deliberately gone, and where its content went:
+ *   - the greeting band → the Page title and subtitle name the store and plan;
+ *   - the three KPI cards with icons → one divided strip (StatStrip);
+ *   - the explainer banner, the FAQ "later" note, the attention banner, the
+ *     autopilot and bulk-job banners → the setup guide's steps, the "what to
+ *     fix first" rows, and the strip's hints. One notice at most survives on
+ *     the page: the quota warning, which only appears between 80% and 100%;
+ *   - the "Optimize your store" strip, the SEO Audit and Blog promo cards →
+ *     Audit and Blog are sidebar items now (app.jsx);
+ *   - "The 3 products holding this store back" → the first run's drafts are
+ *     the primary action ("Review 3 drafts"); a list of three identical scores
+ *     carried no information.
+ *
+ * Laws kept (00-CONSTITUTION L5): every number states its scope in a few
+ * words beneath it; two blocks never disagree, because every count comes from
+ * one loader field; nothing is rendered as zero when it was not measured.
  */
-function StoreScoreCard({ score }) {
+
+/** "57 across 30 products sampled, −1 since 21 Sep" — the ring, its scope, its change. */
+function ScoreSummary({ score, navigate }) {
   const t = useT();
-  if (!score?.available || !Number.isFinite(score.current)) return null;
-
-  // A baseline captured on THIS very load is not a comparison. Treating it as
-  // one produced "Unchanged since you installed" seconds after the first scan.
-  const hasBaseline = Number.isFinite(score.atInstall) && !score.baselineIsNew;
-
-  // The baseline is captured on the FIRST SCAN, not at install. For a shop that
-  // installed weeks before this feature existed, "since you installed" is
-  // simply false. Naming the date is true in both cases and no less
-  // persuasive — and a merchant can check it.
-  const sinceLabel = sinceLabelFor(score.since, t);
-  const sincePhrase = sinceLabel ? t("since {date}", { date: sinceLabel }) : t("since we first scored your store");
+  const available = !!score?.available && Number.isFinite(score.current);
+  const hasBaseline = available && Number.isFinite(score.atInstall) && !score.baselineIsNew;
   const delta = hasBaseline ? score.current - score.atInstall : null;
-  const improved = delta != null && delta > 0;
+  const baselineIsToday = !!score?.since && new Date(score.since).toDateString() === new Date().toDateString();
+  const sinceLabel = available ? sinceLabelFor(score.since, t) : null;
+  const sincePhrase = sinceLabel ? t("since {date}", { date: sinceLabel }) : t("since we first scored your store");
+  const scopeLine = available && Number.isFinite(score.scanned) && score.scanned > 0 ? t("across {n, plural, one {# product} other {# products}} sampled", { n: score.scanned }) : null;
 
-  // Group 6.3 — a baseline stamped TODAY is not history. `baselineIsNew` only
-  // covers the load that stamped it; on the SECOND load of the same day the
-  // baseline is real, the delta is 0, and the card said "Unchanged since
-  // September 10" on September 10 — which reads as "we have been working on
-  // this for a while and nothing improved".
-  const baselineIsToday =
-    !!score.since && new Date(score.since).toDateString() === new Date().toDateString();
+  let changeBadge = null;
+  if (available && hasBaseline && !baselineIsToday && delta !== 0) {
+    changeBadge = delta > 0 ? <Badge tone="success">{t("+{delta} {sincePhrase}", { delta, sincePhrase })}</Badge> : <Badge tone="attention">{t("Down {v} {sincePhrase}", { v: Math.abs(delta), sincePhrase })}</Badge>;
+  } else if (available && hasBaseline && !baselineIsToday && delta === 0) {
+    changeBadge = <Badge>{t("Unchanged {sincePhrase}", { sincePhrase })}</Badge>;
+  }
 
   return (
-    <Card>
-      <BlockStack gap="200">
-        <InlineStack gap="300" blockAlign="center" wrap>
-          <Text as="h2" variant="headingMd">
-            {t("Store SEO score")}
-          </Text>
-          {improved && <Badge tone="success">{t("+{delta} {sincePhrase}", { delta, sincePhrase })}</Badge>}
-        </InlineStack>
-
-        <InlineStack gap="200" blockAlign="baseline" wrap>
-          {improved && (
-            <>
-              <Text as="span" variant="headingLg" tone="subdued">
-                {score.atInstall}
-              </Text>
-              <Text as="span" variant="headingLg" tone="subdued">
-                &rarr;
-              </Text>
-            </>
-          )}
-          <Text as="span" variant="heading2xl" fontWeight="bold" tone={scoreTone(score.current)}>
-            {score.current}
-          </Text>
-          <Text as="span" variant="bodyMd" tone="subdued">
-            / 100
-          </Text>
-          {/*
-            A2 — the population belongs to the NUMBER, not to a caption under it.
-            Home and the SEO Audit now use the same rubric, the same fields and
-            the same scope, so the only honest difference left between them is
-            how many products each one read. That difference is stated here, on
-            the same line as the score, rather than in small print below where a
-            merchant comparing two screens will not connect it to the gap.
-
-            It sits AFTER "/ 100" on purpose: the listing-capture guard matches
-            "Store SEO score" followed by the number, and text inserted between
-            them would break CW's frame 04 capture.
-          */}
-          {Number.isFinite(score.scanned) && score.scanned > 0 ? (
-            <Text as="span" variant="bodyMd" tone="subdued">
-              {t("across {n, plural, one {# product} other {# products}} sampled", { n: score.scanned })}
-            </Text>
-          ) : null}
-        </InlineStack>
-
-        <Text as="p" variant="bodySm" tone="subdued">
-          {/* "sampled", not "scanned": 30 of 1,350 active products is a sample,
-              and Group 2.1's rule is that a number states its population. */}
-          {baselineIsToday && delta === 0 ? t("Your starting score, across the {scanned} products we sampled.", { scanned: score.scanned }) : improved ? t("Up {delta} points {sincePhrase}, across the {scanned} products we sampled.", { delta, sincePhrase, scanned: score.scanned }) : hasBaseline && delta === 0 ? t("Unchanged {sincePhrase}, across the {scanned} products we sampled.", { sincePhrase, scanned: score.scanned }) : hasBaseline && delta < 0 ? t("Down {v} points {sincePhrase}, across the {scanned} products we sampled.", { v: Math.abs(delta), sincePhrase, scanned: score.scanned }) : t("Across the {scanned} products we sampled. We will show the change once there is one.", { scanned: score.scanned })}
-        </Text>
-
-        {/* P1.3 - the same rubric, on the surface EVERY merchant sees. StartState
-            only renders during first run, so publishing it only there would hide it
-            from everyone past that point. */}
-        <GeoRubric />
-
-        {/* Group 6.1 — the OTHER score, named, so the two are never mistaken for
-            one number disagreeing with itself. */}
-        <Text as="p" variant="bodySm" tone="subdued">
-          {t("This is a sample. The SEO Audit scores more of your catalog and lists what to fix.")}
-        </Text>
-      </BlockStack>
-    </Card>
+    <BlockStack gap="300" inlineAlign="center">
+      <ScoreRing value={available ? score.current : null} size="large" label={t("Search readiness")} caption={scopeLine ?? t("Not scored yet")} />
+      {changeBadge}
+      <GeoRubric />
+      {/* A plain link, not a second dark button: when nothing is waiting the
+          page's own primary action is already "Run audit". */}
+      <Button variant="plain" onClick={() => navigate("/app/seo-audit")}>
+        {available ? t("See the full audit") : t("Score my catalogue")}
+      </Button>
+    </BlockStack>
   );
 }
 
-function StatCard({ icon: iconSource, iconTone, label, value, subtext, tone }) {
-  return (
-    <Card>
-      <BlockStack gap="300">
-        <InlineStack align="space-between" blockAlign="start">
-          <BlockStack gap="100">
-            <Text as="p" variant="bodySm" tone="subdued">
-              {label}
-            </Text>
-            <Text as="p" variant="heading2xl" fontWeight="bold" tone={tone}>
-              {value}
-            </Text>
-          </BlockStack>
-          <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-            <Icon source={iconSource} tone={iconTone} />
-          </Box>
-        </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">
-          {subtext}
-        </Text>
-      </BlockStack>
-    </Card>
-  );
+/**
+ * The rows under "What to fix first": the eligibility blockers the daily walk
+ * found (a product with no description cannot be listed by the OpenAI feed),
+ * then the other things the catalogue watch reports (a blocked crawler, pages
+ * that cannot be indexed, the merchant's unanswered GSC question, what changed
+ * since yesterday). Each row carries the action that fixes it, and names the
+ * plan instead when this plan cannot run that fix — a dark button that
+ * refuses is worse than an honest label.
+ */
+function whatToFixFirst({ blockers, attention, entitlements, t, navigate }) {
+  // The blocker rows are built by the one mapping every screen shares
+  // (utils/fixRows.js), so Home and the Audit say the same thing the same way.
+  const rows = blockerRows(blockers, { entitlements, t, navigate });
+  const list = Array.isArray(blockers) ? blockers : [];
+
+  if (attention?.available) {
+    const lines = homeAttentionLines(attention, t);
+    // The blockers above already itemise the blocking count; the catalogue
+    // watch's one-line summary of the same fact would say it twice (L5).
+    const blocking = Number(attention?.blocking ?? 0);
+    const summaryLine = blocking > 0 ? t("{n, plural, one {# product is} other {# products are}} missing something an AI shopping surface requires.", { n: blocking }) : null;
+    const crawlerBlocked = (attention?.crawler?.blocked ?? []).length > 0;
+    lines
+      .filter((line) => !(list.length > 0 && line === summaryLine))
+      .forEach((line, i) => {
+        rows.push({
+          id: `attention-${i}`,
+          severity: i === 0 && crawlerBlocked ? "critical" : "info",
+          title: line,
+          action: { content: t("See what changed"), onAction: () => navigate("/app/attention") },
+        });
+      });
+  }
+  return rows;
 }
 
-function OnboardingStep({ number, title, description, done, actionLabel, onAction }) {
-  const t = useT();
-  return (
-    <Box
-      padding="400"
-      background={done ? "bg-surface-success-subdued" : "bg-surface-secondary"}
-      borderRadius="200"
-    >
-      <InlineStack align="space-between" blockAlign="center" gap="400">
-        <InlineStack gap="300" blockAlign="center">
-          <Box
-            padding="150"
-            background={done ? "bg-fill-success" : "bg-fill-brand"}
-            borderRadius="full"
-            minWidth="32px"
-          >
-            <Text
-              as="p"
-              variant="bodySm"
-              fontWeight="bold"
-              alignment="center"
-              tone={done ? "success" : undefined}
-            >
-              {done ? "✓" : number}
-            </Text>
-          </Box>
-          <BlockStack gap="050">
-            <Text as="p" variant="bodyMd" fontWeight="semibold">
-              {title}
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {description}
-            </Text>
-          </BlockStack>
-        </InlineStack>
-        {done ? (
-          <Badge tone="success">{t("Done")}</Badge>
-        ) : (
-          <Button size="slim" onClick={onAction}>
-            {actionLabel}
-          </Button>
-        )}
-      </InlineStack>
-    </Box>
-  );
-}
-
-/** Placeholder the size of the Recent Activity card, while it streams in. */
 function RecentActivitySkeleton() {
   return (
     <Card>
@@ -585,45 +495,47 @@ function BelowFoldUnavailable() {
   return null;
 }
 
+/** The last five products or collections touched, as plain rows. */
 function RecentActivityCard({ items, navigate }) {
   const t = useT();
+  const rows = items.slice(0, 5);
   return (
     <Card>
-      <BlockStack gap="400">
+      <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="center">
-          <InlineStack gap="200" blockAlign="center">
-            <Icon source={ChartHistogramGrowthIcon} tone="info" />
-            <Text as="h2" variant="headingMd">
-              {t("Recent Activity")}
-            </Text>
-          </InlineStack>
+          <Text as="h2" variant="headingMd">
+            {t("Recent activity")}
+          </Text>
+          <Button variant="plain" onClick={() => navigate("/app/products")}>
+            {t("All products")}
+          </Button>
         </InlineStack>
-
-        <BlockStack gap="200">
-          {items.map((item) => {
+        <BlockStack gap="0">
+          {rows.map((item, i) => {
             // Activity rows can be products OR collections (they share the
             // GeneratedContent table). A Collection GID sent to the product
             // route 404s — route by GID type instead.
             const isProduct = item.productId.startsWith("gid://shopify/Product/");
-            const target = isProduct
-              ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}`
-              : "/app/collections";
+            const target = isProduct ? `/app/products/${item.productId.replace("gid://shopify/Product/", "")}` : "/app/collections";
             const typeLabel = t("{n, plural, one {# content type} other {# content types}}", { n: item.contentTypesCount });
             return (
-              <Box key={item.productId} padding="300" background="bg-surface-secondary" borderRadius="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="050">
-                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                      {item.productTitle}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {isProduct ? typeLabel : `Collection · ${typeLabel}`} · {timeAgo(item.updatedAt)}
-                    </Text>
-                  </BlockStack>
-                  <Button size="slim" onClick={() => navigate(target)}>
-                    {t("View")}
-                  </Button>
-                </InlineStack>
+              <Box key={item.productId}>
+                {i > 0 ? <Divider /> : null}
+                <Box paddingBlock="300">
+                  <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                    <BlockStack gap="050">
+                      <Text as="p" variant="bodyMd" fontWeight="medium" truncate>
+                        {item.productTitle}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {isProduct ? typeLabel : t("Collection · {typeLabel}", { typeLabel })} · {timeAgo(item.updatedAt, t)}
+                      </Text>
+                    </BlockStack>
+                    <Button size="slim" onClick={() => navigate(target)}>
+                      {t("View")}
+                    </Button>
+                  </InlineStack>
+                </Box>
               </Box>
             );
           })}
@@ -633,14 +545,40 @@ function RecentActivityCard({ items, navigate }) {
   );
 }
 
-function timeAgo(isoString) {
+function timeAgo(isoString, t) {
   const secs = Math.floor((Date.now() - new Date(isoString)) / 1000);
-  if (secs < 60) return "just now";
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86400)}d ago`;
+  if (secs < 60) return t("just now");
+  if (secs < 3600) return t("{n}m ago", { n: Math.floor(secs / 60) });
+  if (secs < 86400) return t("{n}h ago", { n: Math.floor(secs / 3600) });
+  return t("{n}d ago", { n: Math.floor(secs / 86400) });
 }
 
+/** The credits readout: the fraction names the bar (FR14), the reset date rides beside it. */
+function CreditsCard({ plan, usageCount, remaining, usagePct, planLabel }) {
+  const t = useT();
+  const usageTone = usagePct >= 90 ? "highlight" : "success";
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+          <Text as="h2" variant="headingMd">
+            {t("Monthly credits")}
+          </Text>
+          <Badge tone={plan.planName === "free" ? "attention" : "success"}>{t("{plan} plan", { plan: planLabel })}</Badge>
+        </InlineStack>
+        <Text id="home-credit-usage" as="p" variant="headingLg" fontWeight="semibold">
+          {t("{usageCount} / {monthlyCredits} used", { usageCount: t.number(usageCount), monthlyCredits: t.number(plan.monthlyCredits) })}
+        </Text>
+        <ProgressBar progress={usagePct} tone={usageTone} size="small" ariaLabelledBy="home-credit-usage" />
+        <Text as="p" variant="bodySm" tone="subdued">
+          {remaining === 0
+            ? t("You've used all {monthlyCredits} credits for this month. They reset on the 1st.", { monthlyCredits: t.number(plan.monthlyCredits) })
+            : t("{remaining} of {monthlyCredits} left this month.", { remaining: t.number(remaining), monthlyCredits: t.number(plan.monthlyCredits) })}
+        </Text>
+      </BlockStack>
+    </Card>
+  );
+}
 /**
  * Phase 2 item 2.4 — dismissing the one explainer banner.
  *
@@ -662,6 +600,7 @@ export const action = async ({ request }) => {
   return Response.json({ ok: true });
 };
 
+
 export default function Dashboard() {
   const t = useT();
   const {
@@ -677,21 +616,16 @@ export default function Dashboard() {
     countsOk,
     activeJobCount,
     hasBrandVoice,
-    isNewShop,
     start,
     quotaWarning,
     storeScore,
     autopilotRecap,
     changeWindow,
-    beforeFirstPublish,
-    findings,
     blockers,
     attention,
     proof,
     plan,
     usageCount,
-    storeName,
-    firstVisit,
     recentlyCompletedJob,
     shopDomain,
     embedConfirmed,
@@ -701,22 +635,12 @@ export default function Dashboard() {
   // D1 — the window's sentence is made here, in the merchant's language, from the loader's data
   const changeWindowLabel = windowLabel(changeWindow, t);
   const navigate = useNavigate();
-  const dismissGeoNote = useFetcher();
-  // Banner dismissal must actually stick — keyed per job completion so a NEW
-  // completed job shows a fresh banner but a dismissed one stays dismissed.
-  const [jobBannerDismissed, setJobBannerDismissed] = useState(() => {
-    if (typeof window === "undefined" || !recentlyCompletedJob) return false;
-    try {
-      return sessionStorage.getItem(`navaal:jobBanner:${recentlyCompletedJob.completedAt}`) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const dismissGuide = useFetcher();
 
   const revalidator = useRevalidator();
   const loadingThisRoute = useRouteLoading();
   if (loadingThisRoute) {
-    return <AppSkeleton title={t("Dashboard")} sections={3} layout="full" />;
+    return <AppSkeleton title={t("Home")} sections={3} layout="full" />;
   }
 
   // Phase 3 items 3.1/3.2 — the first run IS Home. While this shop has never
@@ -728,38 +652,13 @@ export default function Dashboard() {
 
   const usagePct = quotaPct(usageCount, plan.monthlyCredits);
   const remaining = Math.max(0, plan.monthlyCredits - usageCount);
-  const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
-
-  // Reaching the monthly quota is "complete", not an error — so the high-usage
-  // state is amber/neutral, never alarming red (usagePct is capped at 100).
-  const usageTone = usagePct >= 90 ? "highlight" : "success";
-  const usageBg = usagePct >= 60 ? "bg-surface-warning-subdued" : "bg-surface-success-subdued";
-
-  // Hero message
-  let heroSubtitle;
-  if (isNewShop) {
-    heroSubtitle = t("Let's generate your first product description — it takes under 30 seconds.");
-  } else {
-    // Phase 2 item 2.9 - the hero used to turn into an upsell whenever quota
-    // ran low ("Only 2 generations left - upgrade to keep momentum going").
-    // Quota is stated once, plainly, in the usage card. The hero says what the
-    // merchant has actually done.
-    heroSubtitle = t("{generatedCount, plural, one {# product} other {# products}} optimized · {draftCount, plural, one {# draft} other {# drafts}} awaiting review", { generatedCount, draftCount });
-  }
+  const planLabels = { free: t("Free"), starter: t("Starter"), growth: t("Growth"), pro: t("Professional") };
+  const planLabel = planLabels[plan.planName] ?? plan.planName;
+  const entitlements = getEntitlements(plan.planName);
 
   /* Phase 2 item 2.7 — ONE primary action, chosen by what the merchant should
-     do next.
-
-     Home rendered six primary buttons at once for a new merchant: four in the
-     onboarding checklist, one in the embed setup card, one in the usage card —
-     and two of them ("Open theme editor") were the same action, from two
-     different components, on the same screen. The two buttons that were the
-     real primaries, "Generate content" and "Optimize store", were the ones
-     HIDDEN from new shops.
-
-     The order below is what actually helps: content waiting for a person beats
-     content that does not exist yet, which beats a diagnostic. Everything else
-     on the page is now secondary or plain. */
+     do next. Content waiting for a person beats content that does not exist
+     yet, which beats a diagnostic. Everything else on the page is secondary. */
   const primaryAction =
     draftCount > 0
       ? {
@@ -769,15 +668,9 @@ export default function Dashboard() {
       : notOptimizedCount > 0
         ? {
             content: t("Optimize {n, plural, one {# product} other {# products}}", { n: notOptimizedCount }),
-            // A3.2 — this went to /app/optimize while the identically-labelled
-            // primary on Products opened a modal. Same label, same intent, two
-            // different next steps, and a merchant who used both would not know
-            // which one was "the" optimize.
-            //
-            // One behaviour: every Optimize entry point now lands on the same
-            // confirmation, which is the one that states what will actually run
-            // against the quota (A3.3) and names the plan before the click
-            // (A3.1). The Optimize SCREEN keeps its own job: enhance mode.
+            // A3.2 — every Optimize entry point lands on the same confirmation
+            // on Products, the one that states what will run against the
+            // quota (A3.3) and names the plan before the click (A3.1).
             onAction: () => navigate("/app/products?optimize=1"),
           }
         : { content: t("Run audit"), onAction: () => navigate("/app/seo-audit") };
@@ -789,426 +682,170 @@ export default function Dashboard() {
       ? [{ content: t("Write a blog post"), onAction: () => navigate("/app/blog") }]
       : undefined;
 
+  // The title row names the store, the catalogue and the plan — the facts the
+  // greeting band used to carry, without the greeting.
+  // The merchant is inside their own store; the store's name is already on
+  // the admin's own chrome, and with it here the subtitle wraps under the
+  // page actions. Two facts, one line.
+  const subtitle = [
+    totalProducts === null ? null : t("{n, plural, one {# product} other {# products}}", { n: totalProducts }),
+    t("{plan} plan", { plan: planLabel }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  /* The setup guide. Four steps, each decided by real state, the first
+     unfinished one open. Step 4 is App Store requirement 5.1.3 (setup
+     instructions and a deep link for the theme block) and stays until the
+     merchant confirms it; the one-line "complete" state can be dismissed for
+     good, stored per shop (geoNoteDismissedAt — the same flag the retired
+     explainer banner used, repurposed rather than migrated). */
+  const steps = [
+    {
+      id: "scan",
+      title: t("Score your catalogue"),
+      description: t("We read a sample of your products and score what search engines and AI shopping feeds will find."),
+      done: !!storeScore?.available,
+      action: { content: t("Score my catalogue"), onAction: () => navigate("/app/seo-audit") },
+    },
+    {
+      id: "voice",
+      title: t("Set your brand voice"),
+      description: t("Tone, audience and what sets you apart, so every draft reads like you wrote it."),
+      done: hasBrandVoice,
+      action: { content: t("Open settings"), onAction: () => navigate("/app/settings") },
+    },
+    {
+      id: "review",
+      title: t("Review and publish your first drafts"),
+      description: t("Read each draft beside the current text, edit if you like, and publish. Nothing goes live without you."),
+      done: generatedCount > 0,
+      action: { content: draftCount > 0 ? t("Review {n, plural, one {# draft} other {# drafts}}", { n: draftCount }) : t("Open products"), onAction: () => navigate(draftCount > 0 ? "/app/review" : "/app/products") },
+    },
+    {
+      id: "theme",
+      title: t("Show your FAQ content on your product pages"),
+      description: t("The FAQ answers are stored on your products; the FAQ (Navaal) block puts them on the page. The button opens your theme editor with the block ready to add — click Save there, then confirm here."),
+      done: embedConfirmed,
+      extra: <ThemeStepActions shopDomain={shopDomain} />,
+    },
+  ];
+  const setupDone = steps.every((s) => s.done);
+  const showGuide = !(setupDone && geoNoteDismissed);
+
+  const fixRows = whatToFixFirst({ blockers, attention, entitlements, t, navigate });
+
+  /* The strip's hints carry what the autopilot and bulk-job banners used to
+     announce: counted over the score card's own window (Phase 12 A3), so the
+     two can never name different dates. */
+  const autopilotTitle = autopilotRecap ? autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }, t) : null;
+  const readyHint =
+    autopilotTitle ??
+    (recentlyCompletedJob && activeJobCount === 0
+      ? t("Bulk run finished: {n, plural, one {# product} other {# products}} written", { n: recentlyCompletedJob.completedProducts })
+      : draftCount > 0
+        ? t("Waiting for you")
+        : totalProducts === 0
+          ? t("No products yet")
+          : t("Nothing waiting"));
+
+  // Grouped digits ("10,000"), and a count we do not have stays a dash — never "0".
+  const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : t.number(Number(v)));
+  const stats = [
+    { id: "ready", label: t("Ready to review"), value: num(draftCount), hint: readyHint, url: "/app/review" },
+    {
+      id: "published",
+      label: t("Published"),
+      value: num(generatedCount),
+      hint: publishedSubtext({ ok: catalogueOk, inScope: generatedCount, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
+      url: "/app/products?tab=published",
+    },
+    { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
+    {
+      id: "catalogue",
+      label: t("In your catalogue"),
+      value: num(totalProducts),
+      hint: !countsOk
+        ? t("We could not read this from Shopify just now")
+        : [candidateProducts === totalProducts ? null : t("{n} {label}", { n: t.number(candidateProducts), label: candidateLabel }), archivedProducts > 0 ? t("{n} archived not counted", { n: t.number(archivedProducts) }) : null].filter(Boolean).join(" · ") || t("Active products on your Online Store"),
+    },
+  ];
+
   return (
-    <Page primaryAction={primaryAction} secondaryActions={secondaryActions}>
-      <BlockStack gap="600">
-        {/* Phase 4 item 4.3 — above the fold, on purpose. This is the one
-            number that tells a merchant the app did something for them. */}
-        <StoreScoreCard score={storeScore} />
-
-        {/* Phase 12 A4 / FR8 — the result of the first run leads until the first publish. */}
-        {beforeFirstPublish && <FirstRunFindingsCard findings={findings} blockers={blockers} scanned={storeScore?.scanned ?? null} navigate={navigate} />}
-
-        {/* Phase 4 item 5 — what autopilot did while nobody was watching.
-            Phase 12 A3 — counted over the score card's own window, and named
-            with the same date, so the two lines can never disagree. */}
-        {autopilotRecap && autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }, t) && (
-          <Banner
-            tone="info"
-            title={autopilotBannerTitle(autopilotRecap, { label: changeWindowLabel }, t)}
-            action={{ content: t("Review the drafts"), onAction: () => navigate("/app/review") }}
-          >
-            <p>
-              {t("New products get content written for them automatically. Anything the quality check flagged is waiting as a draft rather than going live.")}
-            </p>
-          </Banner>
-        )}
-
-        {/* Phase 3 item 3.4, surface (a) — the only upsell on this screen. */}
+    <Page title={t("Home")} subtitle={subtitle} primaryAction={primaryAction} secondaryActions={secondaryActions}>
+      <BlockStack gap="500">
+        {/* Phase 3 item 3.4, surface (a) — the only notice on this screen, and
+            only between 80% and 100% of the month's credits. */}
         <QuotaWarningBanner warning={quotaWarning} />
 
-        {/* ── Job completion banner ──────────────────────────────────────── */}
-        {recentlyCompletedJob && activeJobCount === 0 && !jobBannerDismissed && (
-          <Banner
-            tone="success"
-            title={t("Bulk job complete — {n, plural, one {# product} other {# products}} generated", { n: recentlyCompletedJob.completedProducts })}
-            action={{ content: t("Review drafts"), onAction: () => navigate("/app/review") }}
-            onDismiss={() => {
-              setJobBannerDismissed(true);
-              try {
-                sessionStorage.setItem(`navaal:jobBanner:${recentlyCompletedJob.completedAt}`, "1");
-              } catch {
-                /* storage unavailable — dismiss still works for this view */
-              }
-            }}
-          >
-            <p>{t("Your AI content is ready to review. Check drafts, make edits, and publish with one click.")}</p>
-          </Banner>
+        {showGuide && (
+          <SetupGuide
+            steps={steps}
+            onDismiss={() => dismissGuide.submit({ actionType: "dismissGeoNote" }, { method: "POST" })}
+          />
         )}
 
-        {/* ── Active jobs banner ─────────────────────────────────────────── */}
-        {activeJobCount > 0 && (
-          <Banner
-            tone="info"
-            title={t("{n, plural, one {# bulk job} other {# bulk jobs}} generating in the background", { n: activeJobCount })}
-            action={{ content: t("View progress"), onAction: () => navigate("/app/jobs") }}
-          >
-            <p>{t("You can navigate freely — writing continues without this tab open.")}</p>
-          </Banner>
-        )}
-
-        {/* ── Hero Section ──────────────────────────────────────────────── */}
-        <Box padding="600" background="bg-fill-brand" borderRadius="300">
-          {/* wrap allowed on mobile so button drops below the heading on narrow screens */}
-          <InlineStack align="space-between" blockAlign="center" gap="400">
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <span style={{ color: "#ffffff", display: "inline-flex" }}>
-                  <Icon source={MagicIcon} tone="inherit" />
-                </span>
-                <Text as="h1" variant="headingXl" fontWeight="bold">
-                  <span style={{ color: "#ffffff" }}>{`${firstVisit ? "Welcome" : "Welcome back"}${storeName ? `, ${storeName}` : ""}!`}</span>
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="bodyMd">
-                <span style={{ color: "rgba(255,255,255,0.85)" }}>{heroSubtitle}</span>
-              </Text>
-            </BlockStack>
-          </InlineStack>
-        </Box>
-
-        {/* Phase 2 item 2.4 - ONE explainer, on Home only.
-            A merchant who has already installed was told what the app does
-            three times on this screen: a dark gradient hero, the onboarding
-            checklist, and a 'How Navaal works' card. The same gradient strip
-            also rendered on five other routes, twice on Results alone.
-
-            Two lines, a link, and a dismiss that sticks. */}
-        {!geoNoteDismissed && (
-          <Banner
-            tone="info"
-            title={t("Written for Google and for AI search")}
-            onDismiss={() => dismissGeoNote.submit({ actionType: "dismissGeoNote" }, { method: "POST" })}
-          >
-            <Text as="p" variant="bodyMd">
-              {t("Your product content is written to rank in search and to be quoted by AI assistants, with FAQ content published as real page copy.")}
-            </Text>
-          </Banner>
-        )}
-
-        {/* ── Theme embed setup (5.1.3) — persistent until confirmed done.
-            Phase 12 A4 — promoted only once there is published content to
-            show; before the first publish it is one dismissible line. ── */}
-        {beforeFirstPublish ? <EmbedLaterNote confirmed={embedConfirmed} /> : <EmbedSetupCard shopDomain={shopDomain} confirmed={embedConfirmed} />}
-
-        {/* ── Onboarding checklist ───────────────────────────────────────── */}
-        {isNewShop && (
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="200" blockAlign="center">
-                <Icon source={MagicIcon} tone="info" />
-                <Text as="h2" variant="headingLg">
-                  {t("Get started in 4 steps")}
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                {t("Complete these steps to generate content that converts.")}
-              </Text>
+        {/* The question, answered: the score with its scope on the left, what
+            to fix first on the right. */}
+        <Card>
+          <Layout>
+            <Layout.Section variant="oneThird">
+              <ScoreSummary score={storeScore} navigate={navigate} />
+            </Layout.Section>
+            <Layout.Section>
               <BlockStack gap="200">
-                <OnboardingStep
-                  number="1"
-                  title={t("Configure your brand voice")}
-                  description={t("Set your tone, audience, and differentiators so AI writes in your exact voice.")}
-                  done={hasBrandVoice}
-                  actionLabel="Set up now"
-                  onAction={() => navigate("/app/settings")}
-                />
-                <OnboardingStep
-                  number="2"
-                  title={t("Generate your first product description")}
-                  description={t("Pick any product and get an AI description, meta title, and FAQ in under 30 seconds.")}
-                  done={generatedCount + draftCount > 0}
-                  actionLabel="Choose a product"
-                  onAction={() => navigate("/app/products")}
-                />
-                <OnboardingStep
-                  number="3"
-                  title={t("Review and publish")}
-                  description={t("Read the draft, make edits, and publish with one click to your Shopify store.")}
-                  done={generatedCount > 0}
-                  actionLabel="View products"
-                  onAction={() => navigate("/app/products")}
-                />
-                <OnboardingStep
-                  number="4"
-                  title={t("Show your FAQ content on your product pages")}
-                  description={t("Add the \"FAQ (Navaal)\" block to your product template so shoppers can read the answers. The optional FAQ-schema app embed lives in the same theme editor.")}
-                  done={embedConfirmed}
-                  actionLabel="Open theme editor"
-                  onAction={() => window.open(embedDeepLink(shopDomain), "_top")}
-                />
-              </BlockStack>
-            </BlockStack>
-          </Card>
-        )}
-
-        {/* P2.3 · P2.2 · P2.1 — told the day it happens. Up to three lines,
-            most expensive first (a blocked crawler, then products a surface
-            cannot list, then what changed), and a way in. Rendered only when
-            there is something to say: an empty "nothing needs you" card on
-            every load teaches a merchant to stop reading the card. */}
-        {attention?.available && homeAttentionLines(attention, t).length > 0 && (
-          <Banner
-            tone={attention.crawler?.blocked?.length ? "critical" : "warning"}
-            title={homeAttentionLines(attention, t)[0]}
-            action={{ content: t("See what changed"), onAction: () => navigate("/app/attention") }}
-          >
-            <BlockStack gap="100">
-              {homeAttentionLines(attention, t)
-                .slice(1)
-                .map((line) => (
-                  <Text key={line} as="p" variant="bodySm">
-                    {line}
-                  </Text>
-                ))}
-              <Text as="p" variant="bodySm" tone="subdued">
-                {attention.partial ? t("From the products we could reach in one check — the daily check covers the rest.") : t("Checked daily against yesterday’s snapshot of your catalogue and what each AI surface asks for.")}
-              </Text>
-            </BlockStack>
-          </Banner>
-        )}
-        {/* P3.1 (Phase 8) — Proof: the latest crawl-time batch, both arms, the
-            interval — or the one sentence that says why there is none yet.
-            Rendered only when Bing measurement is on. */}
-        {proof?.enabled && (
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack align="space-between" blockAlign="center" wrap>
-                <Text as="h2" variant="headingSm">
-                  {t("Proof")}
-                </Text>
-                <Button size="slim" onClick={() => navigate("/app/proof")}>
-                  {t("See both arms")}
-                </Button>
-              </InlineStack>
-              {proofCardLines(proof, t).map((line) => (
-                <Text key={line} as="p" variant="bodySm">
-                  {line}
-                </Text>
-              ))}
-            </BlockStack>
-          </Card>
-        )}
-        {/* ── Stats Grid ───────────────────────────────────────────────── */}
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <StatCard
-              icon={ProductIcon}
-              iconTone="subdued"
-              label={t("Total Products")}
-              value={totalProducts === null ? "—" : totalProducts}
-              subtext={
-                /* Group 1.5 + 2.1 — the total is true and stays true; the
-                   population this app can actually act on is named beside it
-                   rather than silently substituted for it. */
-                !countsOk
-                  ? "We could not read this from Shopify just now"
-                  : [
-                      candidateProducts === totalProducts
-                        ? "In your Shopify catalog"
-                        : `In your Shopify catalog · ${candidateProducts} ${candidateLabel}`,
-                      // The exclusion is STATED. "32" used to be this number.
-                      archivedProducts > 0 ? `${archivedProducts} archived not counted` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-              }
-            />
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            {/* P5.1 — "Live on your storefront" was the same false claim I had
-                just fixed on the Products page, on the FIRST screen, and I
-                missed it because I fixed the instance instead of the class.
-                Read live on 2026-09-14: "Live on your storefront: 30" above
-                "14 active and draft products published to your online store".
-
-                `generatedCount` counts DISTINCT products in our own
-                GeneratedContent table whose state is published. It asks Shopify
-                nothing, so it keeps counting a product after the merchant
-                archives it and after they delete it — which is exactly right as
-                a record of our work and false as a claim about their storefront.
-
-                The subtext was already accurate. The label was the lie, and it
-                now matches the Products page card word for word. */}
-            <StatCard
-              icon={CheckCircleIcon}
-              iconTone="success"
-              label={t("AI Content Published")}
-              value={generatedCount}
-              subtext={publishedSubtext({
-                ok: catalogueOk,
-                inScope: generatedCount,
-                candidateCount: candidateProducts,
-                candidateLabel,
-                record: recordPublished,
-              }, t)}
-              tone="success"
-            />
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <StatCard
-              icon={ClockIcon}
-              iconTone="caution"
-              label={t("Drafts Pending Review")}
-              value={draftCount}
-              subtext={
-                draftCount > 0
-                  ? "Ready to publish"
-                  : totalProducts === 0
-                    ? "No products yet"
-                    : "Nothing waiting"
-              }
-            />
-          </Layout.Section>
-        </Layout>
-
-        {/* ── Usage Card ────────────────────────────────────────────────── */}
-        <Box padding="400" background={usageBg} borderRadius="200">
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <Icon source={PlanIcon} tone={usagePct >= 60 ? "caution" : "success"} />
-                <Text as="h2" variant="headingMd">
-                  {t("Monthly credits")}
-                </Text>
-                <Badge tone={plan.planName === "free" ? "attention" : "success"}>
-                  {planLabels[plan.planName] ?? plan.planName} {t("Plan")}
-                </Badge>
-              </InlineStack>
-              {/* Group 6.4 — this said "2 / 25 used · 23 remaining" directly
-                  above "23 of 25 left this month": the same fact twice, in
-                  adjacent lines, in two different phrasings. The bar shows the
-                  proportion; this shows the count; the line under the bar is
-                  the one that carries the reset date. */}
-              <Text id="home-credit-usage" as="p" variant="bodySm" tone={usagePct >= 90 ? "caution" : "subdued"}>
-                {t("{usageCount} / {monthlyCredits} used", { usageCount, monthlyCredits: plan.monthlyCredits })}
-              </Text>
-            </InlineStack>
-
-            {/* FR14 (Phase 14) — the visible primary number is the fraction
-                above. The bar's own label was the ROUNDED PERCENT and nothing
-                else, so a screen reader heard "1%" for 19 of 4,000 and "3%" for
-                3 of 100: a rounded percent alone, which is the defect. Point the
-                bar at the fraction and the percent is never the only number. */}
-            <ProgressBar progress={usagePct} tone={usageTone} size="medium" ariaLabelledBy="home-credit-usage" />
-
-            {/* Phase 3 item 3.4 — a readout, not an upsell. This card and the
-                Home hero were two of the six surfaces a quota-hit merchant met.
-                It still says exactly where they stand, and the single upgrade
-                path is the banner above, which appears once and can be
-                dismissed for a week. */}
-            <Text as="p" variant="bodySm" tone="subdued">
-              {remaining === 0 ? t("You've used all {monthlyCredits} credits for this month. They reset on the 1st.", { monthlyCredits: plan.monthlyCredits }) : t("{remaining} of {monthlyCredits} left this month.", { remaining, monthlyCredits: plan.monthlyCredits })}
-            </Text>
-          </BlockStack>
-        </Box>
-
-        {/* ── Recent Activity ─────────────────────────────────────────────
-            Streamed: it is below the usage card, and its groupBy used to hold
-            the whole first paint. An empty list renders nothing, so the error
-            path (which resolves to []) simply hides the card. */}
-        <Suspense fallback={<RecentActivitySkeleton />}>
-          <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
-            {({ recentActivity }) =>
-              recentActivity.length > 0 && <RecentActivityCard items={recentActivity} navigate={navigate} />
-            }
-          </Await>
-        </Suspense>
-
-        {/* Optimize CTA ─────────────────────────────────────────────── */}
-        {!isNewShop && (
-          <Box padding="500" background="bg-surface-secondary" borderRadius="300">
-            <InlineStack align="space-between" blockAlign="center" wrap={false}>
-              <BlockStack gap="100">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={MagicIcon} tone="subdued" />
-                  <Text as="h2" variant="headingLg">
-                    {t("Optimize your store")}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  {/* Group 4.2 — this said "every product missing a description",
-                      but the action targets every product WE have not written
-                      for, which on a store with its own copy is a very
-                      different set and a much larger number. */}
-                  {t("Write content for the products we have not optimized yet — one click, runs in the background.")}
-                </Text>
-              </BlockStack>
-              {/* A3.2 — the third surface with this label. Same destination as
-                  the primary above, for the same reason. */}
-              <Button onClick={() => navigate("/app/products?optimize=1")}>{t("Optimize store")}</Button>
-            </InlineStack>
-          </Box>
-        )}
-
-        {/* Tools row. Phase 2 item 2.2 - SEO Audit, Results and Analytics
-            left the sidebar, so this row is now the ONLY way to reach them.
-            It used to be hidden from new shops (`!isNewShop`), which made
-            three features undiscoverable at exactly the moment somebody is
-            exploring the app. Always shown. */}
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={SearchIcon} tone="info" />
+                <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
                   <Text as="h2" variant="headingMd">
-                    {t("SEO Audit")}
+                    {t("What to fix first")}
                   </Text>
+                  {attention?.available ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {attention.partial ? t("From the products we could reach in one check") : t("Checked daily against your catalogue")}
+                    </Text>
+                  ) : null}
                 </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {/* Group 2.1 — this promised the ENTIRE catalog while the audit
-                      itself reports "500 products analyzed · partial scan" on a
-                      3,148-product store. One of the two was wrong, and it was
-                      this one. */}
-                  {t("Check your catalog for missing descriptions, meta tags and alt text — and see exactly which products to fix first.")}
-                </Text>
-                <Button onClick={() => navigate("/app/seo-audit")}>{t("Run audit")}</Button>
+                <IssueList items={fixRows} emptyText={totalProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Nothing needs you right now. The daily check covers the rest.")} />
               </BlockStack>
-            </Card>
+            </Layout.Section>
+          </Layout>
+        </Card>
+
+        <StatStrip items={stats} />
+
+        <Layout>
+          <Layout.Section>
+            <Suspense fallback={<RecentActivitySkeleton />}>
+              <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
+                {({ recentActivity }) => recentActivity.length > 0 && <RecentActivityCard items={recentActivity} navigate={navigate} />}
+              </Await>
+            </Suspense>
           </Layout.Section>
           <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={BlogIcon} tone="info" />
-                  <Text as="h2" variant="headingMd">
-                    {t("Blog")}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Write SEO-optimized blog posts in your brand voice in under 60 seconds.")}
-                </Text>
-                {/* Same streamed promise as Recent Activity. "Write a post" is
-                    there from the first paint; only the counts wait. */}
-                <Suspense fallback={<SkeletonBodyText lines={1} />}>
-                  <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
-                    {({ blogsTotal, blogsPublished, blogsDraft }) =>
-                      blogsTotal > 0 && (
-                        <InlineStack gap="200">
-                          <Badge tone="success">{t("{blogsPublished} published", { blogsPublished })}</Badge>
-                          {blogsDraft > 0 && <Badge tone="info">{t("{blogsDraft} draft", { blogsDraft })}</Badge>}
-                        </InlineStack>
-                      )
-                    }
-                  </Await>
-                </Suspense>
-                <InlineStack gap="200">
-                  <Button onClick={() => navigate("/app/blog")}>{t("Write a post")}</Button>
-                  <Suspense fallback={<SkeletonBodyText lines={1} />}>
-                    <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
-                      {({ blogsTotal }) =>
-                        blogsTotal > 0 && (
-                          <Button variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                            {t("View all ({blogsTotal})", { blogsTotal })}
-                          </Button>
-                        )
-                      }
-                    </Await>
-                  </Suspense>
-                </InlineStack>
-              </BlockStack>
-            </Card>
+            <BlockStack gap="400">
+              <CreditsCard plan={plan} usageCount={usageCount} remaining={remaining} usagePct={usagePct} planLabel={planLabel} />
+              {/* P3.1 (Phase 8) — Proof: the latest crawl-time batch, both arms,
+                  the interval — or the one sentence that says why there is none
+                  yet. Rendered only when Bing measurement is on. */}
+              {proof?.enabled && (
+                <Card>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center" wrap>
+                      <Text as="h2" variant="headingMd">
+                        {t("Proof")}
+                      </Text>
+                      <Button variant="plain" onClick={() => navigate("/app/proof")}>
+                        {t("See both arms")}
+                      </Button>
+                    </InlineStack>
+                    {proofCardLines(proof, t).map((line) => (
+                      <Text key={line} as="p" variant="bodySm">
+                        {line}
+                      </Text>
+                    ))}
+                  </BlockStack>
+                </Card>
+              )}
+            </BlockStack>
           </Layout.Section>
         </Layout>
       </BlockStack>

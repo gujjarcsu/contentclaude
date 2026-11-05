@@ -37,7 +37,7 @@ export default function ProofPage() {
   if (loadingThisRoute) return <AppSkeleton />;
 
   return (
-    <Page title={t("Proof")} subtitle={t("A causal result about your own store: does submitting changed pages to Bing get them crawled sooner?")} backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}>
+    <Page title={t("Proof")} subtitle={t("A causal result about your own store: does submitting changed pages to Bing get them crawled sooner?")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
       <BlockStack gap="400">
         {!bing.enabled && (
           <Card>

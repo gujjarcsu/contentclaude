@@ -172,7 +172,7 @@ export default function AttentionPage() {
     <Page
       title={t("Needs attention")}
       subtitle={summary.available ? lines[0] ?? t("Nothing needs you right now.") : t("We have not been able to read your catalogue yet.")}
-      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
+      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
         {summary.partial && (

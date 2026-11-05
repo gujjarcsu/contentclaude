@@ -98,7 +98,7 @@ export default function SupportPage() {
     <Page
       title={t("Get help")}
       subtitle={t("A real person reads every one of these.")}
-      backAction={{ content: t("Dashboard"), onAction: () => navigate("/app") }}
+      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="500">
         {actionData?.error && (

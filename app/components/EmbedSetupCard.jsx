@@ -154,6 +154,31 @@ export function EmbedSetupCard({ shopDomain, confirmed }) {
 }
 
 /**
+ * Redesign (Nov 2026) — the three theme-step controls on their own, for the
+ * setup guide on Home. Same deep links, same confirm post, same order (the
+ * visible FAQ first because it is the half that does the work); the prose
+ * around them lives in the guide step's description. None is a primary:
+ * the page already has one (tests/routes/primaryActions.test.js).
+ */
+export function ThemeStepActions({ shopDomain }) {
+  const t = useT();
+  const fetcher = useFetcher();
+  const busy = fetcher.state !== "idle";
+  return (
+    <InlineStack gap="300" wrap>
+      <Button onClick={() => window.open(visibleBlockDeepLink(shopDomain), "_top")}>{t("Add the FAQ to my product pages")}</Button>
+      <Button onClick={() => window.open(embedDeepLink(shopDomain), "_top")}>{t("Turn on the FAQ schema")}</Button>
+      <fetcher.Form method="post" action="/app/embed-status">
+        <input type="hidden" name="actionType" value="confirm" />
+        <Button submit loading={busy}>
+          {t("I've enabled it")}
+        </Button>
+      </fetcher.Form>
+    </InlineStack>
+  );
+}
+
+/**
  * Phase 12 A4 — before the first publish there is nothing for the theme block
  * to show, so the setup card would be a chore in front of a result. One line,
  * dismissible for this visit; the full card takes over after the first publish.

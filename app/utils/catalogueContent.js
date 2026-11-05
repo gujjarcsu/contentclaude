@@ -81,8 +81,9 @@ export function intersectContent(rows, inScope) {
  */
 export function publishedSubtext({ ok, inScope, candidateCount, candidateLabel, record }, t = enT) {
   if (!ok || !Number.isFinite(candidateCount)) return t("Products we have published content for");
-  const base = t("of your {count} {label}", { count: candidateCount, label: t(candidateLabel) });
-  if (Number.isFinite(record) && record > inScope) return t("{base} · {record} since you installed", { base, record });
+  const fmt = (n) => (typeof t.number === "function" ? t.number(n) : String(n));
+  const base = t("of your {count} {label}", { count: fmt(candidateCount), label: t(candidateLabel) });
+  if (Number.isFinite(record) && record > inScope) return t("{base} · {record} since you installed", { base, record: fmt(record) });
   return base;
 }
 

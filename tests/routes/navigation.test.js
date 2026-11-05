@@ -36,11 +36,16 @@ function navItems() {
   }));
 }
 
-describe("the sidebar is five items", () => {
+describe("the sidebar is six items", () => {
   const items = navItems();
 
-  it("has exactly five", () => {
-    expect(items.map((i) => i.label)).toEqual(["Home", "Products", "Review", "Blog", "Settings"]);
+  it("has exactly six", () => {
+    // Redesign (Nov 2026) — Audit joined the five. All five top apps in the
+    // category (Tapita, Avada, Smart SEO, StoreSEO, SEOWILL; walked on EBS on
+    // 2 Nov 2026) carry score → issues → fix as its own destination. This is
+    // the recorded decision, not a loosened guard: the list is still exact,
+    // still ordered, and a seventh item fails it.
+    expect(items.map((i) => i.label)).toEqual(["Home", "Audit", "Products", "Review", "Blog", "Settings"]);
   });
 
   it("no two items point at the same place", () => {
@@ -69,8 +74,13 @@ describe("nothing was made unreachable", () => {
   // The routes that left the sidebar still exist and are still linked from
   // inside the app. Deleting them is the owner's decision and has not happened.
   const merged = {
-    "/app/optimize": ["app/routes/app.products.jsx", "app/routes/app._index.jsx"],
-    "/app/seo-audit": ["app/routes/app._index.jsx"],
+    // Redesign (Nov 2026): Home no longer carries an "Optimize store" strip —
+    // its primary already says "Optimize N products". The Optimize screen is
+    // linked from the Audit and from Bulk runs. (Before this, Home satisfied
+    // the check through a COMMENT that mentioned the path — a false green of
+    // the kind 00-CONSTITUTION L1 names — so `read` now strips comments.)
+    "/app/optimize": ["app/routes/app.seo-audit.jsx", "app/routes/app.jobs.jsx"],
+    "/app/seo-audit": ["app/routes/app._index.jsx", "app/routes/app.jsx"],
     "/app/jobs": ["app/routes/app.products.jsx"],
     "/app/collections": ["app/routes/app.products.jsx"],
     "/app/plans": ["app/routes/app._index.jsx", "app/routes/app.products.jsx"],
@@ -83,7 +93,7 @@ describe("nothing was made unreachable", () => {
     });
 
     it(`${href} is linked from at least one screen a merchant can reach`, () => {
-      const linked = linkers.some((f) => read(f).includes(href));
+      const linked = linkers.some((f) => code(f).includes(href));
       expect(linked, `nothing links to ${href}`).toBe(true);
     });
   }
@@ -129,18 +139,23 @@ describe("one bulk action, one name", () => {
   it("the one name is used, and it is US-spelled", () => {
     expect(code("app/routes/app.products.jsx")).toMatch(/Optimize store/);
     expect(code("app/routes/app.optimize.jsx")).toMatch(/Optimize store/);
-    expect(code("app/routes/app._index.jsx")).toMatch(/Optimize store/);
+    // Home's one Optimize control is the Page primary, which counts the work
+    // ("Optimize {n} products") rather than repeating the bulk action's name.
+    expect(code("app/routes/app._index.jsx")).toMatch(/Optimize \{n, plural/);
     expect(code("app/routes/app.seo-audit.jsx")).toMatch(/Optimize store/);
   });
 
   it("the row action opens the product page instead of submitting a bulk job", () => {
     // It used to submit a bulk job, so on Free and Starter the most obvious
     // button on the row answered "Bulk generation requires Growth".
+    // Redesign (Nov 2026): the list is an IndexTable; the row's one button is
+    // rowAction(), which navigates by state (rowActionHref) and never submits.
     const src = read("app/routes/app.products.jsx");
-    const block = src.slice(src.indexOf("shortcutActions={["), src.indexOf("shortcutActions={[") + 900);
-    expect(block).toContain('content: "Generate"');
-    expect(block).toContain("navigate(`/app/products/${numericId}`)");
+    const block = src.slice(src.indexOf("const rowAction = ("), src.indexOf("const rowAction = (") + 900);
+    expect(block).toContain("navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId))");
+    expect(block).toContain("rowActionLabel(id, description)");
     expect(block).not.toContain("buildBulkFormData");
+    expect(src).toContain("onClick={() => navigate(`/app/products/${numericId}`)}"); // the row itself opens the product page
   });
 
   it("Products has exactly one page primary action, and it is the bulk action", () => {

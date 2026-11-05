@@ -38,12 +38,21 @@ describe("A2 — the name comes from Shopify, per session; a first visit is not 
     expect(s).not.toMatch(/SHOP_NAME_TTL_SECONDS = 3600/);
   });
 
-  it("Home passes the session id and greets a first visit with Welcome, not Welcome back", () => {
+  it("Home never addresses the store by name: no greeting, no name in the subtitle, no live-name lookup", () => {
+    // Redesign (Nov 2026): the greeting band is gone (a noun title, as the
+    // studied admin screens and the five top apps' inner pages do), and the
+    // store's name is not in the subtitle either — the admin's own chrome
+    // names the store, and a long name wrapped the subtitle under the page
+    // actions. With nothing to name, Home makes no live-name call; a renamed
+    // store can no longer be addressed by its old name because it is not
+    // addressed at all. Blog keeps the lookup for its author line.
     const h = src("app/routes/app._index.jsx");
-    expect(h).toMatch(/getLiveShopName\(admin, shop, \{ sessionId: session\?\.id/);
-    expect(h).toMatch(/firstVisit \? "Welcome" : "Welcome back"/);
+    expect(h).not.toMatch(/getLiveShopName|greetingName/);
+    expect(h).not.toMatch(/^\s*storeName,\s*$/m); // not in the loader payload (brandVoice.storeName is still read for hasBrandVoice)
+    expect(h).not.toMatch(/Welcome back/);
     expect(h).toMatch(/FIRST_VISIT_MS = 24 \* 3600 \* 1000/);
-    expect(h).not.toMatch(/`Welcome back, \$\{storeName\}!`/);
+    expect(h).toMatch(/const subtitle = \[\s*totalProducts === null/);
+    expect(src("app/routes/app.blog.jsx")).toMatch(/getLiveShopName\(admin, shop\)/);
   });
 });
 
