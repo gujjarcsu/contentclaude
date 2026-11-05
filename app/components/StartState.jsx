@@ -69,13 +69,23 @@ import { GeoRubric } from "./GeoRubric.jsx";
 import { ScoreRing } from "./ScoreRing.jsx";
 import { IssueList } from "./IssueList.jsx";
 import { ProductThumb } from "./ProductThumb.jsx";
-import { WATCH_FROM_HERE, BLOCKER_GROUPS, blockerLine, canRunFix } from "../utils/firstRun.js";
+import { WATCH_FROM_HERE, BLOCKER_GROUPS, PASSWORD_BLOCKER, blockerLine, canRunFix } from "../utils/firstRun.js";
 import { blockerRows } from "../utils/fixRows.js";
 import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { costSentence, uniformScoreNote } from "../utils/startCopy.js";
 
 /** Never let a generation spin forever — flip to a retry the merchant can press. */
 export const WATCHDOG_MS = 55_000;
+
+/** Every check the first-run walk makes: the feed's groups plus the storefront password. */
+export const FIRST_RUN_CHECKS = Object.freeze([...BLOCKER_GROUPS, PASSWORD_BLOCKER]);
+
+/** Critical / needs work / good over FIRST_RUN_CHECKS. One finding per check key. */
+export function severityCounts(all) {
+  const found = new Set(all.map((b) => b?.key));
+  const of = (grade) => FIRST_RUN_CHECKS.filter((g) => g.grade === grade && found.has(g.key)).length;
+  return { critical: of("blocking"), warning: of("degrading"), good: FIRST_RUN_CHECKS.filter((g) => !found.has(g.key)).length };
+}
 
 /** The two outcomes the goal screen offers. Search reads page content; AI shopping lists from feed fields. */
 const GOALS = Object.freeze({ search: "search", shopping: "shopping" });
@@ -484,13 +494,13 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, on
   });
 
   // The severity cards and the headline count every finding the walk made,
-  // not only the three rows shown (SEOWILL 115). Good = the feed checks no
-  // product fails, out of the checks the walk runs (BLOCKER_GROUPS).
+  // not only the three rows shown (SEOWILL 115). Good = the checks nothing
+  // fails, out of the checks the walk runs: the feed's (BLOCKER_GROUPS) AND
+  // the storefront-password check. Counting the password row as Critical but
+  // leaving it out of the total made the cards add to 10 under "out of 9"
+  // (found on a fresh install of the dev store, Nov 2026).
   const all = Array.isArray(start.allBlockers) ? start.allBlockers : Array.isArray(start.blockers) ? start.blockers : [];
-  const criticalCount = all.filter((b) => b?.grade === "blocking").length;
-  const warningCount = all.filter((b) => b?.grade === "degrading").length;
-  const foundGroups = new Set(all.map((b) => b?.key));
-  const goodCount = BLOCKER_GROUPS.filter((g) => !foundGroups.has(g.key)).length;
+  const { critical: criticalCount, warning: warningCount, good: goodCount } = severityCounts(all);
   const issueCount = criticalCount + warningCount;
 
   const nTotal = Number(start.totalProducts);
@@ -567,7 +577,7 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, on
             </Layout.Section>
             <Layout.Section>
               <BlockStack gap="400">
-                <SeverityCards critical={criticalCount} warning={warningCount} good={goodCount} scope={t("Out of {total} checks the OpenAI product feed makes", { total: BLOCKER_GROUPS.length })} />
+                <SeverityCards critical={criticalCount} warning={warningCount} good={goodCount} scope={t("Out of {total} checks: the OpenAI product feed's, and whether your storefront is open", { total: FIRST_RUN_CHECKS.length })} />
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
                     {t("What to fix first")}

@@ -1585,5 +1585,6 @@
   "Your storefront is password-protected, so nothing can be listed anywhere yet. Expected before launch; we re-check the night it opens.": "Tu tienda está protegida con contraseña, así que aún no puede aparecer en ningún sitio. Es normal antes del lanzamiento; volveremos a comprobarlo la noche de la apertura.",
   "Your subscription is active. Your new monthly credits are live.": "Tu suscripción está activa. Tus nuevos créditos mensuales ya están disponibles.",
   "Your voice": "Tu voz",
-  "Z–A": "Z–A"
+  "Z–A": "Z–A",
+  "Out of {total} checks: the OpenAI product feed's, and whether your storefront is open": "De {total} comprobaciones: las del feed de productos de OpenAI y si tu tienda está abierta"
 }

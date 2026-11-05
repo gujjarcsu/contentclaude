@@ -86,10 +86,25 @@ describe("First run — the result screen", () => {
   const start = src("app/components/StartState.jsx");
   it("the headline and the severity cards count every finding, and Good is checks no product fails", () => {
     expect(start).toMatch(/const all = Array\.isArray\(start\.allBlockers\)/);
-    expect(start).toMatch(/const goodCount = BLOCKER_GROUPS\.filter\(\(g\) => !foundGroups\.has\(g\.key\)\)\.length;/);
+    expect(start).toMatch(/severityCounts\(all\)/);
     expect(start).toMatch(/We found \{n, plural, one \{# issue\} other \{# issues\}\} in your catalog/);
     expect(start).toMatch(/<SeverityCards critical=\{criticalCount\} warning=\{warningCount\} good=\{goodCount\}/);
   });
+  it("the three severity cards always add up to the total the caption states", async () => {
+    // Found on a fresh install of the dev store: a password-protected storefront
+    // was counted Critical but was not one of the checks in the total, so the
+    // cards read 1 + 2 + 7 = 10 under "Out of 9 checks".
+    const { severityCounts, FIRST_RUN_CHECKS } = await import("../../app/components/StartState.jsx");
+    const { PASSWORD_BLOCKER } = await import("../../app/utils/firstRun.js");
+    const degrading = FIRST_RUN_CHECKS.filter((g) => g.grade === "degrading").slice(0, 2);
+    const cases = [[], [PASSWORD_BLOCKER], [PASSWORD_BLOCKER, ...degrading], [...degrading], [...FIRST_RUN_CHECKS]];
+    for (const all of cases) {
+      const c = severityCounts(all.map((g) => ({ key: g.key, grade: g.grade })));
+      expect(c.critical + c.warning + c.good).toBe(FIRST_RUN_CHECKS.length);
+    }
+    expect(severityCounts([{ key: PASSWORD_BLOCKER.key, grade: "blocking" }]).critical).toBe(1);
+  });
+
   it("goal and scan sit in the stepped onboarding card", () => {
     expect(start).toMatch(/<StepDots total=\{3\} current=\{step\} \/>/);
     expect(start).toMatch(/<ChoiceCard key=\{o\.id\}/);

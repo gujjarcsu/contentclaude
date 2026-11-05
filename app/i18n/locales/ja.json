@@ -1585,5 +1585,6 @@
   "Your storefront is password-protected, so nothing can be listed anywhere yet. Expected before launch; we re-check the night it opens.": "ストアフロントがパスワードで保護されているため、まだどこにも掲載できません。公開前は想定どおりで、開店した夜に再確認します。",
   "Your subscription is active. Your new monthly credits are live.": "サブスクリプションは有効です。新しい月間クレジットが利用可能になりました。",
   "Your voice": "あなたの文体",
-  "Z–A": "Z→A"
+  "Z–A": "Z→A",
+  "Out of {total} checks: the OpenAI product feed's, and whether your storefront is open": "{total}件のチェックのうち（OpenAIの商品フィードの項目と、ストアフロントが公開されているか）"
 }
