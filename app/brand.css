@@ -107,3 +107,11 @@
 .nv-illu .s { fill: var(--p-color-bg-surface, #fff); } .nv-illu .l { fill: var(--p-color-bg-fill-tertiary, #e3e3e3); } .nv-illu .ln { stroke: var(--p-color-border, #e3e3e3); fill: none; }
 .nv-illu .ok { fill: var(--p-color-bg-fill-success, #29845a); } .nv-illu .warn { fill: var(--p-color-bg-fill-caution, #ffb800); } .nv-illu .bad { fill: var(--p-color-bg-fill-critical, #e51c00); }
 .nv-illu .stroke-b { stroke: var(--navaal-brand); fill: none; }
+
+/* Phone width: Polaris cards go edge to edge below 490px, but text that sits
+   OUTSIDE a card (annotated-section headings, a row heading above cards) was
+   left touching the screen edge. Give it the same gutter the page title has. */
+@media (max-width: 489.98px) {
+  .Polaris-Layout__Annotation,
+  .nv-gutter { padding-inline: var(--p-space-400); }
+}

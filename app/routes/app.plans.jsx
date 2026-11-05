@@ -835,23 +835,25 @@ export default function PlansPage() {
 
         {/* The plans */}
         <BlockStack gap="300">
-          <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-            <Text as="h2" variant="headingMd">
-              {t("Choose a plan")}
-            </Text>
-            <InlineStack gap="200" blockAlign="center">
-              <ButtonGroup variant="segmented">
-                <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
-                  {t("Monthly")}
-                </Button>
-                <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
-                  {t("Annual")}
-                </Button>
-              </ButtonGroup>
-              {/* Computed from the price constants, never typed. */}
-              <Badge tone="success">{t("Save {annualSavingPct}%", { annualSavingPct: SAVING_PCT })}</Badge>
+          <div className="nv-gutter">
+            <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+              <Text as="h2" variant="headingMd">
+                {t("Choose a plan")}
+              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <ButtonGroup variant="segmented">
+                  <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
+                    {t("Monthly")}
+                  </Button>
+                  <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
+                    {t("Annual")}
+                  </Button>
+                </ButtonGroup>
+                {/* Computed from the price constants, never typed. */}
+                <Badge tone="success">{t("Save {annualSavingPct}%", { annualSavingPct: SAVING_PCT })}</Badge>
+              </InlineStack>
             </InlineStack>
-          </InlineStack>
+          </div>
           <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
             {PLAN_DISPLAY.map((displayPlan) => {
               const isCurrent = displayPlan.planName === plan.planName;
