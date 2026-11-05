@@ -157,6 +157,17 @@ describe("writing a DRAFT clears it too, not only publishing", () => {
     expect(wrapper[1]).toMatch(/await handleProductAction\(args\)/);
     expect(wrapper[1]).toMatch(/invalidateContentCaches\(session\.shop\)/);
   });
+
+  it("a bulk run clears them when it finishes, not only when it publishes", () => {
+    // Same defect on the bulk path: with review on, every product got a draft
+    // and Products still said "6 not yet optimized" — the only call sat inside
+    // the auto-publish branch, which a review-first run never enters.
+    const src = readFileSync("app/utils/bulkProcessor.server.js", "utf8");
+    const done = src.indexOf('"Bulk job complete"');
+    const tail = src.slice(src.lastIndexOf("await flushCounters(true);", done), done);
+    expect(tail.length, "end-of-run block not found").toBeGreaterThan(0);
+    expect(tail).toMatch(/invalidateContentCaches\(job\.shop\)/);
+  });
 });
 
 describe("the TTL itself", () => {
