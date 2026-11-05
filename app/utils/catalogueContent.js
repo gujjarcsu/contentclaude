@@ -44,6 +44,21 @@ import { enT } from "../i18n/index.js";
  * @param {Set<string>} inScope product ids in the population being described
  * @returns {{published: number, draft: number, unverified: number, rejected: number, withContent: number}}
  */
+/**
+ * The states that mean "we hold content for this product". The Optimize count
+ * (via intersectContent) and the Optimize run (via idsWithContent) both read
+ * THIS set, so the button and the job can no longer disagree on what needs
+ * content. They did: the count used any content row, the run used description
+ * rows only, so "Optimize store (6)" ran and charged 8 (Nov 2026).
+ */
+export const CONTENT_STATES = Object.freeze(new Set([PRODUCT_STATE.PUBLISHED, PRODUCT_STATE.DRAFT, PRODUCT_STATE.UNVERIFIED, PRODUCT_STATE.REJECTED]));
+
+/** Product ids we hold content for, from productStateRows(). Pure. */
+export function idsWithContent(rows) {
+  if (!Array.isArray(rows)) return new Set();
+  return new Set(rows.filter((r) => r?.productId && CONTENT_STATES.has(r.state)).map((r) => r.productId));
+}
+
 export function intersectContent(rows, inScope) {
   const out = { published: 0, draft: 0, unverified: 0, rejected: 0, withContent: 0 };
   if (!Array.isArray(rows) || !(inScope instanceof Set)) return out;

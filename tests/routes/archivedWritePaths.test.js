@@ -47,7 +47,12 @@ describe("bulk optimize — the path that spent the credits", () => {
     // and `products(query: null)` returns archived products.
     const call = code(OPTIMIZE).match(/enumerateProductIds\([\s\S]*?\n {2}\}\);/);
     expect(call, "enumerateProductIds call not found").not.toBeNull();
-    expect(call[0]).toMatch(/query:\s*LIST_SCOPE_QUERY/);
+    // Nov 2026: generate walks the shop's candidate scope (what the button
+    // counts, see optimizeCount.test.js); enhance keeps LIST_SCOPE_QUERY.
+    // Either way the query is set, and it falls back to LIST_SCOPE_QUERY.
+    expect(call[0]).toMatch(/query:\s*runQuery/);
+    expect(code(OPTIMIZE)).toMatch(/let runQuery = LIST_SCOPE_QUERY;/);
+    expect(code(OPTIMIZE)).toMatch(/runQuery = scopeQueryFor\(await scopeForShop\(shop\)\) \|\| LIST_SCOPE_QUERY;/);
   });
 
   it("uses the shared constant, never a literal", () => {
@@ -59,8 +64,9 @@ describe("bulk optimize — the path that spent the credits", () => {
   });
 
   it("the constant still excludes archived and nothing else", () => {
-    // Draft products are IN scope on purpose: a merchant preparing a launch
-    // wants their copy written before they publish.
+    // The constant is the floor (never archived). Bulk generate narrows it to
+    // the shop's candidate scope; drafts join that only when the merchant
+    // turns on "include draft products" in Settings.
     expect(LIST_SCOPE_QUERY).toBe("-status:archived");
   });
 });

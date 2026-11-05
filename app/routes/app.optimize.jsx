@@ -32,8 +32,10 @@ import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
 import { FREE_PLAN, bulkRefusal, getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { checkEntitlement, remainingGenerations, sliceToQuota, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
-import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY } from "../utils/candidates.server.js";
+import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY, scopeForShop, scopeQueryFor } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
+import { idsWithContent } from "../utils/catalogueContent.js";
+import { productStateRows } from "../utils/metrics.server.js";
 import { enumerateProductIds } from "../utils/enumerateProducts.server.js";
 import { getUpsell } from "../utils/upgradePrompts.server.js";
 import { QuotaReachedCard } from "../components/UpgradePrompt.jsx";
@@ -137,13 +139,18 @@ export const action = async ({ request }) => {
   // which is prohibitive at 100k+ products per merchant.
   // Enhance mode doesn't exclude products with prior AI content (its whole point
   // is re-optimizing what's already live), so the lookup is generate-only.
+  //
+  // Generate runs on EXACTLY what the button counts: the shop's candidate scope
+  // (active on the Online Store, or with drafts if the merchant opted in) minus
+  // products we already hold any content for — the same scope and the same
+  // definition the loader's "Optimize store (n)" uses. It used to walk every
+  // non-archived product and skip only description rows, so the button said 6
+  // and the job ran, and charged, 8.
   let existingIds = new Set();
+  let runQuery = LIST_SCOPE_QUERY;
   if (mode === "generate") {
-    const generatedRows = await prisma.$queryRaw`
-      SELECT DISTINCT "productId" FROM "GeneratedContent"
-      WHERE shop = ${shop} AND "contentType" = 'description'
-    `;
-    existingIds = new Set(generatedRows.map((r) => r.productId));
+    existingIds = idsWithContent(await productStateRows(shop));
+    runQuery = scopeQueryFor(await scopeForShop(shop)) || LIST_SCOPE_QUERY;
   }
 
   // Paginate all Shopify product IDs and filter to the mode's target set:
@@ -175,7 +182,7 @@ export const action = async ({ request }) => {
   // products. Hence one constant, asserted by test, never a literal.
   const walk = await enumerateProductIds(admin.graphql, {
     shop,
-    query: LIST_SCOPE_QUERY,
+    query: runQuery,
     label: t("optimize enumerate"),
     select: (node) =>
       mode === "enhance" ? !!(node.description && node.description.trim()) : !existingIds.has(node.id),
