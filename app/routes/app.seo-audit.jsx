@@ -13,6 +13,8 @@ import { getOrCreatePlan } from "../utils/plans.server.js";
 import { SCORED_PRODUCT_FIELDS, toScorable } from "../utils/startState.server.js";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 import { gradeProduct } from "../utils/catalogueWatch.js";
+import { blockersFor, attentionFor } from "../utils/catalogueWatch.server.js";
+import { PASSWORD_BLOCKER } from "../utils/firstRun.js";
 import { GEO_RUBRIC } from "../utils/geoRubric.js";
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
@@ -305,12 +307,26 @@ export const loader = async ({ request }) => {
     return summarize(allEdges, { stoppedByTimeout, stoppedByError, hasNextPage });
   })();
 
+  // Store-wide checks, from the same sources and in the same words as Home's
+  // "What to fix first" (the storefront password from blockersFor, crawler
+  // access from the daily watch). Without them Home said "Critical 2" and the
+  // audit "Critical 0" for the same store (L5). Display only; never throws.
+  const [storeBlockers, attention] = await Promise.all([
+    blockersFor(shop, { max: 99 }).catch(() => []),
+    attentionFor(admin, shop).catch(() => null),
+  ]);
+  const storeChecks = {
+    passwordProtected: storeBlockers.some((b) => b?.key === PASSWORD_BLOCKER.key),
+    crawlerBlocked: attention?.available ? attention.crawler?.blocked ?? [] : null,
+  };
+
   // Plain object (NOT Response.json) so React Router streams `rest`.
   // The top-level fields are page one, which is what the first paint scores.
   return {
     ...summarize(firstEdges, { stoppedByTimeout: false, stoppedByError: false, hasNextPage: false }),
     catalogueCount,
     catalogueExact,
+    storeChecks,
     planName: plan.planName,
     rest,
   };
@@ -336,7 +352,7 @@ export default function SeoAuditPage() {
     return <AppSkeleton title={t("Audit")} sections={2} layout="full" />;
   }
 
-  const shared = { catalogueCount: data.catalogueCount, catalogueExact: data.catalogueExact, planName: data.planName };
+  const shared = { catalogueCount: data.catalogueCount, catalogueExact: data.catalogueExact, planName: data.planName, storeChecks: data.storeChecks };
   return (
     <Suspense fallback={<AuditBody data={{ ...data, ...shared }} pending />}>
       {/* If the streamed walk throws, page one is still a real audit — show it

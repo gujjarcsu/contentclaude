@@ -60,3 +60,18 @@ describe("Optimize, redesign v2", () => {
     expect(src).not.toContain('free: "Free"');
   });
 });
+
+describe("Optimize: one credit count, and no button that refuses (found on the dev store)", () => {
+  const src = read("app/routes/app.optimize.jsx");
+  it("reads credits from the same sum Home and Plans use, never by counting usage rows (L5)", () => {
+    // Plans said "85 remaining", Optimize "84 credits left": an alt-text row
+    // carries 0 credits, so counting rows overstated what was used.
+    expect(src).toMatch(/getMonthlyUsageCount\(shop\)/);
+    expect(src).not.toMatch(/usageRecord\.count\(/);
+  });
+  it("on a plan without bulk jobs, both run cards sit under a lock card naming the plan", () => {
+    expect(src).toMatch(/const bulkAllowed = !!getEntitlements\(planName\)\.bulkJobs/);
+    expect(src).toMatch(/<LockedPreview[\s\S]*cheapestPlanLabelWith\("bulkJobs"\)/);
+    expect((src.match(/<BulkGate>/g) || []).length).toBe(2);
+  });
+});

@@ -14,7 +14,6 @@
   " {m, plural, one {# is} other {# are}} already written and shown at no charge.": " {m, plural, one {#件} other {#件}}はすでに作成済みで、無料で表示されています。",
   " {n, plural, one {# went live but Shopify stored something different — check it below.} other {# went live but Shopify stored something different — check them below.}}": " {n, plural, one {#件は公開されましたが、Shopifyに保存された内容が異なります。下で確認してください。} other {#件は公開されましたが、Shopifyに保存された内容が異なります。下で確認してください。}}",
   " Details: {message}": " 詳細: {message}",
-  " Estimated time: ~{n, plural, one {# minute} other {# minutes}}.": " 推定所要時間: 約{n, plural, one {#分} other {#分}}。",
   " FAQ schema failed for {n, plural, one {# product} other {# products}} — it stays in drafts so you can retry.": " {n, plural, one {#件の商品} other {#件の商品}}でFAQスキーマの保存に失敗しました。再試行できるよう下書きのまま残しています。",
   " Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the \"FAQ (Navaal)\" block to your product template (see the setup card).": " 注: FAQの回答は保存されていますが、商品テンプレートに「FAQ (Navaal)」ブロックを追加するまでストアフロントには表示されません(設定カードを参照)。",
   " of {monthlyCredits}": " / {monthlyCredits}",

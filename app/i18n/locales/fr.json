@@ -14,7 +14,6 @@
   " {m, plural, one {# is} other {# are}} already written and shown at no charge.": " {m, plural, one {# est déjà rédigé et affiché} other {# sont déjà rédigés et affichés}} sans frais.",
   " {n, plural, one {# went live but Shopify stored something different — check it below.} other {# went live but Shopify stored something different — check them below.}}": " {n, plural, one {# est passé en ligne mais Shopify a enregistré autre chose – vérifiez-le ci-dessous.} other {# sont passés en ligne mais Shopify a enregistré autre chose – vérifiez-les ci-dessous.}}",
   " Details: {message}": " Détails : {message}",
-  " Estimated time: ~{n, plural, one {# minute} other {# minutes}}.": " Durée estimée : ~{n, plural, one {# minute} other {# minutes}}.",
   " FAQ schema failed for {n, plural, one {# product} other {# products}} — it stays in drafts so you can retry.": " Le schéma FAQ a échoué pour {n, plural, one {# produit} other {# produits}} – il reste en brouillon pour que vous puissiez réessayer.",
   " Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the \"FAQ (Navaal)\" block to your product template (see the setup card).": " Remarque : vos réponses FAQ sont enregistrées, mais rien ne les affiche dans votre boutique tant que vous n'ajoutez pas le bloc « FAQ (Navaal) » à votre modèle de produit (voir la carte de configuration).",
   " of {monthlyCredits}": " sur {monthlyCredits}",

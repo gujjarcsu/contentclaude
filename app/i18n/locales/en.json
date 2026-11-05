@@ -14,7 +14,6 @@
   " {m, plural, one {# is} other {# are}} already written and shown at no charge.": " {m, plural, one {# is} other {# are}} already written and shown at no charge.",
   " {n, plural, one {# went live but Shopify stored something different — check it below.} other {# went live but Shopify stored something different — check them below.}}": " {n, plural, one {# went live but Shopify stored something different — check it below.} other {# went live but Shopify stored something different — check them below.}}",
   " Details: {message}": " Details: {message}",
-  " Estimated time: ~{n, plural, one {# minute} other {# minutes}}.": " Estimated time: ~{n, plural, one {# minute} other {# minutes}}.",
   " FAQ schema failed for {n, plural, one {# product} other {# products}} — it stays in drafts so you can retry.": " FAQ schema failed for {n, plural, one {# product} other {# products}} — it stays in drafts so you can retry.",
   " Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the \"FAQ (Navaal)\" block to your product template (see the setup card).": " Note: your FAQ answers are saved, but nothing shows them on your storefront until you add the \"FAQ (Navaal)\" block to your product template (see the setup card).",
   " of {monthlyCredits}": " of {monthlyCredits}",

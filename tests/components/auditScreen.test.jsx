@@ -74,6 +74,17 @@ describe("the Audit screen", () => {
     expect(html).not.toContain("partial scan");
   });
 
+  it("lists the store-wide findings Home shows, in Home's words, inside Critical (two screens never disagree, L5)", () => {
+    const html = render(<AuditBody data={data({ storeChecks: { passwordProtected: true, crawlerBlocked: ["OAI-SearchBot", "Googlebot"] } })} />);
+    expect(html).toContain("Critical (4)");
+    expect(html).toContain("Your storefront is password-protected");
+    expect(html).toContain("OAI-SearchBot, Googlebot are blocked from your storefront.");
+    // Not measured (no daily watch yet): nothing is invented.
+    const none = render(<AuditBody data={data({ storeChecks: { passwordProtected: false, crawlerBlocked: null } })} />);
+    expect(none).toContain("Critical (2)");
+    expect(none).not.toContain("blocked from your storefront");
+  });
+
   it("the tabs carry their counts; a free plan sees which plan runs the bulk fix, never a dark button that refuses", () => {
     const html = render(<AuditBody data={data()} />);
     expect(html).toContain("Critical (2)");

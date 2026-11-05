@@ -52,7 +52,7 @@ import { ProductThumb } from "./ProductThumb.jsx";
 import { IconTile, StatusIcon, TagChip, SeverityCards, LockedPreview } from "./Kit.jsx";
 import { IlluAllGood, IlluScan } from "./Illustrations.jsx";
 import { blockerRows } from "../utils/fixRows.js";
-import { blockerLines, BLOCKER_GROUPS } from "../utils/firstRun.js";
+import { blockerLines, blockerLine, BLOCKER_GROUPS, PASSWORD_BLOCKER } from "../utils/firstRun.js";
 import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 
 const TABLE_PAGE_SIZE = 50;
@@ -243,6 +243,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
     catalogueCount,
     catalogueExact = true,
     planName,
+    storeChecks,
   } = data;
   const tally = rawTally ?? {};
   const navigate = useNavigate();
@@ -293,7 +294,19 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
       action: optimize,
     },
   ].filter(Boolean);
-  const critical = feedRows.filter((r) => r.severity === "critical");
+  // Store-wide findings Home also lists, same sentences (L5: the two screens
+  // must not disagree about the same store). Not tied to scanned products, so
+  // they carry no count and no Details.
+  const storeRows = [
+    storeChecks?.passwordProtected && { id: "store-password", severity: "critical", title: blockerLine(PASSWORD_BLOCKER, t) },
+    storeChecks?.crawlerBlocked?.length > 0 && {
+      id: "store-crawler",
+      severity: "critical",
+      title: t("{agents} {n, plural, one {is} other {are}} blocked from your storefront.", { agents: storeChecks.crawlerBlocked.join(", "), n: storeChecks.crawlerBlocked.length }),
+      action: { content: t("See what changed"), onAction: () => navigate("/app/attention") },
+    },
+  ].filter(Boolean);
+  const critical = [...storeRows, ...feedRows.filter((r) => r.severity === "critical")];
   const warning = [...feedRows.filter((r) => r.severity === "warning"), ...seoRows];
   const passed = passedRows({ tally, missingMeta, missingMetaDesc, missingAltText, staleCount, scannedCount }, t);
   const lists = {

@@ -145,6 +145,20 @@ describe("every path that publishes product content clears the cache", () => {
   });
 });
 
+describe("writing a DRAFT clears it too, not only publishing", () => {
+  // Found on the dev store (Nov 2026): six drafts written from the product page,
+  // and Products said "6 on products not on your Online Store" for ten minutes,
+  // because the catalog join (catcontent:<shop>, cleared by invalidateStoreScan)
+  // still held the pre-draft counts. Only publish cleared it.
+  it("the product page clears the content caches after every action it handles", () => {
+    const src = readFileSync("app/routes/app.products_.$id.jsx", "utf8");
+    const wrapper = src.match(/export async function action\(args\) \{([\s\S]*?)\n\}/);
+    expect(wrapper, "action must wrap the handler").not.toBeNull();
+    expect(wrapper[1]).toMatch(/await handleProductAction\(args\)/);
+    expect(wrapper[1]).toMatch(/invalidateContentCaches\(session\.shop\)/);
+  });
+});
+
 describe("the TTL itself", () => {
   it("is still ten minutes, and that is now a ceiling rather than a floor", async () => {
     // With invalidation wired, 600s is how long a score can lag a change we did

@@ -22,15 +22,15 @@ import {
   InlineGrid,
 } from "@shopify/polaris";
 import { CheckCircleIcon, ProductIcon, CreditCardIcon, MagicIcon, EditIcon, AlertTriangleIcon } from "@shopify/polaris-icons";
-import { IconTile, AiButton } from "../components/Kit.jsx";
+import { IconTile, AiButton, LockedPreview } from "../components/Kit.jsx";
 import { IlluAllGood } from "../components/Illustrations.jsx";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
-import { FREE_PLAN, bulkRefusal } from "../utils/billing-plans.js";
-import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
+import { FREE_PLAN, bulkRefusal, getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
+import { checkEntitlement, remainingGenerations, sliceToQuota, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
@@ -54,7 +54,9 @@ export const loader = async ({ request }) => {
     getCandidateCounts(admin, shop),
     getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
-    prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
+    // The same credit sum Home and Plans read (L5): counting usage ROWS disagreed
+    // with them whenever a row carries 0 credits (alt text) or more than one.
+    getMonthlyUsageCount(shop),
     publishesWithoutReview(shop),
   ]);
 
@@ -263,6 +265,20 @@ export default function OptimizePage() {
   const loadingThisRoute = useRouteLoading();
   const actionData = useActionData();
   const isSubmitting = navigation.state === "submitting";
+  // The action refuses a bulk run on a plan without bulk jobs, so on such a
+  // plan the run cards show as the real thing under a lock card, never as an
+  // enabled button that then says no.
+  const bulkAllowed = !!getEntitlements(planName).bulkJobs;
+  const BulkGate = ({ children }) =>
+    bulkAllowed ? (
+      children
+    ) : (
+      <LockedPreview
+        sentence={t("Fixing many products at once is on {plan} and above. Everything listed here stays visible on every plan, and you can still write for one product at a time from its own page.", { plan: cheapestPlanLabelWith("bulkJobs") })}
+      >
+        {children}
+      </LockedPreview>
+    );
 
   // All hooks before any conditional return
   const coveragePct = totalProducts > 0 ? Math.round((publishedCount / totalProducts) * 100) : 0;
@@ -313,9 +329,7 @@ export default function OptimizePage() {
     }
   }, [publishWithoutReview, doSubmitEnhance]);
 
-  const planLabels = { free: t("Free"), starter: t("Starter"), growth: t("Growth"), pro: t("Professional") };
-  const estMinutes = Math.ceil((canOptimize * 3.5) / 60);
-  const noneChosen = !genDesc && !genMeta && !genFaq;
+  const planLabels = { free: t("Free"), starter: t("Starter"), growth: t("Growth"), pro: t("Professional") };  const noneChosen = !genDesc && !genMeta && !genFaq;
 
   if (loadingThisRoute) {
     return (
@@ -472,6 +486,7 @@ export default function OptimizePage() {
              all keep working. */
           <QuotaReachedCard upsell={upsell} surface="optimize" />
         ) : (
+          <BulkGate>
           <Card>
             <BlockStack gap="500">
               <InlineStack gap="400" blockAlign="center" wrap={false}>
@@ -482,9 +497,7 @@ export default function OptimizePage() {
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     {t("This will create a background bulk job for all {needsContent} products missing AI content.", { needsContent })}
-                    {canOptimize < needsContent && t(" Your quota covers {canOptimize} of them this month.", { canOptimize })}
-                    {estMinutes > 0 && t(" Estimated time: ~{n, plural, one {# minute} other {# minutes}}.", { n: estMinutes })}
-                  </Text>
+                    {canOptimize < needsContent && t(" Your quota covers {canOptimize} of them this month.", { canOptimize })}                  </Text>
                 </BlockStack>
               </InlineStack>
 
@@ -535,12 +548,14 @@ export default function OptimizePage() {
               </InlineStack>
             </BlockStack>
           </Card>
+          </BulkGate>
         )}
 
         {/* Enhance existing panel — improves live descriptions instead of
             generating from scratch. Hidden when there's nothing it could run on
             or the quota banner above already explains why nothing can run. */}
         {totalProducts > 0 && remaining > 0 && (
+          <BulkGate>
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="400" blockAlign="center" wrap={false}>
@@ -572,6 +587,7 @@ export default function OptimizePage() {
               </InlineStack>
             </BlockStack>
           </Card>
+          </BulkGate>
         )}
 
         {/* Drafts already waiting: a row with its action, not a second notice. */}

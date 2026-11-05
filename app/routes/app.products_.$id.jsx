@@ -287,7 +287,26 @@ export async function loader({ request, params }) {
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
-export async function action({ request, params }) {
+/**
+ * Every write on this page changes a product's content state (a draft saved,
+ * enhanced, rewritten, restored, published). Products and Home read that state
+ * through a ten-minute catalog cache (catalogueContent.server.js), and only the
+ * publish path used to clear it — so for up to ten minutes after a draft was
+ * written, Products said the draft sat "on products not on your Online Store"
+ * (L5). The handler below is unchanged; the cache is cleared after it runs.
+ */
+export async function action(args) {
+  const result = await handleProductAction(args);
+  try {
+    const { session } = await authenticate.admin(args.request);
+    void invalidateContentCaches(session.shop);
+  } catch {
+    /* the handler already answered; a cache that lives ten more minutes is not worth failing it */
+  }
+  return result;
+}
+
+async function handleProductAction({ request, params }) {
   const t = tForRequest(request);
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
