@@ -17,9 +17,16 @@ import { scoreBand } from "../utils/scoreBands.js";
 import { useT } from "../i18n/react.jsx";
 
 // xs is for a table row (the Audit's product breakdown); it has no caption.
-const SIZES = { xs: 36, small: 56, medium: 80, large: 112 };
-const STROKE = { xs: 4, small: 5, medium: 7, large: 9 };
-const FONT = { xs: 12, small: 16, medium: 22, large: 30 };
+const SIZES = { xs: 36, small: 56, medium: 80, large: 112, xl: 140 };
+const STROKE = { xs: 4, small: 5, medium: 7, large: 9, xl: 11 };
+const FONT = { xs: 12, small: 16, medium: 22, large: 30, xl: 38 };
+
+/** The soft disc behind the number when `tint` is on (Tapita 083: orange tint for 69). */
+const BAND_TINT = {
+  good: "var(--navaal-tint-success)",
+  fair: "var(--navaal-tint-caution)",
+  poor: "var(--navaal-tint-critical)",
+};
 
 /** The fill colour for a band — Polaris tokens so the ring matches the admin's badges. */
 const BAND_COLOR = {
@@ -36,7 +43,7 @@ const BAND_COLOR = {
  * @param {string} [props.caption] the scope, shown under the ring in six words or fewer
  * @param {string} [props.max]     the text after the number inside the ring; default none
  */
-export function ScoreRing({ value, size = "medium", label, caption }) {
+export function ScoreRing({ value, size = "medium", label, caption, tint = false }) {
   const t = useT();
   const px = SIZES[size] ?? SIZES.medium;
   const stroke = STROKE[size] ?? STROKE.medium;
@@ -53,6 +60,7 @@ export function ScoreRing({ value, size = "medium", label, caption }) {
   return (
     <BlockStack gap="100" inlineAlign="center">
       <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`} role="img" aria-label={name}>
+        {tint && <circle cx={px / 2} cy={px / 2} r={r - stroke / 2} style={{ fill: band ? BAND_TINT[band] : "var(--navaal-tint-neutral)" }} />}
         <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={stroke} style={{ stroke: "var(--p-color-border-secondary)" }} />
         {/* No arc at 0: a zero-length round-capped stroke still draws a dot. */}
         {n !== null && n > 0 && (

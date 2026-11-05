@@ -449,7 +449,7 @@ function ScoreSummary({ score, navigate }) {
       {/* A plain link, not a second dark button: when nothing is waiting the
           page's own primary action is already "Run audit". */}
       <Button variant="plain" onClick={() => navigate("/app/seo-audit")}>
-        {available ? t("See the full audit") : t("Score my catalogue")}
+        {available ? t("See the full audit") : t("Score my catalog")}
       </Button>
     </BlockStack>
   );
@@ -728,10 +728,10 @@ export default function Dashboard() {
   const steps = [
     {
       id: "scan",
-      title: t("Scan your catalogue"),
+      title: t("Scan your catalog"),
       description: t("A score for what search engines and AI shopping feeds find on your product pages."),
       done: !!storeScore?.available,
-      action: { content: t("Score my catalogue"), onAction: () => navigate("/app/seo-audit") },
+      action: { content: t("Score my catalog"), onAction: () => navigate("/app/seo-audit") },
     },
     {
       id: "voice",
@@ -789,7 +789,7 @@ export default function Dashboard() {
     { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount, candidateExact), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
     {
       id: "catalogue",
-      label: t("In your catalogue"),
+      label: t("In your catalog"),
       value: num(totalProducts, totalExact),
       hint: !countsOk
         ? t("We could not read this from Shopify just now")
@@ -826,7 +826,7 @@ export default function Dashboard() {
                   </Text>
                   {attention?.available ? (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {attention.partial ? t("From the products we could reach in one check") : t("Checked daily against your catalogue")}
+                      {attention.partial ? t("From the products we could reach in one check") : t("Checked daily against your catalog")}
                     </Text>
                   ) : null}
                 </InlineStack>

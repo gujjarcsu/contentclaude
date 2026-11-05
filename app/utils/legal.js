@@ -89,7 +89,7 @@ export const DATA_INVENTORY = [
   { model: "UpgradePrompt", holds: T("Which upgrade prompts you were shown, so you are not shown the same one repeatedly."), personal: false },
   { model: "ReviewRequestAttempt", holds: T("Whether we have asked you to review the app, so we do not ask twice."), personal: false },
   { model: "SupportRequest", holds: T("Questions you send us through Get help: the email address you give for a reply, your subject and message."), personal: true },
-  { model: "ProductWatch", holds: T("A daily snapshot of each product's title, URL handle, status, description length, whether it has a product type and alt text, what we noticed changed, which fields an AI shopping surface asks for that the product lacks, what its public page says about indexing (sitemap membership, robots directives, canonical address, redirects), and whether you told us a product has no barcode by design — so we can tell you the day something in your catalogue needs you."), personal: false },
+  { model: "ProductWatch", holds: T("A daily snapshot of each product's title, URL handle, status, description length, whether it has a product type and alt text, what we noticed changed, which fields an AI shopping surface asks for that the product lacks, what its public page says about indexing (sitemap membership, robots directives, canonical address, redirects), and whether you told us a product has no barcode by design — so we can tell you the day something in your catalog needs you."), personal: false },
   { model: "CrawlExperiment", holds: T("When you turn on Bing crawl-time measurement: one record per batch of changed product pages, the random seed used to split them into a submitted half and a withheld half, and the result."), personal: false },
   { model: "CrawlExperimentUrl", holds: T("For each page in such a batch: its address, which half it was in, when it changed, when it was submitted to Bing, and when Bing reported first crawling it."), personal: false },
   { model: "CrawlerAccess", holds: T("A daily record of whether search and AI crawlers can reach your storefront, and what your robots.txt allowed."), personal: false },
@@ -220,7 +220,7 @@ export const PRIVACY_SECTIONS = [
   {
     h: T("The short version"),
     p: [
-      T("{APP_NAME} reads your Shopify product catalogue, writes SEO content for it, and stores what it wrote so you can review, publish and roll it back."),
+      T("{APP_NAME} reads your Shopify product catalog, writes SEO content for it, and stores what it wrote so you can review, publish and roll it back."),
       T("<b>We do not store your customers' personal data.</b> We never request Shopify's customer or order scopes — the app asks only for <code>write_products</code> and <code>write_content</code>, so we cannot read your customers or orders even if we wanted to."),
       T("We do not sell data. We do not use your content to train AI models."),
     ],

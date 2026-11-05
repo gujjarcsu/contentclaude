@@ -641,7 +641,7 @@ export default function ProductsPage() {
    */
   const subtitleText = useMemo(() => {
     if (!countsOk || totalStoreProducts === null) {
-      return t("We could not read your catalogue totals from Shopify just now.");
+      return t("We could not read your catalog totals from Shopify just now.");
     }
     const total = totalExact ? t.number(totalStoreProducts) : `${t.number(totalStoreProducts)}+`;
     const cand = candidateExact ? t.number(candidateProducts) : `${t.number(candidateProducts)}+`;

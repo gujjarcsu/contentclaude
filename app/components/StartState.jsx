@@ -100,7 +100,7 @@ function GoalScreen({ start, onChoose }) {
   const subtitle = useSubtitle(start);
   const options = [
     { id: GOALS.search, title: t("Found in search"), body: t("Google, Bing and AI answers read your product pages."), cta: t("Start with search") },
-    { id: GOALS.shopping, title: t("Listed in AI shopping"), body: t("ChatGPT and Shop list products from your catalogue's fields."), cta: t("Start with AI shopping") },
+    { id: GOALS.shopping, title: t("Listed in AI shopping"), body: t("ChatGPT and Shop list products from your catalog's fields."), cta: t("Start with AI shopping") },
   ];
   return (
     <Page title={t("Home")} subtitle={subtitle}>
@@ -150,7 +150,7 @@ function ScanList({ done, scanned }) {
       <BlockStack gap="400">
         <BlockStack gap="100">
           <Text as="h2" variant="headingLg">
-            {done ? t("Scan complete") : t("Reading your catalogue")}
+            {done ? t("Scan complete") : t("Reading your catalog")}
           </Text>
           <Text as="p" variant="bodyMd" tone="subdued">
             {done ? t("{n, plural, one {# product} other {# products}} read and scored", { n: scanned }) : t("Started when you opened the app")}
@@ -300,7 +300,7 @@ function ScanFailed({ onRetry }) {
     <Card>
       <BlockStack gap="300">
         <Banner tone="warning">
-          <p>{t("We couldn't read your catalogue just now. Nothing was generated and nothing was used.")}</p>
+          <p>{t("We couldn't read your catalog just now. Nothing was generated and nothing was used.")}</p>
         </Banner>
         <InlineStack>
           <Button onClick={onRetry}>{t("Try again")}</Button>
@@ -523,9 +523,9 @@ function StartBody({ scan, start, navigate, onRetry, step, goal, onSeeResult, re
                 <Text as="h2" variant="headingMd">
                   {t("What to fix first")}
                 </Text>
-                <IssueList items={rows} emptyText={t("Nothing in your catalogue blocks a listing right now.")} />
+                <IssueList items={rows} emptyText={t("Nothing in your catalog blocks a listing right now.")} />
                 <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Read from your catalogue just now. What is missing, not a promise about results.")}
+                  {t("Read from your catalog just now. What is missing, not a promise about results.")}
                 </Text>
               </BlockStack>
             </Layout.Section>

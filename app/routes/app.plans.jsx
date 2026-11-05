@@ -420,7 +420,7 @@ const FEATURE_TABLE = [
     free: true, starter: true, growth: true, pro: true,
   },
   {
-    feature: T("Full catalogue audit"),
+    feature: T("Full catalog audit"),
     // Never capped, on any plan including Free — a locked decision, and it is
     // the hook (14-PRICING.md §4).
     free: true, starter: true, growth: true, pro: true,

@@ -73,7 +73,7 @@ describe("StatStrip", () => {
       <StatStrip
         items={[
           { id: "ready", label: "Ready to review", value: "2", hint: "Waiting for you", url: "/app/review" },
-          { id: "cat", label: "In your catalogue", value: null, hint: "We could not read this from Shopify just now" },
+          { id: "cat", label: "In your catalog", value: null, hint: "We could not read this from Shopify just now" },
         ]}
       />,
     );

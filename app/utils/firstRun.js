@@ -148,7 +148,7 @@ export const FIRST_THREE_NOTE = T("The first three drafts are being written belo
 export const WATCH_FROM_HERE = Object.freeze({
   title: T("We'll watch it from here."),
   body: T(
-    "Every day we read your whole catalogue again: descriptions that collapse, alt text that disappears, URLs that change, new products with nothing written, what each AI surface asks for, whether six search and AI crawlers can reach your storefront, and whether your pages can be indexed. When something changes, Home tells you the same day — and only then.",
+    "Every day we read your whole catalog again: descriptions that collapse, alt text that disappears, URLs that change, new products with nothing written, what each AI surface asks for, whether six search and AI crawlers can reach your storefront, and whether your pages can be indexed. When something changes, Home tells you the same day — and only then.",
   ),
 });
 
