@@ -1,0 +1,298 @@
+[
+ {
+  "file": "01-score-audit",
+  "side": "left",
+  "head": "Know your store's score",
+  "line": "Every product scored for search and AI shopping, read from your live store.",
+  "screen": {
+   "src": "raw/audit.png",
+   "crop": {
+    "x": 30,
+    "y": 170,
+    "w": 1900,
+    "h": 1100
+   },
+   "x": 620,
+   "y": 120,
+   "w": 900,
+   "srcW": 1952
+  },
+  "cards": [
+   {
+    "src": "raw/audit.png",
+    "crop": {
+     "x": 49,
+     "y": 2040,
+     "w": 1838,
+     "h": 560
+    },
+    "x": 700,
+    "y": 610,
+    "w": 700
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 672,
+     "y": 189,
+     "w": 590,
+     "h": 462
+    },
+    "label": "Search and AI shopping, scored apart",
+    "labelAt": [
+     880,
+     48
+    ]
+   }
+  ]
+ },
+ {
+  "file": "02-fix-first",
+  "side": "right",
+  "head": "Fix what matters first",
+  "line": "Issues sorted by severity and checked daily against your catalog.",
+  "screen": {
+   "src": "raw/home-needswork.png",
+   "crop": {
+    "x": 49,
+    "y": 1050,
+    "w": 1856,
+    "h": 1050
+   },
+   "x": 60,
+   "y": 130,
+   "w": 920,
+   "srcW": 1952
+  },
+  "cards": [
+   {
+    "src": "raw/card-issues.png",
+    "crop": {
+     "x": 0,
+     "y": 0,
+     "w": 1836,
+     "h": 330
+    },
+    "srcW": 1836,
+    "x": 250,
+    "y": 650,
+    "w": 740
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 1681,
+     "y": 1297,
+     "w": 194,
+     "h": 52
+    },
+    "label": "Fix it from the same row",
+    "labelAt": [
+     1044,
+     180
+    ]
+   }
+  ]
+ },
+ {
+  "file": "03-ai-writing",
+  "side": "left",
+  "head": "AI writing, field by field",
+  "line": "Each draft sits beside what is live. Edit anything before it publishes.",
+  "screen": {
+   "src": "raw/editor.png",
+   "crop": {
+    "x": 20,
+    "y": 170,
+    "w": 1912,
+    "h": 1900
+   },
+   "x": 620,
+   "y": 120,
+   "w": 900,
+   "srcW": 1952
+  },
+  "cards": [
+   {
+    "src": "raw/editor.png",
+    "crop": {
+     "x": 686,
+     "y": 2012,
+     "w": 1200,
+     "h": 520
+    },
+    "x": 980,
+    "y": 640,
+    "w": 560
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 1632,
+     "y": 223,
+     "w": 221,
+     "h": 51
+    },
+    "label": "AI optimize on every field",
+    "labelAt": [
+     1150,
+     52
+    ]
+   }
+  ]
+ },
+ {
+  "file": "04-bulk-optimize",
+  "side": "right",
+  "head": "Optimize in bulk",
+  "line": "Write for your whole catalog in the background, saved as drafts.",
+  "screen": {
+   "src": "raw/optimize-before-1x.png",
+   "crop": {
+    "x": 340,
+    "y": 66,
+    "w": 970,
+    "h": 690
+   },
+   "x": 60,
+   "y": 110,
+   "w": 920,
+   "srcW": 1440
+  },
+  "cards": [
+   {
+    "src": "raw/card-job.png",
+    "crop": {
+     "x": 0,
+     "y": 0,
+     "w": 1520,
+     "h": 250
+    },
+    "srcW": 1856,
+    "x": 300,
+    "y": 700,
+    "w": 640
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 1111,
+     "y": 596,
+     "w": 170,
+     "h": 34
+    },
+    "label": "Runs while you work",
+    "labelAt": [
+     1044,
+     660
+    ]
+   }
+  ]
+ },
+ {
+  "file": "05-review-publish",
+  "side": "left",
+  "head": "Review, then publish",
+  "line": "Current and proposed side by side. Approve, edit or reject.",
+  "screen": {
+   "src": "raw/review.png",
+   "crop": {
+    "x": 20,
+    "y": 20,
+    "w": 1912,
+    "h": 1650
+   },
+   "x": 620,
+   "y": 110,
+   "w": 900,
+   "srcW": 1952
+  },
+  "cards": [
+   {
+    "src": "raw/review.png",
+    "crop": {
+     "x": 984,
+     "y": 728,
+     "w": 871,
+     "h": 269
+    },
+    "x": 470,
+    "y": 640,
+    "w": 540
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 80,
+     "y": 221,
+     "w": 625,
+     "h": 70
+    },
+    "label": "Approve one by one, or all at once",
+    "labelAt": [
+     640,
+     44
+    ]
+   }
+  ]
+ },
+ {
+  "file": "06-ai-shopping",
+  "side": "right",
+  "head": "Ready for AI shopping",
+  "line": "See what AI shopping feeds need from each product, and fill the gaps.",
+  "screen": {
+   "src": "raw/card-feed.png",
+   "crop": {
+    "x": 0,
+    "y": 0,
+    "w": 1836,
+    "h": 560
+   },
+   "x": 60,
+   "y": 330,
+   "w": 940,
+   "srcW": 1836
+  },
+  "cards": [
+   {
+    "src": "raw/card-geo.png",
+    "x": 100,
+    "y": 70,
+    "w": 320
+   },
+   {
+    "src": "raw/home-needswork.png",
+    "crop": {
+     "x": 700,
+     "y": 1262,
+     "w": 1180,
+     "h": 246
+    },
+    "x": 280,
+    "y": 660,
+    "w": 720
+   }
+  ],
+  "callouts": [
+   {
+    "boxSrc": {
+     "x": 960,
+     "y": 430,
+     "w": 840,
+     "h": 46
+    },
+    "label": "Gaps named, product by product",
+    "labelAt": [
+     1044,
+     660
+    ]
+   }
+  ]
+ }
+]
