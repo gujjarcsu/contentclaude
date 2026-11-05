@@ -83,6 +83,20 @@ describe("reinstall keeps the month's credits exactly", () => {
     expect(after).toBe(23);
   });
 
+  it("a free record plus a 3-credit blog record comes back as exactly 3 credits", async () => {
+    // Before the fix: two records → carried as 2 → the shop got 1 credit back.
+    db.state.usage = [rec("altText", 0), rec("blogPost", 3)];
+    expect(await sumMonthlyCredits(SHOP, MONTH)).toBe(3);
+
+    await captureUsageCarryover(SHOP); // uninstall: capture, then the delete
+    expect(db.state.shop.usageCarryover).toBe(3);
+    db.state.usage = [];
+
+    await restoreUsageCarryover(SHOP); // reinstall
+    expect(await sumMonthlyCredits(SHOP, MONTH)).toBe(3);
+    expect(db.state.usage.every((r) => r.contentType === "carryover" && r.credits === 1)).toBe(true);
+  });
+
   it("restoring twice adds nothing the second time", async () => {
     db.state.usage = [rec("blogPost", 3)];
     await uninstallReinstall();
