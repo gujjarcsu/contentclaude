@@ -707,7 +707,10 @@ export async function hasUsedTrial(shop) {
 export async function captureUsageCarryover(shop) {
   const month = new Date().toISOString().slice(0, 7);
   try {
-    const used = await prisma.usageRecord.count({ where: { shop, month } });
+    // CREDITS, not records. Since credit weighting, a record can cost 0 (alt
+    // text) or 3 (a blog post), so counting rows charged a reinstalling shop
+    // for free alt text and handed back two credits per blog post (Nov 2026).
+    const used = await sumMonthlyCredits(shop, month);
     await prisma.shop.updateMany({ where: { shop }, data: { usageMonth: month, usageCarryover: used } });
     logger.info(
       { shop, month, used, event: "usage_carryover_captured" },
@@ -735,7 +738,9 @@ export async function restoreUsageCarryover(shop) {
     });
     if (!row || row.usageMonth !== month || !row.usageCarryover) return 0;
 
-    const present = await prisma.usageRecord.count({ where: { shop, month } });
+    // Credits already on the books this month, compared in credits: the
+    // carried figure is a credit total (captureUsageCarryover).
+    const present = await sumMonthlyCredits(shop, month);
     const missing = row.usageCarryover - present;
     if (missing <= 0) return 0;
 

@@ -402,7 +402,7 @@ model Shop {
   // because Plan is deleted on uninstall and Shop is not.
   annualBoostMonth        String?
   usageMonth              String? // "YYYY-MM" that usageCarryover belongs to
-  usageCarryover          Int       @default(0) // generations used that month, captured at uninstall, restored on reinstall
+  usageCarryover          Int       @default(0) // CREDITS used that month (not records), captured at uninstall, restored on reinstall
   // ── Item 3: first-value milestones for the CURRENT install (install = reinstalledAt ?? installedAt).
   // Stamped first-writer-wins (updateMany where null) by the server at the moment the thing
   // happened; recordReinstall nulls them (the uninstall deleted the content).

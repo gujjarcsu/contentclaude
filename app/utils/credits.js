@@ -75,7 +75,8 @@ export const CREDIT_WEIGHTS = Object.freeze({
   product: 1,
 
   // Synthetic. `restoreUsageCarryover` writes one of these per credit a shop had
-  // already spent this month, so an uninstall/reinstall cannot reset the
+  // already spent this month (the carried figure is a credit total, not a
+  // record count), so an uninstall/reinstall cannot reset the
   // allowance. It must cost exactly what it is restoring, or reinstalling would
   // hand back free credits.
   carryover: 1,

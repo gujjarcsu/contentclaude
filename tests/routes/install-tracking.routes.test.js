@@ -57,7 +57,7 @@ const { db, tx, webhook } = vi.hoisted(() => {
     $transaction: vi.fn(async (fn) => fn(tx)),
     shop: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(async () => null) },
     generationJob: { updateMany: vi.fn(async () => ({ count: 0 })) },
-    usageRecord: { count: vi.fn(async () => 0) },
+    usageRecord: { count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _sum: { credits: null } })) },
     gDPRRequest: { create: vi.fn(async ({ data }) => data) },
   };
   const webhook = vi.fn();
@@ -244,7 +244,8 @@ describe("app/uninstalled — stale delivery guard", () => {
       triggeredAt: new Date().toISOString(),
     });
     db.shop.findUnique.mockResolvedValueOnce(null);
-    db.usageRecord.count.mockResolvedValueOnce(9);
+    // A credit total, not a record count (carryoverCredits.test.js).
+    db.usageRecord.aggregate.mockResolvedValueOnce({ _sum: { credits: 9 } });
     db.shop.updateMany.mockClear();
     const { action } = await import("../../app/routes/webhooks.app.uninstalled.jsx");
     await action({
