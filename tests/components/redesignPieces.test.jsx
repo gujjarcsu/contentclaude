@@ -95,7 +95,7 @@ describe("SetupGuide", () => {
   ];
   it("counts what is done, opens the first unfinished step, and offers Dismiss only when every step is done", () => {
     const html = render(<SetupGuide steps={steps} onDismiss={() => {}} />);
-    expect(html).toContain("1 of 3 done");
+    expect(html).toContain("1/3 done"); // redesign v2: Tapita 063's "0/4 done" chip
     expect(html).toContain("Tell us how you sound.");
     expect(html).toContain("Set it up");
     expect(html).not.toContain("Dismiss");

@@ -148,7 +148,8 @@ describe("A6 — the score, labelled and not scary", () => {
     // the GEO label moved to the figure beside it, which still says it is
     // the score shown and that Traditional SEO is excluded.
     expect(s).toMatch(/<ScoreRing value=\{scan\.storeScore\} size="large" label="Search readiness"/);
-    expect(src("app/routes/app._index.jsx")).toMatch(/<ScoreRing value=\{available \? score\.current : null\} size="large" label="Search readiness"/);
+    // Redesign v2: Home's ring is the xl size on its tint (Tapita 083); same name, same number.
+    expect(src("app/routes/app._index.jsx")).toMatch(/<ScoreRing value=\{available \? score\.current : null\} size="xl" label="Search readiness"/);
     expect(s).toMatch(/Most stores start here/);
     expect(s).toMatch(/AI search \(GEO\) — the score above/);
     expect(s).toMatch(/Traditional SEO — for comparison, not part of the score/);

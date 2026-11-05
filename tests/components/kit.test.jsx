@@ -77,6 +77,15 @@ describe("Kit", () => {
     expect(html(<ScoreGauge value={null} label="Search readiness" />)).toContain("not scored yet");
   });
 
+  it("the gauge bands come from scoreBands.js, never its own numbers (L5)", () => {
+    const src = readFileSync("app/components/Kit.jsx", "utf8");
+    expect(src).toMatch(/import \{ SCORE_FAIR, SCORE_GOOD \} from "\.\.\/utils\/scoreBands\.js"/);
+    expect(src).toMatch(/arc\(0, SCORE_FAIR - 1\)/);
+    expect(src).toMatch(/arc\(SCORE_FAIR \+ 1, SCORE_GOOD - 1\)/);
+    expect(src).toMatch(/arc\(SCORE_GOOD \+ 1, 100\)/);
+    expect(src).not.toMatch(/arc\(\d+, \d+\)/);
+  });
+
   it("the score ring can sit on a tint of its band", () => {
     expect(html(<ScoreRing value={69} tint />)).toContain("var(--navaal-tint-caution)");
     expect(html(<ScoreRing value={69} />)).not.toContain("--navaal-tint");

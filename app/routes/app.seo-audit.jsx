@@ -158,6 +158,9 @@ export const loader = async ({ request }) => {
   // The catalogue the scan is a part of: the same candidate count Home and
   // Products report, or null when Shopify could not be read (never 0).
   const catalogueCount = counts?.candidates?.count ?? null;
+  // Display only: Shopify answers AT_LEAST past 10,000, so the screen says
+  // "10,000+" instead of presenting a floor as the total (L5).
+  const catalogueExact = counts?.candidates ? counts.candidates.exact !== false : null;
 
   // Everything the page renders, derived from however many edges we have.
   // Called twice: once for page one (awaited, so the score paints) and once
@@ -307,6 +310,7 @@ export const loader = async ({ request }) => {
   return {
     ...summarize(firstEdges, { stoppedByTimeout: false, stoppedByError: false, hasNextPage: false }),
     catalogueCount,
+    catalogueExact,
     planName: plan.planName,
     rest,
   };
@@ -332,7 +336,7 @@ export default function SeoAuditPage() {
     return <AppSkeleton title={t("Audit")} sections={2} layout="full" />;
   }
 
-  const shared = { catalogueCount: data.catalogueCount, planName: data.planName };
+  const shared = { catalogueCount: data.catalogueCount, catalogueExact: data.catalogueExact, planName: data.planName };
   return (
     <Suspense fallback={<AuditBody data={{ ...data, ...shared }} pending />}>
       {/* If the streamed walk throws, page one is still a real audit — show it

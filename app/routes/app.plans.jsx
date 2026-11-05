@@ -30,7 +30,8 @@ import {
   InlineGrid,
   Modal,
 } from "@shopify/polaris";
-import { CheckIcon, XIcon } from "@shopify/polaris-icons";
+import { CheckIcon, XIcon, GiftCardIcon, StarIcon, ChartLineIcon, PlanIcon, CreditCardIcon } from "@shopify/polaris-icons";
+import { IconTile } from "../components/Kit.jsx";
 import { authenticate } from "../shopify.server.js";
 import { quotaPct } from "../utils/quota.js";
 import { markPromptArrived, markSubscribeRequested } from "../utils/upgradePrompts.server.js";
@@ -330,7 +331,9 @@ const PLAN_DISPLAY = [
     price: formatPrice(BILLING_PLANS.growth.amount),
     period: T("/ month"),
     monthlyCredits: BILLING_PLANS.growth.monthlyCredits,
-    highlight: true,
+    // Owner decision (Nov 2026): no "Most popular" — nobody measured it (L5).
+    // A plan is highlighted only when this shop's own usage gives a reason.
+    highlight: false,
     planKey: BILLING_PLANS.growth.key,
     annualPlanKey: BILLING_PLANS.growth.annualKey,
     annualPrice: formatPrice(BILLING_PLANS.growth.annualAmount),
@@ -383,6 +386,16 @@ const PLAN_DISPLAY = [
 ];
 
 const PLAN_ORDER = ["free", "starter", "growth", "pro"];
+
+/** One icon per plan, on a tinted tile (Tapita 092, Avada 058). */
+const PLAN_ICON = { free: GiftCardIcon, starter: StarIcon, growth: ChartLineIcon, pro: PlanIcon };
+
+/**
+ * The annual saving, from the price constants. Every paid plan shares one
+ * figure today; if they ever differ this takes the smallest, so the chip's
+ * "Save n%" is never more than any plan gives.
+ */
+const SAVING_PCT = Math.min(...["starter", "growth", "pro"].map((k) => annualSavingPct(BILLING_PLANS[k])));
 
 /** Read an entitlement off the locked table so a gate change cannot leave this row behind. */
 const ent = (name, feature) =>
@@ -512,6 +525,7 @@ function PlanCard({
   isUpgrade,
   isDowngrade,
   isRecommended,
+  fitReason,
   isSubmitting,
   submittingPlan,
   billingPeriod,
@@ -527,19 +541,22 @@ function PlanCard({
   // and no second plan can be started while one hand-off is already in flight.
   const isSubmittingThisPlan = isSubmitting && submittingPlan === activeKey;
 
-  return (
+  const card = (
     <Card>
       <BlockStack gap="400">
         {/* Header. Status badges in normal flow, beside the name — the old
             absolutely-positioned pills overlapped each other on the Growth
             card whenever Growth was also the current plan. */}
         <BlockStack gap="100">
-          <InlineStack gap="200" blockAlign="center" wrap>
-            <Text as="h3" variant="headingMd">
-              {t(displayPlan.label)}
-            </Text>
-            {isCurrent && <Badge tone="success">{t("Current plan")}</Badge>}
-            {displayPlan.highlight && !isCurrent && <Badge>{t("Most popular")}</Badge>}
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
+            <IconTile icon={PLAN_ICON[displayPlan.planName] ?? StarIcon} tone={fitReason || isCurrent ? "brand" : "neutral"} size="md" />
+            <InlineStack gap="200" blockAlign="center" wrap>
+              <Text as="h3" variant="headingMd">
+                {t(displayPlan.label)}
+              </Text>
+              {isCurrent && <Badge tone="success">{t("Current plan")}</Badge>}
+              {fitReason && !isCurrent && <Badge tone="info">{t("Fits your usage")}</Badge>}
+            </InlineStack>
           </InlineStack>
           <Text as="p" variant="bodySm" tone="subdued">
             {t(displayPlan.tagline)}
@@ -617,6 +634,14 @@ function PlanCard({
           )}
         </BlockStack>
 
+        {fitReason && (
+          <Box padding="300" background="bg-surface-info" borderRadius="200">
+            <Text as="p" variant="bodySm">
+              {fitReason}
+            </Text>
+          </Box>
+        )}
+
         <Divider />
 
         {/* Features. Every line on a card is included, so the check carries no
@@ -636,6 +661,13 @@ function PlanCard({
         </BlockStack>
       </BlockStack>
     </Card>
+  );
+  // The plan that fits this shop's usage, when there is one, is set apart the
+  // way Tapita sets apart its plan (092): a frame in the brand colour.
+  return fitReason ? (
+    <div style={{ height: "100%", borderRadius: "var(--p-border-radius-300)", outline: "2px solid var(--navaal-brand)", outlineOffset: "2px" }}>{card}</div>
+  ) : (
+    card
   );
 }
 
@@ -707,10 +739,26 @@ export default function PlansPage() {
   // The one dark button: the highlighted plan when it is an upgrade from here,
   // otherwise the next plan up. On the top plan there is none.
   const upgrades = PLAN_DISPLAY.filter((p) => p.planKey && PLAN_ORDER.indexOf(p.planName) > currentPlanIndex);
-  const recommended = (upgrades.find((p) => p.highlight) ?? upgrades[0])?.planName ?? null;
+  const recommended = upgrades[0]?.planName ?? null;
+  // Highlighted only for a reason measured on THIS shop (brief v2, owner
+  // decision): 70% or more of the month's credits used, and the next plan up
+  // gives more. No usage reason, no highlight — never a "most popular".
+  const fitPlan = usagePct >= 70 ? upgrades.find((p) => p.monthlyCredits > plan.monthlyCredits) ?? null : null;
+  const fitReason = fitPlan
+    ? t("You have used {used} of {credits} credits this month. {plan} gives you {next} a month.", { used: t.number(usageCount), credits: t.number(plan.monthlyCredits), plan: t(fitPlan.label), next: t.number(fitPlan.monthlyCredits) })
+    : null;
+  // The hand-off to Shopify's approval page takes a moment; say so while it does.
+  const subscribing = (isSubmitting && navigation.formData?.get("actionType") === "subscribe") || !!actionData?.confirmationUrl;
+  const subscribingPlan = submittingPlan ? PLAN_DISPLAY.find((d) => d.planKey === submittingPlan || d.annualPlanKey === submittingPlan) : null;
 
   // At most one notice: what just happened outranks what the URL carried back.
-  const notice = actionData?.error
+  const notice = subscribing
+    ? {
+        tone: "info",
+        title: subscribingPlan ? t("Opening Shopify's approval page for {plan}…", { plan: t(subscribingPlan.label) }) : t("Opening Shopify's approval page…"),
+        body: t("You approve the charge on Shopify's own page. Nothing is charged until you do."),
+      }
+    : actionData?.error
     ? { tone: "critical", title: null, body: actionData.error }
     : actionData?.cancelled
       ? { tone: "info", title: t("Subscription cancelled"), body: t("Your plan has been cancelled and you've been moved to the Free plan.") }
@@ -737,6 +785,8 @@ export default function PlansPage() {
             annual, and a guessed price is a number we did not measure (L3). */}
         <Card>
           <InlineGrid columns={{ xs: 1, md: ["oneThird", "twoThirds"] }} gap="400" alignItems="center">
+            <InlineStack gap="300" blockAlign="center" wrap={false}>
+            <IconTile icon={CreditCardIcon} tone="brand" size="lg" />
             <BlockStack gap="100">
               <Text as="h2" variant="headingSm" tone="subdued">
                 {t("Current plan")}
@@ -753,6 +803,7 @@ export default function PlansPage() {
                 </Text>
               )}
             </BlockStack>
+            </InlineStack>
 
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
@@ -788,14 +839,18 @@ export default function PlansPage() {
             <Text as="h2" variant="headingMd">
               {t("Choose a plan")}
             </Text>
-            <ButtonGroup variant="segmented">
-              <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
-                {t("Monthly")}
-              </Button>
-              <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
-                {t("Annual · save {annualSavingPct}%", { annualSavingPct: annualSavingPct(BILLING_PLANS.growth) })}
-              </Button>
-            </ButtonGroup>
+            <InlineStack gap="200" blockAlign="center">
+              <ButtonGroup variant="segmented">
+                <Button pressed={billingPeriod === "monthly"} onClick={() => setBillingPeriod("monthly")}>
+                  {t("Monthly")}
+                </Button>
+                <Button pressed={billingPeriod === "annual"} onClick={() => setBillingPeriod("annual")}>
+                  {t("Annual")}
+                </Button>
+              </ButtonGroup>
+              {/* Computed from the price constants, never typed. */}
+              <Badge tone="success">{t("Save {annualSavingPct}%", { annualSavingPct: SAVING_PCT })}</Badge>
+            </InlineStack>
           </InlineStack>
           <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
             {PLAN_DISPLAY.map((displayPlan) => {
@@ -812,6 +867,7 @@ export default function PlansPage() {
                   isUpgrade={isUpgrade}
                   isDowngrade={isDowngrade}
                   isRecommended={displayPlan.planName === recommended}
+                  fitReason={fitPlan && displayPlan.planName === fitPlan.planName ? fitReason : null}
                   promptId={promptId}
                   isSubmitting={isSubmitting}
                   submittingPlan={submittingPlan}

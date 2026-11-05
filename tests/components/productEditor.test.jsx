@@ -94,7 +94,11 @@ describe("the product editor", () => {
     expect(html).toContain("Currently on your store");
     expect(html).toContain("(using product title)");
     expect(html).toContain("(none set)");
-    expect(html).toContain(">Write<");
+    // Redesign v2: each field's own write is the brand "AI optimize" button (Tapita 083),
+    // named for what it does to which field.
+    expect(html).toContain(">AI optimize<");
+    expect(html).toContain('aria-label="Write Page title with AI"');
+    expect(html).toContain('aria-label="Write Questions and answers with AI"');
     expect(html).toContain("Enhance what is there");
   });
 
@@ -111,7 +115,8 @@ describe("the product editor", () => {
     expect(html).toContain("Rewrite all");
     expect(html).toContain("Draft (yours to edit)");
     expect(html).toContain("43/60 characters");
-    expect(html).toContain(">Rewrite<");
+    expect(html).toContain('aria-label="Rewrite Description with AI"');
+    expect(html).toContain('aria-label="Rewrite Page title with AI"');
   });
 
   it("gated features are a lock and a sentence naming the plan, with a plain link — never a dark full-width button", () => {
@@ -188,5 +193,80 @@ describe("the product editor", () => {
       expect(button).toContain('aria-disabled="false"');
       expect(button).not.toMatch(/\sdisabled(=|\s|>)/);
     }
+  });
+});
+
+describe("the product editor, redesign v2 (Tapita 083/084, Smart SEO 111)", () => {
+  it("prices are in the shop's own currency, never a guessed dollar sign", () => {
+    const html = render(payload({ currencyCode: "EUR" }));
+    expect(html).toContain("€329.00");
+    expect(html).not.toContain("$329");
+    // Unknown currency: the amount alone, still no "$".
+    const unknown = render(payload({ currencyCode: null }));
+    expect(unknown).toContain("329.00");
+    expect(unknown).not.toContain("$329");
+  });
+
+  it("the score sits on a tint of its band, with the checks grouped Critical · Need improvement · Good", () => {
+    const html = render(payload({ feedFindings: [{ surface: "openai", field: "brand", grade: "blocking" }] }));
+    expect(html).toContain("var(--navaal-tint-critical)");
+    expect(html).toContain(">Critical<");
+    expect(html).toContain(">Need improvement<");
+    expect(html).toContain(">Good<");
+    expect(html).toContain('aria-controls="checks-critical"');
+    expect(html).toContain("Missing: brand");
+  });
+
+  it("the Google snippet measures its title and description against their limits", () => {
+    const html = render(payload());
+    expect(html).toContain('id="snippet-title-chars"');
+    expect(html).toContain('id="snippet-desc-chars"');
+    expect(html).toContain("/60 characters");
+    expect(html).toContain("/155 characters");
+  });
+
+  it("images list real thumbnails with their alt text, a count, and one Optimize alt for all", () => {
+    const html = render(payload());
+    expect(html).toContain(">Optimize alt<");
+    expect(html).toContain('aria-label="Write alt text for all 2 images"');
+    expect(html).toContain('value="Front view"');
+    expect(html).toContain('placeholder="No alt text"');
+    expect(html).toMatch(/readOnly|readonly/);
+    expect(html).toContain("https://x/1.png");
+  });
+
+  it("a product with no images says what that costs and where to fix it", () => {
+    const html = render(payload({ product: { ...payload().product, images: [] } }));
+    expect(html).toContain("No images on this product");
+    expect(html).toContain("Add images in Shopify");
+    expect(html).not.toContain(">Optimize alt<");
+  });
+
+  it("a plan-locked feature is the real thing blurred under a lock card, naming the plan", () => {
+    const html = render(payload());
+    expect(html).toContain("nv-locked");
+    expect(html).toContain("Two drafts to compare is on Growth and above.");
+    expect(html).toContain("See plans");
+  });
+
+  it("the action's catch-all says what to do next, not that an unexpected error occurred", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("app/routes/app.products_.$id.jsx", "utf8");
+    expect(src).not.toContain("An unexpected error occurred");
+    expect(src).toContain("Publishing didn't finish. Open the product in Shopify to see what changed before you try again.");
+  });
+});
+
+describe("the description toolbar", async () => {
+  const { DescriptionToolbar } = await import("../../app/components/ProductEditorPieces.jsx");
+  it("is a labelled toolbar of named formatting buttons over the HTML field", () => {
+    const html = renderToStaticMarkup(
+      <AppProvider i18n={{}}>
+        <DescriptionToolbar textareaId="description-html" value="<p>x</p>" onChange={() => {}} />
+      </AppProvider>,
+    );
+    expect(html).toContain('role="toolbar"');
+    expect(html).toContain('aria-controls="description-html"');
+    for (const label of ["Bold", "Italic", "Heading", "Bulleted list", "Numbered list", "Link"]) expect(html, label).toContain(`aria-label="${label}"`);
   });
 });

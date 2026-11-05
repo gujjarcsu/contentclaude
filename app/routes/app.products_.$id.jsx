@@ -6,7 +6,6 @@ import { AppSkeleton } from "../components/AppSkeleton.jsx";
 import {
   Page,
   InlineGrid,
-  Link,
   Card,
   Text,
   BlockStack,
@@ -20,17 +19,19 @@ import {
   Divider,
   TextField,
   Select,
-  ProgressBar,
   Collapsible,
   Modal,
-  Icon,
   List,
+  SkeletonBodyText,
   useBreakpoints,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircleIcon, AlertCircleIcon, AlertDiamondIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { ChevronDownIcon, ChevronUpIcon, ImageIcon } from "@shopify/polaris-icons";
 import { ProductThumb } from "../components/ProductThumb.jsx";
 import { LockedRow } from "../components/LockedRow.jsx";
+import { AiButton, CharBar, CountChip, IconTile, LockedPreview } from "../components/Kit.jsx";
+import { DescriptionToolbar, WordBar, CheckGroups, SnippetPreview, NextProducts } from "../components/ProductEditorPieces.jsx";
+import { formatMoney } from "../utils/money.js";
 import { htmlBlocks, faqPairs } from "../utils/htmlBlocks.js";
 import { toPlainText, META_TITLE_MAX, META_DESCRIPTION_MAX } from "../utils/text.js";
 import { ScoreRing } from "../components/ScoreRing.jsx";
@@ -96,6 +97,7 @@ export async function loader({ request, params }) {
     admin
       .graphql(
         `query getProduct($id: ID!) {
+      shop { currencyCode }
       product(id: $id) {
         id title handle status productType vendor
         description descriptionHtml
@@ -182,6 +184,38 @@ export async function loader({ request, params }) {
     { storefrontPublic: false },
   ).findings.filter((f) => f.surface === "openai");
 
+  // Redesign v2 — "Next products to optimize" (Tapita 083 right rail). A
+  // display-only read, streamed so it never delays the editor: the most
+  // recently updated active products, minus this one and any we already hold
+  // content for. Resolves to [] on any failure; nothing is written.
+  const nextProducts = admin
+    .graphql(
+      `query nextProducts {
+        products(first: 12, sortKey: UPDATED_AT, reverse: true, query: "status:active") {
+          nodes { id title featuredMedia { preview { image { url } } } }
+        }
+      }`,
+    )
+    .then((r) => r.json())
+    .then(async (r) => {
+      const nodes = (r?.data?.products?.nodes ?? []).filter((n) => n?.id && n.id !== productId);
+      if (nodes.length === 0) return [];
+      const written = await prisma.generatedContent.findMany({
+        where: { shop, productId: { in: nodes.map((n) => n.id) } },
+        select: { productId: true },
+        distinct: ["productId"],
+      });
+      const held = new Set(written.map((w) => w.productId));
+      return nodes
+        .filter((n) => !held.has(n.id))
+        .slice(0, 4)
+        .map((n) => ({ id: n.id.split("/").pop(), title: n.title, imageUrl: n.featuredMedia?.preview?.image?.url || "" }));
+    })
+    .catch((err) => {
+      logger.warn({ shop, err: err?.message }, "next products to optimize unavailable (non-fatal)");
+      return [];
+    });
+
   const versionsByType = {};
   for (const v of versions) {
     if (!versionsByType[v.contentType]) versionsByType[v.contentType] = [];
@@ -244,6 +278,10 @@ export async function loader({ request, params }) {
     publishWithoutReview,
     upsell,
     shopDomain: shop,
+    // The shop's own currency, so prices are never printed with a guessed "$".
+    currencyCode: productPayload?.data?.shop?.currencyCode ?? null,
+    // Streamed to <Await>; a plain object return is what lets it stream.
+    nextProducts,
   };
 }
 
@@ -1158,7 +1196,13 @@ export async function action({ request, params }) {
   } catch (err) {
     if (err instanceof Response) throw err;
     logger.error({ err, shop, actionType }, "Unhandled action error in products.$id");
-    return { error: t("An unexpected error occurred. Please try again or contact support.") };
+    // Redesign v2 — say what did not happen and what to do next, not "an
+    // unexpected error". Each sentence claims only what is true whatever the
+    // cause: a publish can stop part-way, so it asks for a check in Shopify.
+    if (actionType === "publish") {
+      return { error: t("Publishing didn't finish. Open the product in Shopify to see what changed before you try again.") };
+    }
+    return { error: t("That didn't finish. Try again in a minute — if it keeps failing, email hello@navaal.ai and name this product.") };
   }
 }
 
@@ -1372,6 +1416,8 @@ export default function ProductGeneratePage() {
     publishWithoutReview,
     shopDomain,
     upsell,
+    currencyCode = null,
+    nextProducts,
   } = useLoaderData();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -1673,6 +1719,8 @@ export default function ProductGeneratePage() {
   const previewTitle = clip(editedMetaTitle || product.seoTitle || product.title, 70);
   const previewDesc = clip(editedMetaDescription || product.seoDescription || toPlainText(product.description), 160);
   const storeUrl = shopDomain && product.handle ? `https://${shopDomain}/products/${product.handle}` : null;
+  // The shop's own currency in the merchant's locale; never a guessed "$".
+  const price = formatMoney(product.variants[0]?.price, currencyCode, t);
 
   const busyMessage = isGeneratingVariants ? t("Writing 2 different versions...") : isEnhancing ? t("Enhancing...") : t("Generating...");
   const hasDraft = hasGeneratedContent && !actionData?.autoPublished;
@@ -1687,8 +1735,13 @@ export default function ProductGeneratePage() {
   ];
   const statusLabel = { ACTIVE: t("Active"), DRAFT: t("Draft"), ARCHIVED: t("Archived") }[String(product.status ?? "").toUpperCase()] ?? product.status;
 
-  /** The header of a field card: its name, its state, its own Write/Rewrite. */
-  const fieldHeader = ({ title, status, hasText, regenerateType, writing }) => (
+  /**
+   * The header of a field card: its name, its state, and its own AI button
+   * (Tapita 083 "AI optimize", Smart SEO 111 "Generate") — the existing
+   * per-field write, which asks before publishing when publish-without-review
+   * is on, exactly as before.
+   */
+  const fieldHeader = ({ title, status, hasText, regenerateType, writing, aiLabel }) => (
     <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
       <InlineStack gap="200" blockAlign="center">
         <Text as="h2" variant="headingMd">
@@ -1701,9 +1754,14 @@ export default function ProductGeneratePage() {
           </Badge>
         ) : null}
       </InlineStack>
-      <Button size="slim" onClick={() => handleRegenerateSection(regenerateType)} loading={writing} disabled={isLoading}>
-        {hasText ? t("Rewrite") : t("Write")}
-      </Button>
+      <AiButton
+        onClick={() => !isLoading && handleRegenerateSection(regenerateType)}
+        loading={writing}
+        disabled={isLoading && !writing}
+        ariaLabel={hasText ? t("Rewrite {field} with AI", { field: title }) : t("Write {field} with AI", { field: title })}
+      >
+        {aiLabel ?? t("AI optimize")}
+      </AiButton>
     </InlineStack>
   );
 
@@ -1720,20 +1778,24 @@ export default function ProductGeneratePage() {
     </Box>
   );
 
+  // While a field is being written: the spinner and the space the draft will
+  // take, so the card does not jump when the words arrive.
   const writingLine = (
-    <InlineStack gap="200" blockAlign="center">
-      <Spinner size="small" accessibilityLabel={busyMessage} />
-      <Text as="p" variant="bodySm" tone="subdued">
-        {busyMessage}
-      </Text>
-    </InlineStack>
+    <BlockStack gap="200">
+      <InlineStack gap="200" blockAlign="center">
+        <Spinner size="small" accessibilityLabel={busyMessage} />
+        <Text as="p" variant="bodySm" tone="subdued">
+          {busyMessage}
+        </Text>
+      </InlineStack>
+      <SkeletonBodyText lines={3} />
+    </BlockStack>
   );
 
   /** A one-line field (page title, search description): current, draft, character bar. */
-  const shortFieldCard = ({ key, title, current, draft, onChange, multiline, limit }) => {
+  const shortFieldCard = ({ key, title, current, draft, onChange, multiline, limit, min }) => {
     const writing = isGenerating && fetcher.formData?.get(`gen_${key}`) === "true";
     const over = draft.length > limit;
-    const near = draft.length >= Math.round(limit * 0.8);
     return (
       <Card key={key}>
         <BlockStack gap="300">
@@ -1750,14 +1812,8 @@ export default function ProductGeneratePage() {
                 {t("Draft (yours to edit)")}
               </Text>
               <TextField label={title} labelHidden value={draft} onChange={onChange} multiline={multiline} autoComplete="off" error={over ? t("Over {limit} characters — shorten before publishing", { limit }) : ""} />
-              <InlineStack align="space-between" blockAlign="center" gap="200">
-                <Box width="75%">
-                  <ProgressBar progress={Math.min(100, Math.round((draft.length / limit) * 100))} tone={over ? "critical" : near ? "highlight" : "success"} size="small" />
-                </Box>
-                <Text as="p" variant="bodySm" tone={over ? "critical" : "subdued"}>
-                  {t("{length}/{limit} characters", { length: draft.length, limit })}
-                </Text>
-              </InlineStack>
+              {/* Red over the limit, amber when short, green in range (Tapita 083). */}
+              <CharBar count={draft.length} max={limit} min={min} id={`${key}-chars`} />
             </BlockStack>
           ) : null}
           {existingContent[key]?.original ? (
@@ -1807,16 +1863,18 @@ export default function ProductGeneratePage() {
               </Button>
             </InlineStack>
             {editingDescriptionHtml ? (
-              <TextField label={t("Description")} labelHidden value={editedDescription} onChange={setEditedDescription} multiline={10} autoComplete="off" />
+              <BlockStack gap="200">
+                {/* Formatting over the HTML field: the published HTML is exactly what is in it. */}
+                <DescriptionToolbar textareaId="description-html" value={editedDescription} onChange={setEditedDescription} />
+                <TextField id="description-html" label={t("Description")} labelHidden value={editedDescription} onChange={setEditedDescription} multiline={10} autoComplete="off" />
+              </BlockStack>
             ) : (
               <Box padding="300" borderWidth="025" borderColor="border" borderRadius="200">
                 <ReadableHtml html={editedDescription} />
               </Box>
             )}
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("{words, plural, one {# word} other {# words}} · {chars} characters", { words: wordCount(editedDescription), chars: plainChars(editedDescription) })}
-              </Text>
+            <WordBar words={wordCount(editedDescription)} chars={plainChars(editedDescription)} />
+            <InlineStack align="end" blockAlign="center">
               <Button
                 size="slim"
                 variant="plain"
@@ -1847,7 +1905,7 @@ export default function ProductGeneratePage() {
   const faqCard = (
     <Card>
       <BlockStack gap="300">
-        {fieldHeader({ title: t("Questions and answers"), status: existingContent.faq?.status, hasText: !!faq, regenerateType: "faq", writing: faqWriting })}
+        {fieldHeader({ title: t("Questions and answers"), status: existingContent.faq?.status, hasText: !!faq, regenerateType: "faq", writing: faqWriting, aiLabel: t("AI generate") })}
         {currentWell(
           faqPublished && faq ? (
             <FaqPairs text={faq} />
@@ -1948,6 +2006,9 @@ export default function ProductGeneratePage() {
   );
 
   // ── Left rail ──
+  // Tapita 083: the content score on a soft tint of its band, then the checks
+  // as Critical / Need improvement / Good groups with the reason under each,
+  // then the Google snippet with a character bar under its title and text.
   const leftRail = (
     <BlockStack gap="400">
       <Card>
@@ -1956,9 +2017,9 @@ export default function ProductGeneratePage() {
             {t("Search readiness")}
           </Text>
           <InlineStack gap="400" blockAlign="center" wrap={false}>
-            <ScoreRing value={productScore.score} size="medium" label={t("Search readiness")} />
+            <ScoreRing value={productScore.score} size="large" tint label={t("Search readiness")} />
             <BlockStack gap="050">
-              <Text as="p" variant="bodyMd" fontWeight="medium">
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
                 {t("{passed} of {total} checks pass", { passed: passedCount, total: checklist.length })}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
@@ -1967,66 +2028,23 @@ export default function ProductGeneratePage() {
             </BlockStack>
           </InlineStack>
           <Divider />
-          <BlockStack gap="0">
-            {checklist.map((c, i) => (
-              <Box key={c.id}>
-                {i > 0 ? <Divider /> : null}
-                <Box paddingBlock="200">
-                  <InlineStack gap="200" blockAlign="start" wrap={false}>
-                    <Box paddingBlockStart="050">
-                      <Icon
-                        source={c.pass ? CheckCircleIcon : c.blocks ? AlertDiamondIcon : AlertCircleIcon}
-                        tone={c.pass ? "success" : c.blocks ? "critical" : "caution"}
-                        accessibilityLabel={c.pass ? t("Passed") : t("Not yet")}
-                      />
-                    </Box>
-                    <BlockStack gap="050">
-                      <Text as="p" variant="bodySm" fontWeight="medium">
-                        {c.label}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {c.detail}
-                      </Text>
-                    </BlockStack>
-                  </InlineStack>
-                </Box>
-              </Box>
-            ))}
-          </BlockStack>
+          <CheckGroups checklist={checklist} />
         </BlockStack>
       </Card>
 
       {/* How the page will read in a Google result, from the draft when
           there is one and from the store when there is not. */}
-      <Card>
-        <BlockStack gap="200">
-          <InlineStack align="space-between" blockAlign="center" gap="200">
-            <Text as="h2" variant="headingMd">
-              {t("Google listing preview")}
-            </Text>
-            {previewFromDraft ? <Badge tone="info">{t("From your draft")}</Badge> : null}
-          </InlineStack>
-          <Box padding="300" background="bg-surface" borderWidth="025" borderColor="border" borderRadius="200">
-            <BlockStack gap="050">
-              <Text as="p" variant="bodySm" tone="subdued" truncate>
-                {storeUrl ?? `${shopDomain ?? ""}/products/${product.handle}`}
-              </Text>
-              <Text as="p" variant="bodyLg" fontWeight="medium">
-                {storeUrl ? (
-                  <Link url={storeUrl} external removeUnderline>
-                    {previewTitle}
-                  </Link>
-                ) : (
-                  previewTitle
-                )}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {previewDesc || t("No description yet — nothing is on your store for this product.")}
-              </Text>
-            </BlockStack>
-          </Box>
-        </BlockStack>
-      </Card>
+      <SnippetPreview
+        urlText={storeUrl ?? `${shopDomain ?? ""}/products/${product.handle}`}
+        storeUrl={storeUrl}
+        title={previewTitle}
+        description={previewDesc}
+        titleLength={(editedMetaTitle || product.seoTitle || product.title).length}
+        descriptionLength={(editedMetaDescription || product.seoDescription || toPlainText(product.description)).length}
+        fromDraft={previewFromDraft}
+        titleMax={META_TITLE_MAX}
+        descriptionMax={META_DESCRIPTION_MAX}
+      />
     </BlockStack>
   );
 
@@ -2093,6 +2111,7 @@ export default function ProductGeneratePage() {
         onChange: setEditedMetaTitle,
         multiline: false,
         limit: META_TITLE_MAX,
+        min: 30,
       })}
 
       {shortFieldCard({
@@ -2103,6 +2122,7 @@ export default function ProductGeneratePage() {
         onChange: setEditedMetaDescription,
         multiline: 2,
         limit: META_DESCRIPTION_MAX,
+        min: 70,
       })}
 
       {faqCard}
@@ -2112,26 +2132,55 @@ export default function ProductGeneratePage() {
   );
 
   // ── Right rail ──
+  // Tapita 083/084: next products to optimize, then the images as a list of
+  // real thumbnails with their alt text and one "Optimize alt" for all of
+  // them (the existing alt-text write: applied straight to Shopify, no
+  // credits), then the extras, locked ones as a blurred preview or a lock row.
   const showAltResults = !!actionData?.altTextResults || altTextResults.some((r) => r.error);
+  const altWriting = isGenerating && fetcher.formData?.get("gen_altText") === "true";
+  const writeAllAlt = () => {
+    if (isLoading) return;
+    setGenAltText(true);
+    handleGenerate({ description: false, metaTitle: false, metaDescription: false, faq: false, altText: true });
+  };
   const rightRail = (
     <BlockStack gap="400">
-      {/* Images and their alt text — the badge reflects the ACTUAL outcome of
+      {nextProducts ? <NextProducts promise={nextProducts} /> : null}
+
+      {/* Images and their alt text. The badge reflects the ACTUAL outcome of
           the last run: all applied / partially applied / failed. Never claim
           success for an operation that failed. */}
       <Card>
         <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
-            <Text as="h2" variant="headingMd">
-              {t("Images")}
-            </Text>
-            <AltTextBadge results={altTextResults} />
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                {t("Images")}
+              </Text>
+              <CountChip n={product.images.length} />
+            </InlineStack>
+            {noImages ? null : (
+              <AiButton onClick={writeAllAlt} loading={altWriting} disabled={isLoading && !altWriting} ariaLabel={t("Write alt text for all {n, plural, one {# image} other {# images}}", { n: product.images.length })}>
+                {t("Optimize alt")}
+              </AiButton>
+            )}
           </InlineStack>
+          <AltTextBadge results={altTextResults} />
           {noImages ? (
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("No images on this product")}
-            </Text>
+            <BlockStack gap="200" inlineAlign="start">
+              <IconTile icon={ImageIcon} tone="neutral" />
+              <Text as="p" variant="bodyMd" fontWeight="medium">
+                {t("No images on this product")}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {t("AI shopping feeds need at least one image. Add one in Shopify and it appears here.")}
+              </Text>
+              <Button variant="plain" url={`shopify://admin/products/${product.id.split("/").pop()}`} target="_top">
+                {t("Add images in Shopify")}
+              </Button>
+            </BlockStack>
           ) : (
-            <BlockStack gap="300">
+            <BlockStack gap="200">
               <BlockStack gap="0">
                 {product.images.slice(0, 6).map((img, i) => (
                   <Box key={img.id ?? i}>
@@ -2139,9 +2188,17 @@ export default function ProductGeneratePage() {
                     <Box paddingBlock="200">
                       <InlineStack gap="300" blockAlign="center" wrap={false}>
                         <ProductThumb url={img.url} alt={img.altText} />
-                        <Text as="p" variant="bodySm" tone={img.altText ? undefined : "subdued"}>
-                          {img.altText || t("No alt text")}
-                        </Text>
+                        <Box width="100%">
+                          {/* What Shopify holds now. Read-only here: the write is "Optimize alt". */}
+                          <TextField
+                            label={t("Alt text for image {n}", { n: i + 1 })}
+                            labelHidden
+                            value={img.altText || ""}
+                            placeholder={t("No alt text")}
+                            readOnly
+                            autoComplete="off"
+                          />
+                        </Box>
                       </InlineStack>
                     </Box>
                   </Box>
@@ -2152,24 +2209,9 @@ export default function ProductGeneratePage() {
                   {t("and {n} more", { n: product.images.length - 6 })}
                 </Text>
               ) : null}
-              <BlockStack gap="100">
-                <InlineStack>
-                  <Button
-                    size="slim"
-                    onClick={() => {
-                      setGenAltText(true);
-                      handleGenerate({ description: false, metaTitle: false, metaDescription: false, faq: false, altText: true });
-                    }}
-                    loading={isGenerating && fetcher.formData?.get("gen_altText") === "true"}
-                    disabled={isLoading}
-                  >
-                    {t("Write alt text for all {n, plural, one {# image} other {# images}}", { n: product.images.length })}
-                  </Button>
-                </InlineStack>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {t("Applied straight to Shopify. Costs no credits.")}
-                </Text>
-              </BlockStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {t("Applied straight to Shopify. Costs no credits.")}
+              </Text>
             </BlockStack>
           )}
           {actionData?.altTextTruncated && (
@@ -2186,7 +2228,7 @@ export default function ProductGeneratePage() {
         </BlockStack>
       </Card>
 
-      {/* Two options to compare: the feature, or the one-line lock. */}
+      {/* Two options to compare: the feature, or a blurred preview of it under a lock (Tapita 074). */}
       <Card>
         <BlockStack gap="200">
           <Text as="h2" variant="headingMd">
@@ -2194,12 +2236,25 @@ export default function ProductGeneratePage() {
           </Text>
           {entitlements?.abVariants ? (
             <InlineStack>
-              <Button size="slim" onClick={handleGenerateVariants} loading={isGeneratingVariants} disabled={isLoading || isGeneratingVariants || noneSelected}>
+              <AiButton onClick={() => !isGeneratingVariants && !isLoading && !noneSelected && handleGenerateVariants()} loading={isGeneratingVariants} disabled={(isLoading || noneSelected) && !isGeneratingVariants}>
                 {isGeneratingVariants ? t("Generating 2 options...") : t("Write two options")}
-              </Button>
+              </AiButton>
             </InlineStack>
           ) : (
-            <LockedRow sentence={t("Two drafts to compare is on {plan} and above.", { plan: cheapestPlanLabelWith("abVariants") ?? PLAN_LABELS.growth })} onSeePlans={() => navigate("/app/plans")} />
+            <LockedPreview sentence={t("Two drafts to compare is on {plan} and above.", { plan: cheapestPlanLabelWith("abVariants") ?? PLAN_LABELS.growth })} onSeePlans={() => navigate("/app/plans")}>
+              <BlockStack gap="300">
+                {["A", "B"].map((v) => (
+                  <Box key={v} padding="300" borderWidth="025" borderColor="border" borderRadius="200">
+                    <BlockStack gap="200">
+                      <Text as="p" variant="headingSm">
+                        {t("Option {v}", { v })}
+                      </Text>
+                      <SkeletonBodyText lines={2} />
+                    </BlockStack>
+                  </Box>
+                ))}
+              </BlockStack>
+            </LockedPreview>
           )}
         </BlockStack>
       </Card>
@@ -2243,9 +2298,9 @@ export default function ProductGeneratePage() {
                 {[t("Instagram"), t("Facebook"), t("TikTok")].join(" · ")}
               </Text>
             </BlockStack>
-            <Button
-              size="slim"
+            <AiButton
               loading={socialFetcher.state !== "idle"}
+              ariaLabel={t("Write social captions with AI")}
               onClick={() => {
                 const fd = new FormData();
                 fd.append("actionType", "generateSocial");
@@ -2253,7 +2308,7 @@ export default function ProductGeneratePage() {
               }}
             >
               {t("Write")}
-            </Button>
+            </AiButton>
           </InlineStack>
           {socialFetcher.data?.social && (
             <BlockStack gap="0">
@@ -2311,7 +2366,7 @@ export default function ProductGeneratePage() {
             {product.productType ? <Badge>{product.productType}</Badge> : null}
           </InlineStack>
           <Text as="p" variant="bodySm" tone="subdued">
-            {[`$${product.variants[0]?.price || "0.00"}`, product.vendor || t("No vendor")].join(" · ")}
+            {[price, product.vendor || t("No vendor")].filter(Boolean).join(" · ")}
           </Text>
           {product.tags.length > 0 && (
             <Text as="p" variant="bodySm" tone="subdued">
@@ -2333,7 +2388,7 @@ export default function ProductGeneratePage() {
   ) : (
     <Page
       title={product.title}
-      subtitle={[product.vendor, product.productType, product.variants[0]?.price ? `$${product.variants[0].price}` : null].filter(Boolean).join(" · ") || undefined}
+      subtitle={[product.vendor, product.productType, price || null].filter(Boolean).join(" · ") || undefined}
       backAction={{ content: t("Products"), onAction: () => navigate("/app/products") }}
       primaryAction={primaryAction}
       secondaryActions={secondaryActions}
@@ -2343,7 +2398,7 @@ export default function ProductGeneratePage() {
         <ReviewRequest ask={reviewAsk} />
         {/* One notice at most: an error first; otherwise the brand-voice nudge. */}
         {actionData?.error ? (
-          <Banner tone="critical" title={t("Error")}>
+          <Banner tone="critical" title={actionData.limitReached ? t("Out of credits for this month") : t("That didn't work")}>
             <p>{actionData.error}</p>
             {actionData.limitReached && (
               <Box paddingBlockStart="200">

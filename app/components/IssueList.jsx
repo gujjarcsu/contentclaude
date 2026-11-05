@@ -15,6 +15,7 @@
 import { BlockStack, InlineStack, InlineGrid, Box, Text, Button, Icon, Divider } from "@shopify/polaris";
 import { AlertDiamondIcon, AlertTriangleIcon, InfoIcon, CheckCircleIcon } from "@shopify/polaris-icons";
 import { useT } from "../i18n/react.jsx";
+import { TagChip } from "./Kit.jsx";
 
 const SEVERITY = {
   critical: { icon: AlertDiamondIcon, tone: "critical" },
@@ -26,9 +27,10 @@ const SEVERITY = {
 /**
  * @param {object} props
  * @param {Array<{id: string, severity: "critical"|"warning"|"info"|"passed", title: string,
- *   detail?: string, count?: string, action?: {content: string, url?: string, onAction?: () => void, external?: boolean, plain?: boolean}}>} props.items
+ *   tag?: "seo"|"geo"|"both", detail?: string, count?: string, action?: {content: string, url?: string, onAction?: () => void, external?: boolean, plain?: boolean}}>} props.items
  *   action.plain, or row.locked (fixRows sets it) — a plain link instead of a button: for a locked fix,
  *   "See plans" is not the way to fix it, so it must not look like one.
+ *   tag — which kind of visibility the finding is about, as a chip before the sentence (Tapita 074).
  * @param {string} [props.emptyText] shown when there is nothing in the list
  */
 export function IssueList({ items, emptyText }) {
@@ -68,9 +70,16 @@ export function IssueList({ items, emptyText }) {
                       the action drops under the text. */}
                   <InlineGrid columns={{ xs: "1fr", sm: "1fr auto" }} gap="300" alignItems="center">
                     <BlockStack gap="050">
-                      <Text as="p" variant="bodyMd" fontWeight="medium">
-                        {row.title}
-                      </Text>
+                      <InlineStack gap="200" blockAlign="start" wrap={false}>
+                        {row.tag ? (
+                          <Box paddingBlockStart="025">
+                            <TagChip kind={row.tag} />
+                          </Box>
+                        ) : null}
+                        <Text as="p" variant="bodyMd" fontWeight="medium">
+                          {row.title}
+                        </Text>
+                      </InlineStack>
                       {row.detail ? (
                         <Text as="p" variant="bodySm" tone="subdued">
                           {row.detail}

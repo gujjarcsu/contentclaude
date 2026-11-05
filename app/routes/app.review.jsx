@@ -24,10 +24,11 @@ import {
   Badge,
   Link,
   Banner,
-  EmptyState,
   TextField,
   Divider,
   Tooltip,
+  Box,
+  ProgressBar,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import pLimit from "p-limit";
@@ -42,6 +43,10 @@ import logger from "../utils/logger.server.js";
 import { ReviewRequest } from "../components/ReviewRequest.jsx";
 import { openReviewAsk } from "../utils/reviewAsk.server.js";
 import { ProductThumb } from "../components/ProductThumb.jsx";
+import { ScoreRing } from "../components/ScoreRing.jsx";
+import { IconTile, StatusIcon } from "../components/Kit.jsx";
+import { FieldLength, CurrentPanel, ProposedPanel, ReviewEmpty } from "../components/ReviewParts.jsx";
+import { CheckCircleIcon } from "@shopify/polaris-icons";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
 
 // ── Publish helper: bounded concurrency + Shopify throttle backoff ──────────────
@@ -768,6 +773,9 @@ export default function ReviewPage() {
   );
 
   const approvedCount = [...approved].filter((id) => products.some((p) => p.productId === id)).length;
+  // Every draft on this page ticked: the bar says so and offers no "Approve all".
+  const allApproved = products.length > 0 && approvedCount === products.length;
+  const approvedPct = products.length > 0 ? Math.round((approvedCount / products.length) * 100) : 0;
   const hasFaqDrafts = products.some((p) => !!p.content?.faq);
 
   // Keyboard review: arrow right steps to the next product, Enter approves the
@@ -828,13 +836,13 @@ export default function ReviewPage() {
         {/* After publishing all drafts we land here with a success actionData —
             still the right moment to ask for a review. */}
         <ReviewRequest ask={actionData?.reviewAsk} />
-        <EmptyState
+        {/* Redesign v2 — the empty state draws the Review card itself, as the
+            category's empty states draw their feature, and offers the next step. */}
+        <ReviewEmpty
           heading={t("Nothing to review — you're all caught up")}
-          image="/empty-review.svg"
-          action={{ content: t("Go to Products"), onAction: () => navigate("/app/products") }}
-        >
-          <p>{t("No drafts are waiting. Nothing goes live until you publish it here.")}</p>
-        </EmptyState>
+          onProducts={() => navigate("/app/products")}
+          onHome={() => navigate("/app")}
+        />
       </Page>
     );
   }
@@ -872,74 +880,88 @@ export default function ReviewPage() {
           <Banner tone="info" title={t("Showing one product")} action={{ content: t("Show all drafts"), onAction: () => navigate("/app/review") }} />
         ) : null}
 
-        {/* Action bar: the count, the two bulk choices, one primary. The
-            keyboard still steps and approves (arrow keys, Enter); it is not
-            narrated on the screen. */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-              <InlineStack gap="300" blockAlign="center" wrap>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  {t("{approvedCount} of {length} approved", { approvedCount, length: products.length })}
-                </Text>
-                {/* With more than one page, "all" is this page's drafts and the
-                    label says so; on a single page it is every draft. */}
-                <Button variant="plain" size="slim" onClick={approveAllOnPage}>
-                  {totalPages > 1 ? t("Approve all on this page") : t("Approve all")}
-                </Button>
-                {approvedCount > 0 && (
-                  <Button variant="plain" size="slim" onClick={clearSelection}>
-                    {t("Clear selection")}
-                  </Button>
-                )}
-              </InlineStack>
-              <ButtonGroup>
-                <Button
-                  tone="critical"
-                  onClick={() => setConfirmReject(true)}
-                  loading={isSubmitting && navigation.formData?.get("actionType") === "reject"}
-                  disabled={isSubmitting || unapprovedIds.length === 0}
-                >
-                  {t("Reject {length} not approved", { length: unapprovedIds.length })}
-                </Button>
-                {/* No disabled primary: with nothing approved there is nothing
-                    to publish, so the slot stays empty rather than dangling a
-                    button the merchant cannot press. Near-black, like every
-                    primary in the app, never a second colour. */}
-                {approvedCount > 0 && (
+        {/* Action bar: the count, the two bulk choices, one primary. Sticky
+            (Polaris Box position), so the publish control stays in reach while
+            the merchant reads down a long list. The keyboard still steps and
+            approves (arrow keys, Enter); it is not narrated on the screen. */}
+        <Box position="sticky" insetBlockStart="0" zIndex="2">
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
+                <InlineStack gap="300" blockAlign="center" wrap>
+                  <IconTile icon={CheckCircleIcon} tone={allApproved ? "success" : "brand"} size="md" />
+                  <BlockStack gap="100">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text id="review-approved-count" as="p" variant="headingSm">
+                        {t("{approvedCount} of {length} approved", { approvedCount, length: products.length })}
+                      </Text>
+                      {allApproved ? <StatusIcon status="good" /> : null}
+                    </InlineStack>
+                    <Box width="180px">
+                      <ProgressBar progress={approvedPct} size="small" tone="success" ariaLabelledBy="review-approved-count" />
+                    </Box>
+                  </BlockStack>
+                  {/* With more than one page, "all" is this page's drafts and the
+                      label says so; on a single page it is every draft. */}
+                  {!allApproved && (
+                    <Button variant="plain" size="slim" onClick={approveAllOnPage}>
+                      {totalPages > 1 ? t("Approve all on this page") : t("Approve all")}
+                    </Button>
+                  )}
+                  {approvedCount > 0 && (
+                    <Button variant="plain" size="slim" onClick={clearSelection}>
+                      {t("Clear selection")}
+                    </Button>
+                  )}
+                </InlineStack>
+                <ButtonGroup>
                   <Button
-                    variant="primary"
-                    onClick={handlePublish}
-                    loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
-                    disabled={isSubmitting}
+                    tone="critical"
+                    onClick={() => setConfirmReject(true)}
+                    loading={isSubmitting && navigation.formData?.get("actionType") === "reject"}
+                    disabled={isSubmitting || unapprovedIds.length === 0}
                   >
-                    {t("Publish {approvedCount} approved", { approvedCount })}
+                    {t("Reject {length} not approved", { length: unapprovedIds.length })}
                   </Button>
-                )}
-              </ButtonGroup>
-            </InlineStack>
+                  {/* No disabled primary: with nothing approved there is nothing
+                      to publish, so the slot stays empty rather than dangling a
+                      button the merchant cannot press. Near-black, like every
+                      primary in the app, never a second colour. */}
+                  {approvedCount > 0 && (
+                    <Button
+                      variant="primary"
+                      onClick={handlePublish}
+                      loading={isSubmitting && navigation.formData?.get("actionType") === "publish"}
+                      disabled={isSubmitting}
+                    >
+                      {t("Publish {approvedCount} approved", { approvedCount })}
+                    </Button>
+                  )}
+                </ButtonGroup>
+              </InlineStack>
 
-            <TextField
-              label={t("Search products")}
-              labelHidden
-              placeholder={t("Search products...")}
-              value={search}
-              onChange={setSearch}
-              clearButton
-              onClearButtonClick={() => setSearch("")}
-              autoComplete="off"
-            />
+              <TextField
+                label={t("Search products")}
+                labelHidden
+                placeholder={t("Search products...")}
+                value={search}
+                onChange={setSearch}
+                clearButton
+                onClearButtonClick={() => setSearch("")}
+                autoComplete="off"
+              />
 
-            {!embedConfirmed && hasFaqDrafts ? (
-              <Text as="p" variant="bodySm" tone="subdued">
-                {t("FAQ answers stay off your product pages until the FAQ (Navaal) theme block is added.")}{" "}
-                <Link onClick={() => navigate("/app")} removeUnderline>
-                  {t("Add it from Home")}
-                </Link>
-              </Text>
-            ) : null}
-          </BlockStack>
-        </Card>
+              {!embedConfirmed && hasFaqDrafts ? (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {t("FAQ answers stay off your product pages until the FAQ (Navaal) theme block is added.")}{" "}
+                  <Link onClick={() => navigate("/app")} removeUnderline>
+                    {t("Add it from Home")}
+                  </Link>
+                </Text>
+              ) : null}
+            </BlockStack>
+          </Card>
+        </Box>
 
         {/* Product cards */}
         <BlockStack gap="400">
@@ -1013,44 +1035,21 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
   const current = product.current || {};
 
   return (
-    // Phase 2 item 2.5 - this was a div with an inset box-shadow in
-    // hard-coded #00A047 / #C9CCCF: status by COLOUR ALONE, which fails
-    // anyone who cannot tell those two apart. Polaris Card carries the
-    // state as a background token, and the Approve checkbox below states it
-    // in words and in its own checked state.
-    // Redesign (Nov 2026): no tinted card either. The state is the
-    // checkbox's own checked state and, once approved, one badge in words.
+    // Phase 2 item 2.5 - status is never colour alone: the Approve checkbox
+    // states it in words and in its own checked state, and once approved one
+    // badge says so. Redesign v2 (Tapita 083, Smart SEO 111): the product's own
+    // photo, its draft-quality ring on a tint of its band, the fields as chips,
+    // then each field's current copy beside the proposed copy with its length.
     <Card>
       <BlockStack gap="400">
         <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-          <InlineStack gap="300" blockAlign="center">
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
             <ProductThumb url={product.imageUrl} size="medium" />
-            <BlockStack gap="100">
-              <InlineStack gap="200" blockAlign="center">
-                <Text as="h3" variant="headingMd">
-                  {product.productTitle}
-                </Text>
-                {product.qualityScore != null && (
-                  // Labelled "Content quality" (distinct from GEO/AI-search and
-                  // traditional SEO scores shown elsewhere). Unified colour rule:
-                  // >=70 green, 40–69 amber, <40 red — a mid score is "work to do",
-                  // not "broken", so it never shows alarming red.
-                  <Tooltip content={t("How complete this draft is, scored out of 100.")}>
-                    <Badge
-                      tone={
-                        product.qualityScore >= 70
-                          ? "success"
-                          : product.qualityScore >= 40
-                            ? "attention"
-                            : "critical"
-                      }
-                    >
-                      {t("Content quality: {qualityScore}/100", { qualityScore: product.qualityScore })}
-                    </Badge>
-                  </Tooltip>
-                )}
-              </InlineStack>
-              <InlineStack gap="100" align="start" wrap>
+            <BlockStack gap="150">
+              <Text as="h3" variant="headingMd">
+                {product.productTitle}
+              </Text>
+              <InlineStack gap="100" align="start" blockAlign="center" wrap>
                 {/* Merchant-facing names. These badges used to print the raw
                     storage keys — "metaTitle", "metaDescription". */}
                 {contentTypes.map((ct) => (
@@ -1060,16 +1059,31 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
               </InlineStack>
             </BlockStack>
           </InlineStack>
-          {/* A checkbox, not a primary button. Approval is a choice you tick,
-              and a green primary per card competed with the one real primary
-              on the page while actually meaning "un-approve". */}
-          <Checkbox
-            id={approveCheckboxId(product.productId)}
-            label={t("Approve")}
-            checked={isApproved}
-            onChange={onToggle}
-            onFocus={onFocusCard}
-          />
+          <InlineStack gap="400" blockAlign="center" wrap={false}>
+            {product.qualityScore != null && (
+              // "Content quality" — how complete this draft is (contentScorer),
+              // distinct from the store's search-readiness score. The ring takes
+              // the app-wide bands (scoreBands.js: 70 good, 40 fair).
+              <Tooltip content={t("Content quality: {qualityScore}/100", { qualityScore: product.qualityScore })}>
+                <InlineStack gap="200" blockAlign="center" wrap={false}>
+                  <ScoreRing value={product.qualityScore} size="small" tint label={t("Content quality")} />
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {t("Content quality")}
+                  </Text>
+                </InlineStack>
+              </Tooltip>
+            )}
+            {/* A checkbox, not a primary button. Approval is a choice you tick,
+                and a green primary per card competed with the one real primary
+                on the page while actually meaning "un-approve". */}
+            <Checkbox
+              id={approveCheckboxId(product.productId)}
+              label={t("Approve")}
+              checked={isApproved}
+              onChange={onToggle}
+              onFocus={onFocusCard}
+            />
+          </InlineStack>
         </InlineStack>
 
         <Divider />
@@ -1078,6 +1092,7 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
           <ContentSection
             key={type}
             type={type}
+            productId={product.productId}
             content={product.content[type]}
             currentValue={current[type] || ""}
             expanded={!!expanded[type]}
@@ -1093,13 +1108,17 @@ function ProductReviewCard({ product, isApproved, onToggle, onFocusCard, onEdit,
 
 // decodeHtmlEntities: stored content (and stripped HTML) can carry entities
 // ("Premium Skateboards &amp; Gear") which React renders literally.
+function plainText(type, value) {
+  const plain = type === "description" ? String(value ?? "").replace(/<[^>]+>/g, " ") : String(value ?? "");
+  return decodeHtmlEntities(plain).replace(/\s+/g, " ").trim();
+}
+
 function previewText(type, value) {
-  const plain = type === "description" ? value.replace(/<[^>]+>/g, "") : value;
-  const decoded = decodeHtmlEntities(plain).trim();
+  const decoded = plainText(type, value);
   return decoded.length > 200 ? `${decoded.substring(0, 200)}...` : decoded;
 }
 
-function ContentSection({ type, content, currentValue, expanded, onToggle, onEdit, onSaveEdit }) {
+function ContentSection({ type, productId, content, currentValue, expanded, onToggle, onEdit, onSaveEdit }) {
   const t = useT();
   const [editedValue, setEditedValue] = useState(content);
   const savedValue = useRef(content);
@@ -1121,17 +1140,18 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
   }, [editedValue, onSaveEdit]);
 
   const label = useT()(CONTENT_LABELS[type] || type);
-  const preview = previewText(type, content);
+  const preview = previewText(type, editedValue);
   const currentPreview = previewText(type, currentValue || "");
 
   const charLimit = type === "metaTitle" ? 60 : type === "metaDescription" ? 155 : null;
   const charCount = editedValue.length;
   const overLimit = charLimit && charCount > charLimit;
+  const idBase = `len-${String(productId).replace(/\W+/g, "-")}-${type}`;
 
   return (
     <BlockStack gap="200">
       <InlineStack align="space-between" blockAlign="center">
-        <Text as="p" variant="bodySm" fontWeight="semibold">
+        <Text as="p" variant="headingSm">
           {label}
         </Text>
         <Button variant="plain" size="slim" onClick={onToggle}>
@@ -1140,45 +1160,51 @@ function ContentSection({ type, content, currentValue, expanded, onToggle, onEdi
       </InlineStack>
 
       {/* What is on the product now, beside what would replace it. One column
-          at 375px, two from md up. */}
+          at 375px, two from md up. Each side carries its own length, so the
+          merchant sees what the change does to it. */}
       <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-        <BlockStack gap="100">
-          <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
-            {t("Current")}
-          </Text>
-          {currentPreview ? (
-            <Text as="p" variant="bodySm">
-              {currentPreview}
+        <CurrentPanel>
+          <BlockStack gap="200">
+            <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
+              {t("Current")}
             </Text>
-          ) : (
-            <Text as="p" variant="bodySm" tone="subdued">
-              {t("Nothing yet")}
-            </Text>
-          )}
-        </BlockStack>
+            {currentPreview ? (
+              <Text as="p" variant="bodySm">
+                {currentPreview}
+              </Text>
+            ) : (
+              <Text as="p" variant="bodySm" tone="subdued">
+                {t("Nothing yet")}
+              </Text>
+            )}
+            <FieldLength type={type} text={plainText(type, currentValue || "")} id={`${idBase}-current`} />
+          </BlockStack>
+        </CurrentPanel>
 
-        <BlockStack gap="100">
-          <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
-            {t("Proposed")}
-          </Text>
-          {expanded ? (
-            <TextField
-              label={t("Proposed {label}", { label })}
-              labelHidden
-              value={editedValue}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
-              helpText={charLimit ? t("{charCount}/{charLimit} characters{v}", { charCount, charLimit, v: overLimit ? t(" — too long") : "" }) : undefined}
-              error={overLimit ? t("Shorten to under {charLimit} characters", { charLimit }) : ""}
-              autoComplete="off"
-            />
-          ) : (
-            <Text as="p" variant="bodySm">
-              {preview}
+        <ProposedPanel>
+          <BlockStack gap="200">
+            <Text as="h4" variant="bodySm" fontWeight="semibold" tone="subdued">
+              {t("Proposed")}
             </Text>
-          )}
-        </BlockStack>
+            {expanded ? (
+              <TextField
+                label={t("Proposed {label}", { label })}
+                labelHidden
+                value={editedValue}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                multiline={type === "description" ? 8 : type === "faq" ? 6 : 2}
+                error={overLimit ? t("Shorten to under {charLimit} characters", { charLimit }) : ""}
+                autoComplete="off"
+              />
+            ) : (
+              <Text as="p" variant="bodySm">
+                {preview}
+              </Text>
+            )}
+            <FieldLength type={type} text={plainText(type, editedValue)} id={`${idBase}-proposed`} />
+          </BlockStack>
+        </ProposedPanel>
       </InlineGrid>
     </BlockStack>
   );

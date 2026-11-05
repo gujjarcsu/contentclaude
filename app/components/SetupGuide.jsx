@@ -1,11 +1,11 @@
 /**
- * SetupGuide — the setup checklist with progress, as every top app has it.
+ * SetupGuide — the "Get started checklist", as every top app has it.
  *
- * Redesign (Nov 2026). Tapita ("Get Started Checklist, 0/4 done"), Smart SEO
- * ("Setup Guide, 0/5 completed") and StoreSEO all open with the same card:
- * steps with a tick, a progress bar, the first unfinished step expanded with
- * its one button. Navaal had a static "Get started in 4 steps" card with four
- * buttons that never ticked anything.
+ * Redesign v2 (Nov 2026), matched to Tapita 063: a title with an "n/4 done"
+ * chip, a thin progress bar, a check circle per step, and the active step
+ * opened in a soft panel with its dark button on the left and a small drawing
+ * of the screen it leads to on the right (Illustrations.jsx — Navaal's own UI,
+ * not stock art). Smart SEO 096 and StoreSEO open the same way.
  *
  * `done` is decided by the caller from real state (a brand voice row exists,
  * a draft was reviewed, the theme block is confirmed); this component never
@@ -13,20 +13,25 @@
  * Dismiss, and the caller hides it for good once dismissed.
  */
 import { useState } from "react";
-import { Card, BlockStack, InlineStack, Box, Text, Button, Badge, ProgressBar, Icon, Collapsible } from "@shopify/polaris";
+import { Card, BlockStack, InlineStack, InlineGrid, Box, Text, Button, ProgressBar, Icon, Collapsible, useBreakpoints } from "@shopify/polaris";
 import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useT } from "../i18n/react.jsx";
+import { CountChip } from "./Kit.jsx";
 
 /**
  * @param {object} props
  * @param {Array<{id: string, title: string, description?: string, done: boolean,
  *   action?: {content: string, url?: string, onAction?: () => void, external?: boolean},
- *   extra?: import("react").ReactNode}>} props.steps  `extra` renders under the description (a step with several controls)
+ *   extra?: import("react").ReactNode, illustration?: import("react").ReactNode}>} props.steps
+ *   `extra` renders under the description (a step with several controls);
+ *   `illustration` is drawn beside the open step on wide screens.
  * @param {() => void} [props.onDismiss]  offered only when every step is done
  * @param {string} [props.title]
  */
 export function SetupGuide({ steps, onDismiss, title }) {
   const t = useT();
+  // Desktop by default, so the server render and the first client render agree.
+  const { mdUp } = useBreakpoints({ defaults: { mdUp: true } });
   const list = Array.isArray(steps) ? steps.filter(Boolean) : [];
   const doneCount = list.filter((s) => s.done).length;
   const firstOpen = list.find((s) => !s.done)?.id ?? null;
@@ -58,60 +63,69 @@ export function SetupGuide({ steps, onDismiss, title }) {
   return (
     <Card>
       <BlockStack gap="400">
-        <BlockStack gap="200">
+        <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
-            <Text as="h2" variant="headingMd">
-              {title ?? t("Setup guide")}
-            </Text>
-            <Badge tone={doneCount > 0 ? "info" : undefined}>{t("{done} of {total} done", { done: doneCount, total: list.length })}</Badge>
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd" id="setup-guide-title">
+                {title ?? t("Get started checklist")}
+              </Text>
+              <CountChip n={t("{done}/{total} done", { done: doneCount, total: list.length })} />
+            </InlineStack>
           </InlineStack>
-          <ProgressBar progress={pct} size="small" tone="primary" />
+          <ProgressBar progress={pct} size="small" tone="primary" ariaLabelledBy="setup-guide-title" />
         </BlockStack>
-        <BlockStack gap="0">
+        <BlockStack gap="100">
           {list.map((step) => {
-            const open = openId === step.id;
+            const open = openId === step.id && !step.done;
+            const expandable = !step.done && (step.description || step.action || step.extra);
+            const circle = step.done ? (
+              <Icon source={CheckCircleIcon} tone="success" accessibilityLabel={t("Done")} />
+            ) : (
+              <Box width="20px" minHeight="20px" borderWidth="050" borderColor={open ? "border-emphasis" : "border"} borderRadius="full" />
+            );
             return (
-              <Box key={step.id} paddingBlock="200" borderBlockStartWidth="025" borderColor="border-secondary">
+              <Box key={step.id} borderRadius="300" background={open ? "bg-surface-secondary" : undefined} padding={open ? "300" : undefined} paddingBlock={open ? undefined : "200"} paddingInline={open ? undefined : "300"}>
                 <BlockStack gap="200">
                   <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
-                    <InlineStack gap="200" blockAlign="center" wrap={false}>
-                      {step.done ? (
-                        <Icon source={CheckCircleIcon} tone="success" accessibilityLabel={t("Done")} />
-                      ) : (
-                        <Box width="20px" minHeight="20px" borderWidth="025" borderColor="border" borderRadius="full" />
-                      )}
-                      <Text as="p" variant="bodyMd" fontWeight={step.done ? "regular" : "medium"} tone={step.done ? "subdued" : undefined}>
+                    <InlineStack gap="300" blockAlign="center" wrap={false}>
+                      <Box minWidth="20px">{circle}</Box>
+                      <Text as="p" variant="bodyMd" fontWeight={step.done ? "regular" : "semibold"} tone={step.done ? "subdued" : undefined} textDecorationLine={step.done ? "line-through" : undefined}>
                         {step.title}
                       </Text>
                     </InlineStack>
-                    {!step.done && (step.description || step.action || step.extra) ? (
+                    {expandable ? (
                       <Button
                         variant="tertiary"
                         size="slim"
                         icon={open ? ChevronUpIcon : ChevronDownIcon}
                         accessibilityLabel={open ? t("Hide step: {title}", { title: step.title }) : t("Show step: {title}", { title: step.title })}
+                        ariaExpanded={open}
+                        ariaControls={`setup-step-${step.id}`}
                         onClick={() => setOpenId(open ? null : step.id)}
                       />
                     ) : null}
                   </InlineStack>
                   {!step.done ? (
                     <Collapsible open={open} id={`setup-step-${step.id}`} transition={{ duration: "150ms", timingFunction: "ease-in-out" }}>
-                      <Box paddingInlineStart="700" paddingBlockEnd="100">
-                        <BlockStack gap="300">
-                          {step.description ? (
-                            <Text as="p" variant="bodyMd" tone="subdued">
-                              {step.description}
-                            </Text>
-                          ) : null}
-                          {step.action ? (
-                            <InlineStack>
-                              <Button url={step.action.url} onClick={step.action.onAction} external={step.action.external} target={step.action.external ? "_blank" : undefined}>
-                                {step.action.content}
-                              </Button>
-                            </InlineStack>
-                          ) : null}
-                          {step.extra ?? null}
-                        </BlockStack>
+                      <Box paddingInlineStart="800" paddingBlockEnd="100">
+                        <InlineGrid columns={step.illustration && mdUp ? "1fr 220px" : "1fr"} gap="400" alignItems="center">
+                          <BlockStack gap="300">
+                            {step.description ? (
+                              <Text as="p" variant="bodyMd" tone="subdued">
+                                {step.description}
+                              </Text>
+                            ) : null}
+                            {step.action ? (
+                              <InlineStack>
+                                <Button variant="primary" url={step.action.url} onClick={step.action.onAction} external={step.action.external} target={step.action.external ? "_blank" : undefined}>
+                                  {step.action.content}
+                                </Button>
+                              </InlineStack>
+                            ) : null}
+                            {step.extra ?? null}
+                          </BlockStack>
+                          {step.illustration && mdUp ? <Box>{step.illustration}</Box> : null}
+                        </InlineGrid>
                       </Box>
                     </Collapsible>
                   ) : null}

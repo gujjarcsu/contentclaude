@@ -97,7 +97,10 @@ describe("wiring", () => {
     const home = code(readFileSync("app/routes/app._index.jsx", "utf8"));
     // Redesign (Nov 2026): Home leads with "what to fix first" on every load,
     // so the blockers are read unconditionally (one indexed query, never throws).
-    expect(home).toMatch(/const blockers = await blockersFor\(shop\);/);
+    // Redesign v2: every finding is read once (the tabs' counts) and the top
+    // three are sliced from it, so the rows are exactly the old max-3 call's.
+    expect(home).toMatch(/const allBlockers = await blockersFor\(shop, \{ max: 99 \}\);/);
+    expect(home).toMatch(/const blockers = allBlockers\.slice\(0, 3\);/);
     // D1: the line is made where it is shown, in the merchant's language. The
     // "written below" note appears only once the drafts really are below:
     // since the redesign they start when the merchant presses the button, so

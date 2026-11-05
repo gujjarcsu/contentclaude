@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useT } from "../i18n/react.jsx";
 import { Await, useLoaderData, useNavigate, useFetcher, useRevalidator } from "react-router";
 import { useRouteLoading } from "../utils/useRouteLoading.js";
@@ -22,10 +22,17 @@ import {
   Divider,
   SkeletonBodyText,
   SkeletonDisplayText,
+  InlineGrid,
+  Tabs,
 } from "@shopify/polaris";
+import { EditIcon, CheckCircleIcon, TextBlockIcon, ProductIcon, ClockIcon, CreditCardIcon } from "@shopify/polaris-icons";
+import { IconTile, MetricCard } from "../components/Kit.jsx";
+import { IlluScore, IlluBrandVoice, IlluDrafts, IlluThemeEditor, IlluAllGood, IlluProducts } from "../components/Illustrations.jsx";
+import { T } from "../i18n/index.js";
+import { gscLine } from "../utils/gscAiControl.js";
+import { indexabilityLine } from "../utils/indexability.js";
 import { ScoreRing } from "../components/ScoreRing.jsx";
 import { IssueList } from "../components/IssueList.jsx";
-import { StatStrip } from "../components/StatStrip.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { ProductThumb } from "../components/ProductThumb.jsx";
 import { getEntitlements } from "../utils/billing-plans.js";
@@ -283,7 +290,11 @@ export const loader = async ({ request }) => {
   // Redesign (Nov 2026) — Home leads with "what to fix first" for every shop,
   // not only before the first publish, so the blockers are read on every load.
   // One indexed query over ProductWatch; never throws.
-  const blockers = await blockersFor(shop);
+  // Redesign v2 — every finding once (the severity counts), the top three
+  // sliced from it (the rows). blockerLines sorts before it slices, so the
+  // three are exactly what the old max-3 call returned, password row included.
+  const allBlockers = await blockersFor(shop, { max: 99 });
+  const blockers = allBlockers.slice(0, 3);
   const findings = beforeFirstPublish && !isFirstRun ? await firstRunFindings(shop) : [];
   // A4/FR9 — drafts already inside the reuse window, so a reload never re-announces a charge.
   const draftedIds = isFirstRun ? await recentDraftIds(shop) : [];
@@ -297,6 +308,8 @@ export const loader = async ({ request }) => {
         // merchant paying for Pro must not be told their allowance is free.
         planName: plan.planName,
         blockers,
+        // Every finding, for the result screen's severity cards and its headline count.
+        allBlockers,
         draftedIds,
         // Phase 10 Part C (F1, the ALL_DRAFT / B2B_ONLY cells) — the scan is
         // scoped to Active products on the Online Store, so a store being
@@ -351,6 +364,7 @@ export const loader = async ({ request }) => {
     beforeFirstPublish,
     findings,
     blockers,
+    allBlockers,
     attention,
     proof,
     plan: { planName: plan.planName, monthlyCredits: plan.monthlyCredits },
@@ -423,7 +437,24 @@ export function shouldRevalidate({ formAction, defaultShouldRevalidate }) {
  * one loader field; nothing is rendered as zero when it was not measured.
  */
 
-/** "57 across 30 products sampled, −1 since 21 Sep" — the ring, its scope, its change. */
+/**
+ * The checks the daily walk runs, said in the positive, for the Passed tab:
+ * a check appears there when no walked product fails it (redesign v2 —
+ * SEOWILL 122 "Good result", Tapita 074 "Good").
+ */
+const PASSED_CHECK = {
+  "openai·description·blocking": T("Every product has a description"),
+  "openai·image_link·blocking": T("Every product has an image"),
+  "openai·brand·blocking": T("Every product has a brand"),
+  "openai·title·blocking": T("Every product has a title"),
+  "openai·link·blocking": T("Every product has a public page"),
+  "openai·description·degrading": T("Descriptions are long enough to quote"),
+  "openai·image alt·degrading": T("Every image has alt text"),
+  "openai·variant options·degrading": T("Variant options are named"),
+  "openai·gtin·degrading": T("Barcodes are set or not needed"),
+};
+
+/** "57 across 30 products sampled, −1 since 21 Sep" — the ring on its tint, its scope, its change. */
 function ScoreSummary({ score, navigate }) {
   const t = useT();
   const available = !!score?.available && Number.isFinite(score.current);
@@ -443,7 +474,10 @@ function ScoreSummary({ score, navigate }) {
 
   return (
     <BlockStack gap="300" inlineAlign="center">
-      <ScoreRing value={available ? score.current : null} size="large" label={t("Search readiness")} caption={scopeLine ?? t("Not scored yet")} />
+      <Text as="h2" variant="headingMd" alignment="center">
+        {t("Search readiness")}
+      </Text>
+      <ScoreRing value={available ? score.current : null} size="xl" label={t("Search readiness")} caption={scopeLine ?? t("Not scored yet")} tint />
       {changeBadge}
       <GeoRubric />
       {/* A plain link, not a second dark button: when nothing is waiting the
@@ -456,39 +490,105 @@ function ScoreSummary({ score, navigate }) {
 }
 
 /**
- * The rows under "What to fix first": the eligibility blockers the daily walk
- * found (a product with no description cannot be listed by the OpenAI feed),
- * then the other things the catalogue watch reports (a blocked crawler, pages
- * that cannot be indexed, the merchant's unanswered GSC question, what changed
- * since yesterday). Each row carries the action that fixes it, and names the
- * plan instead when this plan cannot run that fix — a dark button that
- * refuses is worse than an honest label.
+ * Every finding as a row, split by severity for the tabs (SEOWILL 122,
+ * Tapita 074). The feed findings come through the one mapping every screen
+ * shares (utils/fixRows.js), so Home and the Audit say the same thing the same
+ * way; each carries a chip naming what it is about (GEO = AI shopping feeds,
+ * SEO = search engines, Both). The catalogue watch's own lines follow, built
+ * by the same helpers homeAttentionLines uses, in its order.
  */
-function whatToFixFirst({ blockers, attention, entitlements, t, navigate }) {
-  // The blocker rows are built by the one mapping every screen shares
-  // (utils/fixRows.js), so Home and the Audit say the same thing the same way.
-  const rows = blockerRows(blockers, { entitlements, t, navigate });
+function fixFirstRows({ blockers, attention, entitlements, t, navigate }) {
   const list = Array.isArray(blockers) ? blockers : [];
-
+  const feed = blockerRows(list, { entitlements, t, navigate }).map((row, i) => ({
+    ...row,
+    tag: String(list[i]?.key).startsWith("openai") ? "geo" : "both",
+  }));
+  const extra = [];
   if (attention?.available) {
-    const lines = homeAttentionLines(attention, t);
-    // The blockers above already itemise the blocking count; the catalogue
-    // watch's one-line summary of the same fact would say it twice (L5).
+    const blocked = attention?.crawler?.blocked ?? [];
+    const crawlerLine = blocked.length ? t("{agents} {n, plural, one {is} other {are}} blocked from your storefront.", { agents: blocked.join(", "), n: blocked.length }) : null;
+    const gsc = gscLine(attention?.gsc, t);
+    const idx = indexabilityLine(attention?.indexability, t);
     const blocking = Number(attention?.blocking ?? 0);
     const summaryLine = blocking > 0 ? t("{n, plural, one {# product is} other {# products are}} missing something an AI shopping surface requires.", { n: blocking }) : null;
-    const crawlerBlocked = (attention?.crawler?.blocked ?? []).length > 0;
-    lines
-      .filter((line) => !(list.length > 0 && line === summaryLine))
-      .forEach((line, i) => {
-        rows.push({
-          id: `attention-${i}`,
-          severity: i === 0 && crawlerBlocked ? "critical" : "info",
-          title: line,
-          action: { content: t("See what changed"), onAction: () => navigate("/app/attention") },
-        });
-      });
+    const see = { content: t("See what changed"), onAction: () => navigate("/app/attention") };
+    homeAttentionLines(attention, t).forEach((line, i) => {
+      // The feed rows above already itemise the blocking count; the watch's
+      // one-line summary of the same fact would say it twice (L5).
+      if (line === summaryLine && list.length > 0) return;
+      const kind =
+        line === crawlerLine
+          ? { severity: "critical", tag: "both" }
+          : line === gsc
+            ? { severity: "warning", tag: "geo" }
+            : line === idx
+              ? { severity: "warning", tag: "seo" }
+              : line === summaryLine
+                ? { severity: "critical", tag: "geo" }
+                : { severity: "info" };
+      extra.push({ id: `attention-${i}`, title: line, action: see, ...kind });
+    });
   }
-  return rows;
+  const rows = [...feed, ...extra];
+  const found = new Set(list.map((b) => b?.key));
+  const passed = Object.entries(PASSED_CHECK)
+    .filter(([key]) => !found.has(key))
+    .map(([key, label]) => ({ id: `passed-${key}`, severity: "passed", title: t(label), tag: "geo" }));
+  return {
+    critical: rows.filter((r) => r.severity === "critical"),
+    warning: rows.filter((r) => r.severity === "warning" || r.severity === "info"),
+    passed,
+  };
+}
+
+/** The findings card's right half: tabs with counts, the rows of the chosen one. */
+function FixFirst({ groups, attention, totalProducts }) {
+  const t = useT();
+  const tabs = [
+    { id: "critical", content: t("Critical"), badge: String(groups.critical.length), rows: groups.critical },
+    { id: "warning", content: t("Needs work"), badge: String(groups.warning.length), rows: groups.warning },
+    { id: "passed", content: t("Passed"), badge: String(groups.passed.length), rows: groups.passed },
+  ];
+  // Open on the first tab with something to do in it.
+  const firstWithRows = tabs.findIndex((x) => x.id !== "passed" && x.rows.length > 0);
+  const [chosen, setChosen] = useState(null);
+  const selected = chosen ?? (firstWithRows >= 0 ? firstWithRows : 2);
+  const active = tabs[selected];
+  const nothingToFix = groups.critical.length === 0 && groups.warning.length === 0;
+  return (
+    <BlockStack gap="300">
+      <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+        <Text as="h2" variant="headingMd">
+          {t("What to fix first")}
+        </Text>
+        {attention?.available ? (
+          <Text as="p" variant="bodySm" tone="subdued">
+            {attention.partial ? t("From the products we could reach in one check") : t("Checked daily against your catalog")}
+          </Text>
+        ) : null}
+      </InlineStack>
+      <Tabs tabs={tabs.map(({ id, content, badge }) => ({ id, content, badge, panelID: `fix-${id}` }))} selected={selected} onSelect={setChosen} fitted />
+      <Box id={`fix-${active.id}`}>
+        {totalProducts === 0 ? (
+          <InlineGrid columns={{ xs: "1fr", sm: "1fr 160px" }} gap="400" alignItems="center">
+            <Text as="p" variant="bodyMd" tone="subdued">
+              {t("Add products to your store, and this is where you generate content for them.")}
+            </Text>
+            <IlluProducts width={160} />
+          </InlineGrid>
+        ) : nothingToFix && active.id !== "passed" ? (
+          <InlineGrid columns={{ xs: "1fr", sm: "1fr 160px" }} gap="400" alignItems="center">
+            <Text as="p" variant="bodyMd" tone="subdued">
+              {t("Nothing needs you right now. The daily check covers the rest.")}
+            </Text>
+            <IlluAllGood width={160} />
+          </InlineGrid>
+        ) : (
+          <IssueList items={active.rows} emptyText={active.id === "passed" ? t("No check is passed by every product yet.") : t("Nothing in this group right now.")} />
+        )}
+      </Box>
+    </BlockStack>
+  );
 }
 
 function RecentActivitySkeleton() {
@@ -512,7 +612,33 @@ function BelowFoldUnavailable() {
   return null;
 }
 
-/** The last five products or collections touched, as plain rows. */
+/** Before anything is written: the card keeps its frame, says so, and offers the way in. */
+function RecentActivityEmpty({ navigate }) {
+  const t = useT();
+  return (
+    <Card>
+      <InlineGrid columns={{ xs: "1fr", sm: "1fr 160px" }} gap="400" alignItems="center">
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <IconTile icon={ClockIcon} tone="brand" size="sm" />
+            <Text as="h2" variant="headingMd">
+              {t("Recent activity")}
+            </Text>
+          </InlineStack>
+          <Text as="p" variant="bodyMd" tone="subdued">
+            {t("Nothing written yet. Drafts you generate show up here.")}
+          </Text>
+          <InlineStack>
+            <Button onClick={() => navigate("/app/products")}>{t("Open products")}</Button>
+          </InlineStack>
+        </BlockStack>
+        <IlluDrafts width={160} />
+      </InlineGrid>
+    </Card>
+  );
+}
+
+/** The last five products or collections touched, as plain rows with their photos. */
 function RecentActivityCard({ items, navigate }) {
   const t = useT();
   const rows = items.slice(0, 5);
@@ -520,9 +646,12 @@ function RecentActivityCard({ items, navigate }) {
     <Card>
       <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="center">
-          <Text as="h2" variant="headingMd">
-            {t("Recent activity")}
-          </Text>
+          <InlineStack gap="200" blockAlign="center">
+            <IconTile icon={ClockIcon} tone="brand" size="sm" />
+            <Text as="h2" variant="headingMd">
+              {t("Recent activity")}
+            </Text>
+          </InlineStack>
           <Button variant="plain" onClick={() => navigate("/app/products")}>
             {t("All products")}
           </Button>
@@ -581,9 +710,12 @@ function CreditsCard({ plan, usageCount, remaining, usagePct, planLabel }) {
     <Card>
       <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
-          <Text as="h2" variant="headingMd">
-            {t("Monthly credits")}
-          </Text>
+          <InlineStack gap="200" blockAlign="center">
+            <IconTile icon={CreditCardIcon} tone="brand" size="sm" />
+            <Text as="h2" variant="headingMd">
+              {t("Monthly credits")}
+            </Text>
+          </InlineStack>
           {/* A plan is a fact, not a warning: no tone (colour is for meaning). */}
           <Badge>{t("{plan} plan", { plan: planLabel })}</Badge>
         </InlineStack>
@@ -645,6 +777,7 @@ export default function Dashboard() {
     autopilotRecap,
     changeWindow,
     blockers,
+    allBlockers,
     attention,
     proof,
     plan,
@@ -732,6 +865,7 @@ export default function Dashboard() {
       description: t("A score for what search engines and AI shopping feeds find on your product pages."),
       done: !!storeScore?.available,
       action: { content: t("Score my catalog"), onAction: () => navigate("/app/seo-audit") },
+      illustration: <IlluScore />,
     },
     {
       id: "voice",
@@ -739,6 +873,7 @@ export default function Dashboard() {
       description: t("Tone, audience and what sets you apart, so every draft sounds like you."),
       done: hasBrandVoice,
       action: { content: t("Open settings"), onAction: () => navigate("/app/settings") },
+      illustration: <IlluBrandVoice />,
     },
     {
       id: "review",
@@ -746,6 +881,7 @@ export default function Dashboard() {
       description: t("Nothing goes live until you publish it."),
       done: generatedCount > 0,
       action: { content: draftCount > 0 ? t("Review {n, plural, one {# draft} other {# drafts}}", { n: draftCount }) : t("Open products"), onAction: () => navigate(draftCount > 0 ? "/app/review" : "/app/products") },
+      illustration: <IlluDrafts />,
     },
     {
       id: "theme",
@@ -753,12 +889,14 @@ export default function Dashboard() {
       description: t("The FAQ (Navaal) theme block puts the answers on your product pages, where shoppers and search engines read them."),
       done: embedConfirmed,
       extra: <ThemeStepActions shopDomain={shopDomain} />,
+      illustration: <IlluThemeEditor />,
     },
   ];
   const setupDone = steps.every((s) => s.done);
   const showGuide = !(setupDone && geoNoteDismissed);
 
-  const fixRows = whatToFixFirst({ blockers, attention, entitlements, t, navigate });
+  // Every finding, split for the tabs; the counts on the tabs are these lengths.
+  const fixGroups = fixFirstRows({ blockers: allBlockers ?? blockers, attention, entitlements, t, navigate });
 
   /* The strip's hints carry what the autopilot and bulk-job banners used to
      announce: counted over the score card's own window (Phase 12 A3), so the
@@ -778,17 +916,21 @@ export default function Dashboard() {
   // A capped count keeps its "+" (Shopify's AT_LEAST precision): a floor is never shown as a total.
   const num = (v, exact = true) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : exact === false ? `${t.number(Number(v))}+` : t.number(Number(v)));
   const stats = [
-    { id: "ready", label: t("Ready to review"), value: num(draftCount), hint: readyHint, url: "/app/review" },
+    { id: "ready", icon: EditIcon, tone: "brand", label: t("Ready to review"), value: num(draftCount), hint: readyHint, url: "/app/review" },
     {
       id: "published",
+      icon: CheckCircleIcon,
+      tone: "success",
       label: t("Published"),
       value: num(generatedCount),
       hint: publishedSubtext({ ok: catalogueOk, inScope: generatedCount, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
       url: "/app/products?tab=published",
     },
-    { id: "unwritten", label: t("Not yet written"), value: num(notOptimizedCount, candidateExact), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
+    { id: "unwritten", icon: TextBlockIcon, tone: "caution", label: t("Not yet written"), value: num(notOptimizedCount, candidateExact), hint: t("Products we have not written for"), url: "/app/products?tab=needs_content" },
     {
       id: "catalogue",
+      icon: ProductIcon,
+      tone: "neutral",
       label: t("In your catalog"),
       value: num(totalProducts, totalExact),
       hint: !countsOk
@@ -814,35 +956,33 @@ export default function Dashboard() {
         {/* The question, answered: the score with its scope on the left, what
             to fix first on the right. */}
         <Card>
-          <Layout>
-            <Layout.Section variant="oneThird">
-              <ScoreSummary score={storeScore} navigate={navigate} />
-            </Layout.Section>
-            <Layout.Section>
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
-                  <Text as="h2" variant="headingMd">
-                    {t("What to fix first")}
-                  </Text>
-                  {attention?.available ? (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {attention.partial ? t("From the products we could reach in one check") : t("Checked daily against your catalog")}
-                    </Text>
-                  ) : null}
-                </InlineStack>
-                <IssueList items={fixRows} emptyText={totalProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Nothing needs you right now. The daily check covers the rest.")} />
-              </BlockStack>
-            </Layout.Section>
-          </Layout>
+          <InlineGrid columns={{ xs: "1fr", md: "minmax(240px, 1fr) 2fr" }} gap="600">
+            <ScoreSummary score={storeScore} navigate={navigate} />
+            <FixFirst groups={fixGroups} attention={attention} totalProducts={totalProducts} />
+          </InlineGrid>
         </Card>
 
-        <StatStrip items={stats} />
+        {/* The category's metric cards: a tinted icon tile, the label, the
+            figure and its scope, and the way to the list behind it. */}
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+          {stats.map((s) => (
+            <MetricCard
+              key={s.id}
+              icon={s.icon}
+              tone={s.tone}
+              label={s.label}
+              value={s.value}
+              scope={s.hint}
+              action={s.url ? <Button variant="plain" url={s.url} accessibilityLabel={t("Open {label}", { label: s.label })}>{t("View")}</Button> : null}
+            />
+          ))}
+        </InlineGrid>
 
         <Layout>
           <Layout.Section>
             <Suspense fallback={<RecentActivitySkeleton />}>
               <Await resolve={belowFold} errorElement={<BelowFoldUnavailable />}>
-                {({ recentActivity }) => recentActivity.length > 0 && <RecentActivityCard items={recentActivity} navigate={navigate} />}
+                {({ recentActivity }) => (recentActivity.length > 0 ? <RecentActivityCard items={recentActivity} navigate={navigate} /> : <RecentActivityEmpty navigate={navigate} />)}
               </Await>
             </Suspense>
           </Layout.Section>

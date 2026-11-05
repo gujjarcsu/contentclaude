@@ -15,6 +15,7 @@ import { BlockStack, InlineStack, Box, Text, Icon, Button, Card, Spinner } from 
 import { MagicIcon, LockIcon, AlertDiamondIcon, AlertTriangleIcon, CheckCircleIcon, InfoIcon } from "@shopify/polaris-icons";
 import { useT } from "../i18n/react.jsx";
 import { T } from "../i18n/index.js";
+import { SCORE_FAIR, SCORE_GOOD } from "../utils/scoreBands.js";
 
 const TONE_ICON_TONE = { brand: undefined, critical: "critical", caution: "caution", success: "success", info: "info", neutral: "subdued" };
 
@@ -181,8 +182,8 @@ export function SeverityCards({ critical, warning, good, onSelect, selected, sco
 
 /**
  * Semicircle gauge with a needle (SEOWILL 115/122). Red, amber and green
- * arcs at the same bands as every other score badge (scoreBands.js: 0–49
- * poor, 50–79 fair, 80+ good). `value` null draws the arcs and a dash.
+ * arcs at the bands every ring and badge uses, read from scoreBands.js
+ * (SCORE_FAIR / SCORE_GOOD) so the gauge can never disagree with them (L5). `value` null draws the arcs and a dash.
  */
 export function ScoreGauge({ value, label, caption, width = 220 }) {
   const t = useT();
@@ -196,9 +197,9 @@ export function ScoreGauge({ value, label, caption, width = 220 }) {
   return (
     <BlockStack gap="100" inlineAlign="center">
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={name}>
-        <path d={arc(0, 49)} fill="none" strokeWidth="14" strokeLinecap="round" style={{ stroke: "var(--p-color-bg-fill-critical)" }} />
-        <path d={arc(51, 79)} fill="none" strokeWidth="14" style={{ stroke: "var(--p-color-bg-fill-caution)" }} />
-        <path d={arc(81, 100)} fill="none" strokeWidth="14" strokeLinecap="round" style={{ stroke: "var(--p-color-bg-fill-success)" }} />
+        <path d={arc(0, SCORE_FAIR - 1)} fill="none" strokeWidth="14" strokeLinecap="round" style={{ stroke: "var(--p-color-bg-fill-critical)" }} />
+        <path d={arc(SCORE_FAIR + 1, SCORE_GOOD - 1)} fill="none" strokeWidth="14" style={{ stroke: "var(--p-color-bg-fill-caution)" }} />
+        <path d={arc(SCORE_GOOD + 1, 100)} fill="none" strokeWidth="14" strokeLinecap="round" style={{ stroke: "var(--p-color-bg-fill-success)" }} />
         {n !== null && <line x1={cx} y1={cy} x2={cx + (nx - cx) * 0.78} y2={cy + (ny - cy) * 0.78} strokeWidth="4" strokeLinecap="round" style={{ stroke: "var(--p-color-text)" }} />}
         <circle cx={cx} cy={cy} r="7" style={{ fill: "var(--p-color-text)" }} />
         <text x={cx} y={cy + w * 0.12} textAnchor="middle" dominantBaseline="central" fontSize={Math.round(w * 0.15)} fontWeight="700" style={{ fill: "var(--p-color-text)", fontFamily: "inherit" }}>

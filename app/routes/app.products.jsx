@@ -22,7 +22,6 @@ import {
   BlockStack,
   InlineStack,
   Button,
-  EmptyState,
   Checkbox,
   Banner,
   Box,
@@ -32,9 +31,13 @@ import {
   SkeletonDisplayText,
   SkeletonThumbnail,
   ProgressBar,
+  InlineGrid,
+  ChoiceList,
 } from "@shopify/polaris";
+import { CheckCircleIcon, EditIcon, ProductIcon, CreditCardIcon } from "@shopify/polaris-icons";
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { StatStrip } from "../components/StatStrip.jsx";
+import { AiButton, LockedPreview } from "../components/Kit.jsx";
+import { ProductsMetric, ProductsEmpty, CreditSummary } from "../components/ProductsParts.jsx";
 import { ScoreRing } from "../components/ScoreRing.jsx";
 import { ProductThumb } from "../components/ProductThumb.jsx";
 import { authenticate } from "../shopify.server.js";
@@ -49,7 +52,7 @@ import {
   remainingGenerations,
   sliceToQuota,
 } from "../utils/plans.server.js";
-import { getEntitlements, bulkRefusal } from "../utils/billing-plans.js";
+import { getEntitlements, bulkRefusal, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 import { runQuickStartOne, PRODUCT_GID_RE } from "../utils/quickStart.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, splitByQuota } from "../utils/candidates.server.js";
@@ -499,16 +502,19 @@ function ProductListSkeleton() {
   return (
     <SkeletonPage primaryAction>
       <BlockStack gap="500">
-        <Card>
-          <InlineStack gap="800">
-            {[1, 2, 3, 4].map((i) => (
-              <BlockStack key={i} gap="200">
+        {/* The final layout with grey bars at the values' sizes: four metric
+            cards, then the table, so nothing jumps when the data lands. */}
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <BlockStack gap="300">
+                <SkeletonThumbnail size="extraSmall" />
                 <SkeletonBodyText lines={1} />
                 <SkeletonDisplayText size="small" />
               </BlockStack>
-            ))}
-          </InlineStack>
-        </Card>
+            </Card>
+          ))}
+        </InlineGrid>
         <Card>
           <BlockStack gap="400">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -624,9 +630,63 @@ export default function ProductsPage() {
     matchesListFilter(p, contentMap[p.id], statusFilter),
   );
 
-  const filteredProducts = tabFilteredProducts.filter((p) =>
-    p.title.toLowerCase().includes(searchValue.toLowerCase()),
-  );
+  // Redesign v2 (Smart SEO 108's Active · Draft sub-filters, Tapita 079's sort):
+  // the Shopify-status filter and the sort work on the rows of this page, the
+  // same scope the tabs and the search have, and the pager says so.
+  const [productStatus, setProductStatus] = useState([]);
+  const [sortSelected, setSortSelected] = useState(["title asc"]);
+  const statusFiltered = productStatus.length === 0 ? tabFilteredProducts : tabFilteredProducts.filter((p) => productStatus.includes(String(p.status ?? "").toUpperCase()));
+  const searched = statusFiltered.filter((p) => p.title.toLowerCase().includes(searchValue.toLowerCase()));
+  const filteredProducts = useMemo(() => {
+    const [key, dir] = String(sortSelected[0] ?? "title asc").split(" ");
+    const sign = dir === "desc" ? -1 : 1;
+    const score = (p) => (Number.isFinite(productScores?.[p.id]?.after) ? productScores[p.id].after : null);
+    const written = (p) =>
+      Object.values(contentMap[p.id] || {})
+        .map((v) => (v?.updatedAt ? new Date(v.updatedAt).getTime() : 0))
+        .reduce((a, b) => Math.max(a, b), 0);
+    const rows = [...searched];
+    if (key === "score") {
+      // Unscored products sort last in both directions: an unmeasured score is not a low one.
+      rows.sort((a, b) => (score(a) === null) - (score(b) === null) || sign * ((score(a) ?? 0) - (score(b) ?? 0)));
+    } else if (key === "written") {
+      rows.sort((a, b) => sign * (written(a) - written(b)));
+    } else {
+      rows.sort((a, b) => sign * a.title.localeCompare(b.title));
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searched.map((p) => p.id).join(","), sortSelected, productScores, contentMap]);
+  const sortOptions = [
+    { label: t("Title"), value: "title asc", directionLabel: t("A–Z") },
+    { label: t("Title"), value: "title desc", directionLabel: t("Z–A") },
+    { label: t("Score"), value: "score asc", directionLabel: t("Lowest first") },
+    { label: t("Score"), value: "score desc", directionLabel: t("Highest first") },
+    { label: t("Last written"), value: "written desc", directionLabel: t("Newest first") },
+    { label: t("Last written"), value: "written asc", directionLabel: t("Oldest first") },
+  ];
+  const statusChoices = [
+    { label: t("Active"), value: "ACTIVE" },
+    { label: t("Draft"), value: "DRAFT" },
+  ];
+  const filters = [
+    {
+      key: "productStatus",
+      label: t("Product status"),
+      filter: <ChoiceList title={t("Product status")} titleHidden choices={statusChoices} selected={productStatus} onChange={setProductStatus} allowMultiple />,
+      shortcut: true,
+    },
+  ];
+  const appliedFilters =
+    productStatus.length > 0
+      ? [
+          {
+            key: "productStatus",
+            label: t("Product status: {value}", { value: productStatus.map((v) => statusChoices.find((c) => c.value === v)?.label ?? v).join(", ") }),
+            onRemove: () => setProductStatus([]),
+          },
+        ]
+      : [];
 
   /**
    * Group 1.5 + 2.1. The old subtitle was
@@ -789,7 +849,7 @@ export default function ProductsPage() {
     if (!sc || !Number.isFinite(sc.after)) return null;
     return (
       <InlineStack gap="200" blockAlign="center" wrap={false}>
-        <ScoreRing value={sc.after} size="xs" label={t("Score")} />
+        <ScoreRing value={sc.after} size="xs" label={t("Score")} tint />
         {Number.isFinite(sc.delta) && sc.delta > 0 ? (
           <Text as="span" variant="bodySm" tone="success">
             {t("+{delta}", { delta: sc.delta })}
@@ -873,7 +933,7 @@ export default function ProductsPage() {
   useEffect(() => {
     clearSelection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, searchValue]);
+  }, [statusFilter, searchValue, productStatus]);
   // Redesign (Nov 2026): the content-type choice for a selection lives in the
   // same confirmation the bulk run uses, opened by the table's bulk action —
   // not in a panel that appeared above the list.
@@ -918,27 +978,39 @@ export default function ProductsPage() {
   const stats = [
     {
       id: "published",
+      icon: CheckCircleIcon,
+      tone: "success",
       label: t("AI Content Published"),
       value: num(publishedProducts),
       hint: publishedSubtext({ ok: catalogueOk, inScope: publishedProducts, candidateCount: candidateProducts, candidateLabel, record: recordPublished }, t),
       onClick: () => setSearchParams({ status: "published" }),
+      viewLabel: t("View published products"),
     },
     {
       id: "drafts",
+      icon: EditIcon,
+      tone: "caution",
       label: t("Ready to review"),
       value: num(draftProducts),
       hint: draftsOutsideScope > 0 ? t("{n, plural, one {# on a product} other {# on products}} not on your Online Store", { n: draftsOutsideScope }) : t("Waiting for you"),
       url: "/app/review",
+      viewLabel: t("Review drafts"),
     },
     {
       id: "notOptimized",
+      icon: ProductIcon,
+      tone: "brand",
       label: t("Not yet optimized"),
       value: num(notOptimized),
       hint: t("Products we have not written for"),
       onClick: () => setSearchParams({ status: "needsContent" }),
+      viewLabel: t("View products not yet optimized"),
     },
     {
       id: "credits",
+      icon: CreditCardIcon,
+      tone: "neutral",
+      valueVariant: "headingLg",
       label: t("Monthly credits"),
       value: (
         <Text as="span" id="products-credit-usage">
@@ -952,21 +1024,29 @@ export default function ProductsPage() {
 
   if (loadingThisRoute) return <ProductListSkeleton />;
 
-  const emptyState = (
-    <EmptyState
-      heading={statusFilter !== "all" ? t("No products match this filter") : totalStoreProducts === 0 ? t("No products yet") : t("Nothing on this page")}
-      image="/empty-products.svg"
-      action={
-        statusFilter !== "all"
-          ? { content: t("View all products"), onAction: () => setSearchParams({}) }
-          : { content: t("Go to Home"), onAction: () => navigate("/app") }
-      }
-    >
-      <p>
-        {statusFilter !== "all" ? t("Try another tab, or clear the filter.") : totalStoreProducts === 0 ? t("Add products to your store, and this is where you generate content for them.") : t("Try clearing your search.")}
-      </p>
-    </EmptyState>
-  );
+  // Redesign v2: each empty case says which it is (Smart SEO 102, SEOWILL 128 —
+  // a drawing of the feature, a heading, one line, one action). A search with
+  // no match is not "no products"; a tab with nothing in it is not either.
+  const emptyState =
+    searchValue && searched.length === 0 && statusFiltered.length > 0 ? (
+      <ProductsEmpty heading={t("No products match “{query}”", { query: searchValue })} body={t("Try a different word, or clear the search.")} action={{ content: t("Clear search"), onAction: handleSearchClear }} />
+    ) : statusFilter !== "all" || productStatus.length > 0 ? (
+      <ProductsEmpty
+        heading={t("No products match this filter")}
+        body={t("Try another tab, or clear the filter.")}
+        action={{
+          content: t("View all products"),
+          onAction: () => {
+            setProductStatus([]);
+            setSearchParams({});
+          },
+        }}
+      />
+    ) : totalStoreProducts === 0 ? (
+      <ProductsEmpty heading={t("No products yet")} body={t("Add products to your store, and this is where you generate content for them.")} action={{ content: t("Go to Home"), onAction: () => navigate("/app") }} />
+    ) : (
+      <ProductsEmpty heading={t("Nothing on this page")} body={t("Try clearing your search.")} action={{ content: t("View all products"), onAction: () => setSearchParams({}) }} />
+    );
 
   const pagination =
     pageInfo?.hasPreviousPage || pageInfo?.hasNextPage
@@ -988,23 +1068,28 @@ export default function ProductsPage() {
   /* One row. The title, the vendor or type under it, what we hold as badges,
      the state badge, the score where we have one, when we last wrote, and the
      one action the state calls for. On a phone the same facts stack. */
-  const rowAction = (id, numericId, description) => (
-    <Button
-      size="slim"
-      onClick={(e) => {
-        // FR13, third time (Phase 12 A1). This handler always ran — and
-        // then the click BUBBLED into the row's own onClick, which navigated
-        // to /app/products/<id> last. The route was right twice over and the
-        // click still landed on the product page. Stop the bubble; then
-        // navigate once.
-        e?.stopPropagation?.();
-        e?.preventDefault?.();
-        navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId));
-      }}
-    >
-      {rowActionLabel(id, description)}
-    </Button>
-  );
+  // Redesign v2: a product we have not written for gets the brand AI button
+  // (Tapita 083, StoreSEO's sparkle) — it opens the editor where the draft is
+  // written. Review stays a plain button: nothing is generated by it.
+  const rowAction = (id, numericId, description) => {
+    const onRowAction = (e) => {
+      // FR13, third time (Phase 12 A1). This handler always ran — and
+      // then the click BUBBLED into the row's own onClick, which navigated
+      // to /app/products/<id> last. The route was right twice over and the
+      // click still landed on the product page. Stop the bubble; then
+      // navigate once.
+      e?.stopPropagation?.();
+      e?.preventDefault?.();
+      navigate(rowActionHref(stateOfContentMap(contentMap[id]), numericId));
+    };
+    return stateOfContentMap(contentMap[id]) === PRODUCT_STATE.NEEDS_CONTENT ? (
+      <AiButton onClick={onRowAction}>{rowActionLabel(id, description)}</AiButton>
+    ) : (
+      <Button size="slim" onClick={onRowAction}>
+        {rowActionLabel(id, description)}
+      </Button>
+    );
+  };
 
   const rows = filteredProducts.map((product, index) => {
     const { id, numericId, title, imageUrl, productType, vendor, description } = product;
@@ -1052,19 +1137,20 @@ export default function ProductsPage() {
     return (
       <IndexTable.Row id={id} key={id} position={index} selected={selectedResources.includes(id)} onClick={() => navigate(`/app/products/${numericId}`)}>
         <IndexTable.Cell>
-          <ProductThumb url={imageUrl} />
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <BlockStack gap="050">
-            <Text as="span" variant="bodyMd" fontWeight="medium">
-              {title}
-            </Text>
-            {subline ? (
-              <Text as="span" variant="bodySm" tone="subdued">
-                {subline}
+          {/* Photo and name in one cell, as Smart SEO 108 and Tapita 079 list them. */}
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
+            <ProductThumb url={imageUrl} />
+            <BlockStack gap="050">
+              <Text as="span" variant="bodyMd" fontWeight="medium">
+                {title}
               </Text>
-            ) : null}
-          </BlockStack>
+              {subline ? (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {subline}
+                </Text>
+              ) : null}
+            </BlockStack>
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <InlineStack gap="100" blockAlign="center" wrap>
@@ -1192,7 +1278,23 @@ export default function ProductsPage() {
             had a description. The number was never "products with no content";
             it was "products WE have not written for", which is not a fault of
             the merchant's and is not red. */}
-        <StatStrip items={stats} />
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+          {stats.map((s) => (
+            <ProductsMetric
+              key={s.id}
+              icon={s.icon}
+              tone={s.tone}
+              label={s.label}
+              value={s.value}
+              hint={s.hint}
+              onView={s.onClick}
+              url={s.url}
+              viewLabel={s.viewLabel}
+              extra={s.extra}
+              valueVariant={s.valueVariant}
+            />
+          ))}
+        </InlineGrid>
 
         {/* Phase 4 item 7 — restoring puts the merchant's own words back on a
             LIVE storefront, so it asks first. The copy says exactly what will
@@ -1236,12 +1338,17 @@ export default function ProductsPage() {
             queryPlaceholder={t("Search products on this page")}
             onQueryChange={handleSearchChange}
             onQueryClear={handleSearchClear}
-            onClearAll={handleSearchClear}
-            filters={[]}
-            appliedFilters={[]}
+            onClearAll={() => {
+              handleSearchClear();
+              setProductStatus([]);
+            }}
+            sortOptions={sortOptions}
+            sortSelected={sortSelected}
+            onSort={setSortSelected}
+            filters={filters}
+            appliedFilters={appliedFilters}
             mode={mode}
             setMode={setMode}
-            hideFilters
             canCreateNewView={false}
             cancelAction={{ onAction: handleSearchClear, disabled: false, loading: false }}
           />
@@ -1254,7 +1361,6 @@ export default function ProductsPage() {
             emptyState={emptyState}
             pagination={pagination}
             headings={[
-              { id: "thumb", title: "", hidden: true },
               { id: "product", title: t("Product") },
               { id: "state", title: t("Status") },
               { id: "written", title: t("Content") },
@@ -1297,6 +1403,7 @@ export default function ProductsPage() {
                 <QuotaReachedCard upsell={upsell} surface="products" />
               ) : (
                 <>
+                  <CreditSummary count={selectedItems.length} remaining={usageRemaining} monthly={monthlyCredits} />
                   <Banner tone="warning">
                     <p>
                       <strong>{t("This will replace existing product descriptions entirely.")}</strong>
@@ -1347,6 +1454,7 @@ export default function ProductsPage() {
               )}
               {entitlements?.bulkJobs && (
                 <>
+                  <CreditSummary count={willProcessNow ?? 0} remaining={usageRemaining} monthly={monthlyCredits} />
                   {/* Group 3.3 — this said "a background job for all 3,148
                       products ... ~184 minutes" while sliceToQuota was about to
                       cut the run to whatever quota remained. The app knew before
@@ -1361,12 +1469,33 @@ export default function ProductsPage() {
                   )}
                 </>
               )}
-              <Text as="p" variant="bodySm" fontWeight="semibold">
-                {t("Content to generate:")}
-              </Text>
-              <Checkbox label={t("Description")} checked={bulkDesc} onChange={setBulkDesc} />
-              <Checkbox label={t("Meta Title & Description")} checked={bulkMeta} onChange={setBulkMeta} />
-              <Checkbox label={t("FAQ Content")} checked={bulkFaq} onChange={setBulkFaq} />
+              {entitlements?.bulkJobs ? (
+                <>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                    {t("Content to generate:")}
+                  </Text>
+                  <Checkbox label={t("Description")} checked={bulkDesc} onChange={setBulkDesc} />
+                  <Checkbox label={t("Meta Title & Description")} checked={bulkMeta} onChange={setBulkMeta} />
+                  <Checkbox label={t("FAQ Content")} checked={bulkFaq} onChange={setBulkFaq} />
+                </>
+              ) : (
+                /* Plan-locked: the real options, blurred under a lock card that
+                   names the plan (Tapita 074) — never a disabled form. */
+                <LockedPreview
+                  title={t("Bulk optimize")}
+                  sentence={t("Bulk optimize is on {plan} and above.", { plan: cheapestPlanLabelWith("bulkJobs") ?? t("Starter") })}
+                  onSeePlans={() => navigate("/app/plans")}
+                >
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                      {t("Content to generate:")}
+                    </Text>
+                    <Checkbox label={t("Description")} checked={bulkDesc} onChange={setBulkDesc} />
+                    <Checkbox label={t("Meta Title & Description")} checked={bulkMeta} onChange={setBulkMeta} />
+                    <Checkbox label={t("FAQ Content")} checked={bulkFaq} onChange={setBulkFaq} />
+                  </BlockStack>
+                </LockedPreview>
+              )}
               {bulkError && (
                 <Banner tone="critical">
                   <p>{bulkError}</p>

@@ -28,6 +28,8 @@ vi.mock("../../app/utils/adminGraphql.server.js", () => ({ publishProductWithRet
 vi.mock("../../app/utils/upgradePrompts.server.js", () => ({ getUpsell: vi.fn() }));
 
 const { default: ProductsPage } = await import("../../app/routes/app.products.jsx");
+const { CreditSummary } = await import("../../app/components/ProductsParts.jsx");
+import { readFileSync } from "node:fs";
 
 const product = (i, over = {}) => ({
   id: `gid://shopify/Product/${i}`,
@@ -153,5 +155,56 @@ describe("the Products list", () => {
     expect(html).toContain("No products yet");
     expect(html).toContain("Add products to your store, and this is where you generate content for them.");
     expect(html).toContain("Go to Home");
+  });
+});
+
+describe("the Products list, redesign v2", () => {
+  it("the headline numbers are metric cards with icon tiles and a link to the list behind each", () => {
+    const html = render(payload());
+    expect((html.match(/class="nv-tile nv-tile--md/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect(html).toContain('aria-label="View published products"');
+    expect(html).toContain('aria-label="View products not yet optimized"');
+    expect(html).not.toContain("StatStrip");
+  });
+
+  it("a product we have not written for offers the brand AI button; a draft offers a plain Review", () => {
+    const html = render(payload({ contentMap: { "gid://shopify/Product/2": { description: { status: "draft", updatedAt: "2026-10-31T00:00:00Z" } } } }));
+    expect(html).toMatch(/<button type="button" class="nv-ai">[\s\S]*?(Enhance|Generate)/);
+    expect(html).toContain(">Review<");
+  });
+
+  it("the score ring sits on a tint of its band, and the photo shares the title's cell", () => {
+    const html = render(payload());
+    expect(html).toContain("var(--navaal-tint-");
+    expect(html).not.toMatch(/<th[^>]*>\s*<\/th>/); // no blank thumbnail column heading
+  });
+
+  it("a locked bulk run shows the real options blurred under a lock card that names the plan from billing", () => {
+    // The modal renders through a portal, which a static render never includes,
+    // so this reads the branch: locked means LockedPreview, with the plan from
+    // cheapestPlanLabelWith, never a disabled form.
+    const src = readFileSync("app/routes/app.products.jsx", "utf8");
+    const locked = src.slice(src.indexOf("entitlements?.bulkJobs ? ("), src.indexOf("</LockedPreview>"));
+    expect(locked).toContain("<LockedPreview");
+    expect(locked).toContain("cheapestPlanLabelWith(\"bulkJobs\")");
+    expect(locked).toContain("onSeePlans");
+  });
+
+  it("the bulk confirmation states what it costs before anything runs", () => {
+    const html = renderToStaticMarkup(
+      <AppProvider i18n={{}}>
+        <CreditSummary count={100} remaining={1414} monthly={1500} />
+      </AppProvider>,
+    );
+    expect(html).toContain("Uses up to 100 credits, one per product");
+    expect(html).toContain("1,414 of 1,500 credits left this month");
+    const src = readFileSync("app/routes/app.products.jsx", "utf8");
+    expect((src.match(/<CreditSummary /g) ?? []).length).toBe(2); // the selection run and the whole-catalog run
+  });
+
+  it("an empty catalog shows the drawing of the list, not a stock picture", () => {
+    const html = render(payload({ products: [], totalStoreProducts: 0, notOptimized: 0 }));
+    expect(html).toContain('class="nv-illu"');
+    expect(html).toContain("No products yet");
   });
 });

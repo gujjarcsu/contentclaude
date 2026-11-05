@@ -67,7 +67,7 @@ describe("the Audit screen", () => {
   it("states its scope on the title row, under both rings, on the issues card and in every count", () => {
     const html = render(<AuditBody data={data()} />);
     expect(html).toContain("Scored 2 of 10,000 products");
-    expect(html).toContain("across 2 products scanned");
+    expect(html).toContain("Based on 2 of 10,000 products");
     expect(html).toContain("1 of 2 scanned can be listed");
     expect(html).toContain("Counted over the 2 products scanned");
     expect(html).toContain("1 of 2 scanned");
@@ -77,8 +77,9 @@ describe("the Audit screen", () => {
   it("the tabs carry their counts; a free plan sees which plan runs the bulk fix, never a dark button that refuses", () => {
     const html = render(<AuditBody data={data()} />);
     expect(html).toContain("Critical (2)");
-    expect(html).toContain("Warning (1)"); // the missing page title
-    expect(html).toMatch(/Passed \(\d\)/);
+    // The three severity cards choose the list; their counts are the lists' lengths.
+    expect(html).toMatch(/aria-pressed="true"[\s\S]{0,1500}>2<[\s\S]{0,400}>Critical</);
+    expect(html).toMatch(/>1<[\s\S]{0,400}>Needs work</); // the missing page title
     expect(html).toContain("1 product has no description — the OpenAI product feed cannot list it.");
     expect(html).toContain("Fixing many products at once is on Starter and above.");
     expect(html).toContain("See plans");
@@ -145,7 +146,7 @@ describe("the Audit screen", () => {
     expect(html).toContain("9 of 25");
   });
 
-  it("an issue's count opens the scanned products it is about; a row shows the product's own photo", () => {
+  it("an issue's Details fills the products table with the products it is about; a row shows the product's own photo", () => {
     const withImages = data({
       products: [
         product(1, { imageUrl: "https://cdn.shopify.com/s/files/p1.jpg", findingKeys: ["openai·description·blocking"], checks: { hasDescription: false, hasMetaTitle: false, hasMetaDesc: true, hasAltText: true, noImages: false, missingAltText: false }, feedBlocking: 1, score: 12 }),
@@ -154,13 +155,65 @@ describe("the Audit screen", () => {
     });
     const html = render(<AuditBody data={withImages} />);
     expect(html).toContain("https://cdn.shopify.com/s/files/p1.jpg");
-    expect(html).toMatch(/aria-expanded="false"[^>]*>[\s\S]{0,400}1 of 2 scanned/);
+    expect(html).toMatch(/aria-controls="audit-breakdown"[^>]*>[\s\S]{0,300}>Details</);
+    expect(html).toContain('id="audit-breakdown"');
+    expect(html).toContain("1 of 2 scanned");
   });
 
   it("the route module exports only route members — the screen lives in a component", () => {
     const src = readFileSync("app/routes/app.seo-audit.jsx", "utf8");
     const exported = [...src.matchAll(/^export\s+(?:const|function|async function|\{[^}]*\})\s*(\w+)?/gm)].map((m) => m[0]);
     expect(exported.join("\n")).not.toMatch(/AuditBody/);
+  });
+
+  it("each finding carries the surface it is about: GEO for the feed-only brand, SEO for page titles, Both for descriptions", () => {
+    const html = render(<AuditBody data={data({ tally: { "openai·brand·blocking": 1, "openai·description·blocking": 1 }, missingMeta: 1 })} />);
+    expect(html).toContain("nv-chip--both"); // description: search and the feed both need it
+    expect(html).toContain("nv-chip--geo"); // brand: only the feed requires it
+    // Page titles are search-only; they sit in Needs work, which is not open by default.
+    const seoOnly = render(<AuditBody data={data({ tally: {}, missingMeta: 1 })} />);
+    expect(seoOnly).toContain("nv-chip--seo");
+  });
+
+  it("three score cards, each with its scope: search readiness, AI shopping eligibility, audit coverage", () => {
+    const html = render(<AuditBody data={data({ catalogueCount: 4 })} />);
+    expect(html).toContain("Search readiness");
+    expect(html).toContain("AI shopping eligibility");
+    expect(html).toContain("Audit coverage");
+    expect(html).toContain("2 of 4 products audited");
+    expect(html).toContain('aria-label="Audit coverage: 50%"');
+    expect(html).toContain("var(--navaal-tint-"); // the rings sit on a tint of their band
+  });
+
+  it("Shopify's capped count reads 10,000+, and coverage against a floor is not known", () => {
+    const html = render(<AuditBody data={data({ catalogueCount: 10000, catalogueExact: false, scannedCount: 500 })} />);
+    expect(html).toContain("Scored 500 of 10,000+ products");
+    expect(html).toContain("Based on 500 of 10,000+ products");
+    expect(html).toContain('aria-label="Audit coverage: not known"');
+    expect(html).not.toContain("Audit coverage: 5%");
+  });
+
+  it("an unknown catalog size is never 0: coverage is a dash and the card says why", () => {
+    const html = render(<AuditBody data={data({ catalogueCount: null })} />);
+    expect(html).toContain('aria-label="Audit coverage: not known"');
+    expect(html).toContain("We could not read your catalog size from Shopify just now");
+  });
+
+  it("nothing to fix shows the drawing and says the unscanned products may still have gaps", () => {
+    const clean = data({ products: [product(1), product(2)], tally: {}, missingMeta: 0, eligibleCount: 2 });
+    const html = render(<AuditBody data={clean} />);
+    expect(html).toContain("Nothing to fix in the products scanned");
+    expect(html).toContain("The products you have not scanned yet may still have gaps.");
+    expect(html).toContain('class="nv-illu"');
+    expect(html).not.toContain("All caught up");
+  });
+
+  it("a bulk fix this plan cannot run is a blurred preview under a lock card; a paying plan gets none", () => {
+    const free = render(<AuditBody data={data()} />);
+    expect(free).toContain("nv-locked");
+    expect(free).toContain("Fix these in one run");
+    const paid = render(<AuditBody data={data({ planName: "starter" })} />);
+    expect(paid).not.toContain("nv-locked");
   });
 
   it("an empty store gets the shared empty state and no rings", () => {

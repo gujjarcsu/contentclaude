@@ -1,32 +1,31 @@
 /**
  * AuditBody — the Audit screen, from the loader's shape.
  *
- * Redesign (Nov 2026). The audit is its own destination in every top app in
- * the category (Tapita's Site Audit, SEOWILL's checker, Avada's checklist):
- * the score with its scope, the issues grouped Critical / Warning / Passed,
- * the products each issue touches, and the place it is fixed. That is the
- * order here:
+ * Redesign v2 (Nov 2026), matched against Tapita's Site Audit (077 score
+ * cards, 074 summary, 075 affected pages), SEOWILL's checker (122/123/127)
+ * and Avada's checklist (045):
  *
- *   1. two cards — Search readiness (the store score and how its points fall
- *      per rubric dimension) and AI shopping eligibility (the share of
- *      scanned products the OpenAI feed can list, and the field that stops
- *      the rest);
- *   2. the issues, by severity, each row a finding, its count over the
- *      scanned products and its one action; the count opens the affected
- *      products, and "show all" filters the breakdown below to them;
- *   3. the product breakdown, worst first, with each product's own photo.
+ *   1. three score cards — Search readiness, AI shopping eligibility and audit
+ *      coverage — each a ring on a soft tint with its "Based on n of N" line;
+ *   2. the score broken down: the rubric's points per dimension beside the
+ *      fields the OpenAI product feed reads, each with a coloured status icon;
+ *   3. the issues: three severity cards (Critical · Needs work · Good) that
+ *      choose the list below; each row a SEO / GEO / Both chip, the finding,
+ *      Details · Fix, and how many scanned products it touches;
+ *   4. a bulk fix this plan cannot run, as a blurred preview under a lock card;
+ *   5. the products: worst first, real photos, filled by an issue's Details.
  *
  * It lives in a component, not the route module, because a route file may
  * export only route members (tests render this directly).
  *
- * Laws kept (00-CONSTITUTION L5): every count says what it counts over; a
- * locked bulk fix is a lock, one sentence naming the plan and a plain link;
- * a partial scan is named in the subtitle and raises at most one notice.
+ * Laws kept (00-CONSTITUTION L5): every number says what it counts over;
+ * Shopify's capped count reads "10,000+", never a floor presented as a total;
+ * an unknown catalog size is a dash, never 0; a partial scan is named in the
+ * subtitle and raises at most one notice; findings are visible on every plan.
  */
 import { useState } from "react";
 import { useNavigate, useNavigation, useRevalidator } from "react-router";
 import {
-  EmptyState,
   Page,
   Card,
   Text,
@@ -37,39 +36,59 @@ import {
   Badge,
   Box,
   Banner,
-  Tabs,
   IndexTable,
   Pagination,
   Divider,
   Icon,
-  Collapsible,
-  ProgressBar,
   Tag,
   SkeletonBodyText,
   useBreakpoints,
 } from "@shopify/polaris";
-import { AlertDiamondIcon, AlertTriangleIcon, CheckCircleIcon, LockIcon } from "@shopify/polaris-icons";
+import { LockIcon, ChartVerticalIcon, CartIcon, ProductIcon } from "@shopify/polaris-icons";
 import { useT } from "../i18n/react.jsx";
 import { T } from "../i18n/index.js";
 import { ScoreRing } from "./ScoreRing.jsx";
 import { ProductThumb } from "./ProductThumb.jsx";
+import { IconTile, StatusIcon, TagChip, SeverityCards, LockedPreview } from "./Kit.jsx";
+import { IlluAllGood, IlluScan } from "./Illustrations.jsx";
 import { blockerRows } from "../utils/fixRows.js";
 import { blockerLines, BLOCKER_GROUPS } from "../utils/firstRun.js";
-import { getEntitlements } from "../utils/billing-plans.js";
+import { getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
 
 const TABLE_PAGE_SIZE = 50;
-/** Affected products listed under an opened issue before "show all". */
-const AFFECTED_PREVIEW = 5;
 
-const SEVERITY = {
-  critical: { icon: AlertDiamondIcon, tone: "critical" },
-  warning: { icon: AlertTriangleIcon, tone: "caution" },
-  passed: { icon: CheckCircleIcon, tone: "success" },
+/**
+ * Which kind of visibility a finding is about (the tag chip, Tapita 074).
+ * GEO: only AI shopping feeds read it. SEO: only search results show it.
+ * Both: search engines and AI shopping feeds both need it.
+ */
+const SURFACE_OF = {
+  "openai·title·blocking": "both",
+  "openai·description·blocking": "both",
+  "openai·image_link·blocking": "both",
+  "openai·brand·blocking": "geo",
+  "openai·link·blocking": "both",
+  "openai·description·degrading": "geo",
+  "openai·image alt·degrading": "both",
+  "openai·variant options·degrading": "geo",
+  "openai·gtin·degrading": "geo",
+  "meta-title": "seo",
+  "meta-desc": "seo",
+  alt: "both",
+  stale: "both",
+  "passed-title": "both",
+  "passed-description": "both",
+  "passed-brand": "geo",
+  "passed-image": "both",
+  "passed-meta": "seo",
+  "passed-alt": "both",
+  "passed-fresh": "both",
 };
+const surfaceOf = (id) => SURFACE_OF[id] ?? "both";
 
 /**
  * The partial-audit sentence, one place. This page shows at most one notice,
- * and only when the scan did not cover the whole catalogue.
+ * and only when the scan did not cover the whole catalog.
  */
 function partialNotice({ scanFailed, truncatedReason, scannedCount }, t) {
   const n = t.number(scannedCount);
@@ -82,17 +101,14 @@ function partialNotice({ scanFailed, truncatedReason, scannedCount }, t) {
   if (truncatedReason === "error") {
     return t("Shopify stopped answering after {n} products — your remaining products were NOT analyzed. Scores and counts below cover only the scanned portion. Rescan to try the rest again.", { n });
   }
-  // The cap is not a failure: the subtitle already says "Scored 500 of
-  // 10,000 products · partial scan", and a banner on every load of every
-  // large store would be the one notice this page allows, spent on nothing.
+  // The cap is not a failure: the subtitle already says "partial scan".
   return null;
 }
 
 /**
- * The fields the OpenAI product feed reads, in the eligibility card. Required
- * fields block a listing; recommended ones only weaken it. Each count is the
- * daily walk's grader run over the scanned products (feedFindings in the
- * loader), so it is the same tally the Critical and Warning tabs count.
+ * The fields the OpenAI product feed reads. Required fields block a listing;
+ * recommended ones only weaken it. Each count is the daily walk's grader run
+ * over the scanned products, the same tally the issue rows count.
  */
 const FEED_FIELDS = [
   { key: "openai·title·blocking", label: T("Title"), required: true },
@@ -103,7 +119,7 @@ const FEED_FIELDS = [
   { key: "openai·image alt·degrading", label: T("Image alt text"), required: false },
 ];
 
-/** The checks every scanned product passes, for the Passed tab. */
+/** The checks every scanned product passes, for the Good list. */
 function passedRows({ tally, missingMeta, missingMetaDesc, missingAltText, staleCount, scannedCount }, t) {
   const all = t("{n} of {scanned} scanned", { n: t.number(scannedCount), scanned: t.number(scannedCount) });
   const checks = [
@@ -134,6 +150,82 @@ function affectedBy(rowId, products) {
   return products.filter(match);
 }
 
+/** A ring in the brand colour for a share that is not a quality score (coverage). */
+function ShareRing({ value, label }) {
+  const t = useT();
+  const px = 112, stroke = 9, r = (px - stroke) / 2, c = 2 * Math.PI * r;
+  const n = value === null || value === undefined || !Number.isFinite(Number(value)) ? null : Math.max(0, Math.min(100, Math.round(Number(value))));
+  const name = n === null ? t("{label}: not known", { label }) : t("{label}: {n}%", { label, n });
+  return (
+    <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`} role="img" aria-label={name}>
+      <circle cx={px / 2} cy={px / 2} r={r - stroke / 2} style={{ fill: "var(--navaal-brand-tint)" }} />
+      <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={stroke} style={{ stroke: "var(--p-color-border-secondary)" }} />
+      {n !== null && n > 0 && (
+        <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${(c * n) / 100} ${c}`} transform={`rotate(-90 ${px / 2} ${px / 2})`} style={{ stroke: "var(--navaal-brand)" }} />
+      )}
+      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize="26" fontWeight="600" style={{ fill: "var(--p-color-text)", fontFamily: "inherit" }}>
+        {n === null ? "–" : `${n}%`}
+      </text>
+    </svg>
+  );
+}
+
+/** One of the three score cards across the top (Tapita 077). */
+function ScoreCard({ icon, title, children, lines }) {
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <IconTile icon={icon} size="sm" />
+          <Text as="h2" variant="headingMd">
+            {title}
+          </Text>
+        </InlineStack>
+        <BlockStack gap="150" inlineAlign="center">
+          {children}
+          {lines.filter(Boolean).map((line, i) => (
+            <Text key={i} as="p" variant={i === 0 ? "bodyMd" : "bodySm"} fontWeight={i === 0 ? "medium" : undefined} tone={i === 0 ? undefined : "subdued"} alignment="center">
+              {line}
+            </Text>
+          ))}
+        </BlockStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
+/** A soft bar in the brand colour for one rubric dimension. */
+function DimensionBar({ points, max }) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((points / max) * 100))) : 0;
+  return (
+    <div style={{ height: 6, borderRadius: 3, background: "var(--p-color-bg-fill-tertiary)", overflow: "hidden" }} aria-hidden="true">
+      <div style={{ width: `${pct}%`, height: "100%", borderRadius: 3, background: "var(--navaal-brand)" }} />
+    </div>
+  );
+}
+
+/** A panel with a small drawing of the feature, a heading, one line and one action. */
+function EmptyPanel({ illustration, heading, children, action }) {
+  return (
+    <Box paddingBlock="600" paddingInline="400">
+      <BlockStack gap="300" inlineAlign="center">
+        <Box maxWidth="220px" width="100%">
+          {illustration}
+        </Box>
+        <Text as="h2" variant="headingMd" alignment="center">
+          {heading}
+        </Text>
+        <Box maxWidth="460px">
+          <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+            {children}
+          </Text>
+        </Box>
+        {action ?? null}
+      </BlockStack>
+    </Box>
+  );
+}
+
 export function AuditBody({ data, pending = false, scanFailed = false }) {
   const t = useT();
   const {
@@ -149,6 +241,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
     truncatedReason,
     scannedCount,
     catalogueCount,
+    catalogueExact = true,
     planName,
   } = data;
   const tally = rawTally ?? {};
@@ -157,11 +250,11 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
   const revalidator = useRevalidator();
   const isLoading = navigation.state === "loading" || revalidator.state === "loading";
   const entitlements = getEntitlements(planName);
-  const [chosenTab, setTab] = useState(null);
+  const [chosenSeverity, setSeverity] = useState(null);
   const [page, setPage] = useState(0);
-  const [openRow, setOpenRow] = useState(null);
-  const [filter, setFilter] = useState(null); // { id, label } — the issue the breakdown is narrowed to
+  const [filter, setFilter] = useState(null); // { id, label } — the issue the products table is narrowed to
   const { smDown } = useBreakpoints();
+  const bulkPlan = cheapestPlanLabelWith("bulkJobs");
 
   // ── The issue rows ────────────────────────────────────────────────────────
   // The feed findings, through the same mapping Home uses, so the two screens
@@ -203,39 +296,50 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
   const critical = feedRows.filter((r) => r.severity === "critical");
   const warning = [...feedRows.filter((r) => r.severity === "warning"), ...seoRows];
   const passed = passedRows({ tally, missingMeta, missingMetaDesc, missingAltText, staleCount, scannedCount }, t);
-  const tabs = [
-    { id: "critical", content: t("Critical ({n})", { n: critical.length }), rows: critical, empty: t("Nothing blocks a scanned product from being listed.") },
-    { id: "warning", content: t("Warning ({n})", { n: warning.length }), rows: warning, empty: t("Nothing is holding a scanned product back.") },
-    { id: "passed", content: t("Passed ({n})", { n: passed.length }), rows: passed, empty: t("No check is passed by every scanned product yet.") },
-  ];
-  // Open on the first tab with something in it: an empty "Critical (0)" as the
-  // first thing a merchant sees hides the two warnings beside it.
-  const tab = chosenTab ?? Math.max(0, tabs.findIndex((x) => x.id !== "passed" && x.rows.length > 0));
-  const activeTab = tabs[Math.min(tab, tabs.length - 1)];
+  const lists = {
+    critical: { heading: t("Critical ({n})", { n: critical.length }), rows: critical, empty: t("Nothing blocks a scanned product from being listed.") },
+    warning: { heading: t("Needs work ({n})", { n: warning.length }), rows: warning, empty: t("Nothing is holding a scanned product back.") },
+    good: { heading: t("Good ({n})", { n: passed.length }), rows: passed, empty: t("No check is passed by every scanned product yet.") },
+  };
+  // Open on the first list with something to fix: an empty "Critical (0)" as
+  // the first thing a merchant sees hides the warnings beside it.
+  const severity = chosenSeverity ?? (critical.length > 0 ? "critical" : warning.length > 0 ? "warning" : "good");
+  const active = lists[severity];
+  const lockedRows = feedRows.filter((r) => r.locked);
+  const nothingToFix = critical.length === 0 && warning.length === 0;
 
-  const eligiblePct = scannedCount > 0 ? Math.round((eligibleCount / scannedCount) * 100) : null;
-
-  // ── The title row ─────────────────────────────────────────────────────────
+  // ── The numbers, each with its scope ──────────────────────────────────────
   const scanned = t.number(scannedCount);
+  const catalogKnown = catalogueCount !== null && catalogueCount !== undefined;
+  const totalText = catalogKnown ? (catalogueExact === false ? `${t.number(catalogueCount)}+` : t.number(catalogueCount)) : null;
+  const scoredOfTotal = catalogKnown && catalogueCount >= scannedCount;
+  const basedOn = scoredOfTotal ? t("Based on {scanned} of {total} products", { scanned, total: totalText }) : t("Based on {n, plural, one {# product} other {# products}} scanned", { n: scannedCount });
+  const eligiblePct = scannedCount > 0 ? Math.round((eligibleCount / scannedCount) * 100) : null;
+  // Coverage is a share of an exact total only; against "10,000+" it is not known.
+  const coveragePct = scoredOfTotal && catalogueExact !== false && catalogueCount > 0 ? Math.round((scannedCount / catalogueCount) * 100) : null;
+  const issueCount = critical.length + warning.length;
+
   const subtitle = pending
     ? t("Scored the first {n, plural, one {# product} other {# products}} — the rest of your catalog is still being read", { n: products.length })
     : [
-        catalogueCount === null || catalogueCount < scannedCount
-          ? t("Scored {n, plural, one {# product} other {# products}}", { n: scannedCount })
-          : t("Scored {scanned} of {total} products", { scanned, total: t.number(catalogueCount) }),
+        scoredOfTotal ? t("Scored {scanned} of {total} products", { scanned, total: totalText }) : t("Scored {n, plural, one {# product} other {# products}}", { n: scannedCount }),
         truncatedReason || scanFailed ? t("partial scan") : null,
       ]
         .filter(Boolean)
         .join(" · ");
   const notice = partialNotice({ scanFailed, truncatedReason, scannedCount }, t);
 
-  // ── The product breakdown, worst first, optionally narrowed to one issue ─
+  // ── The products, worst first, optionally narrowed to one issue ───────────
   const tableProducts = filter ? affectedBy(filter.id, products) : products;
   const pageCount = Math.max(1, Math.ceil(tableProducts.length / TABLE_PAGE_SIZE));
   const pageIndex = Math.min(page, pageCount - 1);
   const pageRows = tableProducts.slice(pageIndex * TABLE_PAGE_SIZE, (pageIndex + 1) * TABLE_PAGE_SIZE);
-  const showAllInTable = (row) => {
-    setFilter({ id: row.id, label: row.title });
+  const showInTable = (row) => {
+    if (filter?.id === row.id) {
+      setFilter(null);
+    } else {
+      setFilter({ id: row.id, label: row.title });
+    }
     setPage(0);
     if (typeof document !== "undefined") document.getElementById("audit-breakdown")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -264,72 +368,72 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
         {/* Phase 2 item 2.10 — an empty store is not a store that scores 0. */}
         {products.length === 0 ? (
           <Card>
-            <EmptyState heading={t("Nothing to audit yet")} image="/empty-seo.svg">
-              <p>{t("Add products to your store, and this is where you generate content for them.")}</p>
-            </EmptyState>
+            <EmptyPanel illustration={<IlluScan />} heading={t("Nothing to audit yet")} action={<Button url="shopify://admin/products/new" target="_blank">{t("Add a product in Shopify")}</Button>}>
+              {t("Add products to your store, and this is where you generate content for them.")}
+            </EmptyPanel>
           </Card>
         ) : (
           <>
-            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              {/* Search readiness: the store score, and how its points fall. */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    {t("Search readiness")}
-                  </Text>
-                  <InlineGrid columns={{ xs: 1, sm: "auto 1fr" }} gap="500" alignItems="start">
-                    <ScoreRing
-                      value={totalScore}
-                      size="large"
-                      label={t("Search readiness")}
-                      caption={t("across {n, plural, one {# product} other {# products}} scanned", { n: scannedCount })}
-                    />
-                    <BlockStack gap="300">
-                      {dimensions.map((d) => (
-                        <BlockStack key={d.key} gap="100">
-                          <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
-                            <Text as="span" variant="bodySm">
-                              {t(d.label)}
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued" numeric>
-                              {t("{points} of {max}", { points: d.points, max: d.max })}
-                            </Text>
-                          </InlineStack>
-                          <ProgressBar progress={d.max > 0 ? Math.round((d.points / d.max) * 100) : 0} size="small" tone="primary" animated={false} />
-                        </BlockStack>
-                      ))}
-                    </BlockStack>
-                  </InlineGrid>
-                </BlockStack>
-              </Card>
-
-              {/* AI shopping eligibility: the share of scanned products the
-                  OpenAI product feed could list as they stand, and the field
-                  that stops each of the rest. */}
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    {t("AI shopping eligibility")}
-                  </Text>
-                  <InlineGrid columns={{ xs: 1, sm: "auto 1fr" }} gap="500" alignItems="start">
-                    <ScoreRing
-                      value={eligiblePct}
-                      size="large"
-                      label={t("AI shopping eligibility")}
-                      caption={t("{eligible} of {scanned} scanned can be listed", { eligible: t.number(eligibleCount), scanned })}
-                    />
-                    <BlockStack gap="300">
-                      <FeedFieldGroup heading={t("Required by the OpenAI feed")} fields={FEED_FIELDS.filter((f) => f.required)} tally={tally} />
-                      <FeedFieldGroup heading={t("Recommended")} fields={FEED_FIELDS.filter((f) => !f.required)} tally={tally} />
-                    </BlockStack>
-                  </InlineGrid>
-                </BlockStack>
-              </Card>
+            {/* 1. The three score cards (Tapita 077). */}
+            <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+              <ScoreCard
+                icon={ChartVerticalIcon}
+                title={t("Search readiness")}
+                lines={[nothingToFix ? t("Nothing to fix in the products scanned") : t("{n, plural, one {# issue} other {# issues}} to fix", { n: issueCount }), basedOn]}
+              >
+                <ScoreRing value={totalScore} size="large" tint label={t("Search readiness")} />
+              </ScoreCard>
+              <ScoreCard icon={CartIcon} title={t("AI shopping eligibility")} lines={[t("{eligible} of {scanned} scanned can be listed", { eligible: t.number(eligibleCount), scanned }), t("Checked against the OpenAI product feed")]}>
+                <ScoreRing value={eligiblePct} size="large" tint label={t("AI shopping eligibility")} />
+              </ScoreCard>
+              <ScoreCard
+                icon={ProductIcon}
+                title={t("Audit coverage")}
+                lines={[
+                  scoredOfTotal ? t("{scanned} of {total} products audited", { scanned, total: totalText }) : t("{n, plural, one {# product} other {# products}} audited", { n: scannedCount }),
+                  catalogKnown ? t("Active products on your Online Store") : t("We could not read your catalog size from Shopify just now"),
+                ]}
+              >
+                <ShareRing value={coveragePct} label={t("Audit coverage")} />
+              </ScoreCard>
             </InlineGrid>
 
-            {/* The issues, by severity. */}
+            {/* 2. The score, broken down: the rubric beside the feed fields. */}
             <Card>
-              <BlockStack gap="200">
+              <InlineGrid columns={{ xs: 1, md: 2 }} gap="600">
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="baseline" gap="200" wrap>
+                    <Text as="h2" variant="headingMd">
+                      {t("Search readiness, by part")}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {basedOn}
+                    </Text>
+                  </InlineStack>
+                  {dimensions.map((d) => (
+                    <BlockStack key={d.key} gap="100">
+                      <InlineStack align="space-between" blockAlign="center" gap="300" wrap={false}>
+                        <Text as="span" variant="bodySm">
+                          {t(d.label)}
+                        </Text>
+                        <Text as="span" variant="bodySm" tone="subdued" numeric>
+                          {t("{points} of {max}", { points: d.points, max: d.max })}
+                        </Text>
+                      </InlineStack>
+                      <DimensionBar points={d.points} max={d.max} />
+                    </BlockStack>
+                  ))}
+                </BlockStack>
+                <BlockStack gap="300">
+                  <FeedFieldGroup heading={t("Required by the OpenAI feed")} fields={FEED_FIELDS.filter((f) => f.required)} tally={tally} />
+                  <FeedFieldGroup heading={t("Recommended")} fields={FEED_FIELDS.filter((f) => !f.required)} tally={tally} />
+                </BlockStack>
+              </InlineGrid>
+            </Card>
+
+            {/* 3. The issues (Tapita 074, SEOWILL 122). */}
+            <Card>
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="baseline" gap="300" wrap>
                   <Text as="h2" variant="headingMd">
                     {t("Issues")}
@@ -338,42 +442,65 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                     {t("Counted over the {n} products scanned", { n: scanned })}
                   </Text>
                 </InlineStack>
-                <Tabs
-                  tabs={tabs.map(({ id, content }) => ({ id, content }))}
-                  selected={tab}
-                  onSelect={(i) => {
-                    setTab(i);
-                    setOpenRow(null);
-                  }}
-                />
-                {activeTab.rows.length === 0 ? (
-                  <Box paddingBlock="300">
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      {activeTab.empty}
-                    </Text>
-                  </Box>
-                ) : (
-                  <BlockStack gap="0">
-                    {activeTab.rows.map((row, i) => (
-                      <Box key={row.id}>
-                        {i > 0 ? <Divider /> : null}
-                        <IssueRow
-                          row={row}
-                          affected={row.severity === "passed" || pending ? [] : affectedBy(row.id, products)}
-                          open={openRow === row.id}
-                          onToggle={() => setOpenRow(openRow === row.id ? null : row.id)}
-                          onShowAll={() => showAllInTable(row)}
-                          navigate={navigate}
-                        />
-                      </Box>
-                    ))}
-                  </BlockStack>
-                )}
+                <SeverityCards critical={critical.length} warning={warning.length} good={passed.length} selected={severity} onSelect={setSeverity} />
+                {nothingToFix ? (
+                  <EmptyPanel illustration={<IlluAllGood />} heading={t("Nothing to fix in the products scanned")}>
+                    {t("Every scanned product has what search engines and AI shopping feeds need. The products you have not scanned yet may still have gaps.")}
+                  </EmptyPanel>
+                ) : null}
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">
+                    {active.heading}
+                  </Text>
+                  {active.rows.length === 0 ? (
+                    <Box paddingBlock="300">
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        {active.empty}
+                      </Text>
+                    </Box>
+                  ) : (
+                    <BlockStack gap="0">
+                      {active.rows.map((row, i) => (
+                        <Box key={row.id}>
+                          {i > 0 ? <Divider /> : null}
+                          <IssueRow
+                            row={row}
+                            bulkPlan={bulkPlan}
+                            canShow={row.severity !== "passed" && !pending && affectedBy(row.id, products).length > 0}
+                            showing={filter?.id === row.id}
+                            onDetails={() => showInTable(row)}
+                          />
+                        </Box>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
               </BlockStack>
             </Card>
 
-            {/* The product breakdown: the expensive half of this page, so the
-                half that waits. A skeleton the size of the table it replaces. */}
+            {/* 4. A bulk fix this plan cannot run: the real thing, blurred. */}
+            {lockedRows.length > 0 && (
+              <Card>
+                <LockedPreview title={t("Fix these in one run")} sentence={t("Fixing many products at once is on {plan} and above.", { plan: bulkPlan })} onSeePlans={() => navigate("/app/plans")}>
+                  <BlockStack gap="300">
+                    {lockedRows.map((row) => (
+                      <InlineStack key={row.id} align="space-between" blockAlign="center" gap="300" wrap={false}>
+                        <InlineStack gap="200" blockAlign="center" wrap={false}>
+                          <StatusIcon status={row.severity} />
+                          <Text as="span" variant="bodyMd">
+                            {row.title}
+                          </Text>
+                        </InlineStack>
+                        <Button size="slim">{t("Fix all")}</Button>
+                      </InlineStack>
+                    ))}
+                  </BlockStack>
+                </LockedPreview>
+              </Card>
+            )}
+
+            {/* 5. The products: the expensive half of the page, so the half that
+                waits. A skeleton the size of the table it replaces. */}
             {pending ? (
               <Card>
                 <BlockStack gap="300">
@@ -390,7 +517,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="baseline" gap="300" wrap>
                         <Text as="h2" variant="headingMd">
-                          {t("Product breakdown")}
+                          {filter ? t("Products with this issue") : t("Product breakdown")}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
                           {t("{n, plural, one {# product} other {# products}}, lowest score first", { n: tableProducts.length })}
@@ -436,7 +563,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                                     {p.title}
                                   </Text>
                                 </Box>
-                                <ScoreRing value={p.score} size="xs" label={t("Score")} />
+                                <ScoreRing value={p.score} size="xs" tint label={t("Score")} />
                               </InlineStack>
                               <MissingBadges product={p} />
                             </BlockStack>
@@ -454,7 +581,7 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
                             </InlineStack>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <ScoreRing value={p.score} size="xs" label={t("Score")} />
+                            <ScoreRing value={p.score} size="xs" tint label={t("Score")} />
                           </IndexTable.Cell>
                           <IndexTable.Cell>
                             <MissingBadges product={p} />
@@ -493,11 +620,11 @@ export function AuditBody({ data, pending = false, scanFailed = false }) {
   );
 }
 
-/** One group of feed fields: the field, and how many scanned products lack it. */
+/** One group of feed fields: a coloured status, the field, and how many scanned products lack it. */
 function FeedFieldGroup({ heading, fields, tally }) {
   const t = useT();
   return (
-    <BlockStack gap="100">
+    <BlockStack gap="200">
       <Text as="h3" variant="headingSm">
         {heading}
       </Text>
@@ -505,9 +632,14 @@ function FeedFieldGroup({ heading, fields, tally }) {
         const n = tally[f.key] ?? 0;
         return (
           <InlineStack key={f.key} align="space-between" blockAlign="center" gap="300" wrap={false}>
-            <Text as="span" variant="bodySm">
-              {t(f.label)}
-            </Text>
+            <InlineStack gap="200" blockAlign="center" wrap={false}>
+              <span style={{ display: "inline-flex", flexShrink: 0 }}>
+                <StatusIcon status={n === 0 ? "good" : f.required ? "critical" : "warning"} />
+              </span>
+              <Text as="span" variant="bodySm">
+                {t(f.label)}
+              </Text>
+            </InlineStack>
             {/* The count never wraps: "0 / missing" on two lines reads as two values. */}
             <span style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
               <Text as="span" variant="bodySm" numeric tone={n === 0 ? "subdued" : f.required ? "critical" : "caution"}>
@@ -522,97 +654,63 @@ function FeedFieldGroup({ heading, fields, tally }) {
 }
 
 /**
- * One finding: severity, the sentence, its count, its one action. The count
- * opens the scanned products the finding is about, each with its photo and
- * its Edit; past five, "Show all" narrows the breakdown table to them.
+ * One finding (Tapita 074, SEOWILL 122): its status, a SEO / GEO / Both chip,
+ * the sentence, Details · Fix, and how many scanned products it touches.
+ * Details fills the products table underneath with exactly those products.
  */
-function IssueRow({ row, affected, open, onToggle, onShowAll, navigate }) {
+function IssueRow({ row, bulkPlan, canShow, showing, onDetails }) {
   const t = useT();
-  const sev = SEVERITY[row.severity] ?? SEVERITY.warning;
-  const severityLabel = { critical: t("Critical"), warning: t("Warning"), passed: t("Passed") }[row.severity] ?? t("Warning");
-  const collapsibleId = `audit-issue-${row.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
-  const canOpen = affected.length > 0;
+  const status = row.severity === "passed" ? "good" : row.severity;
   return (
     <Box paddingBlock="300">
       <InlineStack gap="300" blockAlign="start" wrap={false}>
         <Box paddingBlockStart="050">
-          <Icon source={sev.icon} tone={sev.tone} accessibilityLabel={severityLabel} />
+          <StatusIcon status={status} />
         </Box>
         <Box width="100%">
-          <BlockStack gap="200">
-            <InlineGrid columns={{ xs: "1fr", sm: "1fr auto" }} gap="300" alignItems="center">
-              <BlockStack gap="050">
+          <InlineGrid columns={{ xs: "1fr", sm: "1fr auto" }} gap="300" alignItems="start">
+            <BlockStack gap="150">
+              <InlineStack gap="200" blockAlign="start" wrap={false}>
+                <Box paddingBlockStart="025">
+                  <TagChip kind={surfaceOf(row.id)} />
+                </Box>
                 <Text as="p" variant="bodyMd" fontWeight="medium">
                   {row.title}
                 </Text>
-                {row.detail ? (
-                  <InlineStack gap="100" blockAlign="center" wrap={false}>
-                    {row.locked ? (
-                      <span>
-                        <Icon source={LockIcon} tone="subdued" accessibilityLabel={t("Locked")} />
-                      </span>
-                    ) : null}
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {row.detail}
-                    </Text>
-                  </InlineStack>
-                ) : null}
-              </BlockStack>
-              <InlineStack gap="300" blockAlign="center" wrap={false}>
-                {row.count ? (
-                  canOpen ? (
-                    <Button variant="monochromePlain" disclosure={open ? "up" : "down"} onClick={onToggle} ariaExpanded={open} ariaControls={collapsibleId}>
-                      {row.count}
-                    </Button>
-                  ) : (
-                    <Text as="span" variant="bodyMd" tone="subdued" numeric>
-                      {row.count}
-                    </Text>
-                  )
-                ) : null}
-                {row.action ? (
-                  <Button
-                    size="slim"
-                    variant={row.locked ? "plain" : undefined}
-                    url={row.action.url}
-                    onClick={row.action.onAction}
-                    external={row.action.external}
-                    target={row.action.external ? "_blank" : undefined}
-                  >
-                    {row.action.content}
-                  </Button>
-                ) : null}
               </InlineStack>
-            </InlineGrid>
-            {canOpen ? (
-              <Collapsible id={collapsibleId} open={open} transition={{ duration: "150ms", timingFunction: "ease-in-out" }}>
-                <BlockStack gap="0">
-                  {affected.slice(0, AFFECTED_PREVIEW).map((p) => (
-                    <Box key={p.id} paddingBlock="150">
-                      <InlineStack gap="300" blockAlign="center" wrap={false}>
-                        <ProductThumb url={p.imageUrl} size="extraSmall" />
-                        <Box width="100%">
-                          <Text as="span" variant="bodySm" truncate>
-                            {p.title}
-                          </Text>
-                        </Box>
-                        <Button variant="plain" onClick={() => navigate(`/app/products/${p.numericId}`)}>
-                          {t("Edit")}
-                        </Button>
-                      </InlineStack>
-                    </Box>
-                  ))}
-                  {affected.length > AFFECTED_PREVIEW ? (
-                    <Box paddingBlockStart="150">
-                      <Button variant="plain" onClick={onShowAll}>
-                        {t("Show all {n} in the breakdown", { n: t.number(affected.length) })}
-                      </Button>
-                    </Box>
+              {row.locked ? (
+                <InlineStack gap="100" blockAlign="center" wrap={false}>
+                  <span style={{ display: "inline-flex" }}>
+                    <Icon source={LockIcon} tone="subdued" accessibilityLabel={t("Locked")} />
+                  </span>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("Fixing many at once: {plan} and above", { plan: bulkPlan })}
+                  </Text>
+                </InlineStack>
+              ) : null}
+              {canShow || row.action ? (
+                <InlineStack gap="400" blockAlign="center">
+                  {canShow ? (
+                    <Button variant="plain" onClick={onDetails} ariaControls="audit-breakdown" pressed={showing}>
+                      {showing ? t("Hide details") : t("Details")}
+                    </Button>
                   ) : null}
-                </BlockStack>
-              </Collapsible>
+                  {row.action ? (
+                    <Button variant="plain" url={row.action.url} onClick={row.action.onAction} external={row.action.external} target={row.action.external ? "_blank" : undefined}>
+                      {row.action.content}
+                    </Button>
+                  ) : null}
+                </InlineStack>
+              ) : null}
+            </BlockStack>
+            {row.count ? (
+              <span style={{ whiteSpace: "nowrap" }}>
+                <Text as="span" variant="bodyMd" tone="subdued" numeric>
+                  {row.count}
+                </Text>
+              </span>
             ) : null}
-          </BlockStack>
+          </InlineGrid>
         </Box>
       </InlineStack>
     </Box>
