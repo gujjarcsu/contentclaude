@@ -143,7 +143,13 @@ describe("A5 — buttons do what they say", () => {
 describe("A6 — the score, labelled and not scary", () => {
   it("the headline is labelled GEO, framed as a start, and Traditional SEO is said to be excluded", () => {
     const s = src("app/components/StartState.jsx");
-    expect(s).toMatch(/Your AI-search \(GEO\) score/);
+    // Redesign (Nov 2026): the headline is the ring, named "Search readiness"
+    // exactly as Home's ring names the same number (two screens, one name);
+    // the GEO label moved to the figure beside it, which still says it is
+    // the score shown and that Traditional SEO is excluded.
+    expect(s).toMatch(/<ScoreRing value=\{scan\.storeScore\} size="large" label="Search readiness"/);
+    // Redesign v2: Home's ring is the xl size on its tint (Tapita 083); same name, same number.
+    expect(src("app/routes/app._index.jsx")).toMatch(/<ScoreRing value=\{available \? score\.current : null\} size="xl" label="Search readiness"/);
     expect(s).toMatch(/Most stores start here/);
     expect(s).toMatch(/AI search \(GEO\) — the score above/);
     expect(s).toMatch(/Traditional SEO — for comparison, not part of the score/);

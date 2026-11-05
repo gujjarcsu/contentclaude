@@ -26,6 +26,7 @@
  * "on this page" was the only qualifier the tabs carried, and it explains
  * PAGINATION. This store's 15 products fit on one page, so it explained
  * nothing. The screen now names the difference and the row carries a badge.
+ * Redesign (Nov 2026): the naming is on every such row, not in a sentence.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -85,20 +86,25 @@ describe("the two populations now reconcile on screen", () => {
     expect(listed - offStorefront).toBe(header.published + header.drafts);
   });
 
-  it("the tab counts carry an off-storefront count beside them", () => {
+  // Redesign (Nov 2026): the reconciliation moved from a sentence above the
+  // table onto the rows themselves. Every row the strip's totals exclude says
+  // so in its own status cell, keyed on the same fact offStorefrontRows counts,
+  // so the gap above is visible row by row rather than explained in prose. The
+  // rendered proof is tests/components/productsScreen.test.jsx.
+  it("every off-storefront row is marked, keyed on the SAME fact the count uses", () => {
     const src = strip(read("app/routes/app.products.jsx"));
-    expect(src).toMatch(/offStorefront: offStorefrontRows\(products\)/);
+    expect(src).toMatch(/function channelBadge\(productId\) \{\s*if \(onStorefrontById\[productId\] !== false\) return null;/);
+    expect(src).toMatch(/<Badge>\{t\("Not on your Online Store"\)\}<\/Badge>/);
+    // both layouts, desktop and phone, carry it
+    expect(src.match(/\{channelBadge\(id\)\}/g) ?? []).toHaveLength(2);
   });
 
-  it("the sentence appears only when the page actually holds such a row", () => {
+  it("the marker explains the SCOPE, never pagination", () => {
+    // "on this page" was the false explanation that let this sit unreconciled.
     const src = strip(read("app/routes/app.products.jsx"));
-    expect(src).toMatch(/pageCounts\.offStorefront > 0 &&/);
-    expect(src).toMatch(/not on your Online Store/);
-    // it explains the SCOPE, never pagination — "on this page" was the false
-    // explanation that let this sit unreconciled.
-    const line = src.match(/\{t\("\{n, plural[^"]*not on your Online Store[^"]*"/);
-    expect(line, "the reconciliation sentence").toBeTruthy();
-    expect(line[0]).not.toMatch(/on this page/);
+    const marker = src.match(/function channelBadge[\s\S]*?\n {2}\}/);
+    expect(marker, "the channel marker").toBeTruthy();
+    expect(marker[0]).not.toMatch(/on this page/);
   });
 });
 

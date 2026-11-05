@@ -11,12 +11,14 @@
  * rounds, sums or invents (L3, L5). A value of null renders as a dash.
  */
 import { isValidElement } from "react";
-import { Card, InlineGrid, Box, BlockStack, Text, Link } from "@shopify/polaris";
+import { Card, InlineGrid, Box, BlockStack, InlineStack, Text, Link } from "@shopify/polaris";
+import { IconTile } from "./Kit.jsx";
 
 /**
  * @param {object} props
  * @param {Array<{id: string, label: string, value: string|number|null|import("react").ReactElement, hint?: string, url?: string, onClick?: () => void,
- *   extra?: import("react").ReactNode}>} props.items
+ *   extra?: import("react").ReactNode, icon?: any, tone?: string}>} props.items
+ *   icon/tone — optional: a tinted icon tile before the label (redesign v2, the category's metric cards).
  *   value may be an element when the number needs an id (a progress bar in `extra` labelled by it).
  */
 export function StatStrip({ items }) {
@@ -35,9 +37,18 @@ export function StatStrip({ items }) {
             return (
               <Box key={cell.id ?? i} padding="400" background="bg-surface" minHeight="100%">
                 <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {cell.label}
-                  </Text>
+                  {cell.icon ? (
+                    <InlineStack gap="200" blockAlign="center" wrap={false}>
+                      <IconTile icon={cell.icon} tone={cell.tone ?? "brand"} size="sm" />
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {cell.label}
+                      </Text>
+                    </InlineStack>
+                  ) : (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {cell.label}
+                    </Text>
+                  )}
                   <Text as="p" variant="headingLg" fontWeight="semibold">
                     {cell.url || cell.onClick ? (
                       <Link url={cell.url} onClick={cell.onClick} removeUnderline monochrome>

@@ -41,7 +41,7 @@ import { T } from "../i18n/index.js";
 
 /** D1 — the sentences a fix can fail with, stored on the result and translated back on the screen (app/i18n/stored.js). */
 export const FIX_ERRORS = Object.freeze({
-  monitoredOnly: T("This store is monitored only. Changes to its catalogue are not made from here."),
+  monitoredOnly: T("This store is monitored only. Changes to its catalog are not made from here."),
   noBrand: T("No brand name given."),
   noOptionName: T("No option name given."),
   noVariant: T("No variant to write to."),

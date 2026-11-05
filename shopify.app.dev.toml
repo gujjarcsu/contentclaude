@@ -1,0 +1,53 @@
+# Navaal dev — DEVELOPMENT-ONLY app (client id below), never listed, never deployed.
+# Used with `shopify app dev --config shopify.app.dev.toml --store contentpilot-dev2`
+# so a branch can run on the dev store through a temporary tunnel while the
+# production app (shopify.app.toml, app.navaal.ai) is never touched.
+# No [app_proxy]: the production app owns /apps/navaal on every store it is on.
+
+client_id = "fad581ebd9db7017a192e3237e59093c"
+name = "Navaal dev"
+application_url = "https://example.com"
+embedded = true
+# No extensions for the dev app: the theme app extension's storefront preview
+# needs the store's password, and these runs check the admin screens only.
+extension_directories = ["dev-no-extensions/*"]
+
+[access_scopes]
+scopes = "write_products,write_content"
+
+[auth]
+redirect_urls = ["https://example.com/auth/callback"]
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = ["app/scopes_update"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/subscriptions_update"
+  topics = ["app_subscriptions/update"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/create"
+  topics = ["products/create"]
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request"]
+  uri = "/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/redact"]
+  uri = "/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["shop/redact"]
+  uri = "/webhooks/shop/redact"
+
+[build]
+automatically_update_urls_on_dev = true

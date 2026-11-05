@@ -188,7 +188,9 @@ describe("A4 — the first screen is a result, never a task", () => {
     const h = src("app/routes/app._index.jsx");
     expect(h).toMatch(/const beforeFirstPublish = !!shopRow && !shopRow\.firstPublishAt;/);
     expect(h).toMatch(/<ScoreSummary score=\{storeScore\}/);
-    expect(h).toMatch(/<IssueList items=\{fixRows\}/);
+    // Redesign v2: the findings sit in tabs with counts (SEOWILL 122), each tab an IssueList.
+    expect(h).toMatch(/<FixFirst groups=\{fixGroups\}/);
+    expect(h).toMatch(/<IssueList items=\{active\.rows\}/);
     expect(h).toMatch(/id: "theme",[\s\S]{0,400}done: embedConfirmed,[\s\S]{0,100}extra: <ThemeStepActions shopDomain=\{shopDomain\} \/>/);
     expect(h.indexOf('id: "review"')).toBeLessThan(h.indexOf('id: "theme"'));
     const e = src("app/components/EmbedSetupCard.jsx");

@@ -19,11 +19,16 @@ import {
   ProgressBar,
   Checkbox,
   ButtonGroup,
-  Icon,
   Collapsible,
+  Divider,
+  Link,
+  InlineGrid,
 } from "@shopify/polaris";
 import { useState, useEffect, useRef } from "react";
-import { BlogIcon, FileIcon, CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import { ChevronDownIcon, ChevronUpIcon, BlogIcon, GlobeIcon, EditIcon } from "@shopify/polaris-icons";
+import { AiButton, IconTile, LockedPreview } from "../components/Kit.jsx";
+import { IlluBlog } from "../components/Illustrations.jsx";
+import { BlogTabs, BlogEmpty } from "../components/BlogParts.jsx";
 import { authenticate } from "../shopify.server.js";
 import { getLiveShopName } from "../utils/shopName.server.js";
 import { authorName as resolveAuthorName } from "../utils/shopName.js";
@@ -47,7 +52,7 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const resumePostId = url.searchParams.get("postId");
 
-  const [brandVoice, plan, usageCount, recentPosts, blogEnt] = await Promise.all([
+  const [brandVoice, plan, usageCount, recentPosts, blogEnt, postCount] = await Promise.all([
     prisma.brandVoice.findUnique({ where: { shop } }),
     getOrCreatePlan(shop),
     getMonthlyUsageCount(shop),
@@ -61,6 +66,9 @@ export const loader = async ({ request }) => {
     // in the code. The loader carries the answer so the screen can say so
     // BEFORE a merchant types a topic, rather than after they press the button.
     checkEntitlement(shop, "blogPosts"),
+    // Redesign v2 — the Posts tab carries every saved post, not the five
+    // recent ones (the old "Posts (5)" read 5 on a store with twelve).
+    prisma.blogPost.count({ where: { shop } }),
   ]);
 
   // If ?postId= is provided, load that draft so the component can pre-fill the editor
@@ -91,6 +99,7 @@ export const loader = async ({ request }) => {
     // A loader ships data, never a sentence: the screen builds the words.
     blogEntitled: !!blogEnt.allowed,
     blogCredits: CREDIT_WEIGHTS.blog,
+    postCount,
     recentPosts: recentPosts.map((p) => ({
       ...p,
       createdAt: p.createdAt.toISOString(),
@@ -339,17 +348,9 @@ export const action = async ({ request }) => {
   return Response.json({ error: t("Unknown action.") }, { status: 400 });
 };
 
-const LOADING_MESSAGES = [
-  "Researching the topic...",
-  "Structuring the outline...",
-  "Writing your blog post...",
-  "Optimizing for SEO...",
-  "Adding your brand voice...",
-];
-
 export default function BlogPage() {
   const t = useT();
-  const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell, blogEntitled, blogCredits } =
+  const { brandVoice, usageRemaining, usageCount, monthlyCredits, planName, recentPosts, resumePost, upsell, blogEntitled, blogCredits, postCount } =
     useLoaderData();
   // Phase 15 — the plan and the price this screen names are DERIVED from the
   // same table the plans page reads, never typed here. A marker naming a plan
@@ -373,9 +374,9 @@ export default function BlogPage() {
   const [instructions, setInstructions] = useState("");
   const [suggestVisuals, setSuggestVisuals] = useState(false);
   const [addFaq, setAddFaq] = useState(false);
-  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [blogView, setBlogView] = useState("preview"); // "preview" | "html"
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   // Combine the free-text instructions with the optional toggles into one field.
   const combinedInstructions = [
@@ -390,30 +391,22 @@ export default function BlogPage() {
     .filter(Boolean)
     .join("\n");
 
-  useEffect(() => {
-    if (!isGenerating) {
-      setLoadingMsgIdx(0);
-      return;
-    }
-    const t = setInterval(() => setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length), 4000);
-    return () => clearInterval(t);
-  }, [isGenerating]);
-
   const prevActionData = useRef(null);
   useEffect(() => {
     if (actionData && actionData !== prevActionData.current) {
       prevActionData.current = actionData;
       if (typeof window !== "undefined" && window.shopify?.toast) {
         if (actionData.published) {
-          window.shopify.toast.show("Blog post published to Shopify!", { duration: 4000 });
+          window.shopify.toast.show(t("Blog post published"), { duration: 4000 });
         } else if (actionData.error && !actionData.limitReached) {
           window.shopify.toast.show(actionData.error, { duration: 5000, isError: true });
         }
       }
     }
-  }, [actionData]);
+  }, [actionData, t]);
 
   const generated = actionData?.generated;
+  const postOpen = !!(generated || resumePost);
   const [editedTitle, setEditedTitle] = useState(generated?.title || resumePost?.title || "");
   const [editedContent, setEditedContent] = useState(generated?.content || resumePost?.content || "");
 
@@ -439,357 +432,222 @@ export default function BlogPage() {
     { label: t("Long (~2000 words)"), value: "long" },
   ];
 
+  const lockSentence = t("Blog posts are on {plan} and above: {price} a month with {planCredits} credits, {credits} credits a post.", {
+    plan: blogPlanLabel,
+    price: formatPrice(blogPlan?.amount ?? 0),
+    planCredits: blogPlan?.monthlyCredits ?? 0,
+    credits: blogCredits,
+  });
+
+  const wordCount = editedContent.replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length;
+
+  /* The composer. The header panel of the category's blog writers (SEOWILL
+     128/132): the topic and the brand-coloured Generate on one line, the price
+     beside the button that spends it, the rest behind "More options". */
+  const composer = (
+    <Form method="post">
+      <input type="hidden" name="actionType" value="generate" />
+      <input type="hidden" name="instructions" value={combinedInstructions} />
+      <input type="hidden" name="keywords" value={keywords} />
+      <input type="hidden" name="length" value={length} />
+      <BlockStack gap="300">
+        <InlineGrid columns={{ xs: 1, md: "1fr auto" }} gap="300" alignItems="end">
+          <TextField
+            name="topic"
+            label={t("Topic")}
+            value={topic}
+            onChange={setTopic}
+            placeholder={t("e.g., a how-to guide, buying tips, or a seasonal topic for your store")}
+            autoComplete="off"
+          />
+          {/* Phase 15 — the price, on the button that spends it. A8 says money
+              is exact; a merchant should never discover the cost from the
+              balance afterwards. */}
+          <AiButton type="submit" solid size="large" loading={isGenerating} disabled={isGenerating}>
+            {isGenerating ? t("Generating...") : t("Generate post")}
+          </AiButton>
+        </InlineGrid>
+        <InlineStack align="space-between" blockAlign="center" gap="200" wrap>
+          <Button
+            variant="plain"
+            size="slim"
+            icon={optionsOpen ? ChevronUpIcon : ChevronDownIcon}
+            onClick={() => setOptionsOpen((v) => !v)}
+            ariaExpanded={optionsOpen}
+            ariaControls="blog-options"
+          >
+            {t("More options")}
+          </Button>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {t("Costs {credits} credits", { credits: blogCredits })}
+          </Text>
+        </InlineStack>
+        <Collapsible open={optionsOpen} id="blog-options">
+          <BlockStack gap="300">
+            <InlineGrid columns={{ xs: 1, md: 2 }} gap="300">
+              <TextField
+                label={t("Keywords")}
+                value={keywords}
+                onChange={setKeywords}
+                placeholder={t("e.g., your main product keywords, comma-separated")}
+                helpText={t("Keywords to weave naturally into the post")}
+                autoComplete="off"
+              />
+              <Select label={t("Length")} options={lengthOptions} value={length} onChange={setLength} />
+            </InlineGrid>
+            <TextField
+              label={t("Special instructions (optional)")}
+              value={instructions}
+              onChange={setInstructions}
+              multiline={3}
+              maxLength={1000}
+              placeholder={t("e.g., mention our spring sale, compare our top 3 products, keep it beginner-friendly…")}
+              helpText={t("Anything you want included — promotions, angle, examples, structure.")}
+              autoComplete="off"
+            />
+            <InlineStack gap="400" wrap>
+              <Checkbox label={t("Suggest where to add images & visuals")} checked={suggestVisuals} onChange={setSuggestVisuals} />
+              <Checkbox label={t("Add an FAQ section")} checked={addFaq} onChange={setAddFaq} />
+            </InlineStack>
+          </BlockStack>
+        </Collapsible>
+        {actionData?.limitReached && <QuotaReachedCard upsell={upsell} surface="blog" />}
+      </BlockStack>
+    </Form>
+  );
+
+  /* A still picture of the composer for the locked state: the real fields,
+     inert, under the lock card (Tapita 074, Smart SEO 102). */
+  const composerPreview = (
+    <BlockStack gap="300">
+      <InlineGrid columns={{ xs: 1, md: "1fr auto" }} gap="300" alignItems="end">
+        <TextField label={t("Topic")} value="" onChange={() => {}} disabled autoComplete="off" placeholder={t("e.g., a how-to guide, buying tips, or a seasonal topic for your store")} />
+        <AiButton solid size="large" disabled>
+          {t("Generate post")}
+        </AiButton>
+      </InlineGrid>
+      <Text as="p" variant="bodySm" tone="subdued">
+        {t("Costs {credits} credits", { credits: blogCredits })}
+      </Text>
+    </BlockStack>
+  );
+
   return loadingThisRoute ? (
     <AppSkeleton title={t("Blog")} sections={2} layout="twoThird" />
   ) : (
-    <Page
-      title={t("Blog")}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
-      secondaryActions={[
-        {
-          content: t("Posts ({length})", { length: t.number(recentPosts.length) }),
-          onAction: () => navigate("/app/blog/posts"),
-        },
-      ]}
-    >
+    <Page title={t("Blog")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
       <BlockStack gap="500">
-        {actionData?.error && (
+        <BlogTabs selected="write" postCount={postCount} navigate={navigate} />
+
+        {/* One notice at most: the failure, then the publish, then the save. */}
+        {actionData?.error ? (
           <Banner tone="critical">
             <p>{actionData.error}</p>
           </Banner>
-        )}
-        {actionData?.published && (
+        ) : actionData?.published ? (
           <Banner tone="success" title={t("Blog post published")}>
             <p>{t("Your blog post has been published to your Shopify store.")}</p>
           </Banner>
-        )}
-        {actionData?.success && !actionData?.published && (
+        ) : actionData?.success ? (
           <Banner tone="success" title={t("Draft saved")}>
-            <p>
-             {t("Saved as a draft. Review and edit below, then publish when ready.")}
-              {actionData.remaining !== undefined && t(" · {remaining} credits left this month.", { remaining: actionData.remaining })}
-            </p>
+            {actionData.remaining !== undefined ? <p>{t("{remaining} credits left this month.", { remaining: actionData.remaining })}</p> : null}
           </Banner>
-        )}
+        ) : null}
 
-        <Layout>
-          {/* Left panel — controls */}
-          <Layout.Section variant="oneThird">
+        {/* The header panel: what this screen is for, and the one control that does it. */}
+        <Card>
+          <InlineGrid columns={{ xs: 1, md: "1fr auto" }} gap="600" alignItems="center">
             <BlockStack gap="400">
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                     {t("Generate a Blog Post")}
-                    </Text>
-                    <Icon source={BlogIcon} tone="info" />
-                  </InlineStack>
-
-                  {!blogEntitled ? (
-                    /* Phase 15 — the gate, stated BEFORE the topic is typed.
-                       The old screen took a topic, generated, and charged 3
-                       credits it never named, on a plan the table does not sell
-                       blog on. This is not a dead end: it says the price, the
-                       plan and what happens to the posts already written. */
-                    <BlockStack gap="300">
-                      <Text as="h3" variant="headingSm">
-                        {t("Blog posts are on {plan} and above", { plan: blogPlanLabel })}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("A post costs {credits} credits, several times what a product description costs — which is why it is not on the free plan. {plan} is {price} a month with {planCredits} credits.", {
-                          credits: blogCredits,
-                          plan: blogPlanLabel,
-                          price: formatPrice(blogPlan?.amount ?? 0),
-                          planCredits: blogPlan?.monthlyCredits ?? 0,
-                        })}
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {t("Posts you have already written stay here, and you can still publish them.")}
-                      </Text>
-                      <Button onClick={() => navigate("/app/plans")}>{t("See plans")}</Button>
-                    </BlockStack>
-                  ) : isOutOfUsage ? (
-                    <QuotaReachedCard upsell={upsell} surface="blog" />
-                  ) : (
-                    <Form method="post">
-                      <input type="hidden" name="actionType" value="generate" />
-                      <BlockStack gap="300">
-                        <TextField
-                          name="topic"
-                          label={t("Blog Topic")}
-                          value={topic}
-                          onChange={setTopic}
-                          placeholder={t("e.g., a how-to guide, buying tips, or a seasonal topic for your store")}
-                          helpText={t("Be specific — a focused topic generates better content")}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          name="keywords"
-                          label={t("Target Keywords")}
-                          value={keywords}
-                          onChange={setKeywords}
-                          placeholder={t("e.g., your main product keywords, comma-separated")}
-                          helpText={t("Keywords to weave naturally into the post")}
-                          autoComplete="off"
-                        />
-                        <Select
-                          name="length"
-                          label={t("Post Length")}
-                          options={lengthOptions}
-                          value={length}
-                          onChange={setLength}
-                        />
-                        <TextField
-                          label={t("Special instructions (optional)")}
-                          value={instructions}
-                          onChange={setInstructions}
-                          multiline={3}
-                          maxLength={1000}
-                          placeholder={t("e.g., mention our spring sale, compare our top 3 products, keep it beginner-friendly…")}
-                          helpText={t("Anything you want included — promotions, angle, examples, structure.")}
-                          autoComplete="off"
-                        />
-                        <BlockStack gap="150">
-                          <Checkbox
-                            label={t("Suggest where to add images & visuals")}
-                            checked={suggestVisuals}
-                            onChange={setSuggestVisuals}
-                          />
-                          <Checkbox
-                            label={t("Add an FAQ section (great for AI search)")}
-                            checked={addFaq}
-                            onChange={setAddFaq}
-                          />
-                        </BlockStack>
-                        <input type="hidden" name="instructions" value={combinedInstructions} />
-
-                        {/* Animated progress during generation */}
-                        {isGenerating && (
-                          <Box padding="300" background="bg-surface-info" borderRadius="200">
-                            <BlockStack gap="200">
-                              <InlineStack gap="200" blockAlign="center">
-                                <Spinner size="small" />
-                                <Text as="p" variant="bodySm" fontWeight="semibold">
-                                  {LOADING_MESSAGES[loadingMsgIdx]}
-                                </Text>
-                              </InlineStack>
-                              <ProgressBar
-                                progress={((loadingMsgIdx + 1) / LOADING_MESSAGES.length) * 80}
-                                tone="highlight"
-                                size="small"
-                                animated
-                              />
-                              <Text as="p" variant="bodySm" tone="subdued">
-                               {t("Takes 20–40 seconds")}
-                              </Text>
-                            </BlockStack>
-                          </Box>
-                        )}
-
-                        <Button
-                          variant="primary"
-                          submit
-                          loading={isGenerating}
-                          disabled={isGenerating}
-                          fullWidth
-                        >
-                          {isGenerating ? t("Generating...") : t("Generate Blog Post")}
-                        </Button>
-                        {/* Phase 15 — the price, on the button that spends it.
-                            A8 says money is exact; a merchant should never
-                            discover the cost from the balance afterwards. */}
-                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                          {t("Costs {credits} credits", { credits: blogCredits })}
-                        </Text>
-
-                        {actionData?.limitReached && <QuotaReachedCard upsell={upsell} surface="blog" />}
-                      </BlockStack>
-                    </Form>
-                  )}
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <IconTile icon={BlogIcon} tone="brand" size="md" />
+                <BlockStack gap="050">
+                  <Text as="h2" variant="headingLg">
+                    {t("Write a post")}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("Written in your brand voice and saved as a draft. Nothing is published until you publish it.")}
+                  </Text>
                 </BlockStack>
-              </Card>
+              </InlineStack>
 
-              {/* Tips, behind a plain disclosure — the advice is there when wanted,
-                  not a blue box on every visit. */}
-              <Card>
-                <BlockStack gap="200">
-                  <Button variant="plain" size="slim" icon={tipsOpen ? ChevronUpIcon : ChevronDownIcon} onClick={() => setTipsOpen((v) => !v)} ariaExpanded={tipsOpen} ariaControls="blog-tips">
-                    {t("Tips for great posts")}
-                  </Button>
-                  <Collapsible open={tipsOpen} id="blog-tips">
-                  <BlockStack gap="100">
-                    {/* Group 7.6 — this told a plumbing merchant that "How to wax
-                        a snowboard for beginners" beats "snowboards". The example
-                        came from Shopify's demo catalogue, which is a store we do
-                        not serve, and it reads to every real merchant as advice
-                        written for somebody else. The rule it teaches is the same
-                        one without naming anybody's products. */}
-                    <Text as="p" variant="bodySm">
-                      • <strong>{t("Be specific")}</strong> {t("— a post answering one question a customer actually asks beats a post named after a product category.")}
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                     {t("• Add")} <strong>{t("target keywords")}</strong> {t("your customers actually search.")}
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                     {t("• Use")} <strong>{t("special instructions")}</strong> {t("to mention promos, comparisons, or your angle.")}
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                      • <strong>{t("Longer posts")}</strong> {t("give the model more to work with.")}
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                     {t("• Turn on")} <strong>FAQ</strong> {t("to add a question-and-answer section.")}
-                    </Text>
-                  </BlockStack>
-                  </Collapsible>
+              {!blogEntitled ? (
+                /* Phase 15 — the gate, stated BEFORE the topic is typed. It says
+                   the price, the plan and what happens to the posts already
+                   written. Redesign v2: the real composer, blurred under the lock. */
+                <BlockStack gap="300">
+                  <LockedPreview title={t("Blog posts")} sentence={lockSentence} onSeePlans={() => navigate("/app/plans")}>
+                    {composerPreview}
+                  </LockedPreview>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {t("Posts you have already written stay here, and you can still publish them.")}
+                  </Text>
                 </BlockStack>
-              </Card>
-
-              {/* Usage mini-bar */}
-              {(planName === "free" || usagePct >= 50) && (
-                <Card>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="p" variant="bodySm" fontWeight="semibold">
-                       {t("Monthly credits")}
-                      </Text>
-                      <Text id="blog-credit-usage" as="p" variant="bodySm" tone="subdued">
-                        {usageCount}/{monthlyCredits}
-                      </Text>
-                    </InlineStack>
-                    {/* FR14 — labelled by the count, never by the rounded percent alone. */}
-                    <ProgressBar
-                      progress={usagePct}
-                      tone={usagePct >= 90 ? "critical" : "success"}
-                      size="small"
-                      ariaLabelledBy="blog-credit-usage"
-                    />
-                  </BlockStack>
-                </Card>
-              )}
-
-              {/* Recent blog posts */}
-              {recentPosts.length > 0 && (
-                <Card>
-                  <BlockStack gap="300">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">
-                       {t("Recent Posts")}
-                      </Text>
-                      <Button size="slim" variant="plain" onClick={() => navigate("/app/blog/posts")}>
-                       {t("View all")}
-                      </Button>
-                    </InlineStack>
-                    {recentPosts.map((post) => (
-                      <Box
-                        key={post.id}
-                        padding="200"
-                        background="bg-surface-secondary"
-                        borderRadius="100"
-                        onClick={() => navigate(`/app/blog?postId=${post.id}`)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <InlineStack align="space-between" blockAlign="center">
-                          <BlockStack gap="050">
-                            <Text as="p" variant="bodySm" fontWeight="semibold" truncate>
-                              {post.title || "(untitled)"}
-                            </Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                             {t("{wordCount} words", { wordCount: post.wordCount })}
-                            </Text>
-                          </BlockStack>
-                          <Badge tone={post.status === "published" ? "success" : "info"}>
-                            {post.status === "published" ? t("Published") : t("Draft")}
-                          </Badge>
-                        </InlineStack>
-                      </Box>
-                    ))}
-                  </BlockStack>
-                </Card>
+              ) : isOutOfUsage ? (
+                <QuotaReachedCard upsell={upsell} surface="blog" />
+              ) : (
+                composer
               )}
             </BlockStack>
-          </Layout.Section>
+            <Box>
+              <IlluBlog width={200} />
+            </Box>
+          </InlineGrid>
+        </Card>
 
-          {/* Right panel — output */}
+        <Layout>
+          {/* Main — the post */}
           <Layout.Section>
             {isGenerating && (
               <Card>
                 <Box padding="600">
-                  <InlineStack align="center" gap="300">
-                    <Spinner size="large" />
-                    <Text as="p" variant="bodyLg">
-                      {LOADING_MESSAGES[loadingMsgIdx]}
+                  <BlockStack gap="300" inlineAlign="center">
+                    <Spinner size="large" accessibilityLabel={t("Writing your post")} />
+                    <Text as="p" variant="headingSm">
+                      {t("Writing your post…")}
                     </Text>
-                  </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("It opens here as a draft when it is ready.")}
+                    </Text>
+                  </BlockStack>
                 </Box>
               </Card>
             )}
 
-            {!generated && !resumePost && !isGenerating && (
-              <>
-                <Card>
-                  <Box padding="800">
-                    <BlockStack gap="300" inlineAlign="center">
-                      <Icon source={FileIcon} tone="subdued" />
-                      <Text as="p" variant="headingMd" alignment="center" tone="subdued">
-                       {t("No blog post yet")}
-                      </Text>
-                      <Text as="p" variant="bodySm" alignment="center" tone="subdued">
-                       {t("Enter a topic on the left and click Generate Blog Post to create SEO-friendly content in your brand voice.")}
-                      </Text>
-                    </BlockStack>
-                  </Box>
-                </Card>
-              </>
+            {/* Nothing open: the empty state, in the frame the post will fill. */}
+            {!postOpen && !isGenerating && (
+              <BlogEmpty heading={t("No post open")} body={t("Write one above, or open a draft from your posts.")} />
             )}
 
-            {(generated || resumePost) && !isGenerating && (
+            {postOpen && !isGenerating && (
               <BlockStack gap="400">
-                {/* Success / resume indicator */}
-                <Box padding="300" background="bg-surface-success" borderRadius="200">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Icon source={CheckCircleIcon} tone="success" />
-                    <Text as="p" variant="bodySm" fontWeight="semibold">
-                      {generated ? t("Blog post generated and saved as draft — review and edit below") : t("Editing draft: {v}", { v: resumePost?.title || resumePost?.topic || t("Untitled") })}
-                    </Text>
-                  </InlineStack>
-                </Box>
-
                 <Card>
                   <BlockStack gap="400">
-                    <TextField
-                      label={t("Title")}
-                      value={editedTitle}
-                      onChange={setEditedTitle}
-                      autoComplete="off"
-                    />
+                    <InlineStack align="space-between" blockAlign="center" gap="200">
+                      <Text as="h2" variant="headingMd">
+                        {t("Draft")}
+                      </Text>
+                      <Badge>{t("Not published")}</Badge>
+                    </InlineStack>
+                    <TextField label={t("Title")} value={editedTitle} onChange={setEditedTitle} autoComplete="off" />
 
                     {/* Preview-first: read the post as it'll look; switch to Edit
                         HTML only when you want to change the markup. */}
                     <InlineStack align="space-between" blockAlign="center" wrap>
                       <ButtonGroup variant="segmented">
                         <Button pressed={blogView === "preview"} onClick={() => setBlogView("preview")}>
-                         {t("Preview")}
+                          {t("Preview")}
                         </Button>
                         <Button pressed={blogView === "html"} onClick={() => setBlogView("html")}>
-                         {t("Edit HTML")}
+                          {t("Edit HTML")}
                         </Button>
                       </ButtonGroup>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                       {t("{length}{v} words", { length: editedContent
-                            .replace(/<[^>]+>/g, "")
-                            .split(/\s+/)
-                            .filter(Boolean).length, v: " " })}
+                      <Text as="span" variant="bodySm" tone="subdued" numeric>
+                        {t("{length}{v} words", { length: wordCount, v: " " })}
                       </Text>
                     </InlineStack>
 
                     {blogView === "preview" ? (
-                      <Box
-                        padding="500"
-                        background="bg-surface"
-                        borderRadius="300"
-                        borderColor="border"
-                        borderWidth="025"
-                      >
+                      <Box padding="500" background="bg-surface" borderRadius="300" borderColor="border" borderWidth="025">
                         <div className="cc-blog-preview">
                           <h1 style={{ marginTop: 0 }}>{editedTitle}</h1>
                           <div dangerouslySetInnerHTML={{ __html: editedContent }} />
@@ -802,7 +660,6 @@ export default function BlogPage() {
                         value={editedContent}
                         onChange={setEditedContent}
                         multiline={18}
-                        helpText={t("Edit the HTML directly. Switch back to Preview to see your changes.")}
                         autoComplete="off"
                       />
                     )}
@@ -814,30 +671,120 @@ export default function BlogPage() {
                     <input type="hidden" name="actionType" value="publish" />
                     <input type="hidden" name="title" value={editedTitle} />
                     <input type="hidden" name="content" value={editedContent} />
-                    <input
-                      type="hidden"
-                      name="savedPostId"
-                      value={actionData?.savedPostId || resumePost?.id || ""}
-                    />
-                    <BlockStack gap="200">
+                    <input type="hidden" name="savedPostId" value={actionData?.savedPostId || resumePost?.id || ""} />
+                    <InlineStack align="space-between" blockAlign="center" gap="300" wrap>
                       <Text as="p" variant="bodySm" tone="subdued">
-                       {t("This will publish the post directly to your Shopify blog.")}
+                        {t("Publishes to your Shopify blog.")}
                       </Text>
-                      <Button
-                        variant="primary"
-                        size="large"
-                        submit
-                        loading={isPublishing}
-                        disabled={isPublishing}
-                        fullWidth
-                      >
+                      <Button variant="primary" submit loading={isPublishing} disabled={isPublishing}>
                         {isPublishing ? t("Publishing...") : t("Publish to Shopify Blog")}
                       </Button>
-                    </BlockStack>
+                    </InlineStack>
                   </Form>
                 </Card>
               </BlockStack>
             )}
+          </Layout.Section>
+
+          {/* Side — recent posts, tips, credits */}
+          <Layout.Section variant="oneThird">
+            <BlockStack gap="400">
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      {t("Recent posts")}
+                    </Text>
+                    {recentPosts.length > 0 && (
+                      <Button size="slim" variant="plain" onClick={() => navigate("/app/blog/posts")}>
+                        {t("View all")}
+                      </Button>
+                    )}
+                  </InlineStack>
+                  {recentPosts.length === 0 ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {t("Posts you write are listed here.")}
+                    </Text>
+                  ) : (
+                    <BlockStack gap="0">
+                      {recentPosts.map((post, i) => (
+                        <Box key={post.id}>
+                          {i > 0 ? <Divider /> : null}
+                          <Box paddingBlock="200">
+                            <InlineStack align="space-between" blockAlign="center" gap="200" wrap={false}>
+                              <InlineStack gap="200" blockAlign="center" wrap={false}>
+                                <IconTile icon={post.status === "published" ? GlobeIcon : EditIcon} tone={post.status === "published" ? "success" : "neutral"} size="sm" />
+                                <BlockStack gap="050">
+                                  <Link onClick={() => navigate(`/app/blog?postId=${post.id}`)} removeUnderline monochrome>
+                                    <Text as="span" variant="bodySm" fontWeight="semibold" truncate>
+                                      {post.title || t("Untitled")}
+                                    </Text>
+                                  </Link>
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    {t("{wordCount} words", { wordCount: t.number(post.wordCount ?? 0) })}
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                              <Badge tone={post.status === "published" ? "success" : undefined}>
+                                {post.status === "published" ? t("Published") : t("Draft")}
+                              </Badge>
+                            </InlineStack>
+                          </Box>
+                        </Box>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Tips, behind a plain disclosure — the advice is there when wanted,
+                  not a blue box on every visit. */}
+              <Card>
+                <BlockStack gap="200">
+                  <Button variant="plain" size="slim" icon={tipsOpen ? ChevronUpIcon : ChevronDownIcon} onClick={() => setTipsOpen((v) => !v)} ariaExpanded={tipsOpen} ariaControls="blog-tips">
+                    {t("Tips for great posts")}
+                  </Button>
+                  <Collapsible open={tipsOpen} id="blog-tips">
+                    <BlockStack gap="100">
+                      {/* Group 7.6 — the rule, without naming anybody's products. */}
+                      <Text as="p" variant="bodySm">
+                        • <strong>{t("Be specific")}</strong> {t("— a post answering one question a customer actually asks beats a post named after a product category.")}
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        {t("• Add")} <strong>{t("target keywords")}</strong> {t("your customers actually search.")}
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        {t("• Use")} <strong>{t("special instructions")}</strong> {t("to mention promos, comparisons, or your angle.")}
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        • <strong>{t("Longer posts")}</strong> {t("give the model more to work with.")}
+                      </Text>
+                      <Text as="p" variant="bodySm">
+                        {t("• Turn on")} <strong>FAQ</strong> {t("to add a question-and-answer section.")}
+                      </Text>
+                    </BlockStack>
+                  </Collapsible>
+                </BlockStack>
+              </Card>
+
+              {/* Usage mini-bar */}
+              {(planName === "free" || usagePct >= 50) && (
+                <Card>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        {t("Monthly credits")}
+                      </Text>
+                      <Text id="blog-credit-usage" as="p" variant="bodySm" tone="subdued">
+                        {t("{usageCount} / {monthlyCredits} used", { usageCount: t.number(usageCount), monthlyCredits: t.number(monthlyCredits) })}
+                      </Text>
+                    </InlineStack>
+                    {/* FR14 — labelled by the count, never by the rounded percent alone. */}
+                    <ProgressBar progress={usagePct} tone={usagePct >= 90 ? "critical" : "success"} size="small" ariaLabelledBy="blog-credit-usage" />
+                  </BlockStack>
+                </Card>
+              )}
+            </BlockStack>
           </Layout.Section>
         </Layout>
       </BlockStack>

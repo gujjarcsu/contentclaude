@@ -16,10 +16,17 @@
  * therefore could not catch this: both sides used the same rule over different
  * populations and it passed. This one checks the labels instead.
  *
+ * Redesign (Nov 2026): that fix put "on this page" on every tab, and the bar
+ * read like a disclaimer. The tabs now filter and count nothing (the category's
+ * list screens carry no number on a tab), so no tab can show a page-scoped
+ * number unlabelled. The one page-scoped number left, how many rows are shown,
+ * sits beside the pager, and that label must say it.
+ *
  * ── What it prints if the thing it watches is broken ──────────────────────
  *
- * Drop "on this page" from any page-scoped tab and the first case fails naming
- * the label. Verified by doing it.
+ * Put a count back on any tab ("Draft (3)", "Draft ({draft})") and the tab case
+ * fails naming the label. Drop "on this page" from either pager form and the
+ * pager case fails.
  */
 import { describe, it, expect } from "vitest";
 import { unwrapT } from "../helpers/code.js"; // Phase 12 Part D: source guards see through t("…")
@@ -43,14 +50,21 @@ describe("page-scoped numbers say they are page-scoped", () => {
   });
 
   it.each(["all", "needsContent", "draft", "published"])(
-    "the %s tab names its population",
+    "the %s tab carries no number, so it cannot carry an unscoped one",
     (id) => {
       const tab = tabLabels.find((t) => t.id === id);
       expect(tab, `no tab with id ${id}`).toBeTruthy();
-      // "on page" or "on this page" — either phrasing, as long as it is there.
-      expect(tab.label, `"${tab.label}" does not say which products it counts`).toMatch(/on (this )?page/i);
+      // a placeholder or a digit in a tab label is a count without its population
+      expect(tab.label, `"${tab.label}" puts a count on a tab`).not.toMatch(/[{}]|\d/);
     },
   );
+
+  it("the one page-scoped number, beside the pager, says it is page-scoped — both forms", () => {
+    const pager = products.match(/label:\s*filteredProducts\.length === products\.length\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/);
+    expect(pager, "the pager label, unfiltered and filtered").toBeTruthy();
+    expect(pager[1]).toMatch(/on this page/);
+    expect(pager[2]).toMatch(/on this page/);
+  });
 
   it("the store-wide header does NOT claim to be page-scoped", () => {
     // The inverse mistake: labelling a store-wide number "on this page" would

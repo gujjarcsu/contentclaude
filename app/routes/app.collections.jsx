@@ -10,17 +10,20 @@ import {
   BlockStack,
   InlineStack,
   Button,
-  Thumbnail,
   Badge,
   Banner,
-  EmptyState,
   Box,
   Spinner,
   TextField,
   Select,
   Checkbox,
   Divider,
+  InlineGrid,
 } from "@shopify/polaris";
+import { CollectionIcon, CheckCircleIcon, EditIcon, PageIcon } from "@shopify/polaris-icons";
+import { IconTile, AiButton, CharBar } from "../components/Kit.jsx";
+import { IlluProducts } from "../components/Illustrations.jsx";
+import { ProductThumb } from "../components/ProductThumb.jsx";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
@@ -338,13 +341,13 @@ export default function CollectionsPage() {
       prevFetcherData.current = fetcherData;
       if (typeof window !== "undefined" && window.shopify?.toast) {
         if (fetcherData.published) {
-          window.shopify.toast.show("Collection content published!", { duration: 4000 });
+          window.shopify.toast.show(t("Collection content published"), { duration: 4000 });
         } else if (fetcherData.error) {
           window.shopify.toast.show(fetcherData.error, { duration: 5000, isError: true });
         }
       }
     }
-  }, [fetcherData]);
+  }, [fetcherData, t]);
 
   // Voice saves go through voiceFetcher (not the main fetcher) and the action
   // returns `savedVoice` — the old toast watched the wrong fetcher for a
@@ -356,13 +359,13 @@ export default function CollectionsPage() {
       prevVoiceData.current = data;
       if (typeof window !== "undefined" && window.shopify?.toast) {
         if (data.savedVoice) {
-          window.shopify.toast.show("Collection voice saved!", { duration: 3000 });
+          window.shopify.toast.show(t("Collection voice saved"), { duration: 3000 });
         } else if (data.error) {
           window.shopify.toast.show(data.error, { duration: 5000, isError: true });
         }
       }
     }
-  }, [voiceFetcher.data]);
+  }, [voiceFetcher.data, t]);
 
   const handleGenerate = useCallback(
     (collection) => {
@@ -452,9 +455,21 @@ export default function CollectionsPage() {
   if (collections.length === 0) {
     return (
       <Page title={t("Collections")} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
-        <EmptyState heading={t("No collections found")} image="/empty-collections.svg">
-          <p>{t("Create collections in your Shopify admin, then come back to generate descriptions.")}</p>
-        </EmptyState>
+        <Card>
+          <Box paddingBlock="800">
+            <BlockStack gap="300" inlineAlign="center">
+              <Box width="200px">
+                <IlluProducts width={200} />
+              </Box>
+              <Text as="h2" variant="headingMd" alignment="center">
+                {t("No collections found")}
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                {t("Create collections in your Shopify admin, then come back to generate descriptions.")}
+              </Text>
+            </BlockStack>
+          </Box>
+        </Card>
       </Page>
     );
   }
@@ -466,34 +481,53 @@ export default function CollectionsPage() {
       backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
-        {/* Group 2.1 — a throttled or failed read used to render an empty list
-            silently, so "you have no collections" and "Shopify would not answer"
-            looked identical. */}
-        {catalogError && (
+        {/* At most one notice, by priority: what just failed, then a list that
+            may be incomplete (Group 2.1 — a throttled read used to look like
+            "no collections"), then a cap that must never pass for a total.
+            A successful publish is a toast, not a banner. */}
+        {fetcherData?.error ? (
+          <Banner tone="critical">
+            <p>{fetcherData.error}</p>
+          </Banner>
+        ) : catalogError ? (
           <Banner tone="warning" title={t("This list may be incomplete")}>
             <p>{catalogError === "throttled" ? t("Shopify is rate-limiting your store right now, so this list may be incomplete. It will fill in shortly.") : t("We could not read your collections from Shopify just now. This list may be incomplete.")}</p>
           </Banner>
-        )}
-        {/* Group 2.1 — a cap must never be presented as a total. This says what
-            is missing, how much, and what to do about it, instead of showing 250
-            of 395 as though that were the whole store. */}
-        {truncated && (
+        ) : truncated ? (
           <Banner tone="info" title={t("Showing part of your collections")}>
             <p>
               {t("Your store has {v} collections and this page shows the first {length}, sorted by title. The rest are not listed here yet — you can reach any collection from Shopify admin, and the SEO Audit covers products across your whole catalog.", { v: totalExact ? total : t("more than {total}", { total }), length: collections.length })}
             </p>
           </Banner>
-        )}
-        {fetcherData?.error && (
-          <Banner tone="critical">
-            <p>{fetcherData.error}</p>
-          </Banner>
-        )}
-        {fetcherData?.success && fetcherData?.published && (
-          <Banner tone="success" title={t("Published!")}>
-            <p>{t("Collection content published to your Shopify store.")}</p>
-          </Banner>
-        )}
+        ) : null}
+
+        {/* Redesign v2 — the category's metric cards, each counted over the
+            collections listed on this page and saying so. */}
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+          {[
+            { id: "listed", icon: CollectionIcon, tone: "brand", label: t("Collections listed"), value: collections.length, scope: truncated ? t("of {total} in your store", { total: totalExact ? t.number(total) : `${t.number(total)}+` }) : t("All your collections") },
+            { id: "own", icon: PageIcon, tone: "neutral", label: t("Your own description"), value: collections.filter((c) => c.hasOwnContent).length, scope: t("of the {n} listed", { n: t.number(collections.length) }) },
+            { id: "drafts", icon: EditIcon, tone: "caution", label: t("Drafts ready"), value: collections.filter((c) => statusMap[c.id] === "draft").length, scope: t("of the {n} listed", { n: t.number(collections.length) }) },
+            { id: "published", icon: CheckCircleIcon, tone: "success", label: t("Published by Navaal"), value: collections.filter((c) => statusMap[c.id] === "published").length, scope: t("of the {n} listed", { n: t.number(collections.length) }) },
+          ].map((m) => (
+            <Card key={m.id}>
+              <BlockStack gap="300">
+                <IconTile icon={m.icon} tone={m.tone} />
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {m.label}
+                  </Text>
+                  <Text as="p" variant="headingXl" numeric>
+                    {t.number(m.value)}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {m.scope}
+                  </Text>
+                </BlockStack>
+              </BlockStack>
+            </Card>
+          ))}
+        </InlineGrid>
 
         {collections.map((collection) => {
           const status = statusMap[collection.id];
@@ -505,12 +539,8 @@ export default function CollectionsPage() {
             <Card key={collection.id}>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="300" blockAlign="center">
-                    {collection.imageUrl ? (
-                      <Thumbnail source={collection.imageUrl} alt={collection.title} size="small" />
-                    ) : (
-                      <Box width="40px" minHeight="40px" background="bg-fill-secondary" borderRadius="100" />
-                    )}
+                  <InlineStack gap="300" blockAlign="center" wrap={false}>
+                    <ProductThumb url={collection.imageUrl} alt={collection.title} />
                     <BlockStack gap="100">
                       <Text as="h3" variant="headingMd">
                         {collection.title}
@@ -524,14 +554,14 @@ export default function CollectionsPage() {
                     {status === "published" ? (
                       <Badge tone="success">{t("Content Published")}</Badge>
                     ) : status === "draft" ? (
-                      <Badge tone="info">{t("Draft Ready")}</Badge>
+                      <Badge tone="attention">{t("Draft Ready")}</Badge>
                     ) : collection.hasOwnContent ? (
                       /* Group 4.3 — 21 of 30 sampled collections carried
                          hand-written copy naming certifications, the trade
                          counter and 25 years of trading. Offering "Generate"
                          over that, with no indication it exists, is how an app
                          deletes a merchant's best writing. */
-                      <Badge tone="info">{t("Your description")}</Badge>
+                      <Badge>{t("Your description")}</Badge>
                     ) : null}
                     {/* Group 7.4 — several EMPTY collections legitimately carry
                         hand-written copy, because the merchant wrote for ranges
@@ -541,14 +571,14 @@ export default function CollectionsPage() {
                     {collection.productsCount === 0 && (
                       <Badge tone="attention">{t("No products")}</Badge>
                     )}
-                    <Button
-                      size="slim"
+                    {/* The brand AI button (Tapita 083): this one does write. */}
+                    <AiButton
                       onClick={() => handleGenerate(collection)}
                       loading={isGenerating && fetcher.formData?.get("collectionId") === collection.id}
-                      disabled={isGenerating}
+                      disabled={isGenerating && fetcher.formData?.get("collectionId") !== collection.id}
                     >
                       {status ? t("Regenerate") : collection.hasOwnContent ? t("Enhance") : t("Generate")}
-                    </Button>
+                    </AiButton>
                   </InlineStack>
                 </InlineStack>
 
@@ -576,17 +606,17 @@ export default function CollectionsPage() {
                             label={t("Meta Title")}
                             value={edited.metaTitle ?? generated.metaTitle ?? ""}
                             onChange={(v) => updateEdit(collection.id, "metaTitle", v)}
-                            helpText={t("{length}/60", { length: (edited.metaTitle ?? generated.metaTitle ?? "").length })}
                             autoComplete="off"
                           />
+                          <CharBar count={(edited.metaTitle ?? generated.metaTitle ?? "").length} max={60} min={30} id={`col-mt-${collection.id}`} />
                           <TextField
                             label={t("Meta Description")}
                             value={edited.metaDescription ?? generated.metaDescription ?? ""}
                             onChange={(v) => updateEdit(collection.id, "metaDescription", v)}
                             multiline={2}
-                            helpText={t("{length}/155", { length: (edited.metaDescription ?? generated.metaDescription ?? "").length })}
                             autoComplete="off"
                           />
+                          <CharBar count={(edited.metaDescription ?? generated.metaDescription ?? "").length} max={155} min={70} id={`col-md-${collection.id}`} />
                         </BlockStack>
                       </Layout.Section>
                     </Layout>

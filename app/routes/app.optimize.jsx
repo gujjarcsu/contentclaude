@@ -4,7 +4,6 @@ import { tForRequest } from "../i18n/index.js";
 import {
   EmptyState,
   Page,
-  Layout,
   Card,
   Text,
   BlockStack,
@@ -20,14 +19,18 @@ import {
   SkeletonPage,
   SkeletonBodyText,
   SkeletonDisplayText,
+  InlineGrid,
 } from "@shopify/polaris";
+import { CheckCircleIcon, ProductIcon, CreditCardIcon, MagicIcon, EditIcon, AlertTriangleIcon } from "@shopify/polaris-icons";
+import { IconTile, AiButton, LockedPreview } from "../components/Kit.jsx";
+import { IlluAllGood } from "../components/Illustrations.jsx";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { publishesWithoutReview } from "../utils/publishSetting.server.js";
 import { enqueueGenerationJob } from "../queues/generationQueue.server.js";
-import { FREE_PLAN, bulkRefusal } from "../utils/billing-plans.js";
-import { checkEntitlement, remainingGenerations, sliceToQuota } from "../utils/plans.server.js";
+import { FREE_PLAN, bulkRefusal, getEntitlements, cheapestPlanLabelWith } from "../utils/billing-plans.js";
+import { checkEntitlement, remainingGenerations, sliceToQuota, getMonthlyUsageCount } from "../utils/plans.server.js";
 import { getContentMetrics } from "../utils/metrics.server.js";
 import { getCandidateCounts, notOptimizedFrom, LIST_SCOPE_QUERY } from "../utils/candidates.server.js";
 import { contentInCatalogue } from "../utils/catalogueContent.server.js";
@@ -51,7 +54,9 @@ export const loader = async ({ request }) => {
     getCandidateCounts(admin, shop),
     getContentMetrics(shop),
     prisma.plan.findUnique({ where: { shop } }),
-    prisma.usageRecord.count({ where: { shop, month: new Date().toISOString().slice(0, 7) } }),
+    // The same credit sum Home and Plans read (L5): counting usage ROWS disagreed
+    // with them whenever a row carries 0 credits (alt text) or more than one.
+    getMonthlyUsageCount(shop),
     publishesWithoutReview(shop),
   ]);
 
@@ -260,6 +265,20 @@ export default function OptimizePage() {
   const loadingThisRoute = useRouteLoading();
   const actionData = useActionData();
   const isSubmitting = navigation.state === "submitting";
+  // The action refuses a bulk run on a plan without bulk jobs, so on such a
+  // plan the run cards show as the real thing under a lock card, never as an
+  // enabled button that then says no.
+  const bulkAllowed = !!getEntitlements(planName).bulkJobs;
+  const BulkGate = ({ children }) =>
+    bulkAllowed ? (
+      children
+    ) : (
+      <LockedPreview
+        sentence={t("Fixing many products at once is on {plan} and above. Everything listed here stays visible on every plan, and you can still write for one product at a time from its own page.", { plan: cheapestPlanLabelWith("bulkJobs") })}
+      >
+        {children}
+      </LockedPreview>
+    );
 
   // All hooks before any conditional return
   const coveragePct = totalProducts > 0 ? Math.round((publishedCount / totalProducts) * 100) : 0;
@@ -310,19 +329,22 @@ export default function OptimizePage() {
     }
   }, [publishWithoutReview, doSubmitEnhance]);
 
-  const planLabels = { free: "Free", starter: "Starter", growth: "Growth", pro: "Professional" };
-  const estMinutes = Math.ceil((canOptimize * 3.5) / 60);
+  const planLabels = { free: t("Free"), starter: t("Starter"), growth: t("Growth"), pro: t("Professional") };  const noneChosen = !genDesc && !genMeta && !genFaq;
 
   if (loadingThisRoute) {
     return (
       <SkeletonPage title={t("Optimize store")} primaryAction>
         <BlockStack gap="400">
-          <Card>
-            <SkeletonDisplayText size="small" />
-            <Box paddingBlockStart="400">
-              <SkeletonBodyText lines={4} />
-            </Box>
-          </Card>
+          <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <BlockStack gap="300">
+                  <SkeletonDisplayText size="small" />
+                  <SkeletonBodyText lines={2} />
+                </BlockStack>
+              </Card>
+            ))}
+          </InlineGrid>
           <Card>
             <SkeletonDisplayText size="small" />
             <Box paddingBlockStart="400">
@@ -334,94 +356,95 @@ export default function OptimizePage() {
     );
   }
 
+  // Redesign v2 — the facts, not how to use the screen.
+  const subtitle =
+    totalProducts > 0
+      ? t("{n, plural, one {# product} other {# products}} not yet optimized · {remaining} credits left this month", { n: needsContent, remaining: t.number(remaining) })
+      : undefined;
+
+  /* Where the drafts go, in three steps (SEOWILL 128, Smart SEO 105). Honest
+     about the merchant's own setting: with publish without review on, step two
+     is the storefront, not Review. */
+  const steps = publishWithoutReview
+    ? [
+        { icon: MagicIcon, title: t("Written in the background"), body: t("One product at a time, in your brand voice.") },
+        { icon: AlertTriangleIcon, title: t("Published straight to your store"), body: t("Publish without review is on in Settings.") },
+        { icon: CheckCircleIcon, title: t("Originals kept"), body: t("Each product's earlier text can be restored.") },
+      ]
+    : [
+        { icon: MagicIcon, title: t("Written in the background"), body: t("One product at a time, in your brand voice.") },
+        { icon: EditIcon, title: t("Saved as drafts"), body: t("Nothing changes on your store yet.") },
+        { icon: CheckCircleIcon, title: t("You review and publish"), body: t("Only what you approve goes live.") },
+      ];
+
   return (
-    <Page
-      title={t("Optimize store")}
-      subtitle={t("Generate AI content for products missing a description — or improve the descriptions you already have")}
-      backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
-    >
+    <Page title={t("Optimize store")} subtitle={subtitle} backAction={{ content: t("Home"), onAction: () => navigate("/app") }}>
       <BlockStack gap="500">
         {actionData?.error && (
           <Banner
             tone={actionData?.limitReached ? "warning" : "critical"}
             title={actionData?.limitReached ? t("Plan upgrade required") : t("Error")}
-            action={
-              actionData?.limitReached
-                ? { content: t("View Plans"), onAction: () => navigate("/app/plans") }
-                : undefined
-            }
+            action={actionData?.limitReached ? { content: t("View Plans"), onAction: () => navigate("/app/plans") } : undefined}
           >
             <p>{actionData.error}</p>
           </Banner>
         )}
 
-        {/* Coverage overview */}
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">
-                 {t("Content Coverage")}
+        {/* The category's metric cards: an icon tile, the figure, its scope. */}
+        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+          <Card>
+            <BlockStack gap="300">
+              <IconTile icon={CheckCircleIcon} tone="success" />
+              <BlockStack gap="100">
+                <Text as="h2" variant="bodySm" tone="subdued">
+                  {t("Content Coverage")}
                 </Text>
-                <Text
-                  as="p"
-                  variant="heading2xl"
-                  fontWeight="bold"
-                  tone={coveragePct >= 50 ? "success" : "critical"}
-                >
+                <Text as="p" variant="headingXl" numeric>
                   {coveragePct}%
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                 {t("{publishedCount} of {totalProducts} products have a published description", { publishedCount, totalProducts })}
+                <Text id="optimize-coverage" as="p" variant="bodySm" tone="subdued">
+                  {t("{publishedCount} of {totalProducts} products have a published description", { publishedCount, totalProducts })}
                 </Text>
-                <ProgressBar
-                  progress={coveragePct}
-                  tone={coveragePct >= 50 ? "success" : "critical"}
-                  size="small"
-                />
+                <ProgressBar progress={coveragePct} tone={coveragePct >= 50 ? "success" : "highlight"} size="small" ariaLabelledBy="optimize-coverage" />
               </BlockStack>
-            </Card>
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">
-                 {t("Not yet optimized")}
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="300">
+              <IconTile icon={ProductIcon} tone="brand" />
+              <BlockStack gap="100">
+                <Text as="h2" variant="bodySm" tone="subdued">
+                  {t("Not yet optimized")}
                 </Text>
-                <Text as="p" variant="heading2xl" fontWeight="bold">
-                  {needsContent}
+                <Text as="p" variant="headingXl" numeric>
+                  {t.number(needsContent)}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
                   {candidateLabel ? t("Of your {candidateLabel}", { candidateLabel }) : t("Products we have not written for yet")}
                 </Text>
               </BlockStack>
-            </Card>
-          </Layout.Section>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">
-                 {t("Quota Available")}
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="start" gap="200">
+                <IconTile icon={CreditCardIcon} tone="neutral" />
+                <Badge>{t("{plan} plan", { plan: planLabels[planName] ?? planName })}</Badge>
+              </InlineStack>
+              <BlockStack gap="100">
+                <Text as="h2" variant="bodySm" tone="subdued">
+                  {t("Credits left this month")}
                 </Text>
-                <Text
-                  as="p"
-                  variant="heading2xl"
-                  fontWeight="bold"
-                  tone={remaining > 0 ? "success" : "critical"}
-                >
-                  {remaining}
+                <Text as="p" variant="headingXl" numeric>
+                  {t.number(remaining)}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                 {t("Credits left this month")}
-                  <br />
-                  <Badge tone={planName === "free" ? "attention" : "success"}>
-                    {planLabels[planName] ?? planName} — {monthlyCredits}/mo
-                  </Badge>
+                  {t("of {monthlyCredits} this month", { monthlyCredits: t.number(monthlyCredits) })}
                 </Text>
               </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
 
         {/* Optimize panel */}
         {/* Phase 2 item 2.10 - an empty store is not a finished store.
@@ -434,13 +457,27 @@ export default function OptimizePage() {
             and the page had no action anywhere, so the only way out was
             the back link. SEO Audit showed that same store a red 0/100. */}
         {totalProducts === 0 ? (
-          <EmptyState heading={t("No products yet")} image="/empty-products.svg">
-            <p>{t("Add products to your store, and this is where you generate content for them.")}</p>
-          </EmptyState>
+          <Card>
+            <EmptyState heading={t("No products yet")} image="/empty-products.svg">
+              <p>{t("Add products to your store, and this is where you generate content for them.")}</p>
+            </EmptyState>
+          </Card>
         ) : needsContent === 0 ? (
-          <Banner tone="success" title={t("Every product has content")}>
-            <p>{t("All {totalProducts} products have AI content. New products will appear here.", { totalProducts })}</p>
-          </Banner>
+          <Card>
+            <InlineStack gap="400" blockAlign="center" wrap={false}>
+              <Box minWidth="160px">
+                <IlluAllGood width={160} />
+              </Box>
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingMd">
+                  {t("Every product has content")}
+                </Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  {t("All {totalProducts} products have AI content. New products will appear here.", { totalProducts })}
+                </Text>
+              </BlockStack>
+            </InlineStack>
+          </Card>
         ) : remaining === 0 ? (
           /* Phase 3 item 3.4, surface (b) — the optimise action is REPLACED by
              this card rather than hidden. A button that vanishes reads as a
@@ -449,20 +486,43 @@ export default function OptimizePage() {
              all keep working. */
           <QuotaReachedCard upsell={upsell} surface="optimize" />
         ) : (
+          <BulkGate>
           <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingLg">
-               {t("Optimize {n, plural, one {# product} other {# products}}", { n: canOptimize })}
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-               {t("This will create a background bulk job for all {needsContent} products missing AI content.", { needsContent })}
-                {canOptimize < needsContent && t(" Your quota covers {canOptimize} of them this month.", { canOptimize })}
-                {estMinutes > 0 && t(" Estimated time: ~{n, plural, one {# minute} other {# minutes}}.", { n: estMinutes })}
-              </Text>
+            <BlockStack gap="500">
+              <InlineStack gap="400" blockAlign="center" wrap={false}>
+                <IconTile icon={MagicIcon} tone="brand" size="lg" />
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg">
+                    {t("Optimize {n, plural, one {# product} other {# products}}", { n: canOptimize })}
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {t("This will create a background bulk job for all {needsContent} products missing AI content.", { needsContent })}
+                    {canOptimize < needsContent && t(" Your quota covers {canOptimize} of them this month.", { canOptimize })}                  </Text>
+                </BlockStack>
+              </InlineStack>
+
+              {/* What happens to the drafts, as three steps with tiles. */}
+              <InlineGrid columns={{ xs: 1, md: 3 }} gap="300">
+                {steps.map((s) => (
+                  <Box key={s.title} padding="300" background="bg-surface-secondary" borderRadius="300">
+                    <InlineStack gap="300" blockAlign="start" wrap={false}>
+                      <IconTile icon={s.icon} tone="brand" size="sm" />
+                      <BlockStack gap="050">
+                        <Text as="p" variant="headingSm">
+                          {s.title}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {s.body}
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                  </Box>
+                ))}
+              </InlineGrid>
 
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                 {t("Content to generate:")}
+                  {t("Content to generate:")}
                 </Text>
                 <InlineStack gap="500" wrap>
                   <Checkbox label={t("Description")} checked={genDesc} onChange={setGenDesc} />
@@ -471,35 +531,48 @@ export default function OptimizePage() {
                 </InlineStack>
               </BlockStack>
 
-              <Button
-                variant="primary"
-                size="large"
-                onClick={handleOptimize}
-                loading={isSubmitting}
-                disabled={isSubmitting || (!genDesc && !genMeta && !genFaq)}
-              >
-                {isSubmitting ? t("Starting job...") : t("Optimize store ({canOptimize})", { canOptimize })}
-              </Button>
+              {/* What it costs, beside the button that spends it. One credit per
+                  product: the bundle is one call (credits.js creditsFor). */}
+              <InlineStack align="space-between" blockAlign="center" gap="300">
+                <BlockStack gap="050">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {t("Uses up to {n, plural, one {# credit} other {# credits}}, one per product", { n: canOptimize })}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone={noneChosen ? "critical" : "subdued"}>
+                    {noneChosen ? t("Choose at least one kind of content.") : t("{remaining} of {monthly} credits left this month", { remaining: t.number(remaining), monthly: t.number(monthlyCredits) })}
+                  </Text>
+                </BlockStack>
+                <AiButton solid size="large" onClick={handleOptimize} loading={isSubmitting} disabled={isSubmitting || noneChosen}>
+                  {isSubmitting ? t("Starting job...") : t("Optimize store ({canOptimize})", { canOptimize })}
+                </AiButton>
+              </InlineStack>
             </BlockStack>
           </Card>
+          </BulkGate>
         )}
 
         {/* Enhance existing panel — improves live descriptions instead of
             generating from scratch. Hidden when there's nothing it could run on
             or the quota banner above already explains why nothing can run. */}
-        {totalProducts > 0 && remaining > 0 && (
+        {bulkAllowed && totalProducts > 0 && remaining > 0 && (
+          <BulkGate>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingLg">
-               {t("Improve existing descriptions")}
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-               {t("Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved as drafts for your review unless publish without review is turned on in Settings.")}
-              </Text>
+              <InlineStack gap="400" blockAlign="center" wrap={false}>
+                <IconTile icon={EditIcon} tone="brand" size="lg" />
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg">
+                    {t("Improve existing descriptions")}
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {t("Rewrites descriptions you already have. Your facts, claims and voice stay as they are. Saved as drafts for your review unless publish without review is turned on in Settings.")}
+                  </Text>
+                </BlockStack>
+              </InlineStack>
 
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                 {t("Content to enhance:")}
+                  {t("Content to enhance:")}
                 </Text>
                 <InlineStack gap="500" wrap>
                   <Checkbox label={t("Description")} checked={enhDesc} onChange={setEnhDesc} />
@@ -507,24 +580,29 @@ export default function OptimizePage() {
                 </InlineStack>
               </BlockStack>
 
-              <Button
-                size="large"
-                onClick={handleEnhance}
-                loading={isSubmitting}
-                disabled={isSubmitting || (!enhDesc && !enhMeta)}
-              >
-                {isSubmitting ? t("Starting job...") : t("Improve existing descriptions")}
-              </Button>
+              <InlineStack align="end">
+                <AiButton size="large" onClick={handleEnhance} loading={isSubmitting} disabled={isSubmitting || (!enhDesc && !enhMeta)}>
+                  {isSubmitting ? t("Starting job...") : t("Improve existing descriptions")}
+                </AiButton>
+              </InlineStack>
             </BlockStack>
           </Card>
+          </BulkGate>
         )}
 
+        {/* Drafts already waiting: a row with its action, not a second notice. */}
         {draftCount > 0 && (
-          <Banner tone="info" title={t("{n, plural, one {# draft} other {# drafts}} waiting for review", { n: draftCount })}>
-            <Box paddingBlockStart="200">
+          <Card>
+            <InlineStack align="space-between" blockAlign="center" gap="300">
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <IconTile icon={EditIcon} tone="caution" />
+                <Text as="p" variant="headingSm">
+                  {t("{n, plural, one {# draft} other {# drafts}} waiting for review", { n: draftCount })}
+                </Text>
+              </InlineStack>
               <Button onClick={() => navigate("/app/review")}>{t("Review drafts")}</Button>
-            </Box>
-          </Banner>
+            </InlineStack>
+          </Card>
         )}
       </BlockStack>
 

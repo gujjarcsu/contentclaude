@@ -1,6 +1,7 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData, useMatches, useRouteError, isRouteErrorResponse } from "react-router";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import mobileStyles from "./mobile.css?url";
+import brandStyles from "./brand.css?url";
 
 // PostgreSQL COUNT() returns BigInt via Prisma $queryRaw.
 // This global patch ensures BigInts serialize to JSON correctly.
@@ -13,6 +14,7 @@ export function links() {
   return [
     { rel: "stylesheet", href: polarisStyles },
     { rel: "stylesheet", href: mobileStyles },
+    { rel: "stylesheet", href: brandStyles },
   ];
 }
 

@@ -48,6 +48,7 @@
  * yet optimized by us" are different states and must never share a number, a
  * label, a badge or a colour. `CONTENT_ACTION` is that split.
  */
+import { T } from "../i18n/index.js";
 
 /** Shopify product statuses, as the Admin API spells them. */
 export const PRODUCT_STATUS = {
@@ -206,9 +207,9 @@ export const CONTENT_ACTION = Object.freeze({
 });
 
 export const CONTENT_ACTION_LABEL = Object.freeze({
-  [CONTENT_ACTION.GENERATE]: "No description",
-  [CONTENT_ACTION.ENHANCE]: "Not yet optimized",
-  [CONTENT_ACTION.OPTIMIZED]: "Optimized",
+  [CONTENT_ACTION.GENERATE]: T("No description"),
+  [CONTENT_ACTION.ENHANCE]: T("Not yet optimized"),
+  [CONTENT_ACTION.OPTIMIZED]: T("Optimized"),
 });
 
 /**
@@ -221,7 +222,8 @@ export const CONTENT_ACTION_LABEL = Object.freeze({
  */
 export const CONTENT_ACTION_TONE = Object.freeze({
   [CONTENT_ACTION.GENERATE]: "critical",
-  [CONTENT_ACTION.ENHANCE]: "info",
+  // Neutral: the merchant has their own copy and nothing is wrong with it.
+  [CONTENT_ACTION.ENHANCE]: undefined,
   [CONTENT_ACTION.OPTIMIZED]: "success",
 });
 

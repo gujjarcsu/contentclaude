@@ -3,11 +3,11 @@ import { useT } from "../i18n/react.jsx";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { FooterHelp, Link, Box, ProgressBar, InlineStack, Badge, Button } from "@shopify/polaris";
+import { FooterHelp, Link, Box, ProgressBar, InlineStack, BlockStack, Text, Button, Popover, Spinner } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { I18nProvider, useLocaleLoaded } from "../i18n/react.jsx";
 import { normaliseUiLocale, createT, polarisFor } from "../i18n/index.js";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { authenticate } from "../shopify.server.js";
 import prisma from "../db.server.js";
 import { ContentClaudeBrand } from "../components/ContentClaudeBrand.jsx";
@@ -88,7 +88,9 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
   const idleStreakRef = useRef(0);
 
   const data = fetcher.data;
+  const [open, setOpen] = useState(false);
   const hasJobs = data ? data.count > 0 : activeJobCount > 0;
+  const running = data ? data.count : activeJobCount;
   const pct = data?.pct ?? 0;
   const completedProducts = data?.completedProducts ?? 0;
   const totalProducts = data?.totalProducts ?? 0;
@@ -158,18 +160,40 @@ function JobProgressTicker({ navigate, activeJobCount, onJobsPage }) {
      button with a popover). This is that: one line, right-aligned, a Badge
      with the count and the percent, a progress bar the width of the text, and
      a plain button to the Bulk runs page. Same data, same polling. */
+  /* Redesign v2 (Nov 2026) — Avada 041/045: background work is one small
+     "1 running" control with a spinner; the detail (how far, how many, the way
+     to the Bulk runs page) opens in a popover. Same data, same polling. */
+  const progressLine = totalProducts > 0 ? t("Writing {completedProducts} of {totalProducts} products", { completedProducts, totalProducts }) : t("Writing content");
   return (
     <Box paddingBlockStart="200" paddingInlineStart="400" paddingInlineEnd="400">
-      <InlineStack align="end" blockAlign="center" gap="300">
-        <Badge tone="info" progress="partiallyComplete">
-          {totalProducts > 0 ? t("Writing {completedProducts} of {totalProducts} products", { completedProducts, totalProducts }) : t("Writing content")}
-        </Badge>
-        <Box width="120px">
-          <ProgressBar progress={pct} size="small" tone="primary" />
-        </Box>
-        <Button variant="plain" onClick={() => navigate("/app/jobs")}>
-          {t("View progress")}
-        </Button>
+      <InlineStack align="end">
+        <Popover
+          active={open}
+          onClose={() => setOpen(false)}
+          preferredAlignment="right"
+          activator={
+            <Button size="slim" disclosure={open ? "up" : "down"} onClick={() => setOpen((v) => !v)} accessibilityLabel={t("{n, plural, one {# job running} other {# jobs running}} — {progress}", { n: running, progress: progressLine })}>
+              <InlineStack gap="150" blockAlign="center" wrap={false}>
+                <Spinner size="small" accessibilityLabel={t("Running")} />
+                <span>{t("{n} running", { n: running })}</span>
+              </InlineStack>
+            </Button>
+          }
+        >
+          <Box padding="400" minWidth="260px">
+            <BlockStack gap="300">
+              <Text as="p" variant="bodyMd" fontWeight="semibold" id="job-progress-line">
+                {progressLine}
+              </Text>
+              <ProgressBar progress={pct} size="small" tone="primary" ariaLabelledBy="job-progress-line" />
+              <InlineStack>
+                <Button variant="plain" onClick={() => { setOpen(false); navigate("/app/jobs"); }}>
+                  {t("View progress")}
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </Box>
+        </Popover>
       </InlineStack>
     </Box>
   );

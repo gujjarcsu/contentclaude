@@ -601,6 +601,14 @@ export async function processBulkJob(jobId, bullJob = null, token = null) {
 
     await flushCounters(true);
 
+    // Drafts move the counts too, not only publishes. With review on (the
+    // default) the publish branch above never runs, so a finished run left
+    // Products saying "6 not yet optimized" and "8 on products not on your
+    // Online Store" for ten minutes after every product had a draft (found on
+    // the dev store, Nov 2026). Once per run, after the last write, cancelled
+    // or not: whatever was written before a cancel is real.
+    void invalidateContentCaches(job.shop);
+
     // Guarded write: only a job still in "processing" may become "complete".
     // A cancellation that raced the final product must never be overwritten.
     const completed = await prisma.generationJob.updateMany({

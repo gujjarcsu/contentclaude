@@ -171,14 +171,14 @@ export default function AttentionPage() {
   return (
     <Page
       title={t("Needs attention")}
-      subtitle={summary.available ? lines[0] ?? t("Nothing needs you right now.") : t("We have not been able to read your catalogue yet.")}
+      subtitle={summary.available ? lines[0] ?? t("Nothing needs you right now.") : t("We have not been able to read your catalog yet.")}
       backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
     >
       <BlockStack gap="400">
         {summary.partial && (
           <Card>
             <Text as="p" variant="bodySm" tone="subdued">
-              {t("Your catalogue is larger than one check covers, so this page is from the products we reached. The daily check continues where it left off.")}
+              {t("Your catalog is larger than one check covers, so this page is from the products we reached. The daily check continues where it left off.")}
             </Text>
           </Card>
         )}
@@ -228,7 +228,7 @@ export default function AttentionPage() {
           <Card>
             <EmptyState heading={t("Nothing needs attention")} image="">
               <p>
-                {t("We check your catalogue every day for descriptions that collapse, alt text that disappears, changed URLs, missing product types, new products with nothing written yet, and anything an AI shopping surface asks for that a product lacks. When something changes, it appears here the same day.")}
+                {t("We check your catalog every day for descriptions that collapse, alt text that disappears, changed URLs, missing product types, new products with nothing written yet, and anything an AI shopping surface asks for that a product lacks. When something changes, it appears here the same day.")}
               </p>
             </EmptyState>
           </Card>
@@ -342,7 +342,7 @@ export default function AttentionPage() {
         )}
 
         <Text as="p" variant="bodySm" tone="subdued">
-          {t("Method: a daily read of every product in your catalogue — title, description, vendor, product type, featured image and its alt text, URL handle, the barcodes of up to {VARIANT_BARCODE_SAMPLE}{v} variants when the first has none, and option names. Each product is compared with the previous day, and measured against the fields the OpenAI product feed and Google Search ask for. Blocking means a surface cannot list the product without it; degrading means listed, but worse; Shopify's own fields are never called either. Drafts are not graded. Indexing is read from your storefront the way a crawler reads it: your sitemap for every product, and a sample of product pages each night for robots directives, the declared canonical address and redirect hops — not from Search Console, which we cannot see. Nothing here is a ranking claim.", { VARIANT_BARCODE_SAMPLE, v: " " })}
+          {t("Method: a daily read of every product in your catalog — title, description, vendor, product type, featured image and its alt text, URL handle, the barcodes of up to {VARIANT_BARCODE_SAMPLE}{v} variants when the first has none, and option names. Each product is compared with the previous day, and measured against the fields the OpenAI product feed and Google Search ask for. Blocking means a surface cannot list the product without it; degrading means listed, but worse; Shopify's own fields are never called either. Drafts are not graded. Indexing is read from your storefront the way a crawler reads it: your sitemap for every product, and a sample of product pages each night for robots directives, the declared canonical address and redirect hops — not from Search Console, which we cannot see. Nothing here is a ranking claim.", { VARIANT_BARCODE_SAMPLE, v: " " })}
         </Text>
       </BlockStack>
     </Page>

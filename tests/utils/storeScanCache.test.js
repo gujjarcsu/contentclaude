@@ -145,6 +145,31 @@ describe("every path that publishes product content clears the cache", () => {
   });
 });
 
+describe("writing a DRAFT clears it too, not only publishing", () => {
+  // Found on the dev store (Nov 2026): six drafts written from the product page,
+  // and Products said "6 on products not on your Online Store" for ten minutes,
+  // because the catalog join (catcontent:<shop>, cleared by invalidateStoreScan)
+  // still held the pre-draft counts. Only publish cleared it.
+  it("the product page clears the content caches after every action it handles", () => {
+    const src = readFileSync("app/routes/app.products_.$id.jsx", "utf8");
+    const wrapper = src.match(/export async function action\(args\) \{([\s\S]*?)\n\}/);
+    expect(wrapper, "action must wrap the handler").not.toBeNull();
+    expect(wrapper[1]).toMatch(/await handleProductAction\(args\)/);
+    expect(wrapper[1]).toMatch(/invalidateContentCaches\(session\.shop\)/);
+  });
+
+  it("a bulk run clears them when it finishes, not only when it publishes", () => {
+    // Same defect on the bulk path: with review on, every product got a draft
+    // and Products still said "6 not yet optimized" — the only call sat inside
+    // the auto-publish branch, which a review-first run never enters.
+    const src = readFileSync("app/utils/bulkProcessor.server.js", "utf8");
+    const done = src.indexOf('"Bulk job complete"');
+    const tail = src.slice(src.lastIndexOf("await flushCounters(true);", done), done);
+    expect(tail.length, "end-of-run block not found").toBeGreaterThan(0);
+    expect(tail).toMatch(/invalidateContentCaches\(job\.shop\)/);
+  });
+});
+
 describe("the TTL itself", () => {
   it("is still ten minutes, and that is now a ceiling rather than a floor", async () => {
     // With invalidation wired, 600s is how long a score can lag a change we did
